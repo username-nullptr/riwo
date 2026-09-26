@@ -9,7 +9,7 @@ option(RIWO_BUILD_CMAKE_TESTS
 	${BUILD_TESTING}
 )
 option(RIWO_ENABLE_TEST_SANITIZERS
-	"-- ${PRO_NAME}: Enable ASan and UBSan for functional and stress tests." OFF
+	"-- ${PRO_NAME}: Enable ASan and, where available, UBSan for functional and stress tests." OFF
 )
 option(RIWO_ENABLE_TEST_TSAN
 	"-- ${PRO_NAME}: Enable TSan for functional and stress tests." OFF
@@ -273,27 +273,84 @@ if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 		)
 	endif ()
 
-	if (MSVC OR NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+	if (MSVC AND RIWO_ENABLE_TEST_TSAN)
 		message(FATAL_ERROR
-			"${PRO_NAME}: Test sanitizers require GCC or Clang with a GNU-style driver."
+			"${PRO_NAME}: MSVC does not provide ThreadSanitizer."
 		)
+	endif ()
+
+	if (NOT MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+		message(FATAL_ERROR
+			"${PRO_NAME}: Test sanitizers require MSVC, GCC, or Clang."
+		)
+	endif ()
+
+	# MSVC AddressSanitizer is incompatible with the run-time checks and
+	# Edit-and-Continue flags that CMake may add to Debug configurations.  Keep
+	# the cache entries intact for normal builds and shadow them only in this
+	# sanitizer configure.  With CMP0141 NEW, newly-created targets take their
+	# debug-information format from this variable instead of the flags below.
+	if (MSVC)
+		foreach(riwo_msvc_flags_var
+			CMAKE_C_FLAGS_DEBUG
+			CMAKE_C_FLAGS_RELWITHDEBINFO
+			CMAKE_CXX_FLAGS_DEBUG
+			CMAKE_CXX_FLAGS_RELWITHDEBINFO
+		)
+			if (DEFINED ${riwo_msvc_flags_var})
+				set(riwo_msvc_flags "${${riwo_msvc_flags_var}}")
+
+				string(REGEX REPLACE
+					"(^|[ \t])(/|-)RTC[1csu]*([ \t]|$)" " "
+					riwo_msvc_flags "${riwo_msvc_flags}"
+				)
+				string(REGEX REPLACE
+					"(^|[ \t])/ZI([ \t]|$)" "\\1/Zi\\2"
+					riwo_msvc_flags "${riwo_msvc_flags}"
+				)
+				string(STRIP "${riwo_msvc_flags}" riwo_msvc_flags)
+				set(${riwo_msvc_flags_var} "${riwo_msvc_flags}")
+			endif ()
+		endforeach()
+
+		if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.25)
+			set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
+		endif ()
 	endif ()
 
 	include(CheckCXXSourceCompiles)
 	set(riwo_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
 	set(riwo_saved_required_link_options "${CMAKE_REQUIRED_LINK_OPTIONS}")
 
-	if (RIWO_ENABLE_TEST_SANITIZERS)
-		set(riwo_sanitizer_flags -fsanitize=address,undefined)
+	if (MSVC)
+		set(riwo_sanitizer_compile_options /fsanitize=address)
+		set(riwo_sanitizer_link_options /INCREMENTAL:NO)
+
+	elseif (RIWO_ENABLE_TEST_SANITIZERS)
+		set(riwo_sanitizer_compile_options
+			-fsanitize=address,undefined
+			-fno-omit-frame-pointer
+			-fno-sanitize-recover=all
+		)
+		set(riwo_sanitizer_link_options -fsanitize=address,undefined)
+
 	else ()
-		set(riwo_sanitizer_flags -fsanitize=thread)
+		set(riwo_sanitizer_compile_options
+			-fsanitize=thread
+			-fno-omit-frame-pointer
+			-fno-sanitize-recover=all
+		)
+		set(riwo_sanitizer_link_options -fsanitize=thread)
 	endif ()
 
+	string(JOIN " " riwo_sanitizer_compile_flags
+		${riwo_sanitizer_compile_options}
+	)
 	set(CMAKE_REQUIRED_FLAGS
-		"${riwo_saved_required_flags} ${riwo_sanitizer_flags}"
+		"${riwo_saved_required_flags} ${riwo_sanitizer_compile_flags}"
 	)
 	set(CMAKE_REQUIRED_LINK_OPTIONS
-		${riwo_saved_required_link_options} ${riwo_sanitizer_flags}
+		${riwo_saved_required_link_options} ${riwo_sanitizer_link_options}
 	)
 	unset(RIWO_TEST_SANITIZER_AVAILABLE CACHE)
 
@@ -317,21 +374,10 @@ if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 	add_library(Riwo::sanitizer ALIAS riwo.test.sanitizer)
 	install(TARGETS riwo.test.sanitizer EXPORT RiwoTargets)
 
-	if (RIWO_ENABLE_TEST_SANITIZERS)
-		target_compile_options(riwo.test.sanitizer INTERFACE
-			-fsanitize=address,undefined
-			-fno-omit-frame-pointer
-			-fno-sanitize-recover=all
-		)
-		target_link_options(riwo.test.sanitizer INTERFACE
-			-fsanitize=address,undefined
-		)
-	else ()
-		target_compile_options(riwo.test.sanitizer INTERFACE
-			-fsanitize=thread
-			-fno-omit-frame-pointer
-			-fno-sanitize-recover=all
-		)
-		target_link_options(riwo.test.sanitizer INTERFACE -fsanitize=thread)
-	endif ()
+	target_compile_options(riwo.test.sanitizer INTERFACE
+		${riwo_sanitizer_compile_options}
+	)
+	target_link_options(riwo.test.sanitizer INTERFACE
+		${riwo_sanitizer_link_options}
+	)
 endif ()

@@ -149,6 +149,7 @@ feature set, and scale.
 | Option | Instrumentation | Constraint |
 | --- | --- | --- |
 | `RIWO_ENABLE_TEST_SANITIZERS=ON` | AddressSanitizer + UndefinedBehaviorSanitizer | GCC or Clang with GNU-style driver |
+| `RIWO_ENABLE_TEST_SANITIZERS=ON` | AddressSanitizer | MSVC; x86 or x64 Windows 10+ |
 | `RIWO_ENABLE_TEST_TSAN=ON` | ThreadSanitizer | GCC or Clang with GNU-style driver |
 
 Example ASan/UBSan build:
@@ -161,6 +162,22 @@ cmake -S . -B build-asan -DBUILD_TESTING=ON \
 cmake --build build-asan --parallel
 ctest --test-dir build-asan -L sanitizer --output-on-failure
 ```
+
+MSVC uses the same option but enables AddressSanitizer only because MSVC does
+not provide UndefinedBehaviorSanitizer. From a Visual Studio 2022 developer
+prompt:
+
+```bat
+cmake -S . -B build-msvc-asan -G "Visual Studio 17 2022" -A x64 ^
+  -DBUILD_TESTING=ON -DRIWO_ENABLE_TEST_SANITIZERS=ON
+cmake --build build-msvc-asan --config RelWithDebInfo --parallel
+ctest --test-dir build-msvc-asan -C RelWithDebInfo -L sanitizer --output-on-failure
+```
+
+The MSVC sanitizer profile disables incompatible run-time checks,
+Edit-and-Continue, and incremental linking. MSVC does not instrument resumable
+coroutine functions completely, so keep GCC or Clang sanitizer coverage for
+coroutine-heavy code.
 
 Use `RIWO_ENABLE_TEST_TSAN=ON` in a separate build. ASan/UBSan and TSan are
 mutually exclusive. Both require `BUILD_TESTING=ON`, reject LTO, and cannot be

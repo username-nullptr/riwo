@@ -190,6 +190,15 @@ add_riwo_configure_case(sanitizer-without-testing
 	ERROR "Test sanitizers require BUILD_TESTING=ON"
 	OPTIONS "RIWO_ENABLE_TEST_SANITIZERS=ON"
 )
+if (MSVC)
+	add_riwo_configure_case(msvc-tsan-unavailable
+		ERROR "MSVC does not provide ThreadSanitizer"
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_ENABLE_TEST_TSAN=ON"
+	)
+endif ()
+
 add_riwo_configure_case(performance-with-sanitizer
 	ERROR "Performance tests cannot be combined with test sanitizers"
 	OPTIONS

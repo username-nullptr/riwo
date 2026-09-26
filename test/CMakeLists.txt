@@ -98,8 +98,12 @@ function(configure_riwo_sanitized_test test_name)
 
 			set_property(TEST ${test_name} APPEND PROPERTY ENVIRONMENT
 				"ASAN_OPTIONS=${riwo_asan_options}"
-				"UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
 			)
+			if (NOT MSVC)
+				set_property(TEST ${test_name} APPEND PROPERTY ENVIRONMENT
+					"UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+				)
+			endif ()
 		else ()
 			set(riwo_tsan_options "halt_on_error=1")
 			# Distribution libc++ is not TSan-instrumented. Its future and
