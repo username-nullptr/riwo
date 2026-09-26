@@ -50,7 +50,7 @@ def node_client(args, url):
     )
     if completed.returncode:
         raise RuntimeError(
-            "node-ws client rejected the LibGS server\n"
+            "node-ws client rejected the Riwo server\n"
             + completed.stdout
             + completed.stderr
         )
@@ -76,11 +76,11 @@ async def python_websockets_client(url):
             raise RuntimeError(f"unexpected subprotocol: {socket.subprotocol}")
         await socket.send("external-client")
         response = await socket.recv()
-        if response != "libgs-server:external-client":
-            raise RuntimeError(f"unexpected LibGS message: {response!r}")
+        if response != "riwo-server:external-client":
+            raise RuntimeError(f"unexpected Riwo message: {response!r}")
         await socket.wait_closed()
         if socket.close_code != 1000:
-            raise RuntimeError(f"unexpected LibGS close code: {socket.close_code}")
+            raise RuntimeError(f"unexpected Riwo close code: {socket.close_code}")
 
 
 def python_websocket_client(url):
@@ -99,8 +99,8 @@ def python_websocket_client(url):
             raise RuntimeError(f"unexpected subprotocol: {socket.getsubprotocol()}")
         socket.send("external-client")
         response = socket.recv()
-        if response != "libgs-server:external-client":
-            raise RuntimeError(f"unexpected LibGS message: {response!r}")
+        if response != "riwo-server:external-client":
+            raise RuntimeError(f"unexpected Riwo message: {response!r}")
         # recv() processes the peer's Close and emits the required Close reply.
         socket.recv()
     finally:
@@ -136,14 +136,14 @@ def wscat_client(args, url):
         raise RuntimeError("wscat did not stop")
     output = process.stdout.read() + process.stderr.read()
     # wscat intentionally suppresses received-message output when stdout isn't
-    # a terminal. Its exit status verifies the client side; the LibGS peer's
+    # a terminal. Its exit status verifies the client side; the Riwo peer's
     # exit status below independently verifies the message and clean Close.
     if returncode:
-        raise RuntimeError(f"wscat rejected the LibGS server\n{output}")
+        raise RuntimeError(f"wscat rejected the Riwo server\n{output}")
 
 
 def test_external_client(args):
-    process, port = start_server([args.peer, "server"], "LibGS WebSocket server")
+    process, port = start_server([args.peer, "server"], "Riwo WebSocket server")
     try:
         url = f"ws://127.0.0.1:{port}/interop?value=42"
         if args.backend == "node-ws":
@@ -154,7 +154,7 @@ def test_external_client(args):
             python_websocket_client(url)
         else:
             wscat_client(args, url)
-        finish_process(process, "LibGS WebSocket server")
+        finish_process(process, "Riwo WebSocket server")
         process = None
     finally:
         if process is not None and process.poll() is None:
@@ -162,7 +162,7 @@ def test_external_client(args):
             process.communicate(timeout=TIMEOUT)
 
 
-def test_libgs_client_with_node(args):
+def test_riwo_client_with_node(args):
     process, port = start_server(
         [args.node, args.node_helper, args.node_ws_module, "server"],
         "node-ws server",
@@ -178,7 +178,7 @@ def test_libgs_client_with_node(args):
         )
         if completed.returncode:
             raise RuntimeError(
-                "LibGS client rejected the node-ws server\n"
+                "Riwo client rejected the node-ws server\n"
                 + completed.stdout
                 + completed.stderr
             )
@@ -206,7 +206,7 @@ def main():
 
     test_external_client(args)
     if args.backend == "node-ws":
-        test_libgs_client_with_node(args)
+        test_riwo_client_with_node(args)
     else:
         print("Selected WebSocket backend provides client-side coverage only")
     print(f"WebSocket interoperability passed with {args.backend}")

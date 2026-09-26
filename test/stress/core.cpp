@@ -3,16 +3,16 @@
 
 #include "test.h"
 
-#include <libgs/core/algorithm/misc.h>
-#include <libgs/core/lock_free_queue.h>
-#include <libgs/core/url.h>
+#include <riwo/core/algorithm/misc.h>
+#include <riwo/core/lock_free_queue.h>
+#include <riwo/core/url.h>
 
 #include <numeric>
 
 namespace
 {
 
-constexpr size_t scale = LIBGS_STRESS_SCALE;
+constexpr size_t scale = RIWO_STRESS_SCALE;
 
 template <typename Queue, typename ConcurrentWork>
 void run_mpmc_queue_pressure(Queue &queue, ConcurrentWork &&concurrent_work)
@@ -89,12 +89,12 @@ void run_mpmc_queue_pressure(Queue &queue, ConcurrentWork &&concurrent_work)
 	const auto count = std::accumulate(counts.begin(), counts.end(), size_t {0});
 	const auto checksum = std::accumulate(checksums.begin(), checksums.end(), uint64_t {0});
 	const auto expected = static_cast<uint64_t>(total_values) * (total_values + 1) / 2;
-	LIBGS_TEST_CHECK_EQ(count, total_values);
-	LIBGS_TEST_CHECK_EQ(checksum, expected);
-	LIBGS_TEST_CHECK(not corrupt.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK_EQ(count, total_values);
+	RIWO_TEST_CHECK_EQ(checksum, expected);
+	RIWO_TEST_CHECK(not corrupt.load(std::memory_order_relaxed));
 	for(size_t index = 0; index < total_values; ++index)
-		LIBGS_TEST_CHECK_EQ(seen[index].load(std::memory_order_relaxed), 1U);
-	LIBGS_TEST_CHECK(queue.empty());
+		RIWO_TEST_CHECK_EQ(seen[index].load(std::memory_order_relaxed), 1U);
+	RIWO_TEST_CHECK(queue.empty());
 }
 
 template <typename Queue>
@@ -107,7 +107,7 @@ template <typename Queue>
 void run_queue_lifecycle_repetition(size_t rounds)
 {
 	constexpr size_t values_per_round = 8;
-	const auto base_seed = libgs::test::current_seed();
+	const auto base_seed = riwo::test::current_seed();
 	for(size_t round = 0; round < rounds; ++round)
 	{
 		Queue queue(2);
@@ -115,7 +115,7 @@ void run_queue_lifecycle_repetition(size_t rounds)
 		std::atomic_bool start {false};
 		std::thread producer([&, round]
 		{
-			libgs::test::random_sequence random(base_seed ^ round);
+			riwo::test::random_sequence random(base_seed ^ round);
 			while(not start.load(std::memory_order_acquire))
 				std::this_thread::yield();
 			for(size_t offset = 0; offset < values_per_round; ++offset)
@@ -128,7 +128,7 @@ void run_queue_lifecycle_repetition(size_t rounds)
 		});
 		std::thread consumer([&, round]
 		{
-			libgs::test::random_sequence random(~base_seed ^ round);
+			riwo::test::random_sequence random(~base_seed ^ round);
 			while(not start.load(std::memory_order_acquire))
 				std::this_thread::yield();
 			for(size_t offset = 0; offset < values_per_round;)
@@ -145,30 +145,30 @@ void run_queue_lifecycle_repetition(size_t rounds)
 		producer.join();
 		consumer.join();
 		for(size_t offset = 0; offset < values_per_round; ++offset)
-			LIBGS_TEST_CHECK_EQ(observed[offset], round * values_per_round + offset);
-		LIBGS_TEST_CHECK(queue.empty());
+			RIWO_TEST_CHECK_EQ(observed[offset], round * values_per_round + offset);
+		RIWO_TEST_CHECK(queue.empty());
 	}
 }
 
 void low_load_queue_lifecycle_repetition()
 {
 	const size_t rounds_per_queue = 128 * scale;
-	run_queue_lifecycle_repetition<libgs::circular_lock_free_queue<size_t>>(
+	run_queue_lifecycle_repetition<riwo::circular_lock_free_queue<size_t>>(
 		rounds_per_queue);
-	run_queue_lifecycle_repetition<libgs::linked_lock_free_queue<size_t>>(
+	run_queue_lifecycle_repetition<riwo::linked_lock_free_queue<size_t>>(
 		rounds_per_queue);
 }
 
 void circular_queue_saturation_pressure()
 {
-	libgs::circular_lock_free_queue<uint64_t> queue(1);
+	riwo::circular_lock_free_queue<uint64_t> queue(1);
 	run_mpmc_queue_pressure(queue);
 }
 
 void circular_queue_growth_backlog_pressure()
 {
 	constexpr size_t maximum_capacity = 65'536;
-	libgs::circular_lock_free_queue<uint64_t> queue(1);
+	riwo::circular_lock_free_queue<uint64_t> queue(1);
 	size_t next = 0;
 
 	for(size_t capacity = 1; capacity <= maximum_capacity; capacity *= 2)
@@ -176,29 +176,29 @@ void circular_queue_growth_backlog_pressure()
 		queue.set_capacity(capacity);
 		while( queue.enqueue(next) )
 			next++;
-		LIBGS_TEST_CHECK_EQ(next, capacity);
-		LIBGS_TEST_CHECK_EQ(queue.size(), capacity);
+		RIWO_TEST_CHECK_EQ(next, capacity);
+		RIWO_TEST_CHECK_EQ(queue.size(), capacity);
 	}
 	for(size_t expected = 0; expected < maximum_capacity; ++expected)
 	{
 		auto value = queue.dequeue();
-		LIBGS_TEST_CHECK(value);
-		LIBGS_TEST_CHECK_EQ(*value, expected);
+		RIWO_TEST_CHECK(value);
+		RIWO_TEST_CHECK_EQ(*value, expected);
 	}
-	LIBGS_TEST_CHECK(queue.empty());
+	RIWO_TEST_CHECK(queue.empty());
 
 	queue.set_capacity(64);
-	LIBGS_TEST_CHECK(queue.compact());
-	LIBGS_TEST_CHECK(not queue.compact());
-	LIBGS_TEST_CHECK(queue.enqueue(maximum_capacity));
+	RIWO_TEST_CHECK(queue.compact());
+	RIWO_TEST_CHECK(not queue.compact());
+	RIWO_TEST_CHECK(queue.enqueue(maximum_capacity));
 	auto value = queue.dequeue();
-	LIBGS_TEST_CHECK(value);
-	LIBGS_TEST_CHECK_EQ(*value, maximum_capacity);
+	RIWO_TEST_CHECK(value);
+	RIWO_TEST_CHECK_EQ(*value, maximum_capacity);
 }
 
 void circular_queue_resize_pressure()
 {
-	libgs::circular_lock_free_queue<uint64_t> queue(1);
+	riwo::circular_lock_free_queue<uint64_t> queue(1);
 	run_mpmc_queue_pressure(queue, [&](const auto &producers_left)
 	{
 		constexpr size_t maintainer_count = 2;
@@ -232,7 +232,7 @@ void circular_queue_resize_pressure()
 
 void linked_queue_reclamation_pressure()
 {
-	libgs::linked_lock_free_queue<uint64_t> queue(1);
+	riwo::linked_lock_free_queue<uint64_t> queue(1);
 	run_mpmc_queue_pressure(queue);
 }
 
@@ -242,7 +242,7 @@ void forced_eviction_pressure()
 	constexpr size_t consumer_count = 2;
 	const size_t values_per_producer = 20'000 * scale;
 	const size_t total_values = producer_count * values_per_producer;
-	libgs::linked_lock_free_queue<size_t> queue(32);
+	riwo::linked_lock_free_queue<size_t> queue(32);
 	std::atomic_size_t ready {0};
 	std::atomic_size_t producers_left {producer_count};
 	std::atomic_size_t evicted {0};
@@ -303,10 +303,10 @@ void forced_eviction_pressure()
 		thread.join();
 	for(auto &thread : consumers)
 		thread.join();
-	LIBGS_TEST_CHECK(not corrupt.load(std::memory_order_relaxed));
-	LIBGS_TEST_CHECK_EQ(consumed.load(std::memory_order_relaxed) +
+	RIWO_TEST_CHECK(not corrupt.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK_EQ(consumed.load(std::memory_order_relaxed) +
 		evicted.load(std::memory_order_relaxed), total_values);
-	LIBGS_TEST_CHECK(queue.empty());
+	RIWO_TEST_CHECK(queue.empty());
 }
 
 void concurrent_text_and_url_pressure()
@@ -323,14 +323,14 @@ void concurrent_text_and_url_pressure()
 			for(size_t index = 0; index < iterations; ++index)
 			{
 				const auto text = std::format("worker {} / item {} ? %", thread_index, index);
-				const auto encoded = libgs::to_percent_encoding(text);
-				if(libgs::from_percent_encoding(encoded) != text)
+				const auto encoded = riwo::to_percent_encoding(text);
+				if(riwo::from_percent_encoding(encoded) != text)
 					corrupt.store(true, std::memory_order_relaxed);
-				libgs::url value("https://example.test:8443/api/{}/items/{}?q={}",
+				riwo::url value("https://example.test:8443/api/{}/items/{}?q={}",
 					thread_index, index, encoded);
 				if(not value.is_valid())
 					corrupt.store(true, std::memory_order_relaxed);
-				libgs::url copy(value.to_string());
+				riwo::url copy(value.to_string());
 				if(not copy.is_valid() or copy.to_string() != value.to_string())
 					corrupt.store(true, std::memory_order_relaxed);
 			}
@@ -339,15 +339,15 @@ void concurrent_text_and_url_pressure()
 	}
 	for(auto &thread : threads)
 		thread.join();
-	LIBGS_TEST_CHECK_EQ(completed.load(std::memory_order_acquire), thread_count);
-	LIBGS_TEST_CHECK(not corrupt.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK_EQ(completed.load(std::memory_order_acquire), thread_count);
+	RIWO_TEST_CHECK(not corrupt.load(std::memory_order_relaxed));
 }
 
 } //namespace
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"low-load queue lifecycle repetition", low_load_queue_lifecycle_repetition},
 		{"circular queue saturation pressure", circular_queue_saturation_pressure},
 		{"circular queue growth backlog pressure", circular_queue_growth_backlog_pressure},

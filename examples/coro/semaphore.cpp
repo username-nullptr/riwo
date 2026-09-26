@@ -1,24 +1,24 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/coro.h>
+#include <riwo/coro.h>
 
 #include <algorithm>
 #include <iostream>
 
 int main()
 {
-	using namespace libgs::coro::literals;
+	using namespace riwo::coro::literals;
 	constexpr int task_count = 6;
 
-	libgs::coro::semaphore slots(2);
+	riwo::coro::semaphore slots(2);
 	int active = 0;
 	int maximum_active = 0;
 	int completed = 0;
 
 	for(int task = 0; task < task_count; ++task)
 	{
-		libgs::dispatch([&, task]() -> libgs::awaitable<void>
+		riwo::dispatch([&, task]() -> riwo::awaitable<void>
 		{
 			co_await slots.acquire();
 			maximum_active = std::max(maximum_active, ++active);
@@ -32,10 +32,10 @@ int main()
 			if(++completed == task_count)
 			{
 				std::cout << "maximum concurrency = " << maximum_active << '\n';
-				libgs::exit();
+				riwo::exit();
 			}
 			co_return;
 		});
 	}
-	return libgs::exec();
+	return riwo::exec();
 }

@@ -3,23 +3,23 @@
 
 #include "test.h"
 
-#include <libgs.h>
-#include <libgs/websocket/protocol/generator.h>
-#include <libgs/websocket/protocol/handshake.h>
-#include <libgs/websocket/protocol/parser.h>
+#include <riwo.h>
+#include <riwo/websocket/protocol/generator.h>
+#include <riwo/websocket/protocol/handshake.h>
+#include <riwo/websocket/protocol/parser.h>
 
 namespace
 {
 
-namespace ws = libgs::websocket;
+namespace ws = riwo::websocket;
 
 static_assert(std::same_as<ws::stream::executor_t, asio::any_io_executor>);
-static_assert(libgs::test::canonical_executor_type<ws::stream>);
-static_assert(libgs::test::canonical_executor_type<ws::client>);
-static_assert(libgs::test::canonical_executor_type<ws::open_diagnostics>);
-static_assert(libgs::test::canonical_executor_type<ws::accept_result>);
-static_assert(libgs::test::canonical_executor_type<ws::server>);
-static_assert(libgs::test::canonical_executor_type<ws::retry_open_result>);
+static_assert(riwo::test::canonical_executor_type<ws::stream>);
+static_assert(riwo::test::canonical_executor_type<ws::client>);
+static_assert(riwo::test::canonical_executor_type<ws::open_diagnostics>);
+static_assert(riwo::test::canonical_executor_type<ws::accept_result>);
+static_assert(riwo::test::canonical_executor_type<ws::server>);
+static_assert(riwo::test::canonical_executor_type<ws::retry_open_result>);
 static_assert(std::movable<ws::stream>);
 static_assert(not std::copy_constructible<ws::stream>);
 static_assert(std::movable<ws::client>);
@@ -45,7 +45,7 @@ struct invalid_control_callback {
 };
 
 struct async_control_callback {
-	libgs::awaitable<int> operator()(ws::ctrl_payload&) const
+	riwo::awaitable<int> operator()(ws::ctrl_payload&) const
 	{
 		co_return 1;
 	}
@@ -64,79 +64,79 @@ static_assert(not ping_callback<invalid_control_callback>);
 void umbrella_and_value_types()
 {
 	ws::stream_config stream_config;
-	LIBGS_TEST_CHECK(stream_config.max_frame_size > 0);
-	LIBGS_TEST_CHECK(stream_config.max_message_size > 0);
-	LIBGS_TEST_CHECK(stream_config.read_buffer_size > 0);
-	LIBGS_TEST_CHECK_EQ(stream_config.compression.level, -1);
-	LIBGS_TEST_CHECK_EQ(stream_config.compression.min_message_size, 0U);
-	LIBGS_TEST_CHECK_EQ(stream_config.ping_interval,
+	RIWO_TEST_CHECK(stream_config.max_frame_size > 0);
+	RIWO_TEST_CHECK(stream_config.max_message_size > 0);
+	RIWO_TEST_CHECK(stream_config.read_buffer_size > 0);
+	RIWO_TEST_CHECK_EQ(stream_config.compression.level, -1);
+	RIWO_TEST_CHECK_EQ(stream_config.compression.min_message_size, 0U);
+	RIWO_TEST_CHECK_EQ(stream_config.ping_interval,
 		std::chrono::seconds(5));
-	LIBGS_TEST_CHECK_EQ(stream_config.pong_timeout_retries, 0U);
+	RIWO_TEST_CHECK_EQ(stream_config.pong_timeout_retries, 0U);
 	ws::message_chunk chunk;
-	LIBGS_TEST_CHECK(chunk.body.size() == 0);
+	RIWO_TEST_CHECK(chunk.body.size() == 0);
 	ws::message_info info;
-	LIBGS_TEST_CHECK_EQ(info.size, 0U);
+	RIWO_TEST_CHECK_EQ(info.size, 0U);
 	ws::ctrl_payload control("ping");
-	LIBGS_TEST_CHECK_EQ(control.text(), "ping");
-	LIBGS_TEST_CHECK_EQ(control.bytes().size(), size_t {4});
-	LIBGS_TEST_CHECK_EQ(control.as_const_buffer().size(), size_t {4});
+	RIWO_TEST_CHECK_EQ(control.text(), "ping");
+	RIWO_TEST_CHECK_EQ(control.bytes().size(), size_t {4});
+	RIWO_TEST_CHECK_EQ(control.as_const_buffer().size(), size_t {4});
 	control.bytes().front() = std::byte {'P'};
-	LIBGS_TEST_CHECK_EQ(control.text(), "Ping");
+	RIWO_TEST_CHECK_EQ(control.text(), "Ping");
 	control.assign("pong payload");
-	LIBGS_TEST_CHECK_EQ(control.text(), "pong payload");
-	LIBGS_TEST_CHECK_EQ(control.as_mutable_buffer().size(), control.size());
+	RIWO_TEST_CHECK_EQ(control.text(), "pong payload");
+	RIWO_TEST_CHECK_EQ(control.as_mutable_buffer().size(), control.size());
 	ws::client_config client_config;
-	LIBGS_TEST_CHECK(client_config.no_delay.has_value());
-	LIBGS_TEST_CHECK(*client_config.no_delay);
-	client_config.no_delay = libgs::nullopt;
-	LIBGS_TEST_CHECK(not client_config.no_delay.has_value());
+	RIWO_TEST_CHECK(client_config.no_delay.has_value());
+	RIWO_TEST_CHECK(*client_config.no_delay);
+	client_config.no_delay = riwo::nullopt;
+	RIWO_TEST_CHECK(not client_config.no_delay.has_value());
 
 	ws::connect_request request("https://example.test/socket?mode=public");
 	request.subprotocols = {"public.v1"};
 	request.max_redirects = 2;
-	LIBGS_TEST_CHECK_EQ(request.endpoint.protocol(), "https");
-	LIBGS_TEST_CHECK_EQ(request.subprotocols.front(), "public.v1");
+	RIWO_TEST_CHECK_EQ(request.endpoint.protocol(), "https");
+	RIWO_TEST_CHECK_EQ(request.subprotocols.front(), "public.v1");
 
 	ws::upgrade_options upgrade;
 	upgrade.supported_subprotocols = request.subprotocols;
 	upgrade.require_subprotocol = true;
-	LIBGS_TEST_CHECK(upgrade.require_subprotocol);
+	RIWO_TEST_CHECK(upgrade.require_subprotocol);
 	upgrade.subprotocol_selector = [](const ws::request_info &request,
-		std::span<const std::string> offered) -> libgs::optional<std::string>
+		std::span<const std::string> offered) -> riwo::optional<std::string>
 	{
 		return request.path == "/socket" and not offered.empty() ?
-			libgs::optional<std::string>(offered.front()) : libgs::nullopt;
+			riwo::optional<std::string>(offered.front()) : riwo::nullopt;
 	};
 	upgrade.extension_selector = [](const ws::request_info&,
 		std::span<const ws::extension>) -> std::vector<ws::extension>
 	{
 		return {};
 	};
-	LIBGS_TEST_CHECK(upgrade.subprotocol_selector);
-	LIBGS_TEST_CHECK(upgrade.extension_selector);
+	RIWO_TEST_CHECK(upgrade.subprotocol_selector);
+	RIWO_TEST_CHECK(upgrade.extension_selector);
 
 	ws::upgrade_options async_upgrade;
 	async_upgrade.async_subprotocol_selector = [](const ws::request_info&,
 		std::span<const std::string>)
-		-> libgs::awaitable<libgs::optional<std::string>>
+		-> riwo::awaitable<riwo::optional<std::string>>
 	{
-		co_return libgs::nullopt;
+		co_return riwo::nullopt;
 	};
 	async_upgrade.async_extension_selector = [](const ws::request_info&,
 		std::span<const ws::extension>)
-		-> libgs::awaitable<std::vector<ws::extension>>
+		-> riwo::awaitable<std::vector<ws::extension>>
 	{
 		co_return std::vector<ws::extension>{};
 	};
-	LIBGS_TEST_CHECK(async_upgrade.async_subprotocol_selector);
-	LIBGS_TEST_CHECK(async_upgrade.async_extension_selector);
+	RIWO_TEST_CHECK(async_upgrade.async_subprotocol_selector);
+	RIWO_TEST_CHECK(async_upgrade.async_extension_selector);
 
 	auto compression = ws::permessage_deflate_extension();
-	LIBGS_TEST_CHECK(ws::is_permessage_deflate_extension(compression));
+	RIWO_TEST_CHECK(ws::is_permessage_deflate_extension(compression));
 	std::swap(compression.parameters[0], compression.parameters[1]);
-	LIBGS_TEST_CHECK(ws::is_permessage_deflate_extension(compression));
+	RIWO_TEST_CHECK(ws::is_permessage_deflate_extension(compression));
 	compression.parameters.front().value = "1";
-	LIBGS_TEST_CHECK(not ws::is_permessage_deflate_extension(compression));
+	RIWO_TEST_CHECK(not ws::is_permessage_deflate_extension(compression));
 
 	ws::permessage_deflate_options compression_options;
 	compression_options.server_max_window_bits = 12;
@@ -144,38 +144,38 @@ void umbrella_and_value_types()
 	compression_options.offer_client_max_window_bits = true;
 	auto negotiated_compression = ws::permessage_deflate_extension(
 		compression_options);
-	LIBGS_TEST_CHECK(ws::is_permessage_deflate_extension(negotiated_compression));
-	LIBGS_TEST_CHECK_EQ(negotiated_compression.parameters.size(), 2U);
-	LIBGS_TEST_CHECK_EQ(*negotiated_compression.parameters[0].value, "12");
-	LIBGS_TEST_CHECK_EQ(*negotiated_compression.parameters[1].value, "10");
+	RIWO_TEST_CHECK(ws::is_permessage_deflate_extension(negotiated_compression));
+	RIWO_TEST_CHECK_EQ(negotiated_compression.parameters.size(), 2U);
+	RIWO_TEST_CHECK_EQ(*negotiated_compression.parameters[0].value, "12");
+	RIWO_TEST_CHECK_EQ(*negotiated_compression.parameters[1].value, "10");
 	compression_options.client_max_window_bits.reset();
 	auto compression_offer = ws::permessage_deflate_extension(compression_options);
-	LIBGS_TEST_CHECK(not compression_offer.parameters.back().value);
+	RIWO_TEST_CHECK(not compression_offer.parameters.back().value);
 
 	ws::proxy_config proxy {
 		.type = ws::proxy_type::http,
-		.endpoint = libgs::url("http://proxy.example:8080"),
+		.endpoint = riwo::url("http://proxy.example:8080"),
 	};
 	proxy.set_basic_auth("user", "secret");
-	LIBGS_TEST_CHECK_EQ(proxy.authorization.value_or(""),
+	RIWO_TEST_CHECK_EQ(proxy.authorization.value_or(""),
 		"Basic dXNlcjpzZWNyZXQ=");
-	LIBGS_TEST_CHECK_EQ(proxy.username.value_or(""), "user");
+	RIWO_TEST_CHECK_EQ(proxy.username.value_or(""), "user");
 	proxy.set_bearer_auth("token");
-	LIBGS_TEST_CHECK_EQ(proxy.authorization.value_or(""), "Bearer token");
-	LIBGS_TEST_CHECK(not proxy.username);
+	RIWO_TEST_CHECK_EQ(proxy.authorization.value_or(""), "Bearer token");
+	RIWO_TEST_CHECK(not proxy.username);
 	ws::client_config proxy_client_config;
-	LIBGS_TEST_CHECK(std::holds_alternative<ws::use_global_proxy_t>(
+	RIWO_TEST_CHECK(std::holds_alternative<ws::use_global_proxy_t>(
 		proxy_client_config.default_proxy));
 	proxy_client_config.default_proxy = ws::no_proxy;
-	LIBGS_TEST_CHECK(std::holds_alternative<ws::no_proxy_t>(
+	RIWO_TEST_CHECK(std::holds_alternative<ws::no_proxy_t>(
 		proxy_client_config.default_proxy));
 	ws::connect_request inherited("ws://example.test/");
-	LIBGS_TEST_CHECK(not inherited.proxy);
+	RIWO_TEST_CHECK(not inherited.proxy);
 	ws::retry_open_options retry_options;
-	LIBGS_TEST_CHECK_EQ(retry_options.max_attempts, 0U);
-	LIBGS_TEST_CHECK_EQ(ws::suggest_retry_open_delay(retry_options, 0),
+	RIWO_TEST_CHECK_EQ(retry_options.max_attempts, 0U);
+	RIWO_TEST_CHECK_EQ(ws::suggest_retry_open_delay(retry_options, 0),
 		std::chrono::milliseconds::zero());
-#if LIBGS_WEBSOCKET_ZLIB_SUPPORT
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
 	static_assert(ws::permessage_deflate_available_v);
 #else
 	static_assert(not ws::permessage_deflate_available_v);
@@ -183,64 +183,64 @@ void umbrella_and_value_types()
 
 	ws::close_frame close(ws::close_code::normal_closure, "done");
 	auto encoded = ws::encode_close_payload(close);
-	LIBGS_TEST_CHECK(encoded.has_value());
+	RIWO_TEST_CHECK(encoded.has_value());
 	auto decoded = ws::decode_close_payload(encoded->buffer());
-	LIBGS_TEST_CHECK(decoded.has_value());
-	LIBGS_TEST_CHECK_EQ(decoded->code.value_or(0), 1000);
-	LIBGS_TEST_CHECK_EQ(decoded->reason, "done");
+	RIWO_TEST_CHECK(decoded.has_value());
+	RIWO_TEST_CHECK_EQ(decoded->code.value_or(0), 1000);
+	RIWO_TEST_CHECK_EQ(decoded->reason, "done");
 }
 
 void executor_bound_public_objects()
 {
-	libgs::io_context_t context;
+	riwo::io_context_t context;
 	ws::stream stream(context.get_executor());
 	stream.on_ping([](ws::ctrl_payload&) { return 17; })
-		.on_pong([](ws::ctrl_payload&) -> libgs::awaitable<std::string> {
+		.on_pong([](ws::ctrl_payload&) -> riwo::awaitable<std::string> {
 			co_return "ignored";
 		})
 		.on_closed([](const ws::close_info&) {});
-	LIBGS_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);
-	LIBGS_TEST_CHECK(stream.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);
+	RIWO_TEST_CHECK(stream.get_executor() == context.get_executor());
 
 	ws::client client(context.get_executor());
-	LIBGS_TEST_CHECK(client.get_executor() == context.get_executor());
-	LIBGS_TEST_CHECK_EQ(client.pending_open_count(), 0U);
+	RIWO_TEST_CHECK(client.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
 
 	asio::ip::tcp::acceptor acceptor(context);
 	ws::server server(std::move(acceptor));
-	LIBGS_TEST_CHECK(server.get_executor() == context.get_executor());
-	LIBGS_TEST_CHECK_EQ(server.pending_accept_count(), 0U);
-	LIBGS_TEST_CHECK_EQ(server.pending_handshake_count(), 0U);
+	RIWO_TEST_CHECK(server.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK_EQ(server.pending_accept_count(), 0U);
+	RIWO_TEST_CHECK_EQ(server.pending_handshake_count(), 0U);
 }
 
 void asynchronous_completion_signatures()
 {
-	libgs::io_context_t context;
+	riwo::io_context_t context;
 	ws::stream stream(context.get_executor());
 
 	bool read_completed = false;
-	stream.read<std::string>([&](libgs::error_code error,
+	stream.read<std::string>([&](riwo::error_code error,
 		ws::basic_message<std::string> message)
 	{
-		LIBGS_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
-		LIBGS_TEST_CHECK(message.body.empty());
+		RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
+		RIWO_TEST_CHECK(message.body.empty());
 		read_completed = true;
 	});
 
 	bool write_completed = false;
-	stream.write_text("public", [&](libgs::error_code error, size_t written)
+	stream.write_text("public", [&](riwo::error_code error, size_t written)
 	{
-		LIBGS_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
-		LIBGS_TEST_CHECK_EQ(written, 0U);
+		RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
+		RIWO_TEST_CHECK_EQ(written, 0U);
 		write_completed = true;
 	});
 
 	bool frame_completed = false;
-	stream.read_frame<std::string>([&](libgs::error_code error,
+	stream.read_frame<std::string>([&](riwo::error_code error,
 		ws::basic_data_frame<std::string> frame)
 	{
-		LIBGS_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
-		LIBGS_TEST_CHECK(frame.body.empty());
+		RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
+		RIWO_TEST_CHECK(frame.body.empty());
 		frame_completed = true;
 	});
 
@@ -250,48 +250,48 @@ void asynchronous_completion_signatures()
 		.body = "frame",
 	};
 	stream.write_frame(outgoing_frame,
-	[&](libgs::error_code error, size_t written)
+	[&](riwo::error_code error, size_t written)
 	{
-		LIBGS_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
-		LIBGS_TEST_CHECK_EQ(written, 0U);
+		RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
+		RIWO_TEST_CHECK_EQ(written, 0U);
 		frame_write_completed = true;
 	});
 
 	bool consume_completed = false;
 	stream.consume([](const ws::message_chunk&) {},
-	[&](libgs::error_code error, ws::message_info info)
+	[&](riwo::error_code error, ws::message_info info)
 	{
-		LIBGS_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
-		LIBGS_TEST_CHECK_EQ(info.size, 0U);
+		RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
+		RIWO_TEST_CHECK_EQ(info.size, 0U);
 		consume_completed = true;
 	});
 
 	bool close_completed = false;
-	stream.close([&](libgs::error_code error, ws::close_info info)
+	stream.close([&](riwo::error_code error, ws::close_info info)
 	{
-		LIBGS_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
-		LIBGS_TEST_CHECK(not info.clean);
+		RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
+		RIWO_TEST_CHECK(not info.clean);
 		close_completed = true;
 	});
 
-	LIBGS_TEST_CHECK(not read_completed);
-	LIBGS_TEST_CHECK(not write_completed);
-	LIBGS_TEST_CHECK(not frame_completed);
-	LIBGS_TEST_CHECK(not frame_write_completed);
-	LIBGS_TEST_CHECK(not consume_completed);
-	LIBGS_TEST_CHECK(not close_completed);
+	RIWO_TEST_CHECK(not read_completed);
+	RIWO_TEST_CHECK(not write_completed);
+	RIWO_TEST_CHECK(not frame_completed);
+	RIWO_TEST_CHECK(not frame_write_completed);
+	RIWO_TEST_CHECK(not consume_completed);
+	RIWO_TEST_CHECK(not close_completed);
 	context.run();
-	LIBGS_TEST_CHECK(read_completed);
-	LIBGS_TEST_CHECK(write_completed);
-	LIBGS_TEST_CHECK(frame_completed);
-	LIBGS_TEST_CHECK(frame_write_completed);
-	LIBGS_TEST_CHECK(consume_completed);
-	LIBGS_TEST_CHECK(close_completed);
+	RIWO_TEST_CHECK(read_completed);
+	RIWO_TEST_CHECK(write_completed);
+	RIWO_TEST_CHECK(frame_completed);
+	RIWO_TEST_CHECK(frame_write_completed);
+	RIWO_TEST_CHECK(consume_completed);
+	RIWO_TEST_CHECK(close_completed);
 }
 
 void retry_open_completion_signature()
 {
-	libgs::io_context_t context;
+	riwo::io_context_t context;
 	ws::client client(context.get_executor());
 	ws::retry_open_options config;
 	config.max_attempts = 1;
@@ -300,20 +300,20 @@ void retry_open_completion_signature()
 	bool completed = false;
 	ws::retry_open(client,
 		ws::connect_request("ftp://example.test/socket"), config,
-		[&](libgs::error_code error, ws::retry_open_result result)
+		[&](riwo::error_code error, ws::retry_open_result result)
 		{
-			LIBGS_TEST_CHECK_EQ(error,
+			RIWO_TEST_CHECK_EQ(error,
 				std::make_error_code(std::errc::protocol_not_supported));
-			LIBGS_TEST_CHECK_EQ(result.attempts, 1U);
-			LIBGS_TEST_CHECK_EQ(result.last_failure.error, error);
-			LIBGS_TEST_CHECK(not result.stream.is_open());
-			LIBGS_TEST_CHECK(result.stream.get_executor() ==
+			RIWO_TEST_CHECK_EQ(result.attempts, 1U);
+			RIWO_TEST_CHECK_EQ(result.last_failure.error, error);
+			RIWO_TEST_CHECK(not result.stream.is_open());
+			RIWO_TEST_CHECK(result.stream.get_executor() ==
 				context.get_executor());
 			completed = true;
 		});
-	LIBGS_TEST_CHECK(not completed);
+	RIWO_TEST_CHECK(not completed);
 	context.run();
-	LIBGS_TEST_CHECK(completed);
+	RIWO_TEST_CHECK(completed);
 
 	context.restart();
 	config.jitter = 0.0;
@@ -321,71 +321,71 @@ void retry_open_completion_signature()
 	size_t factory_calls = 0;
 	ws::retry_open(client,
 		[&](const ws::retry_open_context &previous)
-			-> libgs::awaitable<ws::connect_request>
+			-> riwo::awaitable<ws::connect_request>
 		{
-			LIBGS_TEST_CHECK_EQ(previous.attempt, 0U);
+			RIWO_TEST_CHECK_EQ(previous.attempt, 0U);
 			++factory_calls;
 			co_return ws::connect_request("ftp://example.test/socket");
 		}, config,
-		[&](libgs::error_code error, ws::retry_open_result result)
+		[&](riwo::error_code error, ws::retry_open_result result)
 		{
-			LIBGS_TEST_CHECK_EQ(error,
+			RIWO_TEST_CHECK_EQ(error,
 				std::make_error_code(std::errc::protocol_not_supported));
-			LIBGS_TEST_CHECK_EQ(result.attempts, 1U);
+			RIWO_TEST_CHECK_EQ(result.attempts, 1U);
 			completed = true;
 		});
 	context.run();
-	LIBGS_TEST_CHECK(completed);
-	LIBGS_TEST_CHECK_EQ(factory_calls, 1U);
+	RIWO_TEST_CHECK(completed);
+	RIWO_TEST_CHECK_EQ(factory_calls, 1U);
 
 	context.restart();
 	config.jitter = 1.1;
 	completed = false;
 	ws::retry_open(client,
 		ws::connect_request("ws://example.test/socket"), config,
-		[&](libgs::error_code error, ws::retry_open_result result)
+		[&](riwo::error_code error, ws::retry_open_result result)
 		{
-			LIBGS_TEST_CHECK_EQ(error,
+			RIWO_TEST_CHECK_EQ(error,
 				std::make_error_code(std::errc::invalid_argument));
-			LIBGS_TEST_CHECK_EQ(result.attempts, 0U);
+			RIWO_TEST_CHECK_EQ(result.attempts, 0U);
 			completed = true;
 		});
 	context.run();
-	LIBGS_TEST_CHECK(completed);
+	RIWO_TEST_CHECK(completed);
 }
 
 void non_default_constructible_executor_errors()
 {
-	libgs::io_context_t context;
-	using executor_t = asio::strand<libgs::io_context_t::executor_type>;
+	riwo::io_context_t context;
+	using executor_t = asio::strand<riwo::io_context_t::executor_type>;
 	auto executor = asio::make_strand(context);
 	ws::basic_client<executor_t> client(executor);
 
-	libgs::error_code error;
+	riwo::error_code error;
 	auto stream = client.open(ws::connect_request(
 		"ftp://example.test/socket"), error);
-	LIBGS_TEST_CHECK_EQ(error,
+	RIWO_TEST_CHECK_EQ(error,
 		std::make_error_code(std::errc::protocol_not_supported));
-	LIBGS_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);
-	LIBGS_TEST_CHECK(stream.get_executor() == executor);
+	RIWO_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);
+	RIWO_TEST_CHECK(stream.get_executor() == executor);
 
 	bool completed = false;
 	ws::connect_request expired("ws://example.test/socket");
 	expired.handshake_timeout = std::chrono::milliseconds::zero();
 	client.open(std::move(expired),
-		[&](libgs::error_code callback_error,
+		[&](riwo::error_code callback_error,
 			ws::basic_stream<executor_t> callback_stream)
 		{
-			LIBGS_TEST_CHECK_EQ(callback_error,
-				libgs::error_code(asio::error::timed_out));
-			LIBGS_TEST_CHECK_EQ(callback_stream.state(),
+			RIWO_TEST_CHECK_EQ(callback_error,
+				riwo::error_code(asio::error::timed_out));
+			RIWO_TEST_CHECK_EQ(callback_stream.state(),
 				ws::connection_state::idle);
-			LIBGS_TEST_CHECK(callback_stream.get_executor() == executor);
+			RIWO_TEST_CHECK(callback_stream.get_executor() == executor);
 			completed = true;
 		});
-	LIBGS_TEST_CHECK(not completed);
+	RIWO_TEST_CHECK(not completed);
 	context.run();
-	LIBGS_TEST_CHECK(completed);
+	RIWO_TEST_CHECK(completed);
 
 	context.restart();
 	bool retry_completed = false;
@@ -393,24 +393,24 @@ void non_default_constructible_executor_errors()
 	options.max_attempts = 1;
 	ws::retry_open(client,
 		ws::connect_request("ftp://example.test/socket"), options,
-		[&](libgs::error_code callback_error,
+		[&](riwo::error_code callback_error,
 			ws::basic_retry_open_result<executor_t> result)
 		{
-			LIBGS_TEST_CHECK_EQ(callback_error,
+			RIWO_TEST_CHECK_EQ(callback_error,
 				std::make_error_code(std::errc::protocol_not_supported));
-			LIBGS_TEST_CHECK_EQ(result.attempts, 1U);
-			LIBGS_TEST_CHECK(result.stream.get_executor() == executor);
+			RIWO_TEST_CHECK_EQ(result.attempts, 1U);
+			RIWO_TEST_CHECK(result.stream.get_executor() == executor);
 			retry_completed = true;
 		});
 	context.run();
-	LIBGS_TEST_CHECK(retry_completed);
+	RIWO_TEST_CHECK(retry_completed);
 }
 
 } //namespace
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"umbrella and value types", umbrella_and_value_types},
 		{"executor-bound public objects", executor_bound_public_objects},
 		{"asynchronous completion signatures", asynchronous_completion_signatures},

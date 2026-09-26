@@ -4,7 +4,7 @@
 #include "benchmark.h"
 #include "test.h"
 
-#include <libgs/utils/logger.h>
+#include <riwo/utils/logger.h>
 
 #include <algorithm>
 #include <array>
@@ -16,20 +16,20 @@
 namespace
 {
 
-using logger_t = libgs::utils::logger;
+using logger_t = riwo::utils::logger;
 using duration_t = std::chrono::steady_clock::duration;
 
 #ifdef NDEBUG
-constexpr size_t hot_path_count = 500'000 * libgs::test::performance_scale;
-constexpr size_t file_log_count = 10'000 * libgs::test::performance_scale;
+constexpr size_t hot_path_count = 500'000 * riwo::test::performance_scale;
+constexpr size_t file_log_count = 10'000 * riwo::test::performance_scale;
 #else
-constexpr size_t hot_path_count = 10'000 * libgs::test::performance_scale;
-constexpr size_t file_log_count = 500 * libgs::test::performance_scale;
+constexpr size_t hot_path_count = 10'000 * riwo::test::performance_scale;
+constexpr size_t file_log_count = 500 * riwo::test::performance_scale;
 #endif
 
 constexpr size_t thread_count = 4;
-constexpr std::string_view disabled_logger_name = "libgs-performance-logger-disabled";
-constexpr std::string_view file_logger_name = "libgs-performance-logger-file";
+constexpr std::string_view disabled_logger_name = "riwo-performance-logger-disabled";
+constexpr std::string_view file_logger_name = "riwo-performance-logger-file";
 
 template <typename Func>
 duration_t median_duration(size_t count, Func &&func)
@@ -52,7 +52,7 @@ duration_t measure_formatting(size_t count)
 		checksum += message.size();
 	}
 	const auto elapsed = std::chrono::steady_clock::now() - begin;
-	LIBGS_TEST_CHECK(checksum > count);
+	RIWO_TEST_CHECK(checksum > count);
 	return elapsed;
 }
 
@@ -79,7 +79,7 @@ duration_t measure_named_formatted(size_t count)
 	const auto begin = std::chrono::steady_clock::now();
 	for(size_t index = 0; index < count; ++index)
 	{
-		libgs_utils_clog_info(
+		riwo_utils_clog_info(
 			disabled_logger_name, "request {} payload {}", index, 64
 		);
 	}
@@ -106,7 +106,7 @@ duration_t measure_parallel_named_formatted(size_t count)
 
 			for(size_t index = 0; index < thread_operations; ++index)
 			{
-				libgs_utils_clog_info(
+				riwo_utils_clog_info(
 					disabled_logger_name, "request {} payload {}", index, 64
 				);
 			}
@@ -122,7 +122,7 @@ duration_t measure_parallel_named_formatted(size_t count)
 		thread.join();
 	const auto elapsed = std::chrono::steady_clock::now() - begin;
 
-	LIBGS_TEST_CHECK_EQ(completed.load(std::memory_order_relaxed), count);
+	RIWO_TEST_CHECK_EQ(completed.load(std::memory_order_relaxed), count);
 	return elapsed;
 }
 
@@ -134,27 +134,27 @@ void disabled_hot_paths()
 	config.level.daily = logger_t::level_t::off;
 	logger.set_config(config);
 
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"logger/std::format baseline (median of 3)", hot_path_count,
 		median_duration(hot_path_count, measure_formatting), "format"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"logger/disabled cached literal (median of 3)", hot_path_count,
 		median_duration(hot_path_count, [&](size_t count) {
 			return measure_cached_literal(logger, count);
 		}), "call"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"logger/disabled cached formatted (median of 3)", hot_path_count,
 		median_duration(hot_path_count, [&](size_t count) {
 			return measure_cached_formatted(logger, count);
 		}), "call"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"logger/disabled named formatted (median of 3)", hot_path_count,
 		median_duration(hot_path_count, measure_named_formatted), "call"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"logger/disabled named formatted 4 threads (median of 3)", hot_path_count,
 		median_duration(hot_path_count, measure_parallel_named_formatted), "call"
 	);
@@ -162,7 +162,7 @@ void disabled_hot_paths()
 
 void async_file_sink()
 {
-	libgs::test::temporary_directory directory;
+	riwo::test::temporary_directory directory;
 	auto &logger = logger_t::instance(file_logger_name);
 	logger_t::config_t config;
 	config.path = directory.path();
@@ -183,9 +183,9 @@ void async_file_sink()
 		if(entry.is_regular_file())
 			bytes_written += entry.file_size();
 	}
-	LIBGS_TEST_CHECK(bytes_written > 0);
+	RIWO_TEST_CHECK(bytes_written > 0);
 
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"logger/async daily file enqueue (median of 3)",
 		file_log_count, elapsed, "call"
 	);
@@ -195,7 +195,7 @@ void async_file_sink()
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"logger disabled hot paths", disabled_hot_paths},
 		{"logger async file sink", async_file_sink},
 	});

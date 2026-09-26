@@ -1,19 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/algorithm.h>
-#include <libgs/core/mime_type.h>
+#include <riwo/core/algorithm.h>
+#include <riwo/core/mime_type.h>
 #include <iostream>
 
 int main()
 {
-	std::cout << "MIME type: " << libgs::mime_type::get("index.html") << '\n';
+	std::cout << "MIME type: " << riwo::mime_type::get("index.html") << '\n';
 
-	libgs::sha1 digest("Hello from LibGS");
+	riwo::sha1 digest("Hello from Riwo");
 	std::cout << "SHA-1: " << digest.finalize().hex() << '\n';
-	std::cout << "UUID: " << libgs::uuid::generate().to_string() << '\n';
+	std::cout << "UUID: " << riwo::uuid::generate().to_string() << '\n';
 
-	auto weight = libgs::wildcard_match("lib*.so*", "libexample.so.1");
+	auto weight = riwo::wildcard_match("lib*.so*", "libexample.so.1");
 	std::cout << "Wildcard match weight: " << weight << '\n';
 	return 0;
 }

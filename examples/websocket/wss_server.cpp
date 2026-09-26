@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/websocket/server.h>
+#include <riwo/websocket/server.h>
 #include <iostream>
 
-namespace ws = libgs::websocket;
+namespace ws = riwo::websocket;
 
 int main(int argc, const char *argv[])
 {
@@ -26,22 +26,22 @@ int main(int argc, const char *argv[])
 		tls.use_certificate_chain_file(argv[1]);
 		tls.use_private_key_file(argv[2], asio::ssl::context::pem);
 
-		asio::ip::tcp::acceptor acceptor(libgs::get_executor());
+		asio::ip::tcp::acceptor acceptor(riwo::get_executor());
 		ws::tls_server server({std::move(acceptor), tls});
 		server
-		.bind({libgs::ip_type::v4, port})
+		.bind({riwo::ip_type::v4, port})
 
 		.on_connection("/echo",
-		[](ws::tls_server::accept_result_t accepted) -> libgs::awaitable<void>
+		[](ws::tls_server::accept_result_t accepted) -> riwo::awaitable<void>
 		{
 			try {
 				auto message = co_await accepted
-					.stream.read<std::string>(libgs::use_awaitable);
+					.stream.read<std::string>(riwo::use_awaitable);
 
 				co_await accepted.stream
-					.write_text("secure echo: " + message.body, libgs::use_awaitable);
+					.write_text("secure echo: " + message.body, riwo::use_awaitable);
 
-				co_await accepted.stream.close(libgs::use_awaitable);
+				co_await accepted.stream.close(riwo::use_awaitable);
 			}
 			catch(const std::exception &exception)
 			{
@@ -50,7 +50,7 @@ int main(int argc, const char *argv[])
 			}
 			co_return ;
 		})
-		.on_server_error([](libgs::error_code error)
+		.on_server_error([](riwo::error_code error)
 		{
 			std::cerr << "Secure WebSocket server failed: "
 				<< error.message() << '\n';
@@ -59,7 +59,7 @@ int main(int argc, const char *argv[])
 		.start();
 
 		std::cout << "Listening on wss://127.0.0.1:" << port << "/echo\n";
-		return libgs::exec();
+		return riwo::exec();
 	}
 	catch(const std::exception &exception) {
 		std::cerr << "WSS server failed: " << exception.what() << '\n';

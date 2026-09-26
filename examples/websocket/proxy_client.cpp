@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/websocket/client.h>
+#include <riwo/websocket/client.h>
 #include <iostream>
 #include <string>
 
-namespace ws = libgs::websocket;
+namespace ws = riwo::websocket;
 
 int main(int argc, const char *argv[])
 {
@@ -50,7 +50,7 @@ int main(int argc, const char *argv[])
 		return 1;
 	}
 	std::cout << message.body << '\n';
-	libgs::ignore_unused(stream.close(error));
+	riwo::ignore_unused(stream.close(error));
 	if( error )
 	{
 		std::cerr << "WebSocket close failed: " << error.message() << '\n';

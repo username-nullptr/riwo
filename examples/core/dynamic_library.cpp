@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/system/app_utls.h>
-#include <libgs/core/system/library.h>
+#include <riwo/core/system/app_utls.h>
+#include <riwo/core/system/library.h>
 
 #include <filesystem>
 #include <iostream>
@@ -11,7 +11,7 @@ namespace
 {
 std::filesystem::path default_plugin_path()
 {
-	auto directory = libgs::app::dir_path();
+	auto directory = riwo::app::dir_path();
 	if(not directory)
 		throw std::system_error(directory.error());
 
@@ -32,11 +32,11 @@ int main(int argc, const char *argv[])
 		const auto path = argc > 1 ? std::filesystem::path(argv[1])
 			: default_plugin_path();
 
-		libgs::library plugin(path);
+		riwo::library plugin(path);
 		if(auto result = plugin.load(); not result)
 			throw std::system_error(result.error());
 
-		auto twice = plugin.interface<int(int)>("libgs_example_twice");
+		auto twice = plugin.interface<int(int)>("riwo_example_twice");
 		if(not twice)
 		{
 			std::cerr << "Plugin symbol was not found\n";

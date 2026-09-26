@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/system/app_utls.h>
+#include <riwo/core/system/app_utls.h>
 #include <iostream>
 
 template <typename T>
-void print_result(std::string_view label, const libgs::sys_expected<T> &result)
+void print_result(std::string_view label, const riwo::sys_expected<T> &result)
 {
 	if(result)
 		std::cout << label << ": " << *result << '\n';
@@ -15,11 +15,11 @@ void print_result(std::string_view label, const libgs::sys_expected<T> &result)
 
 int main()
 {
-	print_result("Executable", libgs::app::file_path());
-	print_result("Executable directory", libgs::app::dir_path());
-	print_result("Working directory", libgs::app::current_directory());
-	print_result("Absolute current directory", libgs::app::absolute_path("."));
-	print_result("Current user", libgs::app::current_user());
-	print_result("Home directory", libgs::app::home_directory());
+	print_result("Executable", riwo::app::file_path());
+	print_result("Executable directory", riwo::app::dir_path());
+	print_result("Working directory", riwo::app::current_directory());
+	print_result("Absolute current directory", riwo::app::absolute_path("."));
+	print_result("Current user", riwo::app::current_user());
+	print_result("Home directory", riwo::app::home_directory());
 	return 0;
 }

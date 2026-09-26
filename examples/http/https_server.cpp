@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/server.h>
+#include <riwo/http/server.h>
 #include <string_view>
 #include <iostream>
 
@@ -25,18 +25,18 @@ int main(int argc, const char *argv[])
 		tls.use_certificate_chain_file(argv[1]);
 		tls.use_private_key_file(argv[2], asio::ssl::context::pem);
 
-		asio::ip::tcp::acceptor acceptor(libgs::get_executor());
-		libgs::https::server server({std::move(acceptor), tls});
+		asio::ip::tcp::acceptor acceptor(riwo::get_executor());
+		riwo::https::server server({std::move(acceptor), tls});
 
 		server
-		.bind({libgs::ip_type::v4, port})
-		.on_request<libgs::http::method::get>(
+		.bind({riwo::ip_type::v4, port})
+		.on_request<riwo::http::method::get>(
 			"/",
-			[](libgs::https::server::context_t &context) -> libgs::awaitable<void>
+			[](riwo::https::server::context_t &context) -> riwo::awaitable<void>
 			{
 				constexpr std::string_view body = "Hello over TLS\n";
 				co_await context.response().write (
-					asio::buffer(body), libgs::use_awaitable
+					asio::buffer(body), riwo::use_awaitable
 				);
 				co_return;
 			}
@@ -44,7 +44,7 @@ int main(int argc, const char *argv[])
 		.start();
 
 		std::cout << "Listening on https://127.0.0.1:" << port << '\n';
-		return libgs::exec();
+		return riwo::exec();
 	}
 	catch(const std::exception &exception) {
 		std::cerr << "HTTPS server failed: " << exception.what() << '\n';

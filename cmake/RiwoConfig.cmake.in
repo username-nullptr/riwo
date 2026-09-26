@@ -1,0 +1,221 @@
+# SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
+# SPDX-License-Identifier: MIT
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+set(Riwo_ASIO_PROVIDER "@RIWO_ASIO_PROVIDER@")
+set(Riwo_SPDLOG_PROVIDER "@RIWO_SPDLOG_PROVIDER@")
+set(Riwo_OPENSSL_INSTALL_PREFIX "@RIWO_OPENSSL_INSTALL_PREFIX@")
+set(Riwo_ZLIB_INSTALL_PREFIX "@RIWO_ZLIB_INSTALL_PREFIX@")
+set(Riwo_VERSION "@PROJECT_VERSION@")
+
+# Resolve component availability before looking for dependencies.  A missing
+# component must not be obscured by an unrelated dependency failure.
+set(Riwo_core_FOUND TRUE)
+set(Riwo_coro_FOUND @RIWO_BUILD_CORO@)
+set(Riwo_http_FOUND @RIWO_BUILD_HTTP@)
+set(Riwo_websocket_FOUND @RIWO_BUILD_WEBSOCKET@)
+set(Riwo_utils_FOUND @RIWO_BUILD_UTILITIES@)
+
+set(_riwo_missing_components)
+foreach(_riwo_component IN LISTS Riwo_FIND_COMPONENTS)
+	if (NOT DEFINED Riwo_${_riwo_component}_FOUND)
+		set(Riwo_${_riwo_component}_FOUND FALSE)
+	endif ()
+
+	if (NOT Riwo_${_riwo_component}_FOUND AND
+		Riwo_FIND_REQUIRED_${_riwo_component})
+		list(APPEND _riwo_missing_components ${_riwo_component})
+	endif ()
+endforeach()
+
+if (_riwo_missing_components)
+	list(JOIN _riwo_missing_components ", " _riwo_missing_components_text)
+	set(Riwo_NOT_FOUND_MESSAGE
+		"Required Riwo components are unavailable: ${_riwo_missing_components_text}"
+	)
+endif ()
+
+set(Riwo_FOUND TRUE)
+check_required_components(Riwo)
+
+if (NOT Riwo_FOUND)
+	unset(_riwo_component)
+	unset(_riwo_missing_components)
+	unset(_riwo_missing_components_text)
+	return()
+endif ()
+
+if (Riwo_ASIO_PROVIDER STREQUAL "BOOST")
+	if (NOT DEFINED Boost_ROOT AND NOT "@RIWO_BOOST_INSTALL_PREFIX@" STREQUAL "")
+		set(Boost_ROOT "@RIWO_BOOST_INSTALL_PREFIX@")
+	endif ()
+	find_dependency(Boost CONFIG)
+
+elseif (Riwo_ASIO_PROVIDER STREQUAL "EXTERNAL")
+	find_package(asio CONFIG QUIET HINTS "@RIWO_ASIO_INSTALL_PREFIX@")
+
+	if (NOT TARGET @RIWO_ASIO_PACKAGE_TARGET@)
+		find_package(Asio CONFIG QUIET HINTS "@RIWO_ASIO_INSTALL_PREFIX@")
+	endif ()
+
+	if (NOT TARGET @RIWO_ASIO_PACKAGE_TARGET@)
+		find_path(Riwo_ASIO_INCLUDE_DIR
+			NAMES asio.hpp
+			HINTS "@RIWO_ASIO_INSTALL_PREFIX@"
+			PATH_SUFFIXES include
+		)
+		if (NOT Riwo_ASIO_INCLUDE_DIR)
+			set(Riwo_FOUND FALSE)
+			set(Riwo_NOT_FOUND_MESSAGE
+				"Riwo was built with external standalone Asio, but asio.hpp was not found."
+			)
+			return()
+		endif ()
+
+		add_library(@RIWO_ASIO_PACKAGE_TARGET@ INTERFACE IMPORTED)
+		set_target_properties(@RIWO_ASIO_PACKAGE_TARGET@ PROPERTIES
+			INTERFACE_INCLUDE_DIRECTORIES "${Riwo_ASIO_INCLUDE_DIR}"
+		)
+	endif ()
+endif ()
+
+set(_riwo_utils_component_requested FALSE)
+if (@RIWO_BUILD_UTILITIES@ AND (NOT Riwo_FIND_COMPONENTS OR
+	"utils" IN_LIST Riwo_FIND_COMPONENTS))
+	set(_riwo_utils_component_requested TRUE)
+endif ()
+
+if (Riwo_SPDLOG_PROVIDER STREQUAL "external" AND _riwo_utils_component_requested)
+	find_package(spdlog CONFIG QUIET HINTS "@RIWO_SPDLOG_INSTALL_PREFIX@")
+
+	if (NOT TARGET @RIWO_SPDLOG_PACKAGE_TARGET@)
+		find_path(Riwo_SPDLOG_INCLUDE_DIR
+			NAMES spdlog/spdlog.h
+			HINTS "@RIWO_SPDLOG_INSTALL_PREFIX@"
+			PATH_SUFFIXES include
+		)
+		if (NOT Riwo_SPDLOG_INCLUDE_DIR)
+			set(Riwo_FOUND FALSE)
+			set(Riwo_NOT_FOUND_MESSAGE
+				"Riwo was built with external spdlog, but spdlog/spdlog.h was not found."
+			)
+			return()
+		endif ()
+
+		add_library(@RIWO_SPDLOG_PACKAGE_TARGET@ INTERFACE IMPORTED)
+		set_target_properties(@RIWO_SPDLOG_PACKAGE_TARGET@ PROPERTIES
+			INTERFACE_INCLUDE_DIRECTORIES "${Riwo_SPDLOG_INCLUDE_DIR}"
+		)
+	endif ()
+endif ()
+
+if (@RIWO_OPENSSL_SUPPORT@)
+	# Preserve the OpenSSL selection made while building Riwo.  This matters
+	# on Windows hosts that contain both MSVC and MinGW OpenSSL installations:
+	# FindOpenSSL can otherwise select libraries built for the wrong ABI.  An
+	# explicit consumer OPENSSL_ROOT_DIR always takes precedence, and a removed
+	# or non-relocatable build-time prefix is ignored.
+	if (NOT DEFINED OPENSSL_ROOT_DIR AND
+		NOT Riwo_OPENSSL_INSTALL_PREFIX STREQUAL "" AND
+		IS_DIRECTORY "${Riwo_OPENSSL_INSTALL_PREFIX}")
+		set(OPENSSL_ROOT_DIR "${Riwo_OPENSSL_INSTALL_PREFIX}")
+	endif ()
+	find_dependency(OpenSSL)
+endif ()
+
+set(_riwo_zlib_component_requested FALSE)
+
+if (NOT Riwo_FIND_COMPONENTS)
+	if (@RIWO_PACKAGE_HTTP_NEEDS_ZLIB@ OR
+		@RIWO_PACKAGE_WEBSOCKET_NEEDS_ZLIB@)
+		set(_riwo_zlib_component_requested TRUE)
+	endif ()
+else ()
+	# WebSocket publicly depends on HTTP, so an HTTP compression dependency is
+	# also part of a requested WebSocket target's static link closure.
+	if (@RIWO_PACKAGE_HTTP_NEEDS_ZLIB@ AND (
+		"http" IN_LIST Riwo_FIND_COMPONENTS OR
+		(Riwo_websocket_FOUND AND "websocket" IN_LIST Riwo_FIND_COMPONENTS)
+		))
+		set(_riwo_zlib_component_requested TRUE)
+	endif ()
+
+	if (@RIWO_PACKAGE_WEBSOCKET_NEEDS_ZLIB@ AND
+		"websocket" IN_LIST Riwo_FIND_COMPONENTS)
+		set(_riwo_zlib_component_requested TRUE)
+	endif ()
+endif ()
+
+set(_riwo_zlib_dependency_required
+	@RIWO_PACKAGE_OPENSSL_NEEDS_ZLIB@
+)
+if (_riwo_zlib_component_requested)
+	set(_riwo_zlib_dependency_required TRUE)
+endif ()
+
+if (_riwo_zlib_dependency_required)
+	if (NOT DEFINED ZLIB_ROOT AND
+		NOT Riwo_ZLIB_INSTALL_PREFIX STREQUAL "" AND
+		IS_DIRECTORY "${Riwo_ZLIB_INSTALL_PREFIX}")
+		set(ZLIB_ROOT "${Riwo_ZLIB_INSTALL_PREFIX}")
+	endif ()
+	find_dependency(ZLIB)
+
+	# Keep core's logical dependency on OpenSSL only.  When the OpenSSL selected
+	# while building Riwo needed an unadvertised zlib edge, repair that
+	# imported target rather than adding ZLIB to Riwo::core itself.
+	if (@RIWO_PACKAGE_OPENSSL_NEEDS_ZLIB@ AND TARGET OpenSSL::Crypto)
+		get_target_property(_riwo_openssl_crypto_links
+			OpenSSL::Crypto INTERFACE_LINK_LIBRARIES
+		)
+		if (NOT ZLIB::ZLIB IN_LIST _riwo_openssl_crypto_links)
+			set_property(TARGET OpenSSL::Crypto APPEND PROPERTY
+				INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
+		endif ()
+	endif ()
+endif ()
+
+if (@RIWO_IO_URING_SUPPORT@)
+	find_path(Riwo_LIBURING_INCLUDE_DIR NAMES liburing.h)
+	find_library(Riwo_LIBURING_LIBRARY NAMES uring)
+
+	if (NOT Riwo_LIBURING_INCLUDE_DIR OR NOT Riwo_LIBURING_LIBRARY)
+		set(Riwo_FOUND FALSE)
+		set(Riwo_NOT_FOUND_MESSAGE
+			"Riwo was built with io_uring support, but liburing was not found."
+		)
+		return()
+	endif ()
+
+	if (NOT TARGET Riwo::uring)
+		add_library(Riwo::uring UNKNOWN IMPORTED)
+		set_target_properties(Riwo::uring PROPERTIES
+			IMPORTED_LOCATION "${Riwo_LIBURING_LIBRARY}"
+			INTERFACE_INCLUDE_DIRECTORIES "${Riwo_LIBURING_INCLUDE_DIR}"
+		)
+	endif ()
+endif ()
+
+include("${CMAKE_CURRENT_LIST_DIR}/RiwoTargets.cmake")
+
+# Preserve the source-tree target names for consumers that already use them.
+foreach(_riwo_component core coro http websocket utils)
+	if (TARGET Riwo::${_riwo_component} AND NOT TARGET riwo.${_riwo_component})
+		add_library(riwo.${_riwo_component} INTERFACE IMPORTED)
+		set_property(TARGET riwo.${_riwo_component} PROPERTY
+			INTERFACE_LINK_LIBRARIES Riwo::${_riwo_component}
+		)
+	endif ()
+endforeach()
+
+unset(_riwo_component)
+unset(_riwo_missing_components)
+unset(_riwo_missing_components_text)
+
+unset(_riwo_openssl_crypto_links)
+unset(_riwo_utils_component_requested)
+unset(_riwo_zlib_component_requested)
+unset(_riwo_zlib_dependency_required)

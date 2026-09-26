@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 
-function(libgs_validate_msvc_imported_targets package root_option)
+function(riwo_validate_msvc_imported_targets package root_option)
 	if (NOT MSVC)
 		return()
 	endif ()
@@ -49,8 +49,8 @@ endfunction()
 # dependency remains OpenSSL; this function repairs only that imported
 # target's incomplete physical link closure when a link probe proves the
 # extra edge is necessary.
-function(libgs_complete_openssl_link_closure)
-	set(LIBGS_PACKAGE_OPENSSL_NEEDS_ZLIB OFF CACHE INTERNAL
+function(riwo_complete_openssl_link_closure)
+	set(RIWO_PACKAGE_OPENSSL_NEEDS_ZLIB OFF CACHE INTERNAL
 		"Whether the selected OpenSSL package needs an implicit zlib link edge."
 		FORCE
 	)
@@ -61,7 +61,7 @@ function(libgs_complete_openssl_link_closure)
 	include(CMakePushCheckState)
 	include(CheckCSourceCompiles)
 
-	# Match the physical platform closure used by gs.core. MinGW's static
+	# Match the physical platform closure used by riwo.core. MinGW's static
 	# OpenSSL package does not advertise these Windows libraries either.
 	set(openssl_probe_system_libraries)
 	if (MINGW)
@@ -88,19 +88,19 @@ int main(void)
 		OpenSSL::SSL OpenSSL::Crypto
 		${openssl_probe_system_libraries}
 	)
-	unset(LIBGS_OPENSSL_LINKS_WITHOUT_ZLIB CACHE)
+	unset(RIWO_OPENSSL_LINKS_WITHOUT_ZLIB CACHE)
 
 	check_c_source_compiles("${openssl_probe}"
-		LIBGS_OPENSSL_LINKS_WITHOUT_ZLIB
+		RIWO_OPENSSL_LINKS_WITHOUT_ZLIB
 	)
 	cmake_pop_check_state()
 
-	if (LIBGS_OPENSSL_LINKS_WITHOUT_ZLIB)
+	if (RIWO_OPENSSL_LINKS_WITHOUT_ZLIB)
 		return()
 	endif ()
 
-	if (LIBGS_ZLIB_INSTALL_PREFIX)
-		set(ZLIB_ROOT "${LIBGS_ZLIB_INSTALL_PREFIX}")
+	if (RIWO_ZLIB_INSTALL_PREFIX)
+		set(ZLIB_ROOT "${RIWO_ZLIB_INSTALL_PREFIX}")
 	endif ()
 
 	find_package(ZLIB QUIET)
@@ -115,14 +115,14 @@ int main(void)
 		OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB
 		${openssl_probe_system_libraries}
 	)
-	unset(LIBGS_OPENSSL_LINKS_WITH_ZLIB CACHE)
+	unset(RIWO_OPENSSL_LINKS_WITH_ZLIB CACHE)
 
 	check_c_source_compiles("${openssl_probe}"
-		LIBGS_OPENSSL_LINKS_WITH_ZLIB
+		RIWO_OPENSSL_LINKS_WITH_ZLIB
 	)
 	cmake_pop_check_state()
 
-	if (NOT LIBGS_OPENSSL_LINKS_WITH_ZLIB)
+	if (NOT RIWO_OPENSSL_LINKS_WITH_ZLIB)
 		return()
 	endif ()
 
@@ -135,7 +135,7 @@ int main(void)
 		)
 	endif ()
 
-	set(LIBGS_PACKAGE_OPENSSL_NEEDS_ZLIB ON CACHE INTERNAL
+	set(RIWO_PACKAGE_OPENSSL_NEEDS_ZLIB ON CACHE INTERNAL
 		"Whether the selected OpenSSL package needs an implicit zlib link edge."
 		FORCE
 	)

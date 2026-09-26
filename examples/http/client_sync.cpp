@@ -1,26 +1,26 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/client.h>
+#include <riwo/http/client.h>
 #include <iostream>
 #include <string>
 
 int main(int argc, const char *argv[])
 {
 	const std::string url = argc > 1 ?
-		argv[1] : "http://127.0.0.1:8080/hello/LibGS";
+		argv[1] : "http://127.0.0.1:8080/hello/Riwo";
 
 	std::error_code error;
-	libgs::http::request_arg arguments;
+	riwo::http::request_arg arguments;
 
 	arguments
 	.set_header("Accept", "text/plain")
-	.set_cookie("libgs-example", "1");
+	.set_cookie("riwo-example", "1");
 
-	libgs::http::client::req_info request(url, arguments);
+	riwo::http::client::req_info request(url, arguments);
 	request.max_redirects = 3;
 
-	libgs::http::client client;
+	riwo::http::client client;
 	auto context = client.request_get(std::move(request), error);
 	if(error)
 	{

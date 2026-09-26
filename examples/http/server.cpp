@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/server.h>
+#include <riwo/http/server.h>
 #include <iostream>
 #include <format>
 
@@ -11,78 +11,78 @@ int main(int argc, const char *argv[])
 		argc > 1 ? std::stoul(argv[1]) : 8080
 	);
 	constexpr std::string_view root_body =
-		"LibGS HTTP example\nTry GET /hello/your-name\n";
+		"Riwo HTTP example\nTry GET /hello/your-name\n";
 
-	asio::ip::tcp::acceptor acceptor(libgs::get_executor());
-	libgs::http::server server(std::move(acceptor));
+	asio::ip::tcp::acceptor acceptor(riwo::get_executor());
+	riwo::http::server server(std::move(acceptor));
 
 	server
-	.bind({libgs::ip_type::v4, port})
-	.on_request<libgs::http::method::get>(
+	.bind({riwo::ip_type::v4, port})
+	.on_request<riwo::http::method::get>(
 		"/",
-		[root_body](libgs::http::server::context_t &context) -> libgs::awaitable<void>
+		[root_body](riwo::http::server::context_t &context) -> riwo::awaitable<void>
 		{
 			co_await context.response().write (
-				asio::buffer(root_body), libgs::use_awaitable
+				asio::buffer(root_body), riwo::use_awaitable
 			);
 			co_return;
 		}
 	)
-	.on_request<libgs::http::method::get>(
+	.on_request<riwo::http::method::get>(
 		"/hello/{name}",
-		[](libgs::http::server::context_t &context) -> libgs::awaitable<void>
+		[](riwo::http::server::context_t &context) -> riwo::awaitable<void>
 		{
 			auto &request = context.request();
-			std::cout << libgs::http::method::string(request.method())
+			std::cout << riwo::http::method::string(request.method())
 				<< ' ' << request.path() << '\n';
 
 			const auto body = std::format (
 				"Hello, {}!\n", request.path_arg("name")
 			);
 			co_await context.response().write (
-				asio::buffer(body), libgs::use_awaitable
+				asio::buffer(body), riwo::use_awaitable
 			);
 			co_return;
 		}
 	)
-	.on_request<libgs::http::method::get>(
+	.on_request<riwo::http::method::get>(
 		"/cookies/set",
-		[](libgs::http::server::context_t &context) -> libgs::awaitable<void>
+		[](riwo::http::server::context_t &context) -> riwo::awaitable<void>
 		{
-			libgs::http::cookie cookie("stored");
+			riwo::http::cookie cookie("stored");
 			cookie.set_path("/");
 
-			context.response().set_cookie("libgs-example", std::move(cookie));
+			context.response().set_cookie("riwo-example", std::move(cookie));
 			constexpr std::string_view body = "Cookie stored\n";
 
 			co_await context.response().write (
-				asio::buffer(body), libgs::use_awaitable
+				asio::buffer(body), riwo::use_awaitable
 			);
 			co_return;
 		}
 	)
-	.on_request<libgs::http::method::get>(
+	.on_request<riwo::http::method::get>(
 		"/cookies/show",
-		[](libgs::http::server::context_t &context) -> libgs::awaitable<void>
+		[](riwo::http::server::context_t &context) -> riwo::awaitable<void>
 		{
-			auto cookie = context.request().cookie("libgs-example");
+			auto cookie = context.request().cookie("riwo-example");
 			const auto body = cookie
 				? std::format("Cookie received: {}\n", cookie->to_string())
 				: std::string("Cookie missing\n");
 
 			co_await context.response().write (
-				asio::buffer(body), libgs::use_awaitable
+				asio::buffer(body), riwo::use_awaitable
 			);
 			co_return;
 		}
 	)
-	.on_default([](libgs::http::server::context_t &context) -> libgs::awaitable<void>
+	.on_default([](riwo::http::server::context_t &context) -> riwo::awaitable<void>
 	{
 		constexpr std::string_view body = "Not found\n";
-		context.response().set_status(libgs::http::status::not_found);
+		context.response().set_status(riwo::http::status::not_found);
 
 		co_await context.response().write (
-			asio::buffer(body), libgs::use_awaitable
+			asio::buffer(body), riwo::use_awaitable
 		);
 		co_return;
 	})
@@ -94,5 +94,5 @@ int main(int argc, const char *argv[])
 	.start();
 
 	std::cout << "Listening on http://127.0.0.1:" << port << '\n';
-	return libgs::exec();
+	return riwo::exec();
 }

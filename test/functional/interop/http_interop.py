@@ -13,7 +13,7 @@ import urllib.request
 TIMEOUT = 8
 
 
-def start_libgs_server(peer):
+def start_riwo_server(peer):
     process = subprocess.Popen(
         [peer, "server"],
         stdout=subprocess.PIPE,
@@ -24,7 +24,7 @@ def start_libgs_server(peer):
     if not line.startswith("PORT "):
         stdout, stderr = process.communicate(timeout=TIMEOUT)
         raise RuntimeError(
-            f"LibGS server did not publish a port: {line!r}\n{stdout}{stderr}"
+            f"Riwo server did not publish a port: {line!r}\n{stdout}{stderr}"
         )
     return process, int(line[5:])
 
@@ -70,9 +70,9 @@ def external_request_with_curl(curl, url):
     response = completed.stdout.replace("\r\n", "\n")
     if "HTTP/1.1 202 Accepted\n" not in response:
         raise RuntimeError(f"curl received an unexpected status:\n{response}")
-    if "X-LibGS-Interop: server\n" not in response:
-        raise RuntimeError(f"curl did not receive the LibGS marker:\n{response}")
-    if not response.rstrip().endswith("libgs-server:external-client"):
+    if "X-Riwo-Interop: server\n" not in response:
+        raise RuntimeError(f"curl did not receive the Riwo marker:\n{response}")
+    if not response.rstrip().endswith("riwo-server:external-client"):
         raise RuntimeError(f"curl received an unexpected body:\n{response}")
 
 
@@ -86,9 +86,9 @@ def external_request_with_stdlib(url):
     with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
         if response.status != 202:
             raise RuntimeError(f"urllib received HTTP {response.status}")
-        if response.headers.get("X-LibGS-Interop") != "server":
-            raise RuntimeError("urllib did not receive the LibGS marker")
-        if response.read() != b"libgs-server:external-client":
+        if response.headers.get("X-Riwo-Interop") != "server":
+            raise RuntimeError("urllib did not receive the Riwo marker")
+        if response.read() != b"riwo-server:external-client":
             raise RuntimeError("urllib received an unexpected body")
 
 
@@ -105,10 +105,10 @@ class ExternalHandler(http.server.BaseHTTPRequestHandler):
         valid = (
             target.path == "/interop"
             and urllib.parse.parse_qs(target.query) == {"value": ["42"]}
-            and self.headers.get("X-Interop-Client") == "libgs"
+            and self.headers.get("X-Interop-Client") == "riwo"
         )
         body = (
-            b"external-server:libgs-client"
+            b"external-server:riwo-client"
             if valid
             else b"external-server:rejected"
         )
@@ -124,7 +124,7 @@ class ExternalHandler(http.server.BaseHTTPRequestHandler):
         del args
 
 
-def test_libgs_client(peer):
+def test_riwo_client(peer):
     server = ExternalServer(("127.0.0.1", 0), ExternalHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -139,7 +139,7 @@ def test_libgs_client(peer):
         )
         if completed.returncode:
             raise RuntimeError(
-                "LibGS client rejected the independent HTTP server\n"
+                "Riwo client rejected the independent HTTP server\n"
                 + completed.stdout
                 + completed.stderr
             )
@@ -156,21 +156,21 @@ def main():
     parser.add_argument("--curl")
     args = parser.parse_args()
 
-    process, port = start_libgs_server(args.peer)
+    process, port = start_riwo_server(args.peer)
     try:
         url = f"http://127.0.0.1:{port}/interop/tool?value=42"
         if args.backend == "curl":
             external_request_with_curl(args.curl, url)
         else:
             external_request_with_stdlib(url)
-        finish_process(process, "LibGS HTTP server")
+        finish_process(process, "Riwo HTTP server")
         process = None
     finally:
         if process is not None and process.poll() is None:
             process.terminate()
             process.communicate(timeout=TIMEOUT)
 
-    test_libgs_client(args.peer)
+    test_riwo_client(args.peer)
     print(f"HTTP interoperability passed with {args.backend}")
 
 

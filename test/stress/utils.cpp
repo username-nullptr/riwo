@@ -3,8 +3,8 @@
 
 #include "test.h"
 
-#include <libgs/utils/sbus.h>
-#include <libgs/utils/signal_slot.h>
+#include <riwo/utils/sbus.h>
+#include <riwo/utils/signal_slot.h>
 
 namespace
 {
@@ -18,11 +18,11 @@ void count_signal(size_t value)
 
 void low_load_utility_lifecycle_repetition()
 {
-	const size_t signal_rounds = 5'000 * LIBGS_STRESS_SCALE;
+	const size_t signal_rounds = 5'000 * RIWO_STRESS_SCALE;
 	size_t signal_received = 0;
 	for(size_t round = 0; round < signal_rounds; ++round)
 	{
-		libgs::utils::signal<void(size_t)> signal;
+		riwo::utils::signal<void(size_t)> signal;
 		signal.connect([&](size_t value) { signal_received += value; });
 		signal(1);
 		signal.block();
@@ -31,22 +31,22 @@ void low_load_utility_lifecycle_repetition()
 		signal.disconnect();
 		signal(1);
 	}
-	LIBGS_TEST_CHECK_EQ(signal_received, signal_rounds);
+	RIWO_TEST_CHECK_EQ(signal_received, signal_rounds);
 
-	const size_t bus_rounds = 64 * LIBGS_STRESS_SCALE;
+	const size_t bus_rounds = 64 * RIWO_STRESS_SCALE;
 	std::atomic_size_t bus_received {0};
 	for(size_t round = 0; round < bus_rounds; ++round)
 	{
 		const auto topic = std::format(
-			"libgs.test.stress.lifecycle.{}", round);
+			"riwo.test.stress.lifecycle.{}", round);
 		auto interface =
-			std::make_shared<libgs::utils::sbus::local_interface>();
+			std::make_shared<riwo::utils::sbus::local_interface>();
 		interface->subscribe(topic, [&](const void *data, size_t size)
 		{
 			if(data != nullptr and size == sizeof(size_t))
 				bus_received.fetch_add(1, std::memory_order_release);
 		});
-		libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+		riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 			topic, round
 		);
 		const auto expected = round + 1;
@@ -56,7 +56,7 @@ void low_load_utility_lifecycle_repetition()
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
-		LIBGS_TEST_CHECK_EQ(
+		RIWO_TEST_CHECK_EQ(
 			bus_received.load(std::memory_order_acquire), expected);
 		interface->cancel();
 	}
@@ -64,13 +64,13 @@ void low_load_utility_lifecycle_repetition()
 
 void concurrent_signal_pressure()
 {
-	libgs::utils::signal<void(size_t)> signal;
+	riwo::utils::signal<void(size_t)> signal;
 	std::atomic_size_t received {0};
 	signal_count = &received;
 	signal.connect(count_signal);
 	constexpr size_t emitter_count = 4;
 	constexpr size_t mutator_count = 2;
-	const size_t emissions_per_thread = 25'000 * LIBGS_STRESS_SCALE;
+	const size_t emissions_per_thread = 25'000 * RIWO_STRESS_SCALE;
 	std::atomic_size_t ready {0};
 	std::atomic_bool start {false};
 	std::array<std::thread,emitter_count> emitters;
@@ -110,17 +110,17 @@ void concurrent_signal_pressure()
 	signal.disconnect();
 	const auto before = received.load();
 	signal(1);
-	LIBGS_TEST_CHECK_EQ(received.load(), before);
-	LIBGS_TEST_CHECK(before <= emitter_count * emissions_per_thread);
+	RIWO_TEST_CHECK_EQ(received.load(), before);
+	RIWO_TEST_CHECK(before <= emitter_count * emissions_per_thread);
 	signal_count = nullptr;
 }
 
 void message_bus_fanout_pressure()
 {
-	constexpr std::string_view topic = "libgs.test.stress.sbus";
+	constexpr std::string_view topic = "riwo.test.stress.sbus";
 	constexpr size_t subscriber_count = 8;
-	const size_t publish_count = 5'000 * LIBGS_STRESS_SCALE;
-	auto interface = std::make_shared<libgs::utils::sbus::local_interface>();
+	const size_t publish_count = 5'000 * RIWO_STRESS_SCALE;
+	auto interface = std::make_shared<riwo::utils::sbus::local_interface>();
 	std::atomic_size_t received {0};
 	for(size_t index = 0; index < subscriber_count; ++index)
 	{
@@ -144,8 +144,8 @@ void message_bus_fanout_pressure()
 				index += publishers.size())
 				{
 					const uint64_t value = index;
-					libgs::utils::sbus::publish<
-						libgs::utils::sbus::local_interface>(topic, value);
+					riwo::utils::sbus::publish<
+						riwo::utils::sbus::local_interface>(topic, value);
 				}
 			});
 		}
@@ -154,7 +154,7 @@ void message_bus_fanout_pressure()
 		const auto expected = batch_end * subscriber_count;
 		for(size_t retry = 0; retry < 2'000 and received.load() != expected; ++retry)
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		LIBGS_TEST_CHECK_EQ(received.load(), expected);
+		RIWO_TEST_CHECK_EQ(received.load(), expected);
 	}
 	interface->cancel();
 }
@@ -163,7 +163,7 @@ void message_bus_fanout_pressure()
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"low-load utility lifecycle repetition",
 			low_load_utility_lifecycle_repetition},
 		{"concurrent signal pressure", concurrent_signal_pressure},

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/client.h>
+#include <riwo/http/client.h>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -15,13 +15,13 @@ int main(int argc, const char *argv[])
 	}
 	const auto upload_file = std::filesystem::absolute(argv[1]);
 	const auto download_file = std::filesystem::absolute (
-		argc > 2 ? argv[2] : "libgs-downloaded.bin"
+		argc > 2 ? argv[2] : "riwo-downloaded.bin"
 	);
 	const std::string base_url = argc > 3 ?
 		argv[3] : "http://127.0.0.1:8083";
 
 	try {
-		libgs::http::client client;
+		riwo::http::client client;
 
 		auto upload = client.upload_file(base_url + "/upload", upload_file);
 		std::cout << upload->reply()->read<std::string>();

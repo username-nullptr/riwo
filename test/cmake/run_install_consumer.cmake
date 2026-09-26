@@ -9,7 +9,7 @@ foreach(required_variable
 	TEST_MISSING_BINARY_DIR
 	TEST_INSTALL_PREFIX
 	TEST_INSTALL_CMAKEDIR
-	LIBGS_BINARY_DIR
+	RIWO_BINARY_DIR
 	TEST_GENERATOR
 	TEST_VERSION
 	TEST_COMPONENTS
@@ -28,7 +28,7 @@ file(REMOVE_RECURSE
 )
 
 set(install_command
-	"${CMAKE_COMMAND}" --install "${LIBGS_BINARY_DIR}"
+	"${CMAKE_COMMAND}" --install "${RIWO_BINARY_DIR}"
 	--prefix "${TEST_INSTALL_PREFIX}"
 )
 if (TEST_CONFIGURATION)
@@ -42,23 +42,23 @@ execute_process(
 )
 if (NOT install_result EQUAL 0)
 	message(FATAL_ERROR
-		"Installing LibGS failed. Build the project before running CTest.\n"
+		"Installing Riwo failed. Build the project before running CTest.\n"
 		"${install_stdout}\n${install_stderr}"
 	)
 endif ()
 
 if (IS_ABSOLUTE "${TEST_INSTALL_CMAKEDIR}")
-	set(libgs_package_dir "${TEST_INSTALL_CMAKEDIR}")
+	set(riwo_package_dir "${TEST_INSTALL_CMAKEDIR}")
 else ()
-	set(libgs_package_dir
+	set(riwo_package_dir
 		"${TEST_INSTALL_PREFIX}/${TEST_INSTALL_CMAKEDIR}"
 	)
 endif ()
 
-if (NOT EXISTS "${libgs_package_dir}/LibGSConfig.cmake")
+if (NOT EXISTS "${riwo_package_dir}/RiwoConfig.cmake")
 	message(FATAL_ERROR
-		"The install tree does not contain LibGSConfig.cmake at "
-		"${libgs_package_dir}."
+		"The install tree does not contain RiwoConfig.cmake at "
+		"${riwo_package_dir}."
 	)
 endif ()
 
@@ -94,9 +94,9 @@ function(make_consumer_configure_command output_variable binary_dir)
 	endif ()
 
 	list(APPEND command
-		"-DLibGS_DIR=${libgs_package_dir}"
-		"-DLIBGS_EXPECTED_VERSION=${TEST_VERSION}"
-		"-DLIBGS_RUNTIME_DIR=${TEST_INSTALL_PREFIX}/bin"
+		"-DRiwo_DIR=${riwo_package_dir}"
+		"-DRIWO_EXPECTED_VERSION=${TEST_VERSION}"
+		"-DRIWO_RUNTIME_DIR=${TEST_INSTALL_PREFIX}/bin"
 	)
 	set(${output_variable} ${command} PARENT_SCOPE)
 endfunction()
@@ -104,7 +104,7 @@ endfunction()
 make_consumer_configure_command(consumer_configure_command "${TEST_BINARY_DIR}")
 
 list(APPEND consumer_configure_command
-	"-DLIBGS_EXPECTED_COMPONENTS=${TEST_COMPONENTS}"
+	"-DRIWO_EXPECTED_COMPONENTS=${TEST_COMPONENTS}"
 )
 execute_process (
 	COMMAND ${consumer_configure_command}
@@ -165,7 +165,7 @@ make_consumer_configure_command(missing_configure_command
 	"${TEST_MISSING_BINARY_DIR}"
 )
 list(APPEND missing_configure_command
-	"-DLIBGS_REQUEST_MISSING_COMPONENT=${TEST_MISSING_COMPONENT}"
+	"-DRIWO_REQUEST_MISSING_COMPONENT=${TEST_MISSING_COMPONENT}"
 )
 execute_process (
 	COMMAND ${missing_configure_command}
@@ -181,5 +181,5 @@ if (NOT missing_configure_result EQUAL 0)
 endif ()
 
 message(STATUS
-	"Installed LibGS was consumed successfully with components: ${TEST_COMPONENTS}"
+	"Installed Riwo was consumed successfully with components: ${TEST_COMPONENTS}"
 )

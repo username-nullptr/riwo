@@ -14,16 +14,16 @@ foreach(required_variable
 endforeach()
 
 # Configure the real project first so the probe exercises the generated
-# LibGSConfig.cmake rather than a test-only approximation.
+# RiwoConfig.cmake rather than a test-only approximation.
 include("${CMAKE_CURRENT_LIST_DIR}/run_configure.cmake")
 
 set(probe_binary_dir "${TEST_BINARY_DIR}-probe")
 file(REMOVE_RECURSE "${probe_binary_dir}")
 
-# install(EXPORT) writes LibGSTargets.cmake only while installing.  Dependency
+# install(EXPORT) writes RiwoTargets.cmake only while installing.  Dependency
 # selection happens before that include, so an empty file is sufficient for a
 # configure-only package probe and keeps these regression tests inexpensive.
-file(WRITE "${TEST_BINARY_DIR}/LibGSTargets.cmake"
+file(WRITE "${TEST_BINARY_DIR}/RiwoTargets.cmake"
 	"# Deliberately empty: dependency-selection probe.\n"
 )
 set(probe_command
@@ -49,7 +49,7 @@ if (TEST_TOOLCHAIN_FILE)
 endif ()
 
 list(APPEND probe_command
-	"-DLibGS_DIR=${TEST_BINARY_DIR}"
+	"-DRiwo_DIR=${TEST_BINARY_DIR}"
 	"-DPROBE_COMPONENT=${TEST_PROBE_COMPONENT}"
 	"-DPROBE_EXPECT_FOUND=${TEST_PROBE_EXPECT_FOUND}"
 	"-DPROBE_EXPECT_ERROR=${TEST_PROBE_EXPECT_ERROR}"

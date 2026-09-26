@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/utils/sbus.h>
+#include <riwo/utils/sbus.h>
 #include <iostream>
 #include <atomic>
 #include <chrono>
@@ -14,7 +14,7 @@ class transport_interface
 public:
 	static void publish(std::string_view topic, const void *data, size_t size)
 	{
-		libgs::utils::sbus::local_interface::publish(topic, data, size);
+		riwo::utils::sbus::local_interface::publish(topic, data, size);
 	}
 
 	uint64_t subscribe(std::string_view topic,std::function<void(const void*,size_t)> callback)
@@ -43,12 +43,12 @@ public:
 	}
 
 private:
-	std::shared_ptr<libgs::utils::sbus::local_interface> m_local =
-		std::make_shared<libgs::utils::sbus::local_interface>();
+	std::shared_ptr<riwo::utils::sbus::local_interface> m_local =
+		std::make_shared<riwo::utils::sbus::local_interface>();
 };
 
 using transport_subscriber =
-	libgs::utils::sbus::basic_subscriber<transport_interface>;
+	riwo::utils::sbus::basic_subscriber<transport_interface>;
 
 std::atomic_bool received = false;
 
@@ -63,7 +63,7 @@ int main()
 		received = true;
 	});
 
-	libgs::utils::sbus::publish<transport_interface>(
+	riwo::utils::sbus::publish<transport_interface>(
 		"example.transport", "replace this adapter with DDS"
 	);
 	for(int retry = 0; retry < 100 and not received; ++retry)

@@ -3,7 +3,7 @@
 
 #include "test.h"
 
-#include <libgs/core/jthread.h>
+#include <riwo/core/jthread.h>
 #include <array>
 #include <functional>
 #include <memory>
@@ -11,8 +11,8 @@
 namespace
 {
 
-static_assert(LIBGS_HAS_STD_JTHREAD == 0);
-constexpr size_t scale = LIBGS_STRESS_SCALE;
+static_assert(RIWO_HAS_STD_JTHREAD == 0);
+constexpr size_t scale = RIWO_STRESS_SCALE;
 
 void repeated_jthread_lifecycle()
 {
@@ -21,7 +21,7 @@ void repeated_jthread_lifecycle()
 	std::atomic_size_t stopped {0};
 	for(size_t round = 0; round < rounds; ++round)
 	{
-		libgs::jthread worker([&](libgs::stop_token token)
+		riwo::jthread worker([&](riwo::stop_token token)
 		{
 			started.fetch_add(1, std::memory_order_release);
 			while( not token.stop_requested() )
@@ -31,8 +31,8 @@ void repeated_jthread_lifecycle()
 		while( started.load(std::memory_order_acquire) != round + 1 )
 			std::this_thread::yield();
 	}
-	LIBGS_TEST_CHECK_EQ(started.load(std::memory_order_acquire), rounds);
-	LIBGS_TEST_CHECK_EQ(stopped.load(std::memory_order_acquire), rounds);
+	RIWO_TEST_CHECK_EQ(started.load(std::memory_order_acquire), rounds);
+	RIWO_TEST_CHECK_EQ(stopped.load(std::memory_order_acquire), rounds);
 }
 
 void concurrent_stop_requests()
@@ -42,9 +42,9 @@ void concurrent_stop_requests()
 	const size_t rounds = 100 * scale;
 	for(size_t round = 0; round < rounds; ++round)
 	{
-		libgs::stop_source source;
+		riwo::stop_source source;
 		std::array<std::atomic_uint8_t,callback_count> callback_hits {};
-		using callback_t = libgs::stop_callback<std::function<void()>>;
+		using callback_t = riwo::stop_callback<std::function<void()>>;
 		std::array<std::unique_ptr<callback_t>,callback_count> callbacks;
 		for(size_t index = 0; index < callback_count; ++index)
 		{
@@ -77,9 +77,9 @@ void concurrent_stop_requests()
 		for(auto &requester : requesters)
 			requester.join();
 
-		LIBGS_TEST_CHECK_EQ(successful_requests.load(), 1U);
+		RIWO_TEST_CHECK_EQ(successful_requests.load(), 1U);
 		for(const auto &hits : callback_hits)
-			LIBGS_TEST_CHECK_EQ(hits.load(std::memory_order_relaxed), uint8_t {1});
+			RIWO_TEST_CHECK_EQ(hits.load(std::memory_order_relaxed), uint8_t {1});
 	}
 }
 
@@ -90,9 +90,9 @@ void callback_removal_races_stop()
 	const size_t rounds = 100 * scale;
 	for(size_t round = 0; round < rounds; ++round)
 	{
-		libgs::stop_source source;
+		riwo::stop_source source;
 		std::array<std::atomic_uint8_t,callback_count> callback_hits {};
-		using callback_t = libgs::stop_callback<std::function<void()>>;
+		using callback_t = riwo::stop_callback<std::function<void()>>;
 		std::array<std::unique_ptr<callback_t>,callback_count> callbacks;
 		for(size_t index = 0; index < callback_count; ++index)
 		{
@@ -141,7 +141,7 @@ void callback_removal_races_stop()
 		requester.join();
 
 		for(const auto &hits : callback_hits)
-			LIBGS_TEST_CHECK(hits.load(std::memory_order_relaxed) <= 1);
+			RIWO_TEST_CHECK(hits.load(std::memory_order_relaxed) <= 1);
 	}
 }
 
@@ -153,10 +153,10 @@ void many_polling_workers()
 	{
 		std::atomic_size_t ready {0};
 		std::atomic_size_t stopped {0};
-		std::array<libgs::jthread,worker_count> workers;
+		std::array<riwo::jthread,worker_count> workers;
 		for(auto &worker : workers)
 		{
-			worker = libgs::jthread([&](libgs::stop_token token)
+			worker = riwo::jthread([&](riwo::stop_token token)
 			{
 				ready.fetch_add(1, std::memory_order_release);
 				while( not token.stop_requested() )
@@ -167,10 +167,10 @@ void many_polling_workers()
 		while( ready.load(std::memory_order_acquire) != worker_count )
 			std::this_thread::yield();
 		for(auto &worker : workers)
-			LIBGS_TEST_CHECK(worker.request_stop());
+			RIWO_TEST_CHECK(worker.request_stop());
 		for(auto &worker : workers)
 			worker.join();
-		LIBGS_TEST_CHECK_EQ(stopped.load(std::memory_order_acquire), worker_count);
+		RIWO_TEST_CHECK_EQ(stopped.load(std::memory_order_acquire), worker_count);
 	}
 }
 
@@ -178,7 +178,7 @@ void many_polling_workers()
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"repeated jthread lifecycle", repeated_jthread_lifecycle},
 		{"concurrent stop requests", concurrent_stop_requests},
 		{"callback removal races stop", callback_removal_races_stop},

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/lock_free_queue.h>
-#include <libgs/core/jthread.h>
+#include <riwo/core/lock_free_queue.h>
+#include <riwo/core/jthread.h>
 #include <iostream>
 #include <atomic>
 #include <thread>
@@ -10,12 +10,12 @@
 int main()
 {
 	constexpr int item_count = 100;
-	libgs::lock_free_queue<int,libgs::queue_type::circular,32> queue;
+	riwo::lock_free_queue<int,riwo::queue_type::circular,32> queue;
 
 	std::atomic_int consumed = 0;
 	std::atomic_bool producer_done = false;
 
-	libgs::jthread producer([&]
+	riwo::jthread producer([&]
 	{
 		for(int value = 0; value < item_count; ++value)
 		{
@@ -25,7 +25,7 @@ int main()
 		producer_done = true;
 	});
 
-	libgs::jthread consumer([&]
+	riwo::jthread consumer([&]
 	{
 		while(not producer_done or not queue.empty())
 		{

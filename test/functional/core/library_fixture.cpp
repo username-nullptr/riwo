@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 #if defined(_WIN32)
-# define LIBGS_TEST_EXPORT __declspec(dllexport)
+# define RIWO_TEST_EXPORT __declspec(dllexport)
 #elif defined(__GNUC__)
-# define LIBGS_TEST_EXPORT __attribute__((visibility("default")))
+# define RIWO_TEST_EXPORT __attribute__((visibility("default")))
 #else
-# define LIBGS_TEST_EXPORT
+# define RIWO_TEST_EXPORT
 #endif
 
-extern "C" LIBGS_TEST_EXPORT int libgs_test_twice(int value)
+extern "C" RIWO_TEST_EXPORT int riwo_test_twice(int value)
 {
 	return value * 2;
 }

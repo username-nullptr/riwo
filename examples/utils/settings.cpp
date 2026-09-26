@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/utils/settings.h>
+#include <riwo/utils/settings.h>
 #include <filesystem>
 #include <iostream>
 
 int main(int argc, const char *argv[])
 {
 	const std::filesystem::path path = argc > 1 ?
-		argv[1] : "libgs-example-settings.ini";
+		argv[1] : "riwo-example-settings.ini";
 
-	auto &settings = libgs::utils::settings::instance();
-	settings.changed.connect([](std::string_view key, const libgs::value &value) {
+	auto &settings = riwo::utils::settings::instance();
+	settings.changed.connect([](std::string_view key, const riwo::value &value) {
 		std::cout << "Changed " << key << " = " << value.to_string() << '\n';
 	});
 

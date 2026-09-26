@@ -1,25 +1,25 @@
 # SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 # SPDX-License-Identifier: MIT
 
-add_libgs_performance_test(lock-free-queue lock_free_queue.cpp gs.core)
-add_libgs_performance_test(core core.cpp gs.core)
-add_libgs_performance_test(mutex mutex.cpp gs.core)
+add_riwo_performance_test(lock-free-queue lock_free_queue.cpp riwo.core)
+add_riwo_performance_test(core core.cpp riwo.core)
+add_riwo_performance_test(mutex mutex.cpp riwo.core)
 
-if (LIBGS_BUILD_CORO)
-	add_libgs_performance_test(coro coro.cpp gs.coro)
+if (RIWO_BUILD_CORO)
+	add_riwo_performance_test(coro coro.cpp riwo.coro)
 endif ()
 
-if (LIBGS_BUILD_HTTP)
-	add_libgs_performance_test(http http.cpp gs.http)
-	add_libgs_performance_test(http-protocol http_protocol.cpp gs.http)
+if (RIWO_BUILD_HTTP)
+	add_riwo_performance_test(http http.cpp riwo.http)
+	add_riwo_performance_test(http-protocol http_protocol.cpp riwo.http)
 endif ()
 
-if (LIBGS_BUILD_WEBSOCKET)
-	add_libgs_performance_test(websocket websocket.cpp gs.websocket)
+if (RIWO_BUILD_WEBSOCKET)
+	add_riwo_performance_test(websocket websocket.cpp riwo.websocket)
 endif ()
 
-if (LIBGS_BUILD_UTILITIES)
-	add_libgs_performance_test(logger logger.cpp gs.utils)
-	add_libgs_performance_test(signal-slot signal_slot.cpp gs.utils)
-	add_libgs_performance_test(sbus sbus.cpp gs.utils)
+if (RIWO_BUILD_UTILITIES)
+	add_riwo_performance_test(logger logger.cpp riwo.utils)
+	add_riwo_performance_test(signal-slot signal_slot.cpp riwo.utils)
+	add_riwo_performance_test(sbus sbus.cpp riwo.utils)
 endif ()

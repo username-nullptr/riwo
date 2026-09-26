@@ -3,8 +3,8 @@
 
 #include "test.h"
 
-#include <libgs/coro/mutex.h>
-#include <libgs/coro/shared_mutex.h>
+#include <riwo/coro/mutex.h>
+#include <riwo/coro/shared_mutex.h>
 
 namespace
 {
@@ -13,12 +13,12 @@ void low_load_mutex_lifecycle_repetition()
 {
 	constexpr size_t worker_count = 2;
 	constexpr size_t iterations = 4;
-	const size_t rounds = 64 * LIBGS_STRESS_SCALE;
-	const auto seed = libgs::test::current_seed();
+	const size_t rounds = 64 * RIWO_STRESS_SCALE;
+	const auto seed = riwo::test::current_seed();
 	for(size_t round = 0; round < rounds; ++round)
 	{
-		libgs::io_context_t context;
-		libgs::coro::mutex mutex;
+		riwo::io_context_t context;
+		riwo::coro::mutex mutex;
 		std::atomic_size_t active {0};
 		std::atomic_bool overlap {false};
 		std::atomic_size_t counter {0};
@@ -26,7 +26,7 @@ void low_load_mutex_lifecycle_repetition()
 		for(size_t worker = 0; worker < worker_count; ++worker)
 		{
 			futures[worker] = asio::co_spawn(context,
-			[&, worker]() -> libgs::awaitable<void>
+			[&, worker]() -> riwo::awaitable<void>
 			{
 				for(size_t index = 0; index < iterations; ++index)
 				{
@@ -35,13 +35,13 @@ void low_load_mutex_lifecycle_repetition()
 						overlap.store(true, std::memory_order_relaxed);
 					counter.fetch_add(1, std::memory_order_relaxed);
 					if(((seed ^ round ^ worker ^ index) & 1U) != 0)
-						co_await asio::post(libgs::use_awaitable);
+						co_await asio::post(riwo::use_awaitable);
 					if(active.fetch_sub(1, std::memory_order_relaxed) != 1)
 						overlap.store(true, std::memory_order_relaxed);
 					mutex.unlock();
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 				}
-			}, libgs::use_future);
+			}, riwo::use_future);
 		}
 
 		std::array<std::thread,2> runners;
@@ -51,20 +51,20 @@ void low_load_mutex_lifecycle_repetition()
 			future.get();
 		for(auto &runner : runners)
 			runner.join();
-		LIBGS_TEST_CHECK_EQ(counter.load(std::memory_order_relaxed),
+		RIWO_TEST_CHECK_EQ(counter.load(std::memory_order_relaxed),
 			worker_count * iterations);
-		LIBGS_TEST_CHECK_EQ(active.load(std::memory_order_relaxed), 0U);
-		LIBGS_TEST_CHECK(not overlap.load(std::memory_order_relaxed));
-		LIBGS_TEST_CHECK(not mutex.is_locked());
+		RIWO_TEST_CHECK_EQ(active.load(std::memory_order_relaxed), 0U);
+		RIWO_TEST_CHECK(not overlap.load(std::memory_order_relaxed));
+		RIWO_TEST_CHECK(not mutex.is_locked());
 	}
 }
 
 void coroutine_mutex_pressure()
 {
 	constexpr size_t worker_count = 128;
-	const size_t iterations = 1'000 * LIBGS_STRESS_SCALE;
-	libgs::io_context_t context;
-	libgs::coro::mutex mutex;
+	const size_t iterations = 1'000 * RIWO_STRESS_SCALE;
+	riwo::io_context_t context;
+	riwo::coro::mutex mutex;
 	std::atomic_uint64_t counter {0};
 	std::atomic_size_t active {0};
 	std::atomic_bool overlap {false};
@@ -74,7 +74,7 @@ void coroutine_mutex_pressure()
 	for(size_t worker = 0; worker < worker_count; ++worker)
 	{
 		futures.emplace_back(asio::co_spawn(context,
-		[&]() -> libgs::awaitable<void>
+		[&]() -> riwo::awaitable<void>
 		{
 			for(size_t index = 0; index < iterations; ++index)
 			{
@@ -86,9 +86,9 @@ void coroutine_mutex_pressure()
 					overlap.store(true, std::memory_order_relaxed);
 				mutex.unlock();
 				if((index & 31U) == 0)
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 			}
-		}, libgs::use_future));
+		}, riwo::use_future));
 	}
 
 	std::array<std::thread,4> runners;
@@ -99,20 +99,20 @@ void coroutine_mutex_pressure()
 	for(auto &runner : runners)
 		runner.join();
 
-	LIBGS_TEST_CHECK_EQ(counter.load(std::memory_order_relaxed),
+	RIWO_TEST_CHECK_EQ(counter.load(std::memory_order_relaxed),
 		worker_count * iterations);
-	LIBGS_TEST_CHECK_EQ(active.load(), 0U);
-	LIBGS_TEST_CHECK(not overlap.load());
-	LIBGS_TEST_CHECK(not mutex.is_locked());
+	RIWO_TEST_CHECK_EQ(active.load(), 0U);
+	RIWO_TEST_CHECK(not overlap.load());
+	RIWO_TEST_CHECK(not mutex.is_locked());
 }
 
 void shared_mutex_reader_writer_pressure()
 {
 	constexpr size_t writer_count = 16;
 	constexpr size_t reader_count = 64;
-	const size_t iterations = 500 * LIBGS_STRESS_SCALE;
-	libgs::io_context_t context;
-	libgs::coro::shared_mutex mutex;
+	const size_t iterations = 500 * RIWO_STRESS_SCALE;
+	riwo::io_context_t context;
+	riwo::coro::shared_mutex mutex;
 	std::atomic_uint64_t value {0};
 	std::atomic_size_t active_readers {0};
 	std::atomic_size_t active_writers {0};
@@ -125,7 +125,7 @@ void shared_mutex_reader_writer_pressure()
 	for(size_t writer = 0; writer < writer_count; ++writer)
 	{
 		futures.emplace_back(asio::co_spawn(context,
-		[&]() -> libgs::awaitable<void>
+		[&]() -> riwo::awaitable<void>
 		{
 			for(size_t index = 0; index < iterations; ++index)
 			{
@@ -139,14 +139,14 @@ void shared_mutex_reader_writer_pressure()
 					concurrent_writers.store(true, std::memory_order_relaxed);
 				mutex.unlock();
 				if((index & 15U) == 0)
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 			}
-		}, libgs::use_future));
+		}, riwo::use_future));
 	}
 	for(size_t reader = 0; reader < reader_count; ++reader)
 	{
 		futures.emplace_back(asio::co_spawn(context,
-		[&]() -> libgs::awaitable<void>
+		[&]() -> riwo::awaitable<void>
 		{
 			std::uint64_t previous = 0;
 			for(size_t index = 0; index < iterations; ++index)
@@ -158,12 +158,12 @@ void shared_mutex_reader_writer_pressure()
 				const auto observed = value.load(std::memory_order_relaxed);
 				active_readers.fetch_sub(1);
 				mutex.unlock_shared();
-				LIBGS_TEST_CHECK(observed >= previous);
+				RIWO_TEST_CHECK(observed >= previous);
 				previous = observed;
 				if((index & 31U) == 0)
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 			}
-		}, libgs::use_future));
+		}, riwo::use_future));
 	}
 
 	std::array<std::thread,4> runners;
@@ -174,22 +174,22 @@ void shared_mutex_reader_writer_pressure()
 	for(auto &runner : runners)
 		runner.join();
 
-	LIBGS_TEST_CHECK_EQ(value.load(), writer_count * iterations);
-	LIBGS_TEST_CHECK_EQ(active_readers.load(), 0U);
-	LIBGS_TEST_CHECK_EQ(active_writers.load(), 0U);
-	LIBGS_TEST_CHECK(not concurrent_writers.load());
-	LIBGS_TEST_CHECK(not writer_reader_overlap.load());
-	LIBGS_TEST_CHECK(not reader_writer_overlap.load());
-	LIBGS_TEST_CHECK(not mutex.is_locked());
+	RIWO_TEST_CHECK_EQ(value.load(), writer_count * iterations);
+	RIWO_TEST_CHECK_EQ(active_readers.load(), 0U);
+	RIWO_TEST_CHECK_EQ(active_writers.load(), 0U);
+	RIWO_TEST_CHECK(not concurrent_writers.load());
+	RIWO_TEST_CHECK(not writer_reader_overlap.load());
+	RIWO_TEST_CHECK(not reader_writer_overlap.load());
+	RIWO_TEST_CHECK(not mutex.is_locked());
 }
 
 void timed_mutex_waiter_pressure()
 {
 	using namespace std::chrono_literals;
 	constexpr size_t worker_count = 64;
-	const size_t iterations = 250 * LIBGS_STRESS_SCALE;
-	libgs::io_context_t context;
-	libgs::coro::mutex mutex;
+	const size_t iterations = 250 * RIWO_STRESS_SCALE;
+	riwo::io_context_t context;
+	riwo::coro::mutex mutex;
 	std::atomic_size_t active {0};
 	std::atomic_size_t acquired {0};
 	std::atomic_size_t timed_out {0};
@@ -200,7 +200,7 @@ void timed_mutex_waiter_pressure()
 	for(size_t worker = 0; worker < worker_count; ++worker)
 	{
 		futures.emplace_back(asio::co_spawn(context,
-		[&, worker]() -> libgs::awaitable<void>
+		[&, worker]() -> riwo::awaitable<void>
 		{
 			for(size_t index = 0; index < iterations; ++index)
 			{
@@ -210,7 +210,7 @@ void timed_mutex_waiter_pressure()
 					if(active.fetch_add(1, std::memory_order_relaxed) != 0)
 						overlap.store(true, std::memory_order_relaxed);
 					acquired.fetch_add(1, std::memory_order_relaxed);
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 					if(active.fetch_sub(1, std::memory_order_relaxed) != 1)
 						overlap.store(true, std::memory_order_relaxed);
 					mutex.unlock();
@@ -218,9 +218,9 @@ void timed_mutex_waiter_pressure()
 				else
 					timed_out.fetch_add(1, std::memory_order_relaxed);
 				if((index & 7U) == 0)
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 			}
-		}, libgs::use_future));
+		}, riwo::use_future));
 	}
 
 	std::array<std::thread,4> runners;
@@ -231,20 +231,20 @@ void timed_mutex_waiter_pressure()
 	for(auto &runner : runners)
 		runner.join();
 
-	LIBGS_TEST_CHECK_EQ(acquired.load() + timed_out.load(),
+	RIWO_TEST_CHECK_EQ(acquired.load() + timed_out.load(),
 		worker_count * iterations);
-	LIBGS_TEST_CHECK(acquired.load() != 0);
-	LIBGS_TEST_CHECK(timed_out.load() != 0);
-	LIBGS_TEST_CHECK_EQ(active.load(), 0U);
-	LIBGS_TEST_CHECK(not overlap.load());
-	LIBGS_TEST_CHECK(not mutex.is_locked());
+	RIWO_TEST_CHECK(acquired.load() != 0);
+	RIWO_TEST_CHECK(timed_out.load() != 0);
+	RIWO_TEST_CHECK_EQ(active.load(), 0U);
+	RIWO_TEST_CHECK(not overlap.load());
+	RIWO_TEST_CHECK(not mutex.is_locked());
 }
 
 } //namespace
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"low-load mutex lifecycle repetition", low_load_mutex_lifecycle_repetition},
 		{"coroutine mutex pressure", coroutine_mutex_pressure},
 		{"shared mutex reader/writer pressure", shared_mutex_reader_writer_pressure},

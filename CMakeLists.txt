@@ -8,7 +8,7 @@ set(MINOR_VERSION 16)
 set(PATCH_VERSION  4)
 
 set(PRO_VERSION ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
-set(PRO_NAME LibGS)
+set(PRO_NAME Riwo)
 
 project(${PRO_NAME} VERSION ${PRO_VERSION} LANGUAGES C CXX)
 
@@ -16,10 +16,10 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 add_definitions (
-	-DLIBGS_MAJOR_VERSION=${MAJOR_VERSION}
-	-DLIBGS_MINOR_VERSION=${MINOR_VERSION}
-	-DLIBGS_PATCH_VERSION=${PATCH_VERSION}
-	-DLIBGS_VERSION_STR="${PRO_VERSION}-dev"
+	-DRIWO_MAJOR_VERSION=${MAJOR_VERSION}
+	-DRIWO_MINOR_VERSION=${MINOR_VERSION}
+	-DRIWO_PATCH_VERSION=${PATCH_VERSION}
+	-DRIWO_VERSION_STR="${PRO_VERSION}-dev"
 )
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -36,25 +36,25 @@ include(test)
 include(CTest)
 
 if (CMAKE_BUILD_TYPE AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))
-	add_definitions(-DLIBGS_DEBUG)
+	add_definitions(-DRIWO_DEBUG)
 endif()
 
 include_directories(.)
-add_subdirectory(libgs)
+add_subdirectory(riwo)
 
 # Generate the installed package only after every provider and exported target
 # has been resolved.  External providers choose their concrete imported target
 # names while configuring 3rd_party, so generating this file earlier leaves
-# empty target names in LibGSConfig.cmake.
+# empty target names in RiwoConfig.cmake.
 include(provider)
 
 if (BUILD_TESTING)
 	add_subdirectory(test)
 endif()
 
-if (LIBGS_BUILD_EXAMPLES)
+if (RIWO_BUILD_EXAMPLES)
 	add_subdirectory(examples)
 endif()
 
-source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES libgs.h)
-install(FILES libgs.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES riwo.h)
+install(FILES riwo.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/coro/mutex.h>
-#include <libgs/coro/semaphore.h>
-#include <libgs/coro/shared_mutex.h>
+#include <riwo/coro/mutex.h>
+#include <riwo/coro/semaphore.h>
+#include <riwo/coro/shared_mutex.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-	if(size == 0 or size > LIBGS_FUZZ_MAX_LENGTH)
+	if(size == 0 or size > RIWO_FUZZ_MAX_LENGTH)
 		return 0;
 
-	libgs::coro::mutex mutex;
-	libgs::coro::shared_mutex shared_mutex;
-	libgs::coro::basic_semaphore<8> semaphore(data[0] % 9);
+	riwo::coro::mutex mutex;
+	riwo::coro::shared_mutex shared_mutex;
+	riwo::coro::basic_semaphore<8> semaphore(data[0] % 9);
 	size_t semaphore_count = data[0] % 9;
 	bool owns_mutex = false;
 	bool owns_exclusive = false;
@@ -37,8 +37,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			}
 			break;
 		case 2:
-			libgs::ignore_unused(mutex.is_locked());
-			libgs::ignore_unused(mutex.native_handle().load());
+			riwo::ignore_unused(mutex.is_locked());
+			riwo::ignore_unused(mutex.native_handle().load());
 			break;
 		case 3:
 		{
@@ -52,7 +52,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		case 4:
 			if(semaphore_count < 8)
 			{
-				libgs::ignore_unused(semaphore.release());
+				riwo::ignore_unused(semaphore.release());
 				++semaphore_count;
 			}
 			break;

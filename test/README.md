@@ -1,32 +1,54 @@
-# LibGS Tests
+# Riwo Tests
 
-Tests are grouped by purpose. CTest entries carry the corresponding suite label.
+This is the canonical guide for verification builds, CTest selection, runner
+controls, and test-only CMake options. Tests are added only for library modules
+enabled in the same build.
 
-| Suite | Purpose | Enable |
-| --- | --- | --- |
-| Functional | Deterministic public behavior, errors, ownership, cancellation, state | `BUILD_TESTING=ON` |
-| Stress | Correctness under concurrency, saturation, and repeated lifecycle work | `LIBGS_BUILD_STRESS_TESTS=ON` |
-| Fuzz | Input and call-sequence exploration with libFuzzer/ASan/UBSan | `LIBGS_BUILD_FUZZERS=ON` |
-| Performance | Throughput and latency measurements without fixed thresholds | `LIBGS_BUILD_PERFORMANCE_TESTS=ON` |
-| CMake | Module/option constraints and installed-package consumption | `LIBGS_BUILD_CMAKE_TESTS=ON` |
+## Choose a suite
 
-Only enabled library modules contribute tests.
+| Suite | Question it answers | Enable | CTest label |
+| --- | --- | --- | --- |
+| Functional | Does public behavior work deterministically? | `BUILD_TESTING=ON` | `functional` |
+| CMake | Do option constraints, exports, and installed consumers work? | `RIWO_BUILD_CMAKE_TESTS=ON` | `cmake` |
+| Interoperability | Does HTTP/WebSocket work with an available independent implementation? | discovered within Functional | `interop` |
+| Stress | Does correctness survive concurrency, saturation, and repeated lifecycle work? | `RIWO_BUILD_STRESS_TESTS=ON` | `stress` |
+| Fuzz | Do malformed inputs and call sequences expose failures? | `RIWO_BUILD_FUZZERS=ON` | `fuzz` |
+| Performance | What throughput and latency does this build produce? | `RIWO_BUILD_PERFORMANCE_TESTS=ON` | `performance` |
+| Sanitizer | Do Functional/Stress runs expose memory, UB, or race failures? | sanitizer option below | `sanitizer` |
 
-## CMake integration tests
+Put successful behavior, invalid input, ownership, cancellation, timeouts, and
+state transitions in Functional. Use Stress for pressure-dependent correctness,
+Fuzz for broad input/state exploration, and Performance only for measurements.
 
-`LIBGS_BUILD_CMAKE_TESTS` follows `BUILD_TESTING` by default.  The configure
-suite enumerates every Core/Coroutine/HTTP/WebSocket/Utilities module
-combination, checks that invalid dependency combinations are rejected for the
-documented reason, and verifies the generated package component state.  It also
-checks the constraints between sanitizer, fuzz, stress, performance, provider,
-and numeric test options.  Package probes verify that component selection
-restores only its transitive external dependencies and reports unavailable
-components before attempting unrelated dependency discovery.
+## Functional profile
 
-The install-consumer test installs the current build into an isolated prefix.
-An independent downstream project then uses `find_package(LibGS COMPONENTS
-...)`, builds against every installed `LibGS::` target and the legacy `gs.`
-targets, and runs the resulting executables.  Run these tests after building:
+The following enables every module so every functional area is present:
+
+```sh
+cmake -S . -B build-test -DBUILD_TESTING=ON \
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_UTILITIES=ON \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-test --parallel
+ctest --test-dir build-test -L functional --output-on-failure
+```
+
+CTest names are `riwo.<area>`; executables are
+`build-test/output/bin/riwo.test.<area>`. The
+[functional API coverage map](functional/API_COVERAGE.md) records which source
+owns each public behavior.
+
+## CMake and installation profile
+
+`RIWO_BUILD_CMAKE_TESTS` follows `BUILD_TESTING` by default. This suite checks:
+
+- every Core/Coroutines/HTTP/WebSocket/Utilities enablement combination;
+- rejection of invalid module, provider, sanitizer, fuzz, and numeric options;
+- generated package component availability;
+- dependency restoration for only the requested installed components;
+- installation followed by an independent `find_package(Riwo)` consumer build
+  and execution against both `Riwo::` and compatibility targets.
 
 ```sh
 cmake -S . -B build-cmake-test -DBUILD_TESTING=ON
@@ -34,154 +56,162 @@ cmake --build build-cmake-test --parallel
 ctest --test-dir build-cmake-test -L cmake --output-on-failure
 ```
 
-## Functional tests
+The install-consumer test uses an isolated prefix below the build tree and does
+not modify a system installation.
+
+## Interoperability checks
+
+Loopback tests are always the dependency-free baseline. When Python 3.8+ is
+already available and the build is not cross-compiling, CMake may add external
+checks without downloading dependencies:
+
+- HTTP uses local `curl` when present, otherwise Python's standard library.
+- WebSocket selects the first available backend among Node.js `ws`, Python
+  `websockets`, Python `websocket-client`, and `wscat`.
+
+Run only discovered interoperability entries with:
 
 ```sh
-cmake -S . -B build-test -DBUILD_TESTING=ON \
-  -DLIBGS_BUILD_HTTP=ON \
-  -DLIBGS_BUILD_WEBSOCKET=ON \
-  -DLIBGS_BUILD_UTILITIES=ON \
-  -DCMAKE_BUILD_TYPE=Debug
-cmake --build build-test --parallel
-ctest --test-dir build-test -L functional --output-on-failure
+ctest --test-dir build-test -L interop --output-on-failure
 ```
 
-CTest names are `libgs.<area>`; executables are
-`build-test/output/bin/libgs.test.<area>`. See the
-[functional API coverage map](functional/API_COVERAGE.md) for the source and
-behavior assigned to each executable.
-
-When Python 3.8+ is available and the build is not cross-compiling, CMake may
-register local interoperability tests:
-
-- HTTP uses local `curl`, falling back to Python's standard library.
-- WebSocket uses the first available backend among Node.js `ws`, Python
-  `websockets`, Python `websocket-client`, or `wscat`.
-
-No dependency is downloaded. Select these tests with `-L interop`.
-
-## Stress tests
+## Stress profile
 
 ```sh
 cmake -S . -B build-stress -DBUILD_TESTING=ON \
-  -DLIBGS_BUILD_STRESS_TESTS=ON \
-  -DLIBGS_BUILD_HTTP=ON \
-  -DLIBGS_BUILD_WEBSOCKET=ON \
-  -DLIBGS_BUILD_UTILITIES=ON \
+  -DRIWO_BUILD_STRESS_TESTS=ON \
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-stress --parallel
 ctest --test-dir build-stress -L stress --output-on-failure
 ```
 
-CTest names are `libgs.stress.<module>`. The suite covers Core queues, locks,
-the fallback joining-thread/stop-state implementation, coroutine
-synchronization, repeated HTTP/WebSocket connections, utility lifecycle/fanout,
-and optional UDP soft-bus pressure. Entries run serially at the CTest level;
-concurrency occurs inside each executable.
+CTest names are `riwo.stress.<area>`. Entries run serially at the CTest level;
+the test executables create their own internal concurrency. Coverage includes
+Core queues/locks and fallback joining threads, coroutine synchronization,
+repeated HTTP/WebSocket connections, utility lifecycle/fanout, and optional UDP
+soft-bus pressure.
 
-## Fuzz tests
+## Fuzz profile
 
-Fuzzing requires Clang with libFuzzer and a dedicated build. Functional, Stress,
-and Performance sources are not added to this configuration.
+Fuzzing is a dedicated Clang/libFuzzer + ASan + UBSan build. It does not add
+Functional, Stress, or Performance sources.
 
 ```sh
 cmake -S . -B build-fuzz -DBUILD_TESTING=ON \
-  -DLIBGS_BUILD_FUZZERS=ON \
+  -DRIWO_BUILD_FUZZERS=ON \
   -DCMAKE_CXX_COMPILER=clang++ \
-  -DLIBGS_BUILD_HTTP=ON \
-  -DLIBGS_BUILD_WEBSOCKET=ON \
-  -DLIBGS_BUILD_UTILITIES=ON \
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-fuzz --parallel
 ctest --test-dir build-fuzz -L fuzz --output-on-failure
 ```
 
-Targets and CTest entries are `libgs.fuzz.<module>.<harness>`; binaries are in
-`build-fuzz/output/fuzz/`. Seed corpora and dictionaries live under
-`test/fuzz/`. CTest copies corpora into the build tree and retains crash
-artifacts under `build-fuzz/test/fuzz/artifacts/`.
+Targets and CTest names are `riwo.fuzz.<module>.<harness>`; executables are
+written to `build-fuzz/output/fuzz/`. Seed corpora and dictionaries live in
+`test/fuzz/`. CMake copies corpora into the build tree and keeps crash
+artifacts below `build-fuzz/test/fuzz/artifacts/`.
 
 Run a longer campaign directly:
 
 ```sh
-build-fuzz/output/fuzz/libgs.fuzz.core.public-api \
+build-fuzz/output/fuzz/riwo.fuzz.core.public-api \
   -max_total_time=300 \
   -artifact_prefix=build-fuzz/test/fuzz/artifacts/core-public-api/ \
   build-fuzz/test/fuzz/corpus/core-public-api/
 ```
 
-## Performance tests
+## Performance profile
 
 ```sh
 cmake -S . -B build-perf -DBUILD_TESTING=ON \
-  -DLIBGS_BUILD_PERFORMANCE_TESTS=ON \
-  -DLIBGS_BUILD_HTTP=ON \
-  -DLIBGS_BUILD_WEBSOCKET=ON \
-  -DLIBGS_BUILD_UTILITIES=ON \
+  -DRIWO_BUILD_PERFORMANCE_TESTS=ON \
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build-perf --parallel
 ctest --test-dir build-perf -L performance -V
 ```
 
-CTest names are `libgs.performance.<area>`. Measurements cover Core
+CTest names are `riwo.performance.<area>`. The suite measures Core
 algorithms/queues/locks, coroutine primitives, HTTP, WebSocket, logging,
-signal/slot, and soft bus. Compare runs only with the same host, compiler, build
-type, feature set, and scale.
+signal/slot, and soft bus. It enforces correctness but has no fixed performance
+threshold. Compare results only across the same host, compiler, build type,
+feature set, and scale.
 
-## Sanitizers
+## Sanitizer profiles
 
-Functional and optional Stress tests can instrument the enabled LibGS modules:
-
-| Switch | Instrumentation | Compilers |
+| Option | Instrumentation | Constraint |
 | --- | --- | --- |
-| `LIBGS_ENABLE_TEST_SANITIZERS=ON` | ASan + UBSan | GCC or Clang with GNU-style driver |
-| `LIBGS_ENABLE_TEST_TSAN=ON` | TSan | GCC or Clang with GNU-style driver |
+| `RIWO_ENABLE_TEST_SANITIZERS=ON` | AddressSanitizer + UndefinedBehaviorSanitizer | GCC or Clang with GNU-style driver |
+| `RIWO_ENABLE_TEST_TSAN=ON` | ThreadSanitizer | GCC or Clang with GNU-style driver |
+
+Example ASan/UBSan build:
 
 ```sh
 cmake -S . -B build-asan -DBUILD_TESTING=ON \
-  -DLIBGS_ENABLE_TEST_SANITIZERS=ON \
-  -DLIBGS_BUILD_STRESS_TESTS=ON \
+  -DRIWO_ENABLE_TEST_SANITIZERS=ON \
+  -DRIWO_BUILD_STRESS_TESTS=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-asan --parallel
 ctest --test-dir build-asan -L sanitizer --output-on-failure
 ```
 
-Use `LIBGS_ENABLE_TEST_TSAN=ON` in a separate build for TSan. The two sanitizer
-switches are mutually exclusive, require `BUILD_TESTING=ON`, and cannot be
-combined with LTO, Fuzz, or performance tests. CMake rejects these incompatible
-configurations instead of silently omitting requested instrumentation or tests.
-On Linux, CMake uses `setarch -R` per test when available to avoid incompatible
-TSan shadow-memory layouts.
+Use `RIWO_ENABLE_TEST_TSAN=ON` in a separate build. ASan/UBSan and TSan are
+mutually exclusive. Both require `BUILD_TESTING=ON`, reject LTO, and cannot be
+combined with the Performance suite. Fuzz instrumentation is a separate build
+and cannot be combined with either sanitizer option. On Linux, TSan tests use
+`setarch -R` when available to avoid incompatible shadow-memory layouts.
 
-## Selection and controls
+## Select tests and cases
 
-List or select CTest entries:
+List or filter CTest entries:
 
 ```sh
 ctest --test-dir build-test -N
 ctest --test-dir build-test -L functional --output-on-failure
-ctest --test-dir build-test -R '^libgs\.http\.protocol$' --output-on-failure
+ctest --test-dir build-test -R '^riwo\.http\.protocol$' --output-on-failure
 ```
 
 Functional and Performance executables read runner environment variables.
-Stress executables also expose equivalent command-line options:
+Stress executables also receive equivalent command-line options:
 
-| Environment | Option | Meaning |
+| Environment | CLI | Meaning |
 | --- | --- | --- |
-| `LIBGS_TEST_CASE` | `--case <name>` | Run an exact named case |
-| `LIBGS_TEST_REPEAT` | `--repeat <count>` | Recreate and rerun the fixture |
-| `LIBGS_TEST_SEED` | `--seed <value>` | Reproduce scheduling perturbations |
-| `LIBGS_TEST_FAIL_FAST=1` | `--fail-fast` | Stop after the first failure |
-| — | `--list` | List case names |
+| `RIWO_TEST_CASE` | `--case <name>` | Run an exact named case; may be repeated |
+| `RIWO_TEST_REPEAT` | `--repeat <count>` | Recreate and rerun each selected fixture |
+| `RIWO_TEST_SEED` | `--seed <value>` | Reproduce scheduling perturbations |
+| `RIWO_TEST_FAIL_FAST=1` | `--fail-fast` | Stop after the first failed iteration |
+| — | `--list` | List case names without running them |
 
 Suite cache controls:
 
-| Suite | Variables (defaults) |
+| Suite | Variables and defaults |
 | --- | --- |
-| Functional | `LIBGS_FUNCTIONAL_REPEAT=3`, `LIBGS_FUNCTIONAL_SEED=1`, `LIBGS_FUNCTIONAL_TIMEOUT=120` |
-| Stress | `LIBGS_STRESS_SCALE=5`, `LIBGS_STRESS_REPEAT=3`, `LIBGS_STRESS_SEED=1`, `LIBGS_STRESS_TIMEOUT=180` |
-| Fuzz | `LIBGS_FUZZ_SMOKE_RUNS=2048`, `LIBGS_FUZZ_SEED=1`, `LIBGS_FUZZ_MAX_LENGTH=4096`, `LIBGS_FUZZ_TIMEOUT=5`, `LIBGS_FUZZ_RSS_LIMIT_MB=1024` |
-| Performance | `LIBGS_PERFORMANCE_SCALE=1`, `LIBGS_PERFORMANCE_TIMEOUT=60` |
+| Functional | `RIWO_FUNCTIONAL_REPEAT=3`, `RIWO_FUNCTIONAL_SEED=1`, `RIWO_FUNCTIONAL_TIMEOUT=120` |
+| Stress | `RIWO_STRESS_SCALE=5`, `RIWO_STRESS_REPEAT=3`, `RIWO_STRESS_SEED=1`, `RIWO_STRESS_TIMEOUT=180` |
+| Fuzz | `RIWO_FUZZ_SMOKE_RUNS=2048`, `RIWO_FUZZ_SEED=1`, `RIWO_FUZZ_MAX_LENGTH=4096`, `RIWO_FUZZ_TIMEOUT=5`, `RIWO_FUZZ_RSS_LIMIT_MB=1024` |
+| Performance | `RIWO_PERFORMANCE_SCALE=1`, `RIWO_PERFORMANCE_TIMEOUT=60` |
 
-Put deterministic contracts in Functional, pressure-dependent correctness in
-Stress, broad input/state exploration in Fuzz, and measurements in Performance.
+Repeat, scale, length, timeout, and memory limits must be positive integers.
+Seeds must be non-negative integers.
+
+## Incompatible configurations
+
+CMake rejects rather than silently weakening these requests:
+
+- CMake tests, Stress, Performance, Fuzz, or sanitizers without
+  `BUILD_TESTING=ON`;
+- ASan/UBSan and TSan together;
+- either sanitizer with LTO;
+- Performance with either sanitizer;
+- Fuzz without Clang/libFuzzer;
+- Fuzz combined with sanitizer options, Stress, Performance, or examples.
+
+Use a separate build directory for Functional, sanitizer, fuzz, and performance
+profiles so their instrumentation and optimization settings do not mix.

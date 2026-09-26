@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/websocket/protocol/generator.h>
-#include <libgs/websocket/protocol/parser.h>
+#include <riwo/websocket/protocol/generator.h>
+#include <riwo/websocket/protocol/parser.h>
 
 namespace
 {
@@ -12,7 +12,7 @@ void generated_frame_round_trip(const uint8_t *data, size_t size)
 	if(size < 4)
 		return;
 
-	namespace ws = libgs::websocket;
+	namespace ws = riwo::websocket;
 	const auto sender_role = (data[0] & 1U) != 0 ? ws::role::client : ws::role::server;
 	const auto receiver_role = sender_role == ws::role::client ?
 		ws::role::server : ws::role::client;
@@ -31,7 +31,7 @@ void generated_frame_round_trip(const uint8_t *data, size_t size)
 		.op = ws::opcode::binary,
 		.payload_size = payload.size(),
 		.mask = sender_role == ws::role::client ?
-			libgs::optional<ws::masking_key>(key) : libgs::nullopt,
+			riwo::optional<ws::masking_key>(key) : riwo::nullopt,
 	};
 	const ws::frame_codec_config sender_config {
 		.local_role = sender_role,
@@ -48,7 +48,7 @@ void generated_frame_round_trip(const uint8_t *data, size_t size)
 		std::memcpy(wire.data() + encoded->size, payload.data(), payload.size());
 	if(header.mask)
 	{
-		ws::apply_mask(libgs::mutable_buffer(
+		ws::apply_mask(riwo::mutable_buffer(
 			wire.data() + encoded->size, payload.size()), *header.mask);
 	}
 
@@ -65,7 +65,7 @@ void generated_frame_round_trip(const uint8_t *data, size_t size)
 	{
 		const auto requested = size_t(data[offset % size] % 17U) + 1;
 		const auto available = std::min(requested, wire.size() - offset);
-		auto parsed = parser.parse(libgs::mutable_buffer(
+		auto parsed = parser.parse(riwo::mutable_buffer(
 			wire.data() + offset, available));
 		if(not parsed or parsed->consumed == 0 or parsed->consumed > available)
 			std::abort();
@@ -101,13 +101,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		return 0;
 	generated_frame_round_trip(data, size);
 
-	libgs::websocket::frame_codec_config config;
+	riwo::websocket::frame_codec_config config;
 	config.local_role = (data[0] & 1) ?
-		libgs::websocket::role::client : libgs::websocket::role::server;
+		riwo::websocket::role::client : riwo::websocket::role::server;
 	config.max_frame_size = (data[1] & 1) ? 0 : 1024 * 1024;
-	config.allowed_rsv = libgs::websocket::reserved_bits(
-		static_cast<libgs::websocket::reserved_bit>(data[1] & 0x07));
-	libgs::websocket::frame_parser parser(config);
+	config.allowed_rsv = riwo::websocket::reserved_bits(
+		static_cast<riwo::websocket::reserved_bit>(data[1] & 0x07));
+	riwo::websocket::frame_parser parser(config);
 
 	std::vector<std::byte> input(size - 2);
 	std::memcpy(input.data(), data + 2, input.size());
@@ -116,13 +116,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	{
 		const auto chunk_size = size_t(data[(offset + 2) % size] % 31) + 1;
 		const auto available = std::min(chunk_size, input.size() - offset);
-		auto parsed = parser.parse(libgs::mutable_buffer(
+		auto parsed = parser.parse(riwo::mutable_buffer(
 			input.data() + offset, available));
 		if(not parsed)
 		{
 			if(not parser.failed() or parser.last_error() != parsed.error())
 				std::abort();
-			auto repeated = parser.parse(libgs::mutable_buffer(
+			auto repeated = parser.parse(riwo::mutable_buffer(
 				input.data() + offset, available));
 			if(repeated or repeated.error() != parsed.error())
 				std::abort();
@@ -135,8 +135,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			break;
 		offset += parsed->consumed;
 	}
-	libgs::ignore_unused(parser.header());
-	libgs::ignore_unused(parser.payload_remaining());
-	libgs::ignore_unused(parser.config());
+	riwo::ignore_unused(parser.header());
+	riwo::ignore_unused(parser.payload_remaining());
+	riwo::ignore_unused(parser.config());
 	return 0;
 }

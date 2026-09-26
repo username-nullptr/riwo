@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/protocol/utils/client/generator.h>
-#include <libgs/http/protocol/utils/client/parser.h>
-#include <libgs/http/protocol/utils/server/generator.h>
-#include <libgs/http/protocol/utils/server/parser.h>
+#include <riwo/http/protocol/utils/client/generator.h>
+#include <riwo/http/protocol/utils/client/parser.h>
+#include <riwo/http/protocol/utils/server/generator.h>
+#include <riwo/http/protocol/utils/server/parser.h>
 
 namespace
 {
 
-[[nodiscard]] libgs::const_buffer buffer(std::string_view value) noexcept
+[[nodiscard]] riwo::const_buffer buffer(std::string_view value) noexcept
 {
 	return {value.data(), value.size()};
 }
@@ -49,10 +49,10 @@ void append_fragmented(Parser &parser, std::string_view wire,
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-	if(size < 4 or size > LIBGS_FUZZ_MAX_LENGTH)
+	if(size < 4 or size > RIWO_FUZZ_MAX_LENGTH)
 		return 0;
 
-	using namespace libgs::http;
+	using namespace riwo::http;
 	static constexpr std::array request_methods {
 		method::post, method::put, method::patch,
 	};
@@ -66,10 +66,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	const auto marker = header_value(data + 2, size - 2);
 
 	request_arg argument;
-	argument.set_header("X-LibGS-Fuzz", marker)
+	argument.set_header("X-Riwo-Fuzz", marker)
 		.set_cookie("fuzz", marker);
 	client_generator request(version::v11,
-		libgs::url("http://example.test/fuzz?q=roundtrip"), argument,
+		riwo::url("http://example.test/fuzz?q=roundtrip"), argument,
 		(data[2] & 1U) != 0 ? request_target_form::absolute :
 			request_target_form::origin);
 	std::string request_wire = request.header_data(request_method, body.size());
@@ -80,7 +80,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	server_parser contiguous_request(size_t(data[2] % 32U) + 1);
 	auto request_result = contiguous_request.append(buffer(request_wire));
 	if(not request_result or contiguous_request.method() != request_method or
-		contiguous_request.header("X-LibGS-Fuzz").value_or("").to_string() != marker or
+		contiguous_request.header("X-Riwo-Fuzz").value_or("").to_string() != marker or
 		contiguous_request.cookie("fuzz").value_or("").to_string() != marker or
 		contiguous_request.take_body() != body)
 		std::abort();
@@ -96,7 +96,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		std::abort();
 
 	server_generator response(version::v11);
-	response.set_status(response_status).set_header("X-LibGS-Fuzz", marker);
+	response.set_status(response_status).set_header("X-Riwo-Fuzz", marker);
 	std::string response_wire = response.header_data(body.size(), method::get);
 	response_wire += response.body_data(buffer(body));
 	if(response.pro_state() != generator_state::finish)
@@ -106,7 +106,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	contiguous_response.set_request_method(method::get);
 	auto response_result = contiguous_response.append(buffer(response_wire));
 	if(not response_result or contiguous_response.status() != response_status or
-		contiguous_response.header("X-LibGS-Fuzz").value_or("").to_string() != marker or
+		contiguous_response.header("X-Riwo-Fuzz").value_or("").to_string() != marker or
 		contiguous_response.take_body() != body)
 		std::abort();
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/utils/signal_slot.h>
+#include <riwo/utils/signal_slot.h>
 
 #include <iostream>
 #include <string_view>
@@ -13,7 +13,7 @@ void print_value(int value)
 
 int main()
 {
-	libgs::utils::signal<void(int,std::string_view)> changed;
+	riwo::utils::signal<void(int,std::string_view)> changed;
 	changed
 		.connect(print_value)
 		.connect([](int value, std::string_view label)

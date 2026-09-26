@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/client.h>
+#include <riwo/http/client.h>
 #include <iostream>
 #include <string>
 
-namespace http = libgs::http;
+namespace http = riwo::http;
 
 int main(int argc, const char *argv[])
 {

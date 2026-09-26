@@ -3,16 +3,16 @@
 
 #include "test.h"
 
-#include <libgs/websocket/client.h>
-#include <libgs/websocket/server.h>
-#include <libgs/core/system/app_utls.h>
+#include <riwo/websocket/client.h>
+#include <riwo/websocket/server.h>
+#include <riwo/core/system/app_utls.h>
 
 #include <thread>
 
 namespace
 {
 
-namespace ws = libgs::websocket;
+namespace ws = riwo::websocket;
 
 class thread_joiner
 {
@@ -37,7 +37,7 @@ class scoped_environment
 	struct entry
 	{
 		std::string name;
-		libgs::optional<std::string> value;
+		riwo::optional<std::string> value;
 	};
 
 public:
@@ -45,9 +45,9 @@ public:
 	{
 		for(const auto name : names)
 		{
-			auto value = libgs::app::getenv(name);
+			auto value = riwo::app::getenv(name);
 			m_entries.push_back({std::string(name), value ?
-				libgs::optional<std::string>(*value) : libgs::nullopt});
+				riwo::optional<std::string>(*value) : riwo::nullopt});
 		}
 	}
 
@@ -56,9 +56,9 @@ public:
 		for(const auto &item : m_entries)
 		{
 			if( item.value )
-				libgs::ignore_unused(libgs::app::setenv(item.name, *item.value));
+				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
 			else
-				libgs::ignore_unused(libgs::app::unsetenv(item.name));
+				riwo::ignore_unused(riwo::app::unsetenv(item.name));
 		}
 	}
 
@@ -124,7 +124,7 @@ void relay_socket(const std::shared_ptr<asio::ip::tcp::socket> &source,
 	const std::shared_ptr<asio::ip::tcp::socket> &destination)
 {
 	std::array<std::byte,16 * 1024> buffer {};
-	libgs::error_code error;
+	riwo::error_code error;
 	for(;;)
 	{
 		auto size = source->read_some(asio::buffer(buffer), error);
@@ -142,7 +142,7 @@ void secure_round_trip()
 	const scoped_environment environment({
 		"wss_proxy", "WSS_PROXY", "no_proxy", "NO_PROXY",
 	});
-	libgs::io_context_t context;
+	riwo::io_context_t context;
 	asio::ssl::context server_tls(asio::ssl::context::tls_server);
 	server_tls.set_options(
 		asio::ssl::context::default_workarounds |
@@ -157,7 +157,7 @@ void secure_round_trip()
 
 	asio::ip::tcp::acceptor acceptor(context);
 	ws::tls_server service({std::move(acceptor), server_tls});
-	service.bind({libgs::ip_type::v4, 0}).start();
+	service.bind({riwo::ip_type::v4, 0}).start();
 	const auto port = service.http_server().acceptor_wrap()
 		.acceptor().local_endpoint().port();
 
@@ -165,13 +165,13 @@ void secure_round_trip()
 	asio::ip::tcp::acceptor proxy_acceptor(proxy_context,
 		{asio::ip::address_v4::loopback(), 0});
 	const auto proxy_port = proxy_acceptor.local_endpoint().port();
-	LIBGS_TEST_CHECK(libgs::app::setenv("wss_proxy", std::format(
+	RIWO_TEST_CHECK(riwo::app::setenv("wss_proxy", std::format(
 		"http://user:secret@127.0.0.1:{}/", proxy_port)));
 #if !defined(_WIN32)
-	LIBGS_TEST_CHECK(libgs::app::unsetenv("WSS_PROXY"));
+	RIWO_TEST_CHECK(riwo::app::unsetenv("WSS_PROXY"));
 #endif
-	LIBGS_TEST_CHECK(libgs::app::unsetenv("no_proxy"));
-	LIBGS_TEST_CHECK(libgs::app::unsetenv("NO_PROXY"));
+	RIWO_TEST_CHECK(riwo::app::unsetenv("no_proxy"));
+	RIWO_TEST_CHECK(riwo::app::unsetenv("NO_PROXY"));
 	std::exception_ptr proxy_error;
 	std::thread proxy_thread([&]
 	{
@@ -179,14 +179,14 @@ void secure_round_trip()
 			auto downstream = std::make_shared<asio::ip::tcp::socket>(proxy_context);
 			proxy_acceptor.accept(*downstream);
 			std::string header;
-			libgs::error_code error;
+			riwo::error_code error;
 			while( not header.ends_with("\r\n\r\n") )
 			{
 				char byte = 0;
 				asio::read(*downstream, asio::buffer(&byte, 1), error);
 				if( error or header.size() >= 16 * 1024 )
 					throw std::system_error(error ? error :
-						libgs::make_system_error_code(std::errc::message_size));
+						riwo::make_system_error_code(std::errc::message_size));
 				header.push_back(byte);
 			}
 			const auto expected_target = std::format(
@@ -213,19 +213,19 @@ void secure_round_trip()
 	thread_joiner proxy_thread_joiner(proxy_thread);
 
 	auto accepted = asio::co_spawn(context,
-		[&]() -> libgs::awaitable<void>
+		[&]() -> riwo::awaitable<void>
 		{
-			auto connection = co_await service.accept(libgs::use_awaitable);
-			LIBGS_TEST_CHECK_EQ(connection.request.path, "/secure/echo");
+			auto connection = co_await service.accept(riwo::use_awaitable);
+			RIWO_TEST_CHECK_EQ(connection.request.path, "/secure/echo");
 			auto message = co_await connection.stream.read<std::string>(
-				libgs::use_awaitable);
-			LIBGS_TEST_CHECK_EQ(message.body, "hello over TLS");
+				riwo::use_awaitable);
+			RIWO_TEST_CHECK_EQ(message.body, "hello over TLS");
 			co_await connection.stream.write_text(
-				"secure: " + message.body, libgs::use_awaitable);
+				"secure: " + message.body, riwo::use_awaitable);
 			auto close_result = co_await connection.stream.read<std::string>(
-				asio::as_tuple(libgs::use_awaitable));
+				asio::as_tuple(riwo::use_awaitable));
 			auto &[close_error, trailing] = close_result;
-			libgs::ignore_unused(close_error, trailing);
+			riwo::ignore_unused(close_error, trailing);
 			co_return;
 		}, asio::use_future);
 
@@ -233,35 +233,35 @@ void secure_round_trip()
 	client_tls.set_verify_mode(asio::ssl::verify_peer);
 	client_tls.add_certificate_authority(
 		asio::buffer(certificate.data(), certificate.size()));
-	auto connector = std::make_shared<libgs::http::connector>(
+	auto connector = std::make_shared<riwo::http::connector>(
 		context.get_executor(), client_tls);
-	libgs::http::connection_pool pool(std::move(connector));
-	libgs::http::client http_client(std::move(pool));
+	riwo::http::connection_pool pool(std::move(connector));
+	riwo::http::client http_client(std::move(pool));
 	ws::client client(std::move(http_client));
 
 	auto connected = asio::co_spawn(context,
-		[&]() -> libgs::awaitable<void>
+		[&]() -> riwo::awaitable<void>
 		{
 			ws::connect_request request(std::format(
 				"wss://127.0.0.1:{}/secure/echo", port));
-			LIBGS_TEST_CHECK(not request.proxy);
+			RIWO_TEST_CHECK(not request.proxy);
 			ws::open_diagnostics diagnostics;
 			auto stream = co_await client.open(std::move(request), diagnostics,
-				libgs::use_awaitable);
-			LIBGS_TEST_CHECK_EQ(diagnostics.endpoint.protocol(), "wss");
-			LIBGS_TEST_CHECK(diagnostics.reply);
-			LIBGS_TEST_CHECK_EQ(diagnostics.reply->status(),
-				libgs::http::status::switching_protocols);
-			co_await stream.write_text("hello over TLS", libgs::use_awaitable);
+				riwo::use_awaitable);
+			RIWO_TEST_CHECK_EQ(diagnostics.endpoint.protocol(), "wss");
+			RIWO_TEST_CHECK(diagnostics.reply);
+			RIWO_TEST_CHECK_EQ(diagnostics.reply->status(),
+				riwo::http::status::switching_protocols);
+			co_await stream.write_text("hello over TLS", riwo::use_awaitable);
 			auto response = co_await stream.read<std::string>(
-				libgs::use_awaitable);
-			LIBGS_TEST_CHECK_EQ(response.body, "secure: hello over TLS");
+				riwo::use_awaitable);
+			RIWO_TEST_CHECK_EQ(response.body, "secure: hello over TLS");
 			auto close_result = co_await stream.close(
-				asio::as_tuple(libgs::use_awaitable));
+				asio::as_tuple(riwo::use_awaitable));
 			auto &[close_error, closed] = close_result;
 			service.stop();
-			LIBGS_TEST_CHECK(not close_error);
-			LIBGS_TEST_CHECK(closed.clean);
+			RIWO_TEST_CHECK(not close_error);
+			RIWO_TEST_CHECK(closed.clean);
 			co_return;
 		}, asio::use_future);
 
@@ -277,7 +277,7 @@ void secure_round_trip()
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"secure round trip", secure_round_trip},
 	});
 }

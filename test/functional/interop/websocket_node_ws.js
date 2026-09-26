@@ -32,11 +32,11 @@ function client(url) {
     socket.send("external-client");
   });
   socket.on("upgrade", response => {
-    upgraded = response.headers["x-libgs-interop"] === "server";
+    upgraded = response.headers["x-riwo-interop"] === "server";
   });
   socket.on("message", (data, isBinary) => {
-    if (isBinary || data.toString() !== "libgs-server:external-client") {
-      fail(`unexpected LibGS message: ${data.toString()}`);
+    if (isBinary || data.toString() !== "riwo-server:external-client") {
+      fail(`unexpected Riwo message: ${data.toString()}`);
       socket.close(1002, "message");
       return;
     }
@@ -47,7 +47,7 @@ function client(url) {
     clearTimeout(timeout);
     if (!upgraded || !received || code !== 1000)
       fail(
-        `unexpected LibGS close: code=${code}, upgraded=${upgraded}, ` +
+        `unexpected Riwo close: code=${code}, upgraded=${upgraded}, ` +
         `received=${received}`);
   });
 }
@@ -76,12 +76,12 @@ function server() {
   });
   listener.on("connection", (socket, request) => {
     valid = request.url === "/interop?value=42" &&
-      request.headers["x-interop-client"] === "libgs" &&
+      request.headers["x-interop-client"] === "riwo" &&
       socket.protocol === "interop.v1";
     socket.on("message", (data, isBinary) => {
-      valid = valid && !isBinary && data.toString() === "libgs-client";
+      valid = valid && !isBinary && data.toString() === "riwo-client";
       socket.send(valid ?
-        "external-server:libgs-client" : "external-server:rejected");
+        "external-server:riwo-client" : "external-server:rejected");
     });
     socket.on("close", code => {
       clearTimeout(timeout);
@@ -89,7 +89,7 @@ function server() {
         valid = false;
       listener.close(() => {
         if (!valid)
-          fail(`LibGS client exchange failed; close code=${code}`);
+          fail(`Riwo client exchange failed; close code=${code}`);
       });
     });
   });

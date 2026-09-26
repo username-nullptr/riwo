@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/websocket/protocol/generator.h>
-#include <libgs/websocket/protocol/handshake.h>
-#include <libgs/websocket/protocol/parser.h>
+#include <riwo/websocket/protocol/generator.h>
+#include <riwo/websocket/protocol/handshake.h>
+#include <riwo/websocket/protocol/parser.h>
 #include <iostream>
 
-namespace ws = libgs::websocket;
+namespace ws = riwo::websocket;
 
 int main()
 {
-	const auto fail = [](std::string_view operation, const libgs::error_code &error) {
+	const auto fail = [](std::string_view operation, const riwo::error_code &error) {
 		std::cerr << operation << " failed: " << error.message() << '\n';
 		return 1;
 	};
@@ -32,7 +32,7 @@ int main()
 		return fail("Opening request generation", request_headers.error());
 
 	auto server_request = ws::parse_opening_request (
-		libgs::http::method::get, libgs::http::version::v11,
+		riwo::http::method::get, riwo::http::version::v11,
 		*request_headers
 	);
 	if( not server_request )
@@ -45,7 +45,7 @@ int main()
 		return fail("Opening response generation", response_headers.error());
 
 	auto client_response = ws::parse_opening_response (
-		libgs::http::status::switching_protocols,
+		riwo::http::status::switching_protocols,
 		*response_headers, client_request
 	);
 	if( not client_response )
@@ -58,8 +58,8 @@ int main()
 	std::vector<std::byte> masked(text.size());
 
 	auto masked_size = ws::mask_copy (
-		libgs::mutable_buffer(masked.data(), masked.size()),
-		libgs::const_buffer(text), mask
+		riwo::mutable_buffer(masked.data(), masked.size()),
+		riwo::const_buffer(text), mask
 	);
 	if( not masked_size )
 		return fail("Payload masking", masked_size.error());
@@ -89,7 +89,7 @@ int main()
 	ws::frame_parser parser(ws::frame_codec_config {
 		.local_role = ws::role::server,
 	});
-	auto frame = parser.parse(libgs::mutable_buffer(wire.data(), wire.size()));
+	auto frame = parser.parse(riwo::mutable_buffer(wire.data(), wire.size()));
 	if( not frame )
 		return fail("Frame parsing", frame.error());
 

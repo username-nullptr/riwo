@@ -4,8 +4,8 @@
 #include "benchmark.h"
 #include "test.h"
 
-#include <libgs/core/atomic_mutex.h>
-#include <libgs/core/shared_mutex.h>
+#include <riwo/core/atomic_mutex.h>
+#include <riwo/core/shared_mutex.h>
 
 #include <algorithm>
 #include <array>
@@ -26,9 +26,9 @@ namespace
 {
 
 #ifdef NDEBUG
-constexpr size_t iterations = 100'000 * libgs::test::performance_scale;
+constexpr size_t iterations = 100'000 * riwo::test::performance_scale;
 #else
-constexpr size_t iterations = 10'000 * libgs::test::performance_scale;
+constexpr size_t iterations = 10'000 * riwo::test::performance_scale;
 #endif
 
 constexpr size_t sample_count = 3;
@@ -48,7 +48,7 @@ void measure_and_print(
 		samples[index] = func();
 	}
 	std::ranges::sort(samples);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		name, operations, samples[sample_count / 2], unit
 	);
 }
@@ -94,7 +94,7 @@ std::chrono::steady_clock::duration measure_exclusive(
 				std::lock_guard lock(mutex);
 				++value;
 				for(size_t count = 0; count < work; ++count)
-					libgs::none_instruction();
+					riwo::none_instruction();
 			}
 		});
 	}
@@ -103,7 +103,7 @@ std::chrono::steady_clock::duration measure_exclusive(
 	for(auto &worker : workers)
 		worker.join();
 	const auto elapsed = std::chrono::steady_clock::now() - begin;
-	LIBGS_TEST_CHECK_EQ(value, thread_count * iterations);
+	RIWO_TEST_CHECK_EQ(value, thread_count * iterations);
 	return elapsed;
 }
 
@@ -163,11 +163,11 @@ void mutex_contention()
 	);
 	measure_and_print(
 		"atomic_mutex uncontended", iterations,
-		measure_uncontended<libgs::atomic_mutex>, "lock"
+		measure_uncontended<riwo::atomic_mutex>, "lock"
 	);
 	measure_and_print(
 		"spin_mutex uncontended", iterations,
-		measure_uncontended<libgs::spin_mutex>, "lock"
+		measure_uncontended<riwo::spin_mutex>, "lock"
 	);
 	for(const size_t threads : {2U, 4U, 8U})
 	{
@@ -184,14 +184,14 @@ void mutex_contention()
 				std::format("atomic_mutex {} threads, work {}", threads, work),
 				threads * iterations,
 				[=] {
-					return measure_exclusive<libgs::atomic_mutex>(threads, work);
+					return measure_exclusive<riwo::atomic_mutex>(threads, work);
 				}, "lock"
 			);
 			measure_and_print(
 				std::format("spin_mutex {} threads, work {}", threads, work),
 				threads * iterations,
 				[=] {
-					return measure_exclusive<libgs::spin_mutex>(threads, work);
+					return measure_exclusive<riwo::spin_mutex>(threads, work);
 				}, "lock"
 			);
 		}
@@ -213,15 +213,15 @@ void shared_mutex_contention()
 		measure_and_print(
 			std::format("atomic_shared_mutex uncontended {}", suffix), iterations,
 			[=] {
-				return shared ? measure_uncontended<libgs::atomic_shared_mutex,true>() :
-					measure_uncontended<libgs::atomic_shared_mutex>();
+				return shared ? measure_uncontended<riwo::atomic_shared_mutex,true>() :
+					measure_uncontended<riwo::atomic_shared_mutex>();
 			}, "lock"
 		);
 		measure_and_print(
 			std::format("spin_shared_mutex uncontended {}", suffix), iterations,
 			[=] {
-				return shared ? measure_uncontended<libgs::spin_shared_mutex,true>() :
-					measure_uncontended<libgs::spin_shared_mutex>();
+				return shared ? measure_uncontended<riwo::spin_shared_mutex,true>() :
+					measure_uncontended<riwo::spin_shared_mutex>();
 			}, "lock"
 		);
 	}
@@ -239,7 +239,7 @@ void shared_mutex_contention()
 				// libstdc++ implements std::shared_mutex with winpthreads.  Its
 				// pthread_rwlock can deadlock internally under mixed reader/writer
 				// contention (threads remain in rdlock, wrlock and unlock).  Pure
-				// reader/writer baselines and all LibGS mixed tests remain enabled.
+				// reader/writer baselines and all Riwo mixed tests remain enabled.
 				std::cout << "[SKIP] " << standard_name
 					<< ": MinGW winpthreads mixed rwlock contention can deadlock"
 					<< std::endl;
@@ -259,7 +259,7 @@ void shared_mutex_contention()
 					threads, write_interval),
 				threads * iterations,
 				[=] {
-					return measure_shared<libgs::atomic_shared_mutex>(threads, write_interval);
+					return measure_shared<riwo::atomic_shared_mutex>(threads, write_interval);
 				}, "lock"
 			);
 			measure_and_print(
@@ -267,7 +267,7 @@ void shared_mutex_contention()
 					threads, write_interval),
 				threads * iterations,
 				[=] {
-					return measure_shared<libgs::spin_shared_mutex>(threads, write_interval);
+					return measure_shared<riwo::spin_shared_mutex>(threads, write_interval);
 				}, "lock"
 			);
 		}
@@ -280,7 +280,7 @@ int main(int argc, const char *const argv[])
 {
 	// Keep glibc's single-thread-only pthread fast path out of the comparison.
 	std::thread([] {}).join();
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"mutex contention", mutex_contention},
 		{"shared mutex contention", shared_mutex_contention},
 	});

@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/ini.h>
+#include <riwo/core/ini.h>
 #include <filesystem>
 #include <iostream>
 
 int main(int argc, const char *argv[])
 {
 	const std::filesystem::path path = argc > 1 ?
-		argv[1] : "libgs-example.ini";
+		argv[1] : "riwo-example.ini";
 
-	libgs::ini config(path);
+	riwo::ini config(path);
 	std::error_code error;
 
 	config.load_or(error);

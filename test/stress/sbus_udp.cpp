@@ -3,7 +3,7 @@
 
 #include "test.h"
 
-#include <libgs/utils/sbus.h>
+#include <riwo/utils/sbus.h>
 
 #include <algorithm>
 #include <array>
@@ -16,7 +16,7 @@ namespace
 {
 
 using namespace std::chrono_literals;
-using udp_interface = libgs::utils::sbus::udp_interface;
+using udp_interface = riwo::utils::sbus::udp_interface;
 using msg_range = udp_interface::msg_range;
 using udp = asio::ip::udp;
 
@@ -67,10 +67,10 @@ struct burst_message
 void concurrent_multicast_burst_and_recovery()
 {
 	udp_config_guard config_guard;
-	constexpr std::string_view topic = "libgs.test.stress.sbus.udp.burst";
+	constexpr std::string_view topic = "riwo.test.stress.sbus.udp.burst";
 	constexpr size_t receiver_count = 4;
 	constexpr size_t publisher_count = 4;
-	const size_t messages_per_publisher = 500 * LIBGS_STRESS_SCALE;
+	const size_t messages_per_publisher = 500 * RIWO_STRESS_SCALE;
 
 	std::array<std::shared_ptr<udp_interface>,receiver_count> receivers;
 	std::array<std::atomic_size_t,receiver_count> received {};
@@ -136,7 +136,7 @@ void concurrent_multicast_burst_and_recovery()
 	for(auto &publisher : publishers)
 		publisher.join();
 
-	LIBGS_TEST_CHECK(wait_until([&]
+	RIWO_TEST_CHECK(wait_until([&]
 	{
 		return std::ranges::all_of(received,
 			[](const auto &count) { return count.load(std::memory_order_acquire) > 0; });
@@ -160,9 +160,9 @@ void concurrent_multicast_burst_and_recovery()
 		udp_interface::publish(topic, &marker, sizeof(marker));
 		std::this_thread::sleep_for(1ms);
 	}
-	LIBGS_TEST_CHECK(std::ranges::all_of(recovered,
+	RIWO_TEST_CHECK(std::ranges::all_of(recovered,
 		[](const auto &count) { return count.load(std::memory_order_acquire) > 0; }));
-	LIBGS_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
 
 	for(auto &receiver : receivers)
 		receiver->cancel();
@@ -171,8 +171,8 @@ void concurrent_multicast_burst_and_recovery()
 void lifecycle_churn_under_traffic()
 {
 	udp_config_guard config_guard;
-	constexpr std::string_view topic = "libgs.test.stress.sbus.udp.lifecycle";
-	const size_t rounds = 16 * LIBGS_STRESS_SCALE;
+	constexpr std::string_view topic = "riwo.test.stress.sbus.udp.lifecycle";
+	const size_t rounds = 16 * RIWO_STRESS_SCALE;
 
 	for(size_t round = 0; round < rounds; ++round)
 	{
@@ -195,8 +195,8 @@ void lifecycle_churn_under_traffic()
 			udp_interface::publish(topic, &round, sizeof(round));
 			std::this_thread::sleep_for(1ms);
 		}
-		LIBGS_TEST_CHECK(received.load(std::memory_order_acquire) > 0);
-		LIBGS_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
+		RIWO_TEST_CHECK(received.load(std::memory_order_acquire) > 0);
+		RIWO_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
 		receiver->cancel();
 	}
 }
@@ -205,14 +205,14 @@ void slow_callback_queue_pressure_and_recovery()
 {
 	udp_config_guard config_guard;
 	constexpr std::string_view topic =
-		"libgs.test.stress.sbus.udp.slow-callback";
+		"riwo.test.stress.sbus.udp.slow-callback";
 	constexpr uint64_t recovery_marker = std::numeric_limits<uint64_t>::max();
 	auto config = udp_interface::config();
 	config.delivery_queue_capacity = 32;
 	config.delivery_queue_bytes = 64 * 1'024;
 	udp_interface::set_config(config);
 	const size_t publish_count = config.delivery_queue_capacity +
-		256 * LIBGS_STRESS_SCALE;
+		256 * RIWO_STRESS_SCALE;
 	auto receiver = std::make_shared<udp_interface>();
 	std::atomic_size_t recovered {0};
 	std::atomic_bool invalid {false};
@@ -233,7 +233,7 @@ void slow_callback_queue_pressure_and_recovery()
 
 	for(uint64_t value = 0; value < publish_count; ++value)
 		udp_interface::publish(topic, &value, sizeof(value));
-	LIBGS_TEST_CHECK(wait_until([&]
+	RIWO_TEST_CHECK(wait_until([&]
 	{
 		return receiver->statistics().delivery_queue_drops > 0;
 	}));
@@ -245,9 +245,9 @@ void slow_callback_queue_pressure_and_recovery()
 		std::this_thread::sleep_for(2ms);
 	}
 	const auto statistics = receiver->statistics();
-	LIBGS_TEST_CHECK(statistics.delivery_queue_drops > 0);
-	LIBGS_TEST_CHECK(recovered.load(std::memory_order_acquire) > 0);
-	LIBGS_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK(statistics.delivery_queue_drops > 0);
+	RIWO_TEST_CHECK(recovered.load(std::memory_order_acquire) > 0);
+	RIWO_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
 	receiver->cancel();
 }
 
@@ -317,13 +317,13 @@ void malformed_and_incomplete_fragment_storm_recovery()
 	config.max_source_reassembly_bytes = 8 * 1'024 * 1'024;
 	udp_interface::set_config(config);
 	constexpr std::string_view probe_topic =
-		"libgs.test.stress.sbus.udp.fragment-storm.probe";
+		"riwo.test.stress.sbus.udp.fragment-storm.probe";
 	constexpr std::string_view entry_limit_topic =
-		"libgs.test.stress.sbus.udp.fragment-storm.entry-limit";
+		"riwo.test.stress.sbus.udp.fragment-storm.entry-limit";
 	constexpr std::string_view byte_limit_topic =
-		"libgs.test.stress.sbus.udp.fragment-storm.byte-limit";
+		"riwo.test.stress.sbus.udp.fragment-storm.byte-limit";
 	constexpr std::string_view unmatched_topic =
-		"libgs.test.stress.sbus.udp.fragment-storm.unmatched";
+		"riwo.test.stress.sbus.udp.fragment-storm.unmatched";
 	auto receiver = std::make_shared<udp_interface>();
 	std::atomic_size_t recovered {0};
 	std::atomic_bool invalid {false};
@@ -350,7 +350,7 @@ void malformed_and_incomplete_fragment_storm_recovery()
 		asio::ip::address_v4(config.multicast_group), config.multicast_port);
 
 	// Valid first fragments that never complete cross both per-source
-	// reassembly limits, even with LIBGS_STRESS_SCALE=1.
+	// reassembly limits, even with RIWO_STRESS_SCALE=1.
 	auto send_incomplete_assemblies = [&] (
 		std::string_view topic, uint32_t assembly_size, size_t count,
 		uint64_t first_message_id)
@@ -375,33 +375,33 @@ void malformed_and_incomplete_fragment_storm_recovery()
 		4 * 1'024 * 1'024,
 		config.max_source_reassemblies + 16,
 		0x0f0000000ULL);
-	LIBGS_TEST_CHECK(wait_until([&]
+	RIWO_TEST_CHECK(wait_until([&]
 	{
 		return receiver->statistics().received_datagrams >=
 			unmatched_before.received_datagrams +
 			config.max_source_reassemblies + 1;
 	}));
-	LIBGS_TEST_CHECK_EQ(receiver->statistics().reassembly_evictions,
+	RIWO_TEST_CHECK_EQ(receiver->statistics().reassembly_evictions,
 		unmatched_before.reassembly_evictions);
 
 	send_incomplete_assemblies(
 		entry_limit_topic,
 		256 * 1'024,
-		config.max_source_reassemblies + 16 * LIBGS_STRESS_SCALE,
+		config.max_source_reassemblies + 16 * RIWO_STRESS_SCALE,
 		0x100000000ULL);
 	send_incomplete_assemblies(
 		byte_limit_topic,
 		4 * 1'024 * 1'024,
-		5 + 8 * LIBGS_STRESS_SCALE,
+		5 + 8 * RIWO_STRESS_SCALE,
 		0x110000000ULL);
-	LIBGS_TEST_CHECK(wait_until([&]
+	RIWO_TEST_CHECK(wait_until([&]
 	{
 		return receiver->statistics().reassembly_evictions > 0;
 	}));
 
 	// A small malformed-datagram burst exceeds the per-source packet bucket.
 	const size_t malformed_count = config.source_datagram_burst +
-		4'000 * LIBGS_STRESS_SCALE;
+		4'000 * RIWO_STRESS_SCALE;
 	for(size_t index = 0; index < malformed_count; ++index)
 	{
 		std::array<std::byte,wire_header_size> malformed {};
@@ -417,7 +417,7 @@ void malformed_and_incomplete_fragment_storm_recovery()
 		write_u32(malformed.data() + 36, 1);
 		socket.send_to(asio::buffer(malformed), destination);
 	}
-	LIBGS_TEST_CHECK(wait_until([&]
+	RIWO_TEST_CHECK(wait_until([&]
 	{
 		return receiver->statistics().rate_limited_datagrams > 0;
 	}));
@@ -432,12 +432,12 @@ void malformed_and_incomplete_fragment_storm_recovery()
 		socket.send_to(asio::buffer(datagram), destination);
 		std::this_thread::sleep_for(2ms);
 	}
-	LIBGS_TEST_CHECK(recovered.load(std::memory_order_acquire) > 0);
-	LIBGS_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK(recovered.load(std::memory_order_acquire) > 0);
+	RIWO_TEST_CHECK(not invalid.load(std::memory_order_relaxed));
 	const auto statistics = receiver->statistics();
-	LIBGS_TEST_CHECK(statistics.invalid_datagrams > 0);
-	LIBGS_TEST_CHECK(statistics.rate_limited_datagrams > 0);
-	LIBGS_TEST_CHECK(statistics.reassembly_evictions > 0);
+	RIWO_TEST_CHECK(statistics.invalid_datagrams > 0);
+	RIWO_TEST_CHECK(statistics.rate_limited_datagrams > 0);
+	RIWO_TEST_CHECK(statistics.reassembly_evictions > 0);
 	receiver->cancel();
 }
 
@@ -445,7 +445,7 @@ void malformed_and_incomplete_fragment_storm_recovery()
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"udp concurrent multicast burst and recovery",
 			concurrent_multicast_burst_and_recovery},
 		{"udp lifecycle churn under traffic", lifecycle_churn_under_traffic},

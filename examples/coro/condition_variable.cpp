@@ -1,33 +1,33 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/coro.h>
+#include <riwo/coro.h>
 
 #include <iostream>
 
 int main()
 {
-	using namespace libgs::coro::literals;
+	using namespace riwo::coro::literals;
 
-	libgs::coro::mutex mutex;
-	libgs::coro::condition_variable changed;
+	riwo::coro::mutex mutex;
+	riwo::coro::condition_variable changed;
 	bool ready = false;
 
-	libgs::dispatch([&]() -> libgs::awaitable<void>
+	riwo::dispatch([&]() -> riwo::awaitable<void>
 	{
-		libgs::coro::unique_lock lock(mutex);
+		riwo::coro::unique_lock lock(mutex);
 		co_await lock.lock();
 		co_await changed.wait(lock, [&] { return ready; });
 
 		std::cout << "consumer observed ready = true\n";
-		libgs::exit();
+		riwo::exit();
 		co_return;
 	});
 
-	libgs::dispatch([&]() -> libgs::awaitable<void>
+	riwo::dispatch([&]() -> riwo::awaitable<void>
 	{
 		co_await 20_ms;
-		libgs::coro::unique_lock lock(mutex);
+		riwo::coro::unique_lock lock(mutex);
 		co_await lock.lock();
 
 		ready = true;
@@ -36,5 +36,5 @@ int main()
 		co_return;
 	});
 
-	return libgs::exec();
+	return riwo::exec();
 }

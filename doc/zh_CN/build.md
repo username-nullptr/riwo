@@ -2,176 +2,221 @@
 
 语言：[English](../en/build.md) | 简体中文
 
-本页统一说明构建要求、CMake 开关、产物、安装和支持边界。
+本页是当前项目的 CMake 参考。测试专用开关和构建配置见
+[测试指南](../../test/README.md)。
 
 ## 要求
 
-| 组件 | 要求 |
+| 组件 | 最低版本 |
 | --- | --- |
-| CMake | 3.15 或更高版本 |
-| 语言 | C++20 |
-| GCC | 13 或更高版本 |
-| Clang | 17 或更高版本 |
-| MSVC | 19.30 或更高版本（Visual Studio 2022+） |
+| CMake | 3.15 |
+| 语言模式 | C++20 |
+| GCC | 13 |
+| Clang | 17 |
+| MSVC | 19.30（Visual Studio 2022） |
 
-仓库已包含 standalone Asio 和 spdlog，并默认使用随附版本；也可以切换到已安装的
-外部包，或使用 Boost.Asio 替代 standalone Asio。OpenSSL、zlib 与 liburing 只在
-启用对应功能时作为系统依赖。
+仓库随附 standalone Asio 和 spdlog。只有启用对应能力时，才会查找 OpenSSL、
+zlib 和 liburing。
 
-## 模块选择
+## 选择构建配置
 
-| 开关 | 默认值 | Target | 依赖 |
-| --- | :---: | --- | --- |
-| Core（始终构建） | ON | `gs.core` | — |
-| `LIBGS_BUILD_CORO` | ON | `gs.coro` | Core |
-| `LIBGS_BUILD_HTTP` | OFF | `gs.http` | Coroutines |
-| `LIBGS_BUILD_WEBSOCKET` | OFF | `gs.websocket` | HTTP |
-| `LIBGS_BUILD_UTILITIES` | OFF | `gs.utils` | Coroutines |
-
-启用模块但关闭其依赖时，CMake 会拒绝配置。模块依赖公开传递，应用只需链接直接使用
-的最高层模块。
-
-默认构建：
+默认库只包含 Core 与 Coroutines：
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-构建全部模块与示例：
+构建全部库模块和适用示例：
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DLIBGS_BUILD_HTTP=ON \
-  -DLIBGS_BUILD_WEBSOCKET=ON \
-  -DLIBGS_BUILD_UTILITIES=ON \
-  -DLIBGS_BUILD_EXAMPLES=ON
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_UTILITIES=ON \
+  -DRIWO_BUILD_EXAMPLES=ON
 cmake --build build --parallel
 ```
 
-## 功能开关
+TLS 和压缩是独立能力。例如：
 
-| 开关 | 默认值 | 作用 |
+```sh
+cmake -S . -B build-secure -DCMAKE_BUILD_TYPE=Release \
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_OPENSSL_SUPPORT=ON \
+  -DRIWO_HTTP_ZLIB_SUPPORT=ON
+cmake --build build-secure --parallel
+```
+
+## 模块选择
+
+| 选项 | 默认值 | 构建 Target | 前置条件 |
+| --- | :---: | --- | --- |
+| Core，无选项 | ON | `riwo.core` | 选定的 Asio provider |
+| `RIWO_BUILD_CORO` | ON | `riwo.coro` | Core |
+| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Coroutines |
+| `RIWO_BUILD_WEBSOCKET` | OFF | `riwo.websocket` | HTTP |
+| `RIWO_BUILD_UTILITIES` | OFF | `riwo.utils` | Coroutines 与 spdlog |
+| `RIWO_BUILD_EXAMPLES` | OFF | `riwo.example.*` | 对应的已启用模块 |
+
+启用模块但关闭其前置模块时，CMake 会拒绝配置。应用应链接每个直接使用的模块；
+该模块的下层 Target 会作为公共依赖自动传递。
+
+## 能力开关
+
+| 选项 | 默认值 | 范围 | 外部要求 |
+| --- | :---: | --- | --- |
+| `RIWO_BUILD_STATIC` | OFF* | 将全部 Riwo 模块构建为静态库 | — |
+| `RIWO_ADD_LIBRARY_VERSION` | ON | 为共享库添加版本/SOVERSION | — |
+| `RIWO_OPENSSL_SUPPORT` | OFF | TLS、HTTPS 与 WSS | OpenSSL |
+| `RIWO_HTTP_ZLIB_SUPPORT` | OFF | HTTP gzip | zlib |
+| `RIWO_WEBSOCKET_ZLIB_SUPPORT` | OFF | RFC 7692 `permessage-deflate` | zlib |
+| `RIWO_IO_URING_SUPPORT` | OFF | 使用 Asio io_uring 取代 epoll | Linux 与 liburing |
+| `RIWO_BUILD_UTILITIES_SBUS_UDP` | ON | UDP 多播软总线传输 | Utilities 模块 |
+| `RIWO_UTILS_SBUS_DEFAULT_INTERFACE` | `local` | 未限定软总线 API 的默认实现：`local` 或 `udp` | 设为 `udp` 时需启用 UDP 传输 |
+
+同时启用 HTTP gzip 与 WebSocket 时，WebSocket 压缩也会启用；否则由
+`RIWO_WEBSOCKET_ZLIB_SUPPORT` 独立控制 WebSocket 压缩。
+
+*Windows GNU 工具链找不到共享 `libstdc++-6.dll` 时，默认改为静态构建；
+此时显式请求共享构建会失败。*
+
+可选的包位置提示：
+
+| 变量 | 包 |
+| --- | --- |
+| `RIWO_OPENSSL_INSTALL_PREFIX` | OpenSSL 安装前缀 |
+| `RIWO_ZLIB_INSTALL_PREFIX` | zlib 安装前缀 |
+
+即使编译了 OpenSSL 支持，TLS 证书加载、对端验证和信任策略仍由应用负责。
+
+## 依赖 provider
+
+| 选项 | 默认值 | 取值/作用 |
 | --- | :---: | --- |
-| `LIBGS_BUILD_STATIC` | OFF* | 构建静态库而非共享库 |
-| `LIBGS_ADD_LIBRARY_VERSION` | ON | 为共享库添加版本信息 |
-| `LIBGS_OPENSSL_SUPPORT` | OFF | 启用 TLS、HTTPS 和 WSS；需要 OpenSSL |
-| `LIBGS_HTTP_ZLIB_SUPPORT` | OFF | 启用 HTTP gzip；需要 zlib |
-| `LIBGS_WEBSOCKET_ZLIB_SUPPORT` | OFF | 启用 WebSocket `permessage-deflate`；需要 zlib |
-| `LIBGS_BUILD_UTILITIES_SBUS_UDP` | ON | 构建 UDP 软总线传输 |
-| `LIBGS_UTILS_SBUS_DEFAULT_INTERFACE` | `local` | 为未限定的软总线 API 选择 `local` 或 `udp` |
-| `LIBGS_IO_URING_SUPPORT` | OFF | 在 Linux 上使用 Asio io_uring；需要 liburing |
-| `LIBGS_BUILD_EXAMPLES` | OFF | 构建已启用模块的示例 |
+| `RIWO_ASIO_PROVIDER` | 空 = `BUNDLED` | `BUNDLED`、`EXTERNAL` 或 `BOOST`；不区分大小写 |
+| `RIWO_ASIO_INSTALL_PREFIX` | 空 | 外部 standalone Asio 的位置提示 |
+| `RIWO_BOOST_INSTALL_PREFIX` | 空 | Boost.Asio 的位置提示 |
+| `RIWO_USE_BUNDLED_SPDLOG` | ON | 使用随附 spdlog 头文件 |
+| `RIWO_SPDLOG_INSTALL_PREFIX` | 空 | 外部 spdlog 的位置提示 |
 
-HTTP zlib 会在构建 WebSocket 时自动启用其 zlib 支持；只有关闭 HTTP zlib 时才提供
-独立的 WebSocket 开关。
-
-*Windows GNU 工具链找不到共享 `libstdc++-6.dll` 时，默认改为静态构建。*
-
-工具链开关：
-
-| 开关 | 适用范围 | 作用 |
-| --- | --- | --- |
-| `LIBGS_USE_LIBCXX` | Clang | 使用 libc++ 编译和链接 |
-| `LIBGS_USE_LLD` | Clang | 使用 lld 链接 |
-| `LIBGS_ENABLE_LTO` | GCC | 启用 LTO |
-| `LIBGS_HEAVY_COMPILE_JOBS` | 测试/示例 | 限制 HTTP/WebSocket 并行编译数；`0` 表示不限 |
-| `LIBGS_LOW_MEMORY_DEBUG_INFO` | GCC Debug 构建 | 使用 `-g1` 降低编译内存 |
-
-测试专用开关见[测试](../../test/README.md)。
-
-依赖选择：
-
-| 开关 | 默认值 | 作用 |
-| --- | :---: | --- |
-| `LIBGS_ASIO_PROVIDER` | 空（`BUNDLED`） | 选择 `BUNDLED`、`EXTERNAL` 或 `BOOST` Asio；不区分大小写 |
-| `LIBGS_USE_BUNDLED_SPDLOG` | ON | 使用随附的 spdlog |
-| `LIBGS_BOOST_INSTALL_PREFIX` | 空 | 可选的 Boost 安装前缀 |
-| `LIBGS_ASIO_INSTALL_PREFIX` | 空 | 可选的 standalone Asio 安装前缀 |
-| `LIBGS_SPDLOG_INSTALL_PREFIX` | 空 | 可选的 spdlog 安装前缀 |
-
-使用外部 standalone Asio 和 spdlog 时，选择外部 Asio provider 并关闭随附 spdlog。
-LibGS 会先查找对应的 CMake package，找不到时再到指定安装前缀下查找头文件：
+外部 standalone Asio 和 spdlog 可以是 CMake package，也可以是指定前缀下的头文件树：
 
 ```sh
 cmake -S . -B build \
-  -DLIBGS_ASIO_PROVIDER=EXTERNAL \
-  -DLIBGS_ASIO_INSTALL_PREFIX=/path/to/asio \
-  -DLIBGS_USE_BUNDLED_SPDLOG=OFF \
-  -DLIBGS_SPDLOG_INSTALL_PREFIX=/path/to/spdlog
+  -DRIWO_ASIO_PROVIDER=EXTERNAL \
+  -DRIWO_ASIO_INSTALL_PREFIX=/path/to/asio \
+  -DRIWO_USE_BUNDLED_SPDLOG=OFF \
+  -DRIWO_SPDLOG_INSTALL_PREFIX=/path/to/spdlog
 ```
 
-使用 Boost.Asio 时选择 `BOOST` provider：
+显式选择 Boost.Asio：
 
 ```sh
 cmake -S . -B build \
-  -DLIBGS_ASIO_PROVIDER=BOOST \
-  -DLIBGS_BOOST_INSTALL_PREFIX=/path/to/boost
+  -DRIWO_ASIO_PROVIDER=BOOST \
+  -DRIWO_BOOST_INSTALL_PREFIX=/path/to/boost
 ```
+
+Riwo 会把选定的 Asio 实现编译进 Core。消费端应使用 Riwo 模块 Target，不要直接
+链接 provider Target。
+
+## 工具链与构建资源控制
+
+| 选项 | 默认值 | 约束/作用 |
+| --- | :---: | --- |
+| `RIWO_USE_LIBCXX` | OFF | 仅 Clang；使用 libc++ 编译和链接 |
+| `RIWO_USE_LLD` | OFF | 仅 Clang；使用 lld 链接 |
+| `RIWO_ENABLE_LTO` | OFF | 仅 GCC；启用 LTO |
+| `RIWO_HEAVY_COMPILE_JOBS` | 随编译器变化 | 限制 HTTP/WebSocket 示例和测试的并行编译数；`0` 表示不限 |
+| `RIWO_LOW_MEMORY_DEBUG_INFO` | OFF | 仅 GCC Debug 构建；使用 `-g1` |
+
+`RIWO_HEAVY_COMPILE_JOBS` 在 Clang 下默认为 8、GCC 下为 6，其他编译器下为 0。
+Ninja 使用编译 job pool；其他生成器只把已识别的重型 Target 串入对应数量的通道。
 
 ## 产物与安装
 
-单配置构建的输出目录：
+单配置生成器的构建树：
 
 | 产物 | 路径 |
 | --- | --- |
-| 共享库与可执行文件 | `build/output/bin` |
-| 静态库与导入库 | `build/output/lib` |
-| 示例 | `build/output/examples/<module>` |
-| 生成的配置头文件 | `build/output/config_include` |
+| 共享库与可执行文件 | `<build>/output/bin` |
+| 静态库与导入库 | `<build>/output/lib` |
+| 示例 | `<build>/output/examples/<module>` |
+| 生成的配置头文件 | `<build>/output/config_include` |
+| 启用 Fuzz 时的可执行文件 | `<build>/output/fuzz` |
 
-多配置生成器可能增加配置子目录。
+多配置生成器可能插入配置目录。
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/path/to/libgs-install
+  -DCMAKE_INSTALL_PREFIX=/path/to/riwo-install
 cmake --build build --parallel
 cmake --install build
 ```
 
-Visual Studio 等多配置生成器需要在构建和安装命令中添加
-`--config Release`。
+Visual Studio 等多配置生成器需要在构建和安装命令中添加 `--config Release`。
+`RIWO_INSTALL_CMAKEDIR` 可修改生成的 CMake package 文件的安装位置。
 
 ## 使用源码树
+
+在 `add_subdirectory()` 前设置 Riwo 选项，然后链接应用直接使用的模块 Target：
 
 ```cmake
 cmake_minimum_required(VERSION 3.15)
 project(my_app LANGUAGES CXX)
 
-set(LIBGS_BUILD_HTTP ON CACHE BOOL "")
-add_subdirectory(path/to/libgs)
+set(RIWO_BUILD_HTTP ON CACHE BOOL "")
+add_subdirectory(path/to/riwo)
 
 add_executable(my_app main.cpp)
 target_compile_features(my_app PRIVATE cxx_std_20)
-target_link_libraries(my_app PRIVATE gs.http)
+target_link_libraries(my_app PRIVATE riwo.http)
 ```
 
-在 `add_subdirectory()` 前设置 LibGS 选项。链接 Target 会提供内置头文件和传递
-模块/系统依赖。
+如果同一应用还直接使用 Utilities，则在链接行添加 `riwo.utils`；HTTP 不会隐含
+Utilities。
 
-## 使用安装树
+## 使用安装包
 
-将安装前缀加入 `CMAKE_PREFIX_PATH`，然后加载已安装的 package，并链接应用使用的
-最高层模块：
+安装结果会导出 `Riwo` config package。请求应用使用的模块，并链接带命名空间的
+Target：
 
 ```cmake
-find_package(LibGS 0.16 CONFIG REQUIRED COMPONENTS http)
+find_package(Riwo 0.16 CONFIG REQUIRED COMPONENTS http)
 
 add_executable(my_app main.cpp)
-target_link_libraries(my_app PRIVATE LibGS::http)
+target_link_libraries(my_app PRIVATE Riwo::http)
 ```
 
-例如，配置消费项目时传入 `-DCMAKE_PREFIX_PATH=/path/to/libgs-install`。可用组件名和
-导入 Target 为 `core`、`coro`、`http`、`websocket` 和 `utils`；请求的组件必须在构建
-LibGS 时已启用。package 同时提供旧目标名（`gs.core`、`gs.coro` 等）以兼容源码树
-用法，并会恢复所需的可选系统依赖。
+安装前缀不能被自动发现时，为消费项目传入
+`-DCMAKE_PREFIX_PATH=/path/to/riwo-install`。
 
-## 支持边界
+| Component | 导入 Target |
+| --- | --- |
+| `core` | `Riwo::core` |
+| `coro` | `Riwo::coro` |
+| `http` | `Riwo::http` |
+| `websocket` | `Riwo::websocket` |
+| `utils` | `Riwo::utils` |
 
-- LibGS 以共享库或静态库构建，不是 header-only 库。
-- 源码树和安装树均支持 Target 化 CMake 集成。
-- 运行时基于 Asio，可使用进程级默认上下文或应用持有的 Asio executor。
-- TLS 需要应用配置 OpenSSL context；LibGS 不负责证书策略。
-- HTTP 支持 1.0 和 1.1，不支持 HTTP/2 或 HTTP/3。
-- WebSocket 实现基于 HTTP/1.1 的 RFC 6455。
-- 公共 API 尚未达到 1.0，版本间可能变化。
+只有构建进安装结果的 component 才可用。package 会恢复选定的 Asio provider，
+以及所需的 OpenSSL、zlib、liburing 或外部 spdlog 依赖。它也暴露
+`riwo.<module>` 兼容 Target，但新的安装树消费端应优先使用 `Riwo::<module>`。
+
+## 配置约束
+
+CMake 会尽早拒绝不支持的组合，包括：
+
+- 关闭 Coroutines 却启用 HTTP、关闭 HTTP 却启用 WebSocket，或关闭
+  Coroutines 却启用 Utilities；
+- 禁用 UDP 传输却把它设为默认软总线接口；
+- 在非 Linux 平台启用 io_uring，或系统缺少 liburing；
+- 在错误的编译器上启用 libc++、lld 或 LTO 专用选项；
+- MinGW 缺少共享 GNU C++ 运行时时仍请求共享库；
+- [测试指南](../../test/README.md)明确拒绝的测试、Sanitizer、Fuzz、Stress 或
+  Performance 组合。
+
+Riwo 是编译型静态/共享库，不是 header-only 库。HTTP 只覆盖 1.0/1.1，
+WebSocket 是 HTTP/1.1 上的 RFC 6455。公共 API 尚未达到 1.0，版本间可能变化。

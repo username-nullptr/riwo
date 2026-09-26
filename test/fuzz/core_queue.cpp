@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/lock_free_queue.h>
+#include <riwo/core/lock_free_queue.h>
 
 #include <deque>
 
@@ -87,9 +87,9 @@ void exercise_queue(const uint8_t *data, size_t size)
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-	if(size == 0 or size > LIBGS_FUZZ_MAX_LENGTH)
+	if(size == 0 or size > RIWO_FUZZ_MAX_LENGTH)
 		return 0;
-	exercise_queue<libgs::circular_lock_free_queue<uint32_t>>(data, size);
-	exercise_queue<libgs::linked_lock_free_queue<uint32_t>>(data, size);
+	exercise_queue<riwo::circular_lock_free_queue<uint32_t>>(data, size);
+	exercise_queue<riwo::linked_lock_free_queue<uint32_t>>(data, size);
 	return 0;
 }

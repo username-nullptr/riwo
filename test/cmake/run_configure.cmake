@@ -53,8 +53,8 @@ endif ()
 
 list(APPEND configure_command
 	-DBUILD_TESTING=OFF
-	-DLIBGS_BUILD_CMAKE_TESTS=OFF
-	-DLIBGS_BUILD_EXAMPLES=OFF
+	-DRIWO_BUILD_CMAKE_TESTS=OFF
+	-DRIWO_BUILD_EXAMPLES=OFF
 )
 if (TEST_OPTIONS)
 	string(REPLACE "|" ";" test_options "${TEST_OPTIONS}")
@@ -79,18 +79,18 @@ if (TEST_EXPECT_SUCCESS)
 		)
 	endif ()
 
-	set(package_config "${TEST_BINARY_DIR}/LibGSConfig.cmake")
+	set(package_config "${TEST_BINARY_DIR}/RiwoConfig.cmake")
 
 	if (NOT EXISTS "${package_config}")
 		message(FATAL_ERROR
-			"Configuration '${TEST_NAME}' did not generate LibGSConfig.cmake."
+			"Configuration '${TEST_NAME}' did not generate RiwoConfig.cmake."
 		)
 	endif ()
 
 	file(READ "${package_config}" package_config_contents)
 	string(REPLACE "," ";" expected_components "${TEST_EXPECT_COMPONENTS}")
 
-	if (NOT package_config_contents MATCHES "set\\(LibGS_core_FOUND TRUE\\)")
+	if (NOT package_config_contents MATCHES "set\\(Riwo_core_FOUND TRUE\\)")
 		message(FATAL_ERROR "The generated package does not expose core.")
 	endif ()
 
@@ -102,7 +102,7 @@ if (TEST_EXPECT_SUCCESS)
 		endif ()
 
 		if (NOT package_config_contents MATCHES
-			"set\\(LibGS_${component}_FOUND ${expected_value}\\)")
+			"set\\(Riwo_${component}_FOUND ${expected_value}\\)")
 			message(FATAL_ERROR
 				"Configuration '${TEST_NAME}' generated an inconsistent "
 				"${component} component state; expected ${expected_value}."

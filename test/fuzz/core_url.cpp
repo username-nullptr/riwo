@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/algorithm/misc.h>
-#include <libgs/core/url.h>
+#include <riwo/core/algorithm/misc.h>
+#include <riwo/core/url.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
@@ -11,26 +11,26 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
 	const std::string input(reinterpret_cast<const char*>(data), size);
 
-	const auto encoded = libgs::to_percent_encoding(input);
-	if( libgs::from_percent_encoding(encoded) != input )
+	const auto encoded = riwo::to_percent_encoding(input);
+	if( riwo::from_percent_encoding(encoded) != input )
 		std::abort();
 
-	libgs::url parsed(input);
+	riwo::url parsed(input);
 	if( not parsed.is_valid() )
 		return 0;
 
 	const auto serialized = parsed.to_string();
-	libgs::url reparsed(serialized);
+	riwo::url reparsed(serialized);
 	if( not reparsed.is_valid() or reparsed.to_string() != serialized )
 		std::abort();
 
-	libgs::url copied(parsed);
-	libgs::url moved(std::move(copied));
+	riwo::url copied(parsed);
+	riwo::url moved(std::move(copied));
 	if( moved.to_string() != serialized )
 		std::abort();
 
 	const auto split = size / 2;
-	libgs::ignore_unused(libgs::url::resolve(
+	riwo::ignore_unused(riwo::url::resolve(
 		parsed, std::string_view(input).substr(split)));
 	return 0;
 }

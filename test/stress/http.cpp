@@ -3,54 +3,54 @@
 
 #include "test.h"
 
-#include <libgs/http/client.h>
-#include <libgs/http/server.h>
+#include <riwo/http/client.h>
+#include <riwo/http/server.h>
 
 namespace
 {
 
 void low_load_client_lifecycle_repetition()
 {
-	using namespace libgs::http;
-	const size_t rounds = 200 * LIBGS_STRESS_SCALE;
-	const auto seed = libgs::test::current_seed();
-	libgs::io_context_t context;
+	using namespace riwo::http;
+	const size_t rounds = 200 * RIWO_STRESS_SCALE;
+	const auto seed = riwo::test::current_seed();
+	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	server service(std::move(acceptor), asio::make_strand(context));
 	std::atomic_size_t handled {0};
-	service.bind({libgs::ip_type::v4, 0})
+	service.bind({riwo::ip_type::v4, 0})
 		.on_request<method::get>("/lifecycle",
-		[&](server::context_t &request_context) -> libgs::awaitable<void>
+		[&](server::context_t &request_context) -> riwo::awaitable<void>
 		{
 			const auto body = request_context.request().parameter("round")
 				.value_or("missing").to_string();
 			handled.fetch_add(1, std::memory_order_relaxed);
 			co_await request_context.response().write(
-				asio::buffer(body), libgs::use_awaitable);
+				asio::buffer(body), riwo::use_awaitable);
 		})
 		.start();
 	const auto port = service.acceptor_wrap().acceptor().local_endpoint().port();
 	const auto target = std::format(
 		"http://127.0.0.1:{}/lifecycle?round=", port);
 	auto completed = asio::co_spawn(asio::make_strand(context),
-		[&, target]() -> libgs::awaitable<void>
+		[&, target]() -> riwo::awaitable<void>
 		{
 			auto executor = co_await asio::this_coro::executor;
 			for(size_t round = 0; round < rounds; ++round)
 			{
 				client requester(executor);
 				auto request = co_await requester.request_get(
-					target + std::to_string(round), libgs::use_awaitable);
-				LIBGS_TEST_CHECK(request);
-				LIBGS_TEST_CHECK_EQ(
-					co_await request->wait_reply(libgs::use_awaitable), status::ok);
-				LIBGS_TEST_CHECK_EQ(
-					co_await request->reply()->read<std::string>(libgs::use_awaitable),
+					target + std::to_string(round), riwo::use_awaitable);
+				RIWO_TEST_CHECK(request);
+				RIWO_TEST_CHECK_EQ(
+					co_await request->wait_reply(riwo::use_awaitable), status::ok);
+				RIWO_TEST_CHECK_EQ(
+					co_await request->reply()->read<std::string>(riwo::use_awaitable),
 					std::to_string(round));
 				if(((seed ^ round) & 3U) == 0)
-					co_await asio::post(libgs::use_awaitable);
+					co_await asio::post(riwo::use_awaitable);
 			}
-		}, libgs::use_future);
+		}, riwo::use_future);
 
 	std::array<std::thread,2> runners;
 	for(auto &runner : runners)
@@ -67,7 +67,7 @@ void low_load_client_lifecycle_repetition()
 			runner.join();
 		throw;
 	}
-	LIBGS_TEST_CHECK_EQ(handled.load(std::memory_order_relaxed), rounds);
+	RIWO_TEST_CHECK_EQ(handled.load(std::memory_order_relaxed), rounds);
 	service.stop();
 	context.stop();
 	for(auto &runner : runners)
@@ -76,17 +76,17 @@ void low_load_client_lifecycle_repetition()
 
 void concurrent_keep_alive_pressure()
 {
-	using namespace libgs::http;
+	using namespace riwo::http;
 	constexpr size_t client_count = 12;
-	const size_t requests_per_client = 100 * LIBGS_STRESS_SCALE;
-	libgs::io_context_t context;
+	const size_t requests_per_client = 100 * RIWO_STRESS_SCALE;
+	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	auto service_executor = asio::make_strand(context);
 	server service(std::move(acceptor), service_executor);
 	std::atomic_size_t handled {0};
-	service.bind({libgs::ip_type::v4, 0})
+	service.bind({riwo::ip_type::v4, 0})
 		.on_request<method::get>("/stress",
-		[&](server::context_t &request_context) -> libgs::awaitable<void>
+		[&](server::context_t &request_context) -> riwo::awaitable<void>
 		{
 			const auto requested_size = request_context.request().parameter("size")
 				.value_or("0").to_uint().value_or(0);
@@ -97,7 +97,7 @@ void concurrent_keep_alive_pressure()
 				static_cast<char>('a' + fill_value % 26));
 			handled.fetch_add(1, std::memory_order_relaxed);
 			co_await request_context.response().write(
-				asio::buffer(body), libgs::use_awaitable);
+				asio::buffer(body), riwo::use_awaitable);
 		})
 		.start();
 	const auto port = service.acceptor_wrap().acceptor().local_endpoint().port();
@@ -108,7 +108,7 @@ void concurrent_keep_alive_pressure()
 	{
 		auto client_executor = asio::make_strand(context);
 		futures.emplace_back(asio::co_spawn(client_executor,
-		[&, target, index]() -> libgs::awaitable<void>
+		[&, target, index]() -> riwo::awaitable<void>
 		{
 			auto executor = co_await asio::this_coro::executor;
 			client requester(executor);
@@ -128,19 +128,19 @@ void concurrent_keep_alive_pressure()
 					active_client = transient.get();
 				}
 				auto request = co_await active_client->request_get(
-					request_target, libgs::use_awaitable);
-				LIBGS_TEST_CHECK(request);
-				LIBGS_TEST_CHECK_EQ(
-					co_await request->wait_reply(libgs::use_awaitable), status::ok);
+					request_target, riwo::use_awaitable);
+				RIWO_TEST_CHECK(request);
+				RIWO_TEST_CHECK_EQ(
+					co_await request->wait_reply(riwo::use_awaitable), status::ok);
 				auto body = co_await request->reply()->read<std::string>(
-					libgs::use_awaitable);
-				LIBGS_TEST_CHECK_EQ(body.size(), body_size);
-				LIBGS_TEST_CHECK(std::ranges::all_of(body,
+					riwo::use_awaitable);
+				RIWO_TEST_CHECK_EQ(body.size(), body_size);
+				RIWO_TEST_CHECK(std::ranges::all_of(body,
 					[expected = static_cast<char>('a' + fill_value)](char value) {
 						return value == expected;
 					}));
 			}
-		}, libgs::use_future));
+		}, riwo::use_future));
 	}
 
 	std::array<std::thread,4> runners;
@@ -159,7 +159,7 @@ void concurrent_keep_alive_pressure()
 			runner.join();
 		throw;
 	}
-	LIBGS_TEST_CHECK_EQ(handled.load(), client_count * requests_per_client);
+	RIWO_TEST_CHECK_EQ(handled.load(), client_count * requests_per_client);
 	service.stop();
 	context.stop();
 	for(auto &runner : runners)
@@ -170,7 +170,7 @@ void concurrent_keep_alive_pressure()
 
 int main(int argc, const char *const argv[])
 {
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"low-load HTTP client lifecycle repetition",
 			low_load_client_lifecycle_repetition},
 		{"concurrent HTTP keep-alive pressure", concurrent_keep_alive_pressure},

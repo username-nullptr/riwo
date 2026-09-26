@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/coro.h>
+#include <riwo/coro.h>
 #include <iostream>
 #include <chrono>
 #include <future>
@@ -9,11 +9,11 @@
 int main()
 {
 	using namespace std::chrono_literals;
-	using namespace libgs::coro::literals;
+	using namespace riwo::coro::literals;
 
-	libgs::dispatch([]() -> libgs::awaitable<void>
+	riwo::dispatch([]() -> riwo::awaitable<void>
 	{
-		std::cout << "Coroutine started on thread " << libgs::this_thread_id() << '\n';
+		std::cout << "Coroutine started on thread " << riwo::this_thread_id() << '\n';
 		co_await 20_ms;
 
 		auto answer = std::async(std::launch::async, []
@@ -21,13 +21,13 @@ int main()
 			std::this_thread::sleep_for(20ms);
 			return 42;
 		});
-		std::cout << "Future result: " << co_await libgs::coro::wait(answer) << '\n';
+		std::cout << "Future result: " << co_await riwo::coro::wait(answer) << '\n';
 
-		co_await libgs::coro::goto_thread();
-		std::cout << "Moved to worker thread " << libgs::this_thread_id() << '\n';
+		co_await riwo::coro::goto_thread();
+		std::cout << "Moved to worker thread " << riwo::this_thread_id() << '\n';
 
-		libgs::exit();
+		riwo::exit();
 		co_return;
 	});
-	return libgs::exec();
+	return riwo::exec();
 }

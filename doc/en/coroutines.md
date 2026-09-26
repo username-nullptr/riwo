@@ -2,59 +2,69 @@
 
 Language: English | [简体中文](../zh_CN/coroutines.md)
 
-Target: `gs.coro`. Include `<libgs/coro.h>`. The module provides
-executor-aware waits and synchronization without intentionally blocking an
-executor thread.
+| Property | Value |
+| --- | --- |
+| Build option | `RIWO_BUILD_CORO=ON` (default) |
+| Source-tree target | `riwo.coro` |
+| Installed target | `Riwo::coro` |
+| Umbrella header | `<riwo/coro.h>` |
+| Depends on | Core |
 
-## Start work
+Coroutines adds suspending synchronization and executor-switching helpers. It is
+the required base for HTTP and Utilities.
 
-`libgs::dispatch()` and `libgs::post()` accept callables returning
-`libgs::awaitable<T>`:
+## Start coroutine work
+
+`riwo::dispatch()` and `riwo::post()` accept an awaitable or a callable that
+returns one:
 
 ```cpp
-#include <libgs/coro.h>
+#include <riwo/coro.h>
 
-using namespace libgs::coro::literals;
+using namespace riwo::coro::literals;
 
 int main()
 {
-    libgs::dispatch([]() -> libgs::awaitable<void>
+    riwo::dispatch([]() -> riwo::awaitable<void>
     {
         co_await 250_ms;
-        libgs::exit();
+        riwo::exit();
     });
 
-    return libgs::exec();
+    return riwo::exec();
 }
 ```
 
-Delay literals are available from years down to nanoseconds:
-`_y`, `_mon`, `_d`, `_h`, `_min`, `_s`, `_ms`, `_us`, and
-`_ns`.
+The duration literals are `_y`, `_mon`, `_d`, `_h`, `_min`, `_s`,
+`_ms`, `_us`, and `_ns`.
 
 ## Facilities
 
-| API | Purpose |
+| Header/API | Purpose |
 | --- | --- |
 | `coro::mutex`, `coro::unique_lock` | Exclusive locking and RAII ownership |
-| `coro::shared_mutex`, `coro::shared_lock` | Shared/exclusive locking |
+| `coro::shared_mutex`, `coro::shared_lock` | Shared and exclusive locking |
 | `coro::semaphore`, `coro::binary_semaphore` | Counting and binary permits |
-| `coro::condition_variable` | Predicate, timed, notify-one/all waits |
-| `coro::wait()` | Await a `std::future`, `std::thread`, `libgs::jthread`, or `asio::thread_pool` |
-| `coro::goto_exec()` | Resume on another executor and return the previous one |
+| `coro::condition_variable` | Predicate waits, timed waits, notify one/all |
+| `coro::wait()` | Await a future, thread, `riwo::jthread`, or Asio thread pool |
+| `coro::goto_exec()` | Resume on another executor and return the previous executor |
 | `coro::goto_thread()` | Resume on a worker thread |
 
-Timed lock and semaphore operations return an awaitable `bool`.
+Timed lock and semaphore operations yield a Boolean acquisition result.
 
-## Rules
+## Ownership and ordering
 
-- A synchronization object must outlive all of its waiters.
-- Detached coroutines should own captured state.
-- Update a condition-variable predicate while holding its mutex.
-- Do not carry a lock across an executor switch unless that ordering is
-  intentional.
-- Complete or cancel pending work before stopping its executor.
+- A synchronization primitive must outlive all queued and resumed waiters.
+- Update a condition-variable predicate while holding its associated mutex.
+- A detached coroutine must own captures that do not otherwise have a proven
+  longer lifetime.
+- Do not keep a lock across an executor switch unless the cross-executor
+  ordering is deliberate.
+- Cancel or complete pending waits before stopping the executor that must resume
+  them.
+- Use coroutine primitives only for coroutine waiters. Use Core thread locks
+  when a blocking thread-level critical section is intended.
 
-See [Execution and I/O model](io-model.md) for general ownership and concurrency
-rules, and [Coroutine examples](../../examples/README.md#coroutines) for runnable
-programs.
+The shared executor, completion, cancellation, strand, and shutdown contract is
+in [Execution and I/O model](io-model.md). Runnable usage is indexed under
+[Coroutine examples](../../examples/README.md#coroutines).

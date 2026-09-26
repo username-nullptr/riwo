@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/utils/sbus.h>
+#include <riwo/utils/sbus.h>
 #include <iostream>
 
 int main()
 {
 	using namespace std::chrono_literals;
-	constexpr std::string_view topic = "libgs.example.sbus.udp";
+	constexpr std::string_view topic = "riwo.example.sbus.udp";
 
 	asio::thread_pool pool(1);
-	libgs::utils::sbus::udp_subscriber subscriber(pool);
+	riwo::utils::sbus::udp_subscriber subscriber(pool);
 
 	std::atomic_bool received {false};
 	subscriber.subscribe(topic, [&](asio::const_buffer payload)
@@ -20,7 +20,7 @@ int main()
 		) << '\n';
 		received.store(true, std::memory_order_release);
 	});
-	libgs::utils::sbus::publish<libgs::utils::sbus::udp_interface>(
+	riwo::utils::sbus::publish<riwo::utils::sbus::udp_interface>(
 		topic, "hello over UDP multicast"
 	);
 

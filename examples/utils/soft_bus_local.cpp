@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/utils/sbus.h>
+#include <riwo/utils/sbus.h>
 #include <iostream>
 #include <atomic>
 #include <chrono>
@@ -27,15 +27,15 @@ int main()
 	constexpr auto topic = "example.counter";
 	asio::thread_pool pool(1);
 
-	libgs::utils::sbus::local_subscriber subscriber(pool);
+	riwo::utils::sbus::local_subscriber subscriber(pool);
 	subscriber.subscribe(topic, [](int value)
 	{
 		std::cout << "Received " << value << '\n';
 		received = true;
 	});
-	libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(topic, 42);
+	riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(topic, 42);
 
-	libgs::utils::sbus::local_cache cache(pool);
+	riwo::utils::sbus::local_cache cache(pool);
 
 	cache.changed(topic).connect(
 	[](std::vector<std::byte>, std::vector<std::byte>) {

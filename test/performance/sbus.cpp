@@ -4,7 +4,7 @@
 #include "benchmark.h"
 #include "test.h"
 
-#include <libgs/utils/sbus.h>
+#include <riwo/utils/sbus.h>
 
 namespace
 {
@@ -14,41 +14,41 @@ using duration_t = steady_clock_t::duration;
 
 #ifdef NDEBUG
 constexpr size_t no_subscriber_publish_count =
-	1'000'000 * libgs::test::performance_scale;
+	1'000'000 * riwo::test::performance_scale;
 constexpr size_t subscribed_publish_count =
-	20'000 * libgs::test::performance_scale;
+	20'000 * riwo::test::performance_scale;
 constexpr size_t connection_cycle_count =
-	1'000 * libgs::test::performance_scale;
+	1'000 * riwo::test::performance_scale;
 constexpr size_t payload_64k_publish_count =
-	4'096 * libgs::test::performance_scale;
+	4'096 * riwo::test::performance_scale;
 constexpr size_t payload_1m_publish_count =
-	256 * libgs::test::performance_scale;
+	256 * riwo::test::performance_scale;
 constexpr size_t payload_64k_fanout_publish_count =
-	1'024 * libgs::test::performance_scale;
+	1'024 * riwo::test::performance_scale;
 constexpr size_t payload_1m_fanout_publish_count =
-	128 * libgs::test::performance_scale;
+	128 * riwo::test::performance_scale;
 #else
 constexpr size_t no_subscriber_publish_count =
-	100'000 * libgs::test::performance_scale;
+	100'000 * riwo::test::performance_scale;
 constexpr size_t subscribed_publish_count =
-	2'000 * libgs::test::performance_scale;
+	2'000 * riwo::test::performance_scale;
 constexpr size_t connection_cycle_count =
-	100 * libgs::test::performance_scale;
+	100 * riwo::test::performance_scale;
 constexpr size_t payload_64k_publish_count =
-	512 * libgs::test::performance_scale;
+	512 * riwo::test::performance_scale;
 constexpr size_t payload_1m_publish_count =
-	32 * libgs::test::performance_scale;
+	32 * riwo::test::performance_scale;
 constexpr size_t payload_64k_fanout_publish_count =
-	128 * libgs::test::performance_scale;
+	128 * riwo::test::performance_scale;
 constexpr size_t payload_1m_fanout_publish_count =
-	16 * libgs::test::performance_scale;
+	16 * riwo::test::performance_scale;
 #endif
 
 constexpr size_t publish_batch_size = 64;
 constexpr size_t max_batch_payload_bytes = 4 * 1'024 * 1'024;
 constexpr size_t sample_count = 3;
 constexpr size_t unrelated_interface_count = 32;
-constexpr std::string_view topic = "libgs.performance.sbus";
+constexpr std::string_view topic = "riwo.performance.sbus";
 
 struct measurement
 {
@@ -74,13 +74,13 @@ duration_t measure_without_subscribers(size_t payload_size)
 {
 	std::vector<std::byte> payload(payload_size, std::byte {0x2a});
 	for(size_t index = 0; index < 1'000; ++index)
-		libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+		riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 			topic, payload.data(), payload.size()
 		);
 
 	const auto begin = steady_clock_t::now();
 	for(size_t index = 0; index < no_subscriber_publish_count; ++index)
-		libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+		riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 			topic, payload.data(), payload.size()
 		);
 	return steady_clock_t::now() - begin;
@@ -88,13 +88,13 @@ duration_t measure_without_subscribers(size_t payload_size)
 
 duration_t measure_with_unrelated_interfaces(size_t payload_size)
 {
-	std::vector<std::shared_ptr<libgs::utils::sbus::local_interface>> interfaces;
+	std::vector<std::shared_ptr<riwo::utils::sbus::local_interface>> interfaces;
 	interfaces.reserve(unrelated_interface_count);
 	for(size_t index = 0; index < unrelated_interface_count; ++index)
 	{
-		auto interface = std::make_shared<libgs::utils::sbus::local_interface>();
+		auto interface = std::make_shared<riwo::utils::sbus::local_interface>();
 		interface->subscribe(
-			"libgs.performance.sbus.unrelated." + std::to_string(index),
+			"riwo.performance.sbus.unrelated." + std::to_string(index),
 			[](const void*, size_t) {}
 		);
 		interfaces.emplace_back(std::move(interface));
@@ -102,13 +102,13 @@ duration_t measure_with_unrelated_interfaces(size_t payload_size)
 
 	std::vector<std::byte> payload(payload_size, std::byte {0x2a});
 	for(size_t index = 0; index < 1'000; ++index)
-		libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+		riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 			topic, payload.data(), payload.size()
 		);
 
 	const auto begin = steady_clock_t::now();
 	for(size_t index = 0; index < no_subscriber_publish_count; ++index)
-		libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+		riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 			topic, payload.data(), payload.size()
 		);
 	const auto elapsed = steady_clock_t::now() - begin;
@@ -119,7 +119,7 @@ duration_t measure_with_unrelated_interfaces(size_t payload_size)
 
 duration_t measure_connection_cycles()
 {
-	auto interface = std::make_shared<libgs::utils::sbus::local_interface>();
+	auto interface = std::make_shared<riwo::utils::sbus::local_interface>();
 	const auto begin = steady_clock_t::now();
 	for(size_t index = 0; index < connection_cycle_count; ++index)
 	{
@@ -131,27 +131,27 @@ duration_t measure_connection_cycles()
 
 duration_t measure_awaitable_signal()
 {
-	libgs::io_context_t context;
-	libgs::utils::signal<libgs::awaitable<void>(std::vector<std::byte>)> received;
+	riwo::io_context_t context;
+	riwo::utils::signal<riwo::awaitable<void>(std::vector<std::byte>)> received;
 	size_t received_count = 0;
 	received.connect([&](const std::vector<std::byte> &payload) {
 		if( payload.size() == 8 )
 			++received_count;
 	});
 
-	auto future = asio::co_spawn(context, [&]() -> libgs::awaitable<void>
+	auto future = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		std::vector<std::byte> payload(8, std::byte {0x2a});
 		for(size_t index = 0; index < subscribed_publish_count; ++index)
 			co_await received(payload);
 		co_return ;
-	}, libgs::use_future);
+	}, riwo::use_future);
 
 	const auto begin = steady_clock_t::now();
 	context.run();
 	future.get();
 	const auto elapsed = steady_clock_t::now() - begin;
-	LIBGS_TEST_CHECK_EQ(received_count, subscribed_publish_count);
+	RIWO_TEST_CHECK_EQ(received_count, subscribed_publish_count);
 	return elapsed;
 }
 
@@ -168,7 +168,7 @@ measurement measure_delivery(
 		publish_batch_size, payload_limited_batch_size, publish_count
 	});
 	for(size_t index = 0; index < batch_size; ++index)
-		libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+		riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 			topic, payload.data(), payload.size()
 		);
 	bool completed = wait_until_received(received, batch_size * subscriber_count);
@@ -182,7 +182,7 @@ measurement measure_delivery(
 		const auto count = std::min(batch_size, publish_count - published);
 		const auto publish_begin = steady_clock_t::now();
 		for(size_t index = 0; index < count; ++index)
-			libgs::utils::sbus::publish<libgs::utils::sbus::local_interface>(
+			riwo::utils::sbus::publish<riwo::utils::sbus::local_interface>(
 				topic, payload.data(), payload.size()
 			);
 		publish_elapsed += steady_clock_t::now() - publish_begin;
@@ -206,7 +206,7 @@ measurement measure_subscribed(
 	size_t publish_count = subscribed_publish_count
 )
 {
-	auto interface = std::make_shared<libgs::utils::sbus::local_interface>();
+	auto interface = std::make_shared<riwo::utils::sbus::local_interface>();
 	std::atomic_size_t received {0};
 	std::atomic_bool invalid_payload {false};
 
@@ -237,16 +237,16 @@ measurement measure_subscribed(
 	auto result = measure_delivery(received, subscriber_count, payload, publish_count);
 	interface->cancel();
 	interface.reset();
-	LIBGS_TEST_CHECK(result.completed);
-	LIBGS_TEST_CHECK_EQ(result.received, publish_count * subscriber_count);
-	LIBGS_TEST_CHECK(not invalid_payload.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK(result.completed);
+	RIWO_TEST_CHECK_EQ(result.received, publish_count * subscriber_count);
+	RIWO_TEST_CHECK(not invalid_payload.load(std::memory_order_relaxed));
 	return result;
 }
 
 measurement measure_local_subscriber(size_t payload_size)
 {
 	asio::thread_pool pool(1);
-	libgs::utils::sbus::local_subscriber subscriber(pool);
+	riwo::utils::sbus::local_subscriber subscriber(pool);
 	std::atomic_size_t received {0};
 	std::atomic_bool invalid_payload {false};
 	subscriber.subscribe(topic, [&, payload_size](const void*, size_t size)
@@ -261,9 +261,9 @@ measurement measure_local_subscriber(size_t payload_size)
 	subscriber.cancel();
 	pool.stop();
 	pool.join();
-	LIBGS_TEST_CHECK(result.completed);
-	LIBGS_TEST_CHECK_EQ(result.received, subscribed_publish_count);
-	LIBGS_TEST_CHECK(not invalid_payload.load(std::memory_order_relaxed));
+	RIWO_TEST_CHECK(result.completed);
+	RIWO_TEST_CHECK_EQ(result.received, subscribed_publish_count);
+	RIWO_TEST_CHECK(not invalid_payload.load(std::memory_order_relaxed));
 	return result;
 }
 
@@ -304,7 +304,7 @@ void print_payload_result(
 	duration_t elapsed
 )
 {
-	libgs::test::print_performance_result(name, publish_count, elapsed, "message");
+	riwo::test::print_performance_result(name, publish_count, elapsed, "message");
 	const auto seconds = std::chrono::duration<double>(elapsed).count();
 	const auto delivered_bytes = static_cast<double>(publish_count) *
 		static_cast<double>(subscriber_count) * static_cast<double>(payload_size);
@@ -314,7 +314,7 @@ void print_payload_result(
 
 void print_connection_performance()
 {
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/subscribe + cancel (median of 3)", connection_cycle_count,
 		median_duration(measure_connection_cycles), "cycle"
 	);
@@ -322,57 +322,57 @@ void print_connection_performance()
 
 void sbus_throughput()
 {
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/publish no subscribers (8 B, median of 3)", no_subscriber_publish_count,
 		median_duration([] { return measure_without_subscribers(8); }), "message"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/publish with 32 unrelated interfaces (8 B, median of 3)",
 		no_subscriber_publish_count,
 		median_duration([] { return measure_with_unrelated_interfaces(8); }), "message"
 	);
 	print_connection_performance();
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/awaitable signal baseline (8 B, median of 3)", subscribed_publish_count,
 		median_duration(measure_awaitable_signal), "message"
 	);
 
 	const auto topic_one = median_measurement([] { return measure_subscribed(1, 8, false); });
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/topic 1 subscriber publish (8 B, median of 3)", subscribed_publish_count,
 		topic_one.publish_elapsed, "message"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/topic 1 subscriber end-to-end (8 B, median of 3)", subscribed_publish_count,
 		topic_one.end_to_end_elapsed, "message"
 	);
 
 	const auto topic_four = median_measurement([] { return measure_subscribed(4, 8, false); });
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/topic 4 subscribers publish (8 B, median of 3)", subscribed_publish_count,
 		topic_four.publish_elapsed, "message"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/topic 4 subscribers end-to-end (8 B, median of 3)", subscribed_publish_count,
 		topic_four.end_to_end_elapsed, "message"
 	);
 
 	const auto global_one = median_measurement([] { return measure_subscribed(1, 8, true); });
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/global 1 subscriber publish (8 B, median of 3)", subscribed_publish_count,
 		global_one.publish_elapsed, "message"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/global 1 subscriber end-to-end (8 B, median of 3)", subscribed_publish_count,
 		global_one.end_to_end_elapsed, "message"
 	);
 
 	const auto local_one = median_measurement([] { return measure_local_subscriber(8); });
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/local_subscriber publish (8 B, median of 3)", subscribed_publish_count,
 		local_one.publish_elapsed, "message"
 	);
-	libgs::test::print_performance_result(
+	riwo::test::print_performance_result(
 		"sbus/local_subscriber end-to-end (8 B, median of 3)", subscribed_publish_count,
 		local_one.end_to_end_elapsed, "message"
 	);
@@ -445,7 +445,7 @@ int main(int argc, const char *const argv[])
 		print_connection_performance();
 		return 0;
 	}
-	return libgs::test::run(argc, argv, {
+	return riwo::test::run(argc, argv, {
 		{"sbus throughput", sbus_throughput},
 	});
 }

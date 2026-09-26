@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef LIBGS_TEST_TEST_H
-#define LIBGS_TEST_TEST_H
+#ifndef RIWO_TEST_TEST_H
+#define RIWO_TEST_TEST_H
 
 #include <exception>
 #include <atomic>
@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-namespace libgs::test
+namespace riwo::test
 {
 
 template <typename T>
@@ -43,7 +43,7 @@ public:
 		static std::atomic_uint64_t sequence {0};
 		const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
 		m_path = std::filesystem::temp_directory_path() /
-			("libgs-test-" + std::to_string(stamp) + '-' +
+			("riwo-test-" + std::to_string(stamp) + '-' +
 			 std::to_string(sequence.fetch_add(1)));
 		std::filesystem::create_directories(m_path);
 	}
@@ -240,17 +240,17 @@ template <typename Integer>
 	run_options options;
 	options.seed = static_cast<std::uint64_t>(
 		std::chrono::steady_clock::now().time_since_epoch().count());
-	if(const auto *value = std::getenv("LIBGS_TEST_CASE"); value and *value)
+	if(const auto *value = std::getenv("RIWO_TEST_CASE"); value and *value)
 		options.cases.emplace_back(value);
-	if(const auto *value = std::getenv("LIBGS_TEST_REPEAT"); value and *value)
+	if(const auto *value = std::getenv("RIWO_TEST_REPEAT"); value and *value)
 	{
-		options.repeat = parse_integer<size_t>(value, "LIBGS_TEST_REPEAT");
+		options.repeat = parse_integer<size_t>(value, "RIWO_TEST_REPEAT");
 		if(options.repeat == 0)
-			throw std::invalid_argument("LIBGS_TEST_REPEAT must be positive");
+			throw std::invalid_argument("RIWO_TEST_REPEAT must be positive");
 	}
-	if(const auto *value = std::getenv("LIBGS_TEST_SEED"); value and *value)
-		options.seed = parse_integer<std::uint64_t>(value, "LIBGS_TEST_SEED");
-	if(const auto *value = std::getenv("LIBGS_TEST_FAIL_FAST"); value and *value)
+	if(const auto *value = std::getenv("RIWO_TEST_SEED"); value and *value)
+		options.seed = parse_integer<std::uint64_t>(value, "RIWO_TEST_SEED");
+	if(const auto *value = std::getenv("RIWO_TEST_FAIL_FAST"); value and *value)
 		options.fail_fast = std::string_view(value) != "0";
 	return options;
 }
@@ -480,24 +480,24 @@ inline void check_throws(
 	fail(std::string("expected exception from: ") + std::string(expression), location);
 }
 
-} //namespace libgs::test
+} //namespace riwo::test
 
-#define LIBGS_TEST_CHECK(expression) \
+#define RIWO_TEST_CHECK(expression) \
 	do { \
-		::libgs::test::check(static_cast<bool>(expression), #expression); \
+		::riwo::test::check(static_cast<bool>(expression), #expression); \
 	} while(false)
 
-#define LIBGS_TEST_CHECK_EQ(actual, expected) \
+#define RIWO_TEST_CHECK_EQ(actual, expected) \
 	do { \
-		::libgs::test::check_equal((actual), (expected), #actual, #expected); \
+		::riwo::test::check_equal((actual), (expected), #actual, #expected); \
 	} while(false)
 
-#define LIBGS_TEST_CHECK_THROWS(expression, exception_type) \
+#define RIWO_TEST_CHECK_THROWS(expression, exception_type) \
 	do { \
-		::libgs::test::check_throws<exception_type>( \
+		::riwo::test::check_throws<exception_type>( \
 			[&] { static_cast<void>(expression); }, #expression, \
 			std::source_location::current() \
 		); \
 	} while(false)
 
-#endif //LIBGS_TEST_TEST_H
+#endif //RIWO_TEST_TEST_H

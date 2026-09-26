@@ -13,11 +13,11 @@ function(add_project target_name)
 	)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${all_files})
 
-	if (LIBGS_BUILD_STATIC)
+	if (RIWO_BUILD_STATIC)
 		add_library(${target_name} STATIC ${all_files})
 	else ()
 		add_library(${target_name} SHARED ${all_files})
-		if (LIBGS_ADD_LIBRARY_VERSION)
+		if (RIWO_ADD_LIBRARY_VERSION)
 			set_target_properties(${target_name} PROPERTIES
 				VERSION ${PRO_VERSION} SOVERSION ${MAJOR_VERSION}
 			)
@@ -36,9 +36,9 @@ function(add_project target_name)
 		"$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:preprocessor>"
 	)
 	# libc++ is an ABI choice, not a private build warning.  Export it with
-	# every installed LibGS target so a plain target_link_libraries() consumer
-	# compiles and links against the same C++ standard library as LibGS.
-	if (LIBGS_USE_LIBCXX)
+	# every installed Riwo target so a plain target_link_libraries() consumer
+	# compiles and links against the same C++ standard library as Riwo.
+	if (RIWO_USE_LIBCXX)
 		target_compile_options(${target_name} PUBLIC
 			"$<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>"
 		)
@@ -47,7 +47,7 @@ function(add_project target_name)
 
 	target_include_directories(${target_name} PUBLIC
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
-		$<BUILD_INTERFACE:${LIBGS_CONFIG_INCLUDE}>
+		$<BUILD_INTERFACE:${RIWO_CONFIG_INCLUDE}>
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 	)
 	if (NOT ${ARGN} STREQUAL "")
@@ -55,19 +55,19 @@ function(add_project target_name)
 	endif ()
 
 	set_target_properties(${target_name} PROPERTIES
-		LIBRARY_OUTPUT_DIRECTORY ${LIBGS_OUTPUT_DIR}/bin
-		RUNTIME_OUTPUT_DIRECTORY ${LIBGS_OUTPUT_DIR}/bin
-		ARCHIVE_OUTPUT_DIRECTORY ${LIBGS_OUTPUT_DIR}/lib
+		LIBRARY_OUTPUT_DIRECTORY ${RIWO_OUTPUT_DIR}/bin
+		RUNTIME_OUTPUT_DIRECTORY ${RIWO_OUTPUT_DIR}/bin
+		ARCHIVE_OUTPUT_DIRECTORY ${RIWO_OUTPUT_DIR}/lib
 	)
-	string(REGEX REPLACE "^gs\\." "" target_export_name "${target_name}")
+	string(REGEX REPLACE "^riwo\\." "" target_export_name "${target_name}")
 
 	set_target_properties(${target_name} PROPERTIES
 		EXPORT_NAME ${target_export_name}
 	)
-	add_library(LibGS::${target_export_name} ALIAS ${target_name})
+	add_library(Riwo::${target_export_name} ALIAS ${target_name})
 
 	install(TARGETS ${target_name}
-		EXPORT LibGSTargets
+		EXPORT RiwoTargets
 		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 		LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 		ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

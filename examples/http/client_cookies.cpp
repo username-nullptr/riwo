@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/http/client.h>
+#include <riwo/http/client.h>
 #include <iostream>
 #include <string>
 
@@ -11,7 +11,7 @@ int main(int argc, const char *argv[])
 		argv[1] : "http://127.0.0.1:8080";
 
 	try {
-		libgs::http::client client;
+		riwo::http::client client;
 
 		auto set = client.request_get(base_url + "/cookies/set");
 		set->reply()->read<std::string>();

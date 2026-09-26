@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef LIBGS_TEST_PERFORMANCE_BENCHMARK_H
-#define LIBGS_TEST_PERFORMANCE_BENCHMARK_H
+#ifndef RIWO_TEST_PERFORMANCE_BENCHMARK_H
+#define RIWO_TEST_PERFORMANCE_BENCHMARK_H
 
 #include <chrono>
 #include <cstddef>
@@ -11,14 +11,14 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace libgs::test
+namespace riwo::test
 {
 
-#ifndef LIBGS_PERFORMANCE_SCALE
-# define LIBGS_PERFORMANCE_SCALE 1
+#ifndef RIWO_PERFORMANCE_SCALE
+# define RIWO_PERFORMANCE_SCALE 1
 #endif
 
-inline constexpr size_t performance_scale = LIBGS_PERFORMANCE_SCALE;
+inline constexpr size_t performance_scale = RIWO_PERFORMANCE_SCALE;
 static_assert(performance_scale > 0);
 
 inline void print_performance_result(
@@ -47,6 +47,6 @@ inline void print_performance_result(
 		<< performance_scale << '\n' << std::flush;
 }
 
-} //namespace libgs::test
+} //namespace riwo::test
 
-#endif //LIBGS_TEST_PERFORMANCE_BENCHMARK_H
+#endif //RIWO_TEST_PERFORMANCE_BENCHMARK_H

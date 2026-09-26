@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <libgs/core/value.h>
+#include <riwo/core/value.h>
 
 #include <iostream>
 
 int main()
 {
-	libgs::value text = "42";
-	libgs::value integer = 42;
-	libgs::value decimal = 3.5;
-	libgs::value formatted("answer = {}", integer);
+	riwo::value text = "42";
+	riwo::value integer = 42;
+	riwo::value decimal = 3.5;
+	riwo::value formatted("answer = {}", integer);
 
 	std::cout << text.to_string() << " as int: "
 		<< text.to_int().value_or(0) << '\n';
@@ -23,7 +23,7 @@ int main()
 
 	std::cout << formatted.to_string() << '\n';
 
-	libgs::value invalid = "not-a-number";
+	riwo::value invalid = "not-a-number";
 	auto conversion = invalid.get<int>();
 
 	std::cout << "Invalid conversion has value: "
