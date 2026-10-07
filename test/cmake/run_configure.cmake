@@ -43,6 +43,14 @@ if (TEST_CXX_COMPILER)
 	list(APPEND configure_command "-DCMAKE_CXX_COMPILER=${TEST_CXX_COMPILER}")
 endif ()
 
+if (TEST_RC_COMPILER)
+	list(APPEND configure_command "-DCMAKE_RC_COMPILER=${TEST_RC_COMPILER}")
+endif ()
+
+if (TEST_MT)
+	list(APPEND configure_command "-DCMAKE_MT=${TEST_MT}")
+endif ()
+
 if (TEST_TOOLCHAIN_FILE)
 	list(APPEND configure_command "-DCMAKE_TOOLCHAIN_FILE=${TEST_TOOLCHAIN_FILE}")
 endif ()

@@ -64,7 +64,7 @@ void run_mpmc_queue_pressure(Queue &queue, ConcurrentWork &&concurrent_work)
 					counts[consumer]++;
 					if(*value == 0 or *value > total_values)
 						corrupt.store(true, std::memory_order_relaxed);
-					else if(seen[*value - 1].fetch_add(1,
+					else if(seen[static_cast<size_t>(*value - 1)].fetch_add(1,
 						std::memory_order_relaxed) != 0)
 						corrupt.store(true, std::memory_order_relaxed);
 				}
