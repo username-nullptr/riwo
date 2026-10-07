@@ -29,6 +29,8 @@ function(add_riwo_configure_case name)
 			"-DTEST_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
 			"-DTEST_C_COMPILER=${CMAKE_C_COMPILER}"
 			"-DTEST_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+			"-DTEST_RC_COMPILER=${CMAKE_RC_COMPILER}"
+			"-DTEST_MT=${CMAKE_MT}"
 			"-DTEST_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
 			"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 			"-DTEST_EXPECT_SUCCESS=${case_expect_success}"
@@ -37,6 +39,8 @@ function(add_riwo_configure_case name)
 			"-DTEST_EXPECT_COMPONENTS=${case_components}"
 			-P "${CMAKE_CURRENT_SOURCE_DIR}/run_configure.cmake"
 	)
+	configure_riwo_ctest_environment(riwo.cmake.configure.${name})
+
 	set_tests_properties(riwo.cmake.configure.${name} PROPERTIES
 		LABELS "cmake;configure"
 		TIMEOUT 120
@@ -72,6 +76,8 @@ function(add_riwo_package_probe_case name)
 			"-DTEST_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
 			"-DTEST_C_COMPILER=${CMAKE_C_COMPILER}"
 			"-DTEST_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+			"-DTEST_RC_COMPILER=${CMAKE_RC_COMPILER}"
+			"-DTEST_MT=${CMAKE_MT}"
 			"-DTEST_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
 			"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 			-DTEST_EXPECT_SUCCESS=ON
@@ -83,6 +89,8 @@ function(add_riwo_package_probe_case name)
 			"-DTEST_PROBE_OPTIONS=${case_probe_options}"
 			-P "${CMAKE_CURRENT_SOURCE_DIR}/run_package_probe.cmake"
 	)
+	configure_riwo_ctest_environment(riwo.cmake.package.${name})
+
 	set_tests_properties(riwo.cmake.package.${name} PROPERTIES
 		LABELS "cmake;package"
 		TIMEOUT 120
@@ -332,6 +340,8 @@ if (NOT RIWO_BUILD_FUZZERS)
 		"-DTEST_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
 		"-DTEST_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
 		"-DTEST_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+		"-DTEST_RC_COMPILER=${CMAKE_RC_COMPILER}"
+		"-DTEST_MT=${CMAKE_MT}"
 		"-DTEST_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
 		"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 		"-DTEST_CONFIGURATION=${riwo_consumer_configuration}"
@@ -341,6 +351,8 @@ if (NOT RIWO_BUILD_FUZZERS)
 		"-DTEST_CTEST_COMMAND=${CMAKE_CTEST_COMMAND}"
 		-P "${CMAKE_CURRENT_SOURCE_DIR}/run_install_consumer.cmake"
 	)
+	configure_riwo_ctest_environment(riwo.cmake.install-consumer)
+
 	set_tests_properties(riwo.cmake.install-consumer PROPERTIES
 		LABELS "cmake;install;consumer"
 		RUN_SERIAL TRUE

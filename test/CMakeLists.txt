@@ -4,6 +4,33 @@
 set(RIWO_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(RIWO_TEST_LAUNCHER)
 
+# CMake's Ninja generator relies on INCLUDE/LIB from the MSVC developer
+# environment, but CTest is often launched by an IDE or shell which does not
+# reproduce that environment. Preserve the values seen by the successful
+# outer configure so nested configure tests use the same compiler toolchain.
+if (MSVC)
+	foreach(variable INCLUDE LIB LIBPATH)
+		if (NOT "$ENV{${variable}}" STREQUAL "")
+			set(RIWO_MSVC_TEST_${variable} "$ENV{${variable}}"
+				CACHE INTERNAL "MSVC environment for nested CMake tests" FORCE
+			)
+		endif ()
+	endforeach()
+endif ()
+
+function(configure_riwo_ctest_environment test_name)
+	foreach(variable INCLUDE LIB LIBPATH)
+		if (RIWO_MSVC_TEST_${variable})
+			string(REPLACE ";" "\\;" environment_value
+				"${RIWO_MSVC_TEST_${variable}}"
+			)
+			set_property(TEST ${test_name} APPEND PROPERTY ENVIRONMENT
+				"${variable}=${environment_value}"
+			)
+		endif ()
+	endforeach()
+endfunction()
+
 # GCC's ThreadSanitizer cannot reserve its shadow-memory layout with the more
 # aggressive address randomisation used by some recent Linux kernels.  Probe a
 # per-process ASLR-disabled launcher instead of requiring developers to know the

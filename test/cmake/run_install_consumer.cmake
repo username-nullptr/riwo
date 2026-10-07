@@ -85,6 +85,14 @@ function(make_consumer_configure_command output_variable binary_dir)
 		list(APPEND command "-DCMAKE_CXX_COMPILER=${TEST_CXX_COMPILER}")
 	endif ()
 
+	if (TEST_RC_COMPILER)
+		list(APPEND command "-DCMAKE_RC_COMPILER=${TEST_RC_COMPILER}")
+	endif ()
+
+	if (TEST_MT)
+		list(APPEND command "-DCMAKE_MT=${TEST_MT}")
+	endif ()
+
 	if (TEST_TOOLCHAIN_FILE)
 		list(APPEND command "-DCMAKE_TOOLCHAIN_FILE=${TEST_TOOLCHAIN_FILE}")
 	endif ()

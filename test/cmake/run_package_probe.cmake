@@ -44,6 +44,18 @@ if (TEST_MAKE_PROGRAM)
 	list(APPEND probe_command "-DCMAKE_MAKE_PROGRAM=${TEST_MAKE_PROGRAM}")
 endif ()
 
+if (TEST_CXX_COMPILER)
+	list(APPEND probe_command "-DCMAKE_CXX_COMPILER=${TEST_CXX_COMPILER}")
+endif ()
+
+if (TEST_RC_COMPILER)
+	list(APPEND probe_command "-DCMAKE_RC_COMPILER=${TEST_RC_COMPILER}")
+endif ()
+
+if (TEST_MT)
+	list(APPEND probe_command "-DCMAKE_MT=${TEST_MT}")
+endif ()
+
 if (TEST_TOOLCHAIN_FILE)
 	list(APPEND probe_command "-DCMAKE_TOOLCHAIN_FILE=${TEST_TOOLCHAIN_FILE}")
 endif ()
