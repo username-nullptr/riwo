@@ -7,7 +7,6 @@
 #include <riwo/core/shared_mutex.h>
 #include <riwo/core/jthread.h>
 
-#include <riwo/utils/signal_slot.h>
 #include <riwo/utils/logger.h>
 
 namespace riwo::utils::sbus { namespace detail
@@ -192,18 +191,16 @@ private:
 class /* RIWO_DECL_HIDDEN */ global_subscriber : public subscriber_thread
 {
 	RIWO_DISABLE_COPY_MOVE(global_subscriber)
-
-	circular_lock_free_queue <
-		std::pair<std::string,payload_t>, g_queue_max_size
-	> m_queue {};
+	using callback_t = std::function<void(std::string_view,const payload_t&)>;
 
 public:
-	global_subscriber()
+	explicit global_subscriber(callback_t callback) :
+		m_callback(std::move(callback))
 	{
 		start([this]
 		{
 			while( auto event = m_queue.dequeue() )
-				received(event->first, std::move(event->second));
+				m_callback(event->first, event->second);
 		});
 	}
 
@@ -221,13 +218,18 @@ public:
 
 	void tigger(std::string_view topic, const shared_payload_t &payload) noexcept
 	{
-		m_queue.force_emplace(
+		m_queue.force_emplace (
 			std::make_pair(std::string(topic), payload_t(payload))
 		);
 		notify();
 	}
 
-	signal<void(std::string_view,payload_t)> received;
+private:
+	circular_lock_free_queue <
+		std::pair<std::string,payload_t>, g_queue_max_size
+	> m_queue {};
+
+	callback_t m_callback {};
 };
 
 using global_subscriber_ptr = std::shared_ptr<global_subscriber>;
@@ -235,15 +237,16 @@ using global_subscriber_ptr = std::shared_ptr<global_subscriber>;
 class /* RIWO_DECL_HIDDEN */ subscriber : public subscriber_thread
 {
 	RIWO_DISABLE_COPY_MOVE(subscriber)
-	circular_lock_free_queue<payload_t,g_queue_max_size> m_queue {};
+	using callback_t = std::function<void(const payload_t&)>;
 
 public:
-	subscriber()
+	explicit subscriber(callback_t callback) :
+		m_callback(std::move(callback))
 	{
 		start([this]
 		{
 			while( auto event = m_queue.dequeue() )
-				received(std::move(*event));
+				m_callback(*event);
 		});
 	}
 
@@ -263,7 +266,9 @@ public:
 		notify();
 	}
 
-	signal<void(payload_t)> received;
+private:
+	circular_lock_free_queue<payload_t,g_queue_max_size> m_queue {};
+	callback_t m_callback {};
 };
 
 using subscriber_ptr = std::shared_ptr<subscriber>;
@@ -285,10 +290,10 @@ public:
 	impl() = default;
 
 	[[nodiscard]] std::pair<uint64_t,detail::subscriber_ptr>
-	make_subscriber(std::string_view topic) noexcept
+	make_subscriber(std::string_view topic, std::function<void(const detail::payload_t&)> callback) noexcept
 	{
 		auto id = m_id_seq++;
-		auto obj = std::make_shared<detail::subscriber>();
+		auto obj = std::make_shared<detail::subscriber>(std::move(callback));
 		std::unique_lock lock(m_subscribers_lock);
 
 		auto it = m_subscribers.emplace (
@@ -299,10 +304,11 @@ public:
 		return { id, obj };
 	}
 
-	[[nodiscard]] std::pair<uint64_t,detail::global_subscriber_ptr> make_subscriber() noexcept
+	[[nodiscard]] std::pair<uint64_t,detail::global_subscriber_ptr>
+	make_subscriber(std::function<void(std::string_view, const detail::payload_t&)> callback) noexcept
 	{
 		auto id = m_id_seq++;
-		auto obj = std::make_shared<detail::global_subscriber>();
+		auto obj = std::make_shared<detail::global_subscriber>(std::move(callback));
 		std::unique_lock lock(m_global_subscribers_lock);
 		m_global_subscribers.emplace(id, obj);
 		return { id, obj };
@@ -446,12 +452,11 @@ void local_interface::publish(std::string_view topic, const void *buffer, size_t
 uint64_t local_interface::subscribe(std::string_view topic, std::function<void(const void*, size_t)> callback)
 {
 	std::unique_lock objs_lock(m_objs_lock);
-	auto [id, subr] = m_impl->make_subscriber(topic);
-
-	subr->received.connect (
+	auto [id, subr] = m_impl->make_subscriber(topic,
 	[func = std::move(callback)](const detail::payload_t &payload) {
 		func(payload.data(), payload.size());
 	});
+	ignore_unused(subr);
 	g_obj_map.emplace(this, shared_from_this());
 	g_topic_interfaces[std::string(topic)].emplace(this);
 	return id;
@@ -460,12 +465,11 @@ uint64_t local_interface::subscribe(std::string_view topic, std::function<void(c
 uint64_t local_interface::subscribe(std::function<void(std::string_view topic, const void*, size_t)> callback)
 {
 	std::unique_lock objs_lock(m_objs_lock);
-	auto [id, subr] = m_impl->make_subscriber();
-
-	subr->received.connect (
+	auto [id, subr] = m_impl->make_subscriber(
 	[func = std::move(callback)](std::string_view topic, const detail::payload_t &payload) {
 		func(topic, payload.data(), payload.size());
 	});
+	ignore_unused(subr);
 	g_obj_map.emplace(this, shared_from_this());
 	g_global_interfaces.emplace(this);
 	return id;
