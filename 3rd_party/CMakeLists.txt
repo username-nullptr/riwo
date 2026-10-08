@@ -64,7 +64,7 @@ target_compile_options(riwo.asio INTERFACE
 )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	target_compile_options(riwo.asio INTERFACE
-		-Wno-mismatched-new-delete
+		"$<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-new-delete>"
 	)
 endif ()
 
