@@ -18,12 +18,17 @@ class RIWO_CORE_VAPI const_buffer : public asio::const_buffer
 {
 public:
 	using asio::const_buffer::const_buffer;
+
+	const_buffer(const const_buffer&) = default;
 	const_buffer &operator=(const const_buffer&) = default;
+
 	const_buffer(const asio::const_buffer &buf);
 	const_buffer(const mutable_buffer &buf);
 	const_buffer(const char *buf);
+
 	const_buffer(const std::string &buf);
 	const_buffer(std::string_view buf);
+
 	const_buffer &operator=(const mutable_buffer &buf);
 };
 
