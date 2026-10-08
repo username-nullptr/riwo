@@ -80,7 +80,9 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 
 	if (RIWO_USE_LIBCXX)
 		message(STATUS "${PRO_NAME}: Use clang libcxx.")
-		add_compile_options(-stdlib=libc++)
+		add_compile_options (
+			$<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>
+		)
 		add_link_options(-stdlib=libc++)
 	endif ()
 
@@ -108,7 +110,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		endif ()
 
 		message(STATUS "${PRO_NAME}: Use gnu-lto.")
-		add_compile_options(-flto)
+		add_compile_options(-flto=auto)
 	endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
