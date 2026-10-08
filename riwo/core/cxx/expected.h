@@ -94,8 +94,11 @@ public:
 		noexcept(std::is_nothrow_swappable_v<error_type>)
 		requires std::swappable<error_type>;
 
-	friend constexpr bool operator==(const unexpected&, const unexpected&)
-		requires std::equality_comparable<error_type> = default;
+	friend constexpr bool operator==(const unexpected &left, const unexpected &right)
+		noexcept(noexcept(left.error() == right.error()))
+		requires std::equality_comparable<error_type> {
+		return left.error() == right.error();
+	}
 
 private:
 	error_type m_error;
