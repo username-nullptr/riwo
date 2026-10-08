@@ -405,6 +405,19 @@ private:
 		catch(...) {}
 	}
 
+	void release_monitor_thread() noexcept
+	{
+		// Once public join ownership has been released, the monitor owns its
+		// control block until waitpid() completes.  Detach the native thread at
+		// the same point so a process-wide owner can shut down without leaving a
+		// finished, unjoined thread behind.
+		try {
+			if( m_thread.joinable() )
+				m_thread.detach();
+		}
+		catch(...) {}
+	}
+
 	void finish_io(std::uint64_t generation, bool close_output) noexcept
 	{
 		if( generation != m_generation.load(std::memory_order_acquire) )
@@ -552,6 +565,7 @@ public:
 			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
 		m_released.store(true, std::memory_order_release);
+		release_monitor_thread();
 		return {};
 	}
 
@@ -565,8 +579,8 @@ public:
 		{
 			m_released.store(true, std::memory_order_release);
 			m_joinable.store(false, std::memory_order_release);
+			release_monitor_thread();
 		}
-
 		try {
 			riwo::dispatch(m_exec, [self = shared_from_this()]
 			{
