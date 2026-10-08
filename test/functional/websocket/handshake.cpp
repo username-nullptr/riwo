@@ -19,7 +19,7 @@ class scoped_environment
 	struct entry
 	{
 		std::string name;
-		riwo::optional<std::string> value;
+		riwo::optional<riwo::app::path_t> value;
 	};
 
 public:
@@ -29,7 +29,7 @@ public:
 		{
 			auto value = riwo::app::getenv(name);
 			m_entries.push_back({std::string(name), value ?
-				riwo::optional<std::string>(*value) : riwo::nullopt});
+				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
 		}
 	}
 

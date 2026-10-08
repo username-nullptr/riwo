@@ -94,22 +94,22 @@ bool is_absolute_path(const path_t &path) noexcept
 // This is not a bounded low-latency critical section.
 static shared_mutex g_env_mutex;
 
-sys_expected<std::string> getenv(std::string_view key) noexcept
+sys_expected<path_t> getenv(std::string_view key) noexcept
 {
 	std::shared_lock lock(g_env_mutex);
 	auto value = ::getenv(key.data());
 
-	sys_expected<std::string> result {""};
+	sys_expected<path_t> result {""};
 	if( value )
-		result = value;
+		result = path_t(value);
 	else
 		result.despair(sys_error());
 	return result;
 }
 
-sys_expected<std::map<std::string,std::string>> getenvs() noexcept
+sys_expected<std::map<std::string,path_t>> getenvs() noexcept
 {
-	std::map<std::string,std::string> envs;
+	std::map<std::string,path_t> envs;
 	std::shared_lock lock(g_env_mutex);
 
 	for(int i=0; environ[i]!=nullptr; i++)
@@ -118,19 +118,19 @@ sys_expected<std::map<std::string,std::string>> getenvs() noexcept
 		auto pos = tmp.find('=');
 
 		if( pos == std::string::npos )
-			envs.emplace(tmp, "");
+			envs.emplace(tmp, path_t{});
 		else
-			envs.emplace(tmp.substr(0,pos), tmp.substr(pos+1));
+			envs.emplace(tmp.substr(0,pos), path_t(tmp.substr(pos+1)));
 	}
 	return envs;
 }
 
-sys_expected<> setenv(std::string_view key, const riwo::value &value, bool overwrite) noexcept
+sys_expected<> setenv(std::string_view key, const path_t &value, bool overwrite) noexcept
 {
 	sys_expected<> result;
 	std::unique_lock locker(g_env_mutex);
 
-	if( ::setenv(key.data(), value->c_str(), overwrite) != 0 )
+	if( ::setenv(key.data(), value.c_str(), overwrite) != 0 )
 		result.despair(sys_error());
 	return result;
 }

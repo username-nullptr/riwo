@@ -104,7 +104,7 @@ public:
 
 public:
 	void set_work_path(path_t path) noexcept;
-	void setenv(std::string_view key, riwo::value value) noexcept;
+	void setenv(std::string_view key, path_t value) noexcept;
 	void unsetenv(std::string_view key) noexcept;
 
 public:
@@ -701,7 +701,7 @@ public:
 	void set_work_path(path_t path) noexcept {
 		m_detail.set_work_path(std::move(path));
 	}
-	void setenv(std::string_view key, riwo::value value) noexcept {
+	void setenv(std::string_view key, path_t value) noexcept {
 		m_detail.setenv(key, std::move(value));
 	}
 	void unsetenv(std::string_view key) noexcept {
@@ -1079,7 +1079,7 @@ void basic_process<Exec>::set_work_path(path_t path) noexcept
 }
 
 template <concepts::exec Exec>
-void basic_process<Exec>::setenv(std::string_view key, riwo::value value) noexcept
+void basic_process<Exec>::setenv(std::string_view key, path_t value) noexcept
 {
 	m_impl->setenv(key, std::move(value));
 }

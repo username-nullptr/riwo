@@ -42,7 +42,7 @@ using write_pipe_t = asio::writable_pipe;
 using read_channel_t = process::read_channel;
 
 using args_t = std::vector<std::wstring>;
-using envs_t = std::map<std::string, value>;
+using envs_t = std::map<std::string, path_t>;
 
 [[nodiscard]] static error_code sys_error()
 {
@@ -150,7 +150,7 @@ using envs_t = std::map<std::string, value>;
 		FreeEnvironmentStringsW(block);
 	}
 	for(auto &[key, val] : envs)
-		merged[to_wstring(key)] = to_wstring(*val);
+		merged[to_wstring(key)] = val.wstring();
 
 	std::vector<wchar_t> result;
 	for(auto &[key, val] : merged)
@@ -1293,9 +1293,9 @@ void process::set_work_path(path_t path) noexcept
 	m_impl->m_work_path = std::move(path);
 }
 
-void process::setenv(std::string_view key, riwo::value value) noexcept
+void process::setenv(std::string_view key, path_t value) noexcept
 {
-	m_impl->m_envs[std::string(key)] = std::move(*value);
+	m_impl->m_envs[std::string(key)] = std::move(value);
 }
 
 void process::unsetenv(std::string_view key) noexcept

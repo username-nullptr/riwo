@@ -75,6 +75,48 @@ sys_expected<path_t> current_directory() noexcept
 
 constexpr size_t g_max_buf_size = 4096;
 
+[[nodiscard]] static std::wstring to_wstring(std::string_view value)
+{
+	if( value.empty() )
+		return {};
+
+	const auto size = MultiByteToWideChar(CP_UTF8, 0, value.data(),
+		static_cast<int>(value.size()), nullptr, 0
+	);
+	if( size <= 0 )
+		return std::wstring(value.begin(), value.end());
+
+	std::wstring result(static_cast<size_t>(size), L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, value.data(),
+		static_cast<int>(value.size()), result.data(), size
+	);
+	return result;
+}
+
+[[nodiscard]] static std::string to_string(std::wstring_view value)
+{
+	if( value.empty() )
+		return {};
+
+	const auto size = WideCharToMultiByte(CP_UTF8, 0, value.data(),
+		static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr
+	);
+	if( size <= 0 )
+	{
+		std::string result;
+		result.reserve(value.size());
+		for(const auto character : value)
+			result.push_back(static_cast<char>(character));
+		return result;
+	}
+
+	std::string result(static_cast<size_t>(size), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, value.data(),
+		static_cast<int>(value.size()), result.data(), size, nullptr, nullptr
+	);
+	return result;
+}
+
 sys_expected<path_t> absolute_path(const path_t &path) noexcept
 {
 	auto wpath = path.wstring();
@@ -128,61 +170,79 @@ bool is_absolute_path(const path_t &path) noexcept
 	return false;
 }
 
-sys_expected<std::string> getenv(std::string_view key) noexcept
+sys_expected<path_t> getenv(std::string_view key) noexcept
 {
-	char buf[g_max_buf_size] = "";
-	auto len = GetEnvironmentVariable(key.data(), buf, g_max_buf_size);
+	auto wkey = to_wstring(key);
+	sys_expected<path_t> result {L""};
 
-	sys_expected<std::string> result {""};
-	if( len == 0 )
-		result.despair(sys_error());
-	else
-		result = std::string(buf,len);
+	SetLastError(ERROR_SUCCESS);
+	auto capacity = GetEnvironmentVariableW(wkey.c_str(), nullptr, 0);
+
+	if( capacity == 0 )
+	{
+		if( GetLastError() != ERROR_SUCCESS )
+			result.despair(sys_error());
+		return result;
+	}
+	std::wstring value(capacity, L'\0');
+	auto size = GetEnvironmentVariableW(wkey.c_str(), value.data(), capacity);
+
+	if( size == 0 or size >= capacity )
+		return result.despair(sys_error());
+
+	value.resize(size);
+	result = path_t(std::move(value));
 	return result;
 }
 
-sys_expected<std::map<std::string,std::string>> getenvs() noexcept
+sys_expected<std::map<std::string,path_t>> getenvs() noexcept
 {
-	using envs_t = std::map<std::string,std::string>;
+	using envs_t = std::map<std::string,path_t>;
 	sys_expected<envs_t> result {envs_t{}};
 
-	auto buf = GetEnvironmentStrings();
+	auto buf = GetEnvironmentStringsW();
 	if( buf == nullptr )
 		return result.despair(sys_error());
 
 	size_t start = 0;
 	for(size_t i=0; ;i++)
 	{
-		if( buf[i] == '=' )
+		if( buf[i] == L'=' )
 		{
 			auto m = i;
-			while( buf[++i] != '\0' ) {}
+			while( buf[++i] != L'\0' ) {}
 
 			result.value().emplace (
-				std::string(buf + start, m - start),
-				std::string(buf + m + 1, i - m - 1)
+				to_string(std::wstring_view(buf + start, m - start)),
+				path_t(std::wstring(buf + m + 1, i - m - 1))
 			);
 			start = i + 1;
 		}
-		else if( buf[i] == '\0' )
+		else if( buf[i] == L'\0' )
 			break;
 	}
+	FreeEnvironmentStringsW(buf);
 	return result;
 }
 
-sys_expected<> setenv(std::string_view key, const riwo::value &value, bool overwrite) noexcept
+sys_expected<> setenv(std::string_view key, const path_t &value, bool overwrite) noexcept
 {
 	sys_expected<> result;
+	auto wkey = to_wstring(key);
+
 	if( (not overwrite and app::getenv(key).has_value()) or
-		SetEnvironmentVariable(key.data(), value->c_str()) )
+		SetEnvironmentVariableW(wkey.c_str(), value.c_str()) )
 		return result;
+
 	return result.despair(sys_error());
 }
 
 sys_expected<> unsetenv(std::string_view key) noexcept
 {
 	sys_expected<> result;
-	if( SetEnvironmentVariable(key.data(), nullptr) )
+	auto wkey = to_wstring(key);
+
+	if( SetEnvironmentVariableW(wkey.c_str(), nullptr) )
 		return result;
 	return result.despair(sys_error());
 }

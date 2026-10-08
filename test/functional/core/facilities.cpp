@@ -809,8 +809,20 @@ void application_environment()
 	RIWO_TEST_CHECK(riwo::app::absolute_path(".").has_value());
 
 	constexpr auto key = "RIWO_TEST_ENVIRONMENT_VALUE";
-	RIWO_TEST_CHECK(riwo::app::setenv(key, "available").has_value());
-	RIWO_TEST_CHECK_EQ(riwo::app::getenv(key).value_or(""), "available");
+	const riwo::app::path_t value {u8"available/环境变量"};
+	RIWO_TEST_CHECK(riwo::app::setenv(key, value).has_value());
+
+	const auto variable = riwo::app::getenv(key);
+	RIWO_TEST_CHECK(variable and *variable == value);
+
+	const auto variables = riwo::app::getenvs();
+	RIWO_TEST_CHECK(variables);
+	if( variables )
+	{
+		const auto position = variables->find(key);
+		RIWO_TEST_CHECK(position != variables->end() and position->second == value);
+	}
+
 	RIWO_TEST_CHECK(riwo::app::unsetenv(key).has_value());
 	RIWO_TEST_CHECK(not riwo::app::getenv(key));
 }

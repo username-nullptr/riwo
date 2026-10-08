@@ -42,8 +42,12 @@ struct RIWO_DECL_HIDDEN proxy_environment
 	for(const auto name : names)
 	{
 		auto value = app::getenv(name);
-		if( value and not strtls::trimmed(*value).empty() )
-			return strtls::trimmed(*value);
+		if( value )
+		{
+			auto string = value->string();
+			if( not strtls::trimmed(string).empty() )
+				return strtls::trimmed(string);
+		}
 	}
 	return nullopt;
 }

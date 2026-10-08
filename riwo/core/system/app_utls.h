@@ -31,13 +31,13 @@ sys_expected<path_t> absolute_path(const path_t &path) noexcept;
 bool is_absolute_path(const path_t &path) noexcept;
 
 [[nodiscard]] RIWO_CORE_API
-sys_expected<std::string> getenv(std::string_view key) noexcept;
+sys_expected<path_t> getenv(std::string_view key) noexcept;
 
 [[nodiscard]] RIWO_CORE_API
-sys_expected<std::map<std::string,std::string>> getenvs() noexcept;
+sys_expected<std::map<std::string,path_t>> getenvs() noexcept;
 
 /*[[nodiscard]]*/ RIWO_CORE_API
-sys_expected<> setenv(std::string_view key, const riwo::value &value, bool overwrite = true) noexcept;
+sys_expected<> setenv(std::string_view key, const path_t &value, bool overwrite = true) noexcept;
 
 /*[[nodiscard]]*/ RIWO_CORE_API
 sys_expected<> unsetenv(std::string_view key) noexcept;

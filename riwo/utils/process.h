@@ -143,7 +143,7 @@ public:
 
 public:
 	void set_work_path(path_t path) noexcept;
-	void setenv(std::string_view key, riwo::value value) noexcept;
+	void setenv(std::string_view key, path_t value) noexcept;
 	void unsetenv(std::string_view key) noexcept;
 
 public:

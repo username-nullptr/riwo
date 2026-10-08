@@ -32,7 +32,9 @@ using descriptor_t = asio::posix::stream_descriptor;
 
 using read_channel_t = process::read_channel;
 using args_t = std::vector<std::string>;
-using envs_t = std::map<std::string, value>;
+
+using path_t = process::path_t;
+using envs_t = std::map<std::string, path_t>;
 
 [[nodiscard]] static error_code sys_error() {
 	return error_code(std::error_code(errno, std::system_category()));
@@ -177,7 +179,7 @@ public:
 			RIWO_UNUSED(res);
 
 			for(auto &[key, value] : envs)
-				setenv(key.c_str(), value->c_str(), true);
+				setenv(key.c_str(), value.c_str(), true);
 
 			if( is_pipe )
 			{
@@ -1202,9 +1204,9 @@ void process::set_work_path(path_t path) noexcept
 	m_impl->m_work_path = std::move(path);
 }
 
-void process::setenv(std::string_view key, riwo::value value) noexcept
+void process::setenv(std::string_view key, path_t value) noexcept
 {
-	m_impl->m_envs[std::string(key)] = std::move(*value);
+	m_impl->m_envs[std::string(key)] = std::move(value);
 }
 
 void process::unsetenv(std::string_view key) noexcept
