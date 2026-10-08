@@ -56,8 +56,9 @@ observer 时直接包含对应头文件。
 
 ## 进程
 
-`utils::process` 与 `utils::wprocess` 提供 start/run、join、detach、terminate、
-kill、取消、超时、工作目录/环境、单实例锁，以及 stdin/stdout/stderr I/O。
+`utils::process` 提供 start/run、join、detach、terminate、kill、取消、超时、
+工作目录/环境、单实例锁，以及 stdin/stdout/stderr I/O。命令和参数使用
+`std::filesystem::path`。
 
 I/O 未完成时保持 Process 对象有效。生命周期变化与 I/O 发起必须串行化；同一进程
 最多保留一个 stdin 写、一个 stdout 读和一个 stderr 读。

@@ -60,9 +60,10 @@ declared dependencies, and supports synchronous or asynchronous initialization.
 
 ## Processes
 
-`utils::process` and `utils::wprocess` provide start/run, join, detach,
-terminate, kill, cancellation, timeouts, working directory/environment,
-single-instance locks, and stdin/stdout/stderr I/O.
+`utils::process` provides start/run, join, detach, terminate, kill,
+cancellation, timeouts, working directory/environment, single-instance locks,
+and stdin/stdout/stderr I/O. Commands and arguments use
+`std::filesystem::path`.
 
 Keep the process object alive while I/O is pending. Serialize lifecycle changes
 with I/O initiation. For one process, keep at most one stdin write, one stdout

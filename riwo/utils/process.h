@@ -25,42 +25,41 @@ enum class process_state {
  * Keep at most one stdin write, one stdout read, and one stderr read
  * outstanding. Serialize lifecycle changes with I/O initiation.
  */
-template <concepts::character CharT, concepts::exec Exec = asio::any_io_executor>
+template <concepts::exec Exec = asio::any_io_executor>
 class RIWO_UTILS_TAPI basic_process
 {
 	RIWO_DISABLE_COPY(basic_process)
 
 public:
-	using char_t = CharT;
 	using executor_type = Exec;
 	using executor_t = executor_type;
-
 	using state_t = process_state;
-	using string_t = std::basic_string<char_t>;
-	using value_t = riwo::basic_value<char_t>;
 
-	using args_t = std::vector<value_t>;
 	using path_t = std::filesystem::path;
+	using args_t = std::vector<path_t>;
+
+	template <typename...Args>
+	static constexpr bool is_args_v = (
+		concepts::constructible<path_t,Args> and ...
+	);
 
 public:
-	explicit basic_process(string_t cmd = {}, args_t args = {})
+	explicit basic_process(path_t cmd = {}, args_t args = {})
 		requires concepts::match_sched<io_executor_t,Exec>;
 
 	template <typename...Args>
-	basic_process(string_t cmd, Args&&...args) requires
-		concepts::match_sched<io_executor_t,Exec> and
-		concepts::formatter<char_t,Args...>;
+	basic_process(path_t cmd, Args&&...args) requires
+		concepts::match_sched<io_executor_t,Exec> and is_args_v<Args...>;
 
 	template <typename Scheduler>
-	basic_process(Scheduler &&exec, string_t cmd = {}, args_t args = {}) requires
+	basic_process(Scheduler &&exec, path_t cmd = {}, args_t args = {}) requires
 		(not std::same_as<std::remove_cvref_t<Scheduler>,basic_process>) and
 		concepts::match_sched<Scheduler,Exec>;
 
 	template <typename Scheduler, typename...Args>
-	basic_process(Scheduler &&exec, string_t cmd, Args&&...args) requires
+	basic_process(Scheduler &&exec, path_t cmd, Args&&...args) requires
 		(not std::same_as<std::remove_cvref_t<Scheduler>,basic_process>) and
-		concepts::match_sched<Scheduler,Exec> and
-		concepts::formatter<char_t,Args...>;
+		concepts::match_sched<Scheduler,Exec> and is_args_v<Args...>;
 
 	basic_process(basic_process &&other) noexcept;
 	basic_process &operator=(basic_process &&other) noexcept;
@@ -68,11 +67,11 @@ public:
 
 public:
 	template <typename...Args>
-	sys_expected<> start(const string_t &cmd, Args&&...args) noexcept
-		requires concepts::formatter<char_t,Args...>;
+	sys_expected<> start(const path_t &cmd, Args&&...args) noexcept
+		requires is_args_v<Args...>;
 
 	sys_expected<> start (
-		const string_t &cmd = {}, const args_t &args = {}
+		const path_t &cmd = {}, const args_t &args = {}
 	) noexcept;
 
 	void terminate() noexcept;
@@ -131,11 +130,11 @@ public:
 
 public:
 	template <typename Token = use_sync_t>
-	auto run(const string_t &cmd, const args_t &args, Token &&token = {})
+	auto run(const path_t &cmd, const args_t &args, Token &&token = {})
 		requires task_token_v<Token,int>;
 
 	template <typename Token = use_sync_t>
-	auto run(const string_t &cmd, Token &&token = {})
+	auto run(const path_t &cmd, Token &&token = {})
 		requires task_token_v<Token,int>;
 
 	template <typename Token = use_sync_t>
@@ -161,19 +160,19 @@ public:
 		task_token_v<Token,int> or concepts::time_p<Token>;
 
 	template <typename Token = use_sync_t>
-	static auto exec(const string_t &cmd, const args_t &args, Token &&token = {})
+	static auto exec(const path_t &cmd, const args_t &args, Token &&token = {})
 		requires exec_token_v<Token>;
 
 	template <typename Token = use_sync_t>
-	static auto exec(const string_t &cmd, Token &&token = {})
+	static auto exec(const path_t &cmd, Token &&token = {})
 		requires exec_token_v<Token>;
 
 	template <concepts::match_sched<Exec> Exec0, typename Token = use_sync_t>
-	static auto exec(Exec0 &&exec, const string_t &cmd, const args_t &args, Token &&token = {})
+	static auto exec(Exec0 &&exec, const path_t &cmd, const args_t &args, Token &&token = {})
 		requires exec_token_v<Token>;
 
 	template <concepts::match_sched<Exec> Exec0, typename Token = use_sync_t>
-	static auto exec(Exec0 &&exec, const string_t &cmd, Token &&token = {})
+	static auto exec(Exec0 &&exec, const path_t &cmd, Token &&token = {})
 		requires exec_token_v<Token>;
 
 public:
@@ -192,12 +191,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using process  = basic_process<char   >;
-using wprocess = basic_process<wchar_t>;
-
-// using u8process  = basic_process<char8_t >;
-// using u16process = basic_process<char16_t>;
-// using u32process = basic_process<char32_t>;
+using process  = basic_process<>;
 
 } //namespace riwo::utils
 #include <riwo/utils/detail/process.h>

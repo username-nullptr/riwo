@@ -131,8 +131,8 @@ private:
 
 } //namespace detail
 
-template <concepts::character CharT, concepts::exec Exec>
-class RIWO_UTILS_TAPI basic_process<CharT,Exec>::impl : public std::enable_shared_from_this<impl>
+template <concepts::exec Exec>
+class RIWO_UTILS_TAPI basic_process<Exec>::impl : public std::enable_shared_from_this<impl>
 {
 	RIWO_DISABLE_COPY_MOVE(impl)
 
@@ -146,28 +146,21 @@ public:
 		m_detail(m_exec) {}
 
 public:
-	void set(string_t cmd, args_t args)
+	void set(path_t cmd, args_t args)
 	{
-		std::vector<path_t> paths;
-		for(auto &arg : args)
-			paths.emplace_back(std::move(*arg));
-		m_detail.set(std::move(cmd), paths);
+		m_detail.set(cmd, args);
 	}
 
 	template <typename...Args>
-	void set(string_t cmd, Args&&...args)
+	void set(path_t cmd, Args&&...args)
 	{
-		m_detail.set(std::move(cmd), {});
-		(
-			m_detail.add_arg(std::format (
-				l_str(char_t,"{}"), std::forward<Args>(args)
-			)), ...
-		);
+		m_detail.set(cmd, {});
+		(m_detail.add_arg(path_t(std::forward<Args>(args))), ...);
 	}
 
 public:
 	template <typename...Args>
-	[[nodiscard]] sys_expected<> start(const string_t &cmd, Args&&...args) noexcept
+	[[nodiscard]] sys_expected<> start(const path_t &cmd, Args&&...args) noexcept
 	{
 		if( joinable() )
 		{
@@ -193,7 +186,7 @@ public:
 		);
 	}
 
-	[[nodiscard]] sys_expected<> start(const string_t &cmd, const args_t &args) noexcept
+	[[nodiscard]] sys_expected<> start(const path_t &cmd, const args_t &args) noexcept
 	{
 		if( joinable() )
 		{
@@ -321,7 +314,7 @@ public:
 	}
 
 	template <typename Token>
-	[[nodiscard]] auto run(string_t cmd, args_t args, Token &&token)
+	[[nodiscard]] auto run(path_t cmd, args_t args, Token &&token)
 	{
 		using token_t = std::remove_cvref_t<Token>;
 		using unbound_t = token_unbound_t<token_t>;
@@ -754,26 +747,26 @@ private:
 	detail::process m_detail;
 };
 
-template <concepts::character CharT, concepts::exec Exec>
-basic_process<CharT,Exec>::basic_process(string_t cmd, args_t args)
+template <concepts::exec Exec>
+basic_process<Exec>::basic_process(path_t cmd, args_t args)
 	requires concepts::match_sched<io_executor_t,Exec> :
 	m_impl(std::make_shared<impl>())
 {
 	m_impl->set(std::move(cmd), std::move(args));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename...Args>
-basic_process<CharT,Exec>::basic_process(string_t cmd, Args&&...args) requires
-	concepts::match_sched<io_executor_t,Exec> and concepts::formatter<char_t,Args...> :
+basic_process<Exec>::basic_process(path_t cmd, Args&&...args) requires
+	concepts::match_sched<io_executor_t,Exec> and is_args_v<Args...> :
 	m_impl(std::make_shared<impl>())
 {
 	m_impl->set(std::move(cmd), std::forward<Args>(args)...);
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Scheduler>
-basic_process<CharT,Exec>::basic_process(Scheduler &&exec, string_t cmd, args_t args) requires
+basic_process<Exec>::basic_process(Scheduler &&exec, path_t cmd, args_t args) requires
 	(not std::same_as<std::remove_cvref_t<Scheduler>,basic_process>) and
 	concepts::match_sched<Scheduler,Exec> :
 	m_impl(std::make_shared<impl>(executor_t(get_executor_helper(std::forward<Scheduler>(exec)))))
@@ -781,26 +774,26 @@ basic_process<CharT,Exec>::basic_process(Scheduler &&exec, string_t cmd, args_t 
 	m_impl->set(std::move(cmd), std::move(args));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Scheduler, typename...Args>
-basic_process<CharT,Exec>::basic_process(Scheduler &&exec, string_t cmd, Args&&...args) requires
+basic_process<Exec>::basic_process(Scheduler &&exec, path_t cmd, Args&&...args) requires
 	(not std::same_as<std::remove_cvref_t<Scheduler>,basic_process>) and
 	concepts::match_sched<Scheduler,Exec> and
-	concepts::formatter<char_t,Args...> :
+	is_args_v<Args...> :
 	m_impl(std::make_shared<impl>(executor_t(get_executor_helper(std::forward<Scheduler>(exec)))))
 {
 	m_impl->set(std::move(cmd), std::forward<Args>(args)...);
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-basic_process<CharT,Exec>::basic_process(basic_process &&other) noexcept :
+template <concepts::exec Exec>
+basic_process<Exec>::basic_process(basic_process &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
 
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-basic_process<CharT,Exec> &basic_process<CharT,Exec>::operator=(basic_process &&other) noexcept
+template <concepts::exec Exec>
+basic_process<Exec> &basic_process<Exec>::operator=(basic_process &&other) noexcept
 {
 	if( &other == this )
 		return *this;
@@ -815,37 +808,37 @@ basic_process<CharT,Exec> &basic_process<CharT,Exec>::operator=(basic_process &&
 	return *this;
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-basic_process<CharT,Exec>::~basic_process() = default;
+template <concepts::exec Exec>
+basic_process<Exec>::~basic_process() = default;
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename...Args>
-sys_expected<> basic_process<CharT,Exec>::start(const string_t &cmd, Args&&...args) noexcept
-	requires concepts::formatter<char_t,Args...>
+sys_expected<> basic_process<Exec>::start(const path_t &cmd, Args&&...args) noexcept
+	requires is_args_v<Args...>
 {
 	return m_impl->start(cmd, std::forward<Args>(args)...);
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-sys_expected<> basic_process<CharT,Exec>::start(const string_t &cmd, const args_t &args) noexcept
+template <concepts::exec Exec>
+sys_expected<> basic_process<Exec>::start(const path_t &cmd, const args_t &args) noexcept
 {
 	return m_impl->start(cmd, args);
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::terminate() noexcept
+template <concepts::exec Exec>
+void basic_process<Exec>::terminate() noexcept
 {
 	m_impl->terminate();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::kill() noexcept
+template <concepts::exec Exec>
+void basic_process<Exec>::kill() noexcept
 {
 	m_impl->kill();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::detach()
+template <concepts::exec Exec>
+void basic_process<Exec>::detach()
 {
 	if( not m_impl )
 	{
@@ -856,15 +849,15 @@ void basic_process<CharT,Exec>::detach()
 	m_impl->detach();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::cancel(cancel_option option) noexcept
+template <concepts::exec Exec>
+void basic_process<Exec>::cancel(cancel_option option) noexcept
 {
 	m_impl->cancel(option);
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::join(Token &&token)
+auto basic_process<Exec>::join(Token &&token)
 	requires dis_detach_token_v<Token,int> or concepts::time_p<Token>
 {
 	using unbound_t = token_unbound_t<Token>;
@@ -892,25 +885,25 @@ auto basic_process<CharT,Exec>::join(Token &&token)
 	return m_impl->join(std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <concepts::tf_opt_token<error_code,size_t> Token>
-auto basic_process<CharT,Exec>::write(const const_buffer &buf, Token &&token)
+auto basic_process<Exec>::write(const const_buffer &buf, Token &&token)
 {
 	return m_impl->write(buf, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::read(const mutable_buffer &buf, Token &&token)
+auto basic_process<Exec>::read(const mutable_buffer &buf, Token &&token)
 	requires dis_detach_token_v<Token,size_t>
 {
 	return m_impl->template read<impl::read_channel::std_output>
 		(buf, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <concepts::buffer Buffer, typename Token>
-auto basic_process<CharT,Exec>::read(Token &&token) requires
+auto basic_process<Exec>::read(Token &&token) requires
 	dis_detach_token_v<Token,Buffer>
 {
 	using channel = impl::read_channel;
@@ -969,26 +962,26 @@ auto basic_process<CharT,Exec>::read(Token &&token) requires
 	}
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::read(Token &&token) requires
+auto basic_process<Exec>::read(Token &&token) requires
 	dis_detach_token_v<Token,std::vector<std::byte>>
 {
 	return read<std::vector<std::byte>>(std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::read_stderr(const mutable_buffer &buf, Token &&token)
+auto basic_process<Exec>::read_stderr(const mutable_buffer &buf, Token &&token)
 	requires dis_detach_token_v<Token,size_t>
 {
 	return m_impl->template read<impl::read_channel::std_error>
 		(buf, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <concepts::buffer Buffer, typename Token>
-auto basic_process<CharT,Exec>::read_stderr(Token &&token) requires
+auto basic_process<Exec>::read_stderr(Token &&token) requires
 	dis_detach_token_v<Token,Buffer>
 {
 	using channel = impl::read_channel;
@@ -1047,106 +1040,106 @@ auto basic_process<CharT,Exec>::read_stderr(Token &&token) requires
 	}
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::read_stderr(Token &&token) requires
+auto basic_process<Exec>::read_stderr(Token &&token) requires
 	dis_detach_token_v<Token,std::vector<std::byte>>
 {
 	return read_stderr<std::vector<std::byte>>(std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::run(const string_t &cmd, const args_t &args, Token &&token)
+auto basic_process<Exec>::run(const path_t &cmd, const args_t &args, Token &&token)
 	requires task_token_v<Token,int>
 {
 	return m_impl->run(cmd, args, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::run(const string_t &cmd, Token &&token)
+auto basic_process<Exec>::run(const path_t &cmd, Token &&token)
 	requires task_token_v<Token,int>
 {
 	return run(cmd, {}, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::run(Token &&token)
+auto basic_process<Exec>::run(Token &&token)
 	requires task_token_v<Token,int>
 {
 	return run({}, {}, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::set_work_path(path_t path) noexcept
+template <concepts::exec Exec>
+void basic_process<Exec>::set_work_path(path_t path) noexcept
 {
 	m_impl->set_work_path(std::move(path));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::setenv(std::string_view key, riwo::value value) noexcept
+template <concepts::exec Exec>
+void basic_process<Exec>::setenv(std::string_view key, riwo::value value) noexcept
 {
 	m_impl->setenv(key, std::move(value));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-void basic_process<CharT,Exec>::unsetenv(std::string_view key) noexcept
+template <concepts::exec Exec>
+void basic_process<Exec>::unsetenv(std::string_view key) noexcept
 {
 	m_impl->unsetenv(key);
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-auto basic_process<CharT,Exec>::state() const noexcept -> state_t
+template <concepts::exec Exec>
+auto basic_process<Exec>::state() const noexcept -> state_t
 {
 	return m_impl->state();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-int basic_process<CharT,Exec>::exit_code() const noexcept
+template <concepts::exec Exec>
+int basic_process<Exec>::exit_code() const noexcept
 {
 	return m_impl->exit_code();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-pid_t basic_process<CharT,Exec>::pid() const noexcept
+template <concepts::exec Exec>
+pid_t basic_process<Exec>::pid() const noexcept
 {
 	return m_impl ? m_impl->pid() : 0;
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-bool basic_process<CharT,Exec>::joinable() const noexcept
+template <concepts::exec Exec>
+bool basic_process<Exec>::joinable() const noexcept
 {
 	return m_impl and m_impl->joinable();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-basic_process<CharT,Exec>::executor_t
-basic_process<CharT,Exec>::get_executor() const noexcept
+template <concepts::exec Exec>
+basic_process<Exec>::executor_t
+basic_process<Exec>::get_executor() const noexcept
 {
 	return m_impl->get_executor();
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::exec(const string_t &cmd, const args_t &args, Token &&token)
+auto basic_process<Exec>::exec(const path_t &cmd, const args_t &args, Token &&token)
 	requires exec_token_v<Token>
 {
 	return exec(riwo::get_executor(), cmd, args, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <typename Token>
-auto basic_process<CharT,Exec>::exec(const string_t &cmd, Token &&token)
+auto basic_process<Exec>::exec(const path_t &cmd, Token &&token)
 	requires exec_token_v<Token>
 {
 	return exec(riwo::get_executor(), cmd, {}, std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <concepts::match_sched<Exec> Exec0, typename Token>
-auto basic_process<CharT,Exec>::exec(Exec0 &&exec, const string_t &cmd,
+auto basic_process<Exec>::exec(Exec0 &&exec, const path_t &cmd,
 	const args_t &args, Token &&token) requires exec_token_v<Token>
 {
 	using token_t = std::remove_cvref_t<Token>;
@@ -1300,49 +1293,49 @@ auto basic_process<CharT,Exec>::exec(Exec0 &&exec, const string_t &cmd,
 	}
 }
 
-template <concepts::character CharT, concepts::exec Exec>
+template <concepts::exec Exec>
 template <concepts::match_sched<Exec> Exec0, typename Token>
-auto basic_process<CharT,Exec>::exec(Exec0 &&exec, const string_t &cmd, Token &&token)
+auto basic_process<Exec>::exec(Exec0 &&exec, const path_t &cmd, Token &&token)
 	requires exec_token_v<Token>
 {
 	return basic_process::exec(std::forward<Exec0>(exec), cmd, {},
 		std::forward<Token>(token));
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-sys_expected<pid_t> basic_process<CharT,Exec>::self_pid() noexcept
+template <concepts::exec Exec>
+sys_expected<pid_t> basic_process<Exec>::self_pid() noexcept
 {
 	auto expected = impl::self_pid();
 	riwo::detail::canonicalize_expected(expected);
 	return expected;
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-sys_expected<> basic_process<CharT,Exec>::terminate(pid_t pid) noexcept
+template <concepts::exec Exec>
+sys_expected<> basic_process<Exec>::terminate(pid_t pid) noexcept
 {
 	auto expected = impl::terminate(pid);
 	riwo::detail::canonicalize_expected(expected);
 	return expected;
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-sys_expected<> basic_process<CharT,Exec>::kill(pid_t pid) noexcept
+template <concepts::exec Exec>
+sys_expected<> basic_process<Exec>::kill(pid_t pid) noexcept
 {
 	auto expected = impl::kill(pid);
 	riwo::detail::canonicalize_expected(expected);
 	return expected;
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-sys_expected<pid_t> basic_process<CharT,Exec>::set_single(const path_t &path, std::string_view key)
+template <concepts::exec Exec>
+sys_expected<pid_t> basic_process<Exec>::set_single(const path_t &path, std::string_view key)
 {
 	auto expected = impl::set_single(path, key);
 	riwo::detail::canonicalize_expected(expected);
 	return expected;
 }
 
-template <concepts::character CharT, concepts::exec Exec>
-sys_expected<pid_t> basic_process<CharT,Exec>::set_single(std::string_view key)
+template <concepts::exec Exec>
+sys_expected<pid_t> basic_process<Exec>::set_single(std::string_view key)
 {
 	auto expected = impl::set_single(key);
 	riwo::detail::canonicalize_expected(expected);
