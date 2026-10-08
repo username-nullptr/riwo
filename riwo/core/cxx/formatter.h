@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024-2025 Xiaoqiang <username_nullptr@163.com>
+// SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
 #ifndef RIWO_CORE_CXX_FORMATTER_H
