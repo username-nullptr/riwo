@@ -259,8 +259,10 @@ private:
 		if( not is_token(values[index]) )
 			return {};
 
-		if( std::ranges::find(values.begin(), values.begin() + index, values[index]) !=
-			values.begin() + index )
+		const auto current = values.begin() +
+			static_cast<std::vector<std::string>::difference_type>(index);
+
+		if( std::ranges::find(values.begin(), current, values[index]) != current )
 			return {};
 
 		if( index != 0 )
@@ -342,13 +344,13 @@ private:
 
 	for(size_t offset=0; offset<input.size(); offset+=3)
 	{
-		uint32_t value = std::to_integer<uint8_t>(input[offset]) << 16;
+		uint32_t value = static_cast<uint32_t>(std::to_integer<uint8_t>(input[offset])) << 16U;
 
 		if( offset + 1 < input.size() )
-			value |= std::to_integer<uint8_t>(input[offset + 1]) << 8;
+			value |= static_cast<uint32_t>(std::to_integer<uint8_t>(input[offset + 1])) << 8U;
 
 		if( offset + 2 < input.size() )
-			value |= std::to_integer<uint8_t>(input[offset + 2]);
+			value |= static_cast<uint32_t>(std::to_integer<uint8_t>(input[offset + 2]));
 
 		output += alphabet[(value >> 18) & 0x3F];
 		output += alphabet[(value >> 12) & 0x3F];

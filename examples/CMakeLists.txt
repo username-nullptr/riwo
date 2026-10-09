@@ -23,6 +23,7 @@ function(riwo_add_example category name)
 
 	set(target "riwo.example.${category}.${name}")
 	add_executable(${target} ${EXAMPLE_SOURCES})
+	# riwo_enable_strict_warnings(${target})
 
 	if (category MATCHES "^(http|websocket)$")
 		riwo_limit_heavy_compile(${target})
@@ -55,6 +56,7 @@ riwo_add_example(core value           LIBRARIES riwo.core)
 add_library(riwo.example.core.dynamic_library_plugin SHARED
 	core/dynamic_library_plugin.cpp
 )
+riwo_enable_strict_warnings(riwo.example.core.dynamic_library_plugin)
 set_target_properties(riwo.example.core.dynamic_library_plugin PROPERTIES
 	OUTPUT_NAME dynamic_library_plugin
 	PREFIX ""

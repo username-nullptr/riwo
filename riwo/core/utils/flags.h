@@ -73,7 +73,7 @@ public:
 
 private:
 	using iterator = std::initializer_list<enum_t>::const_iterator;
-	[[nodiscard]] constexpr static int initializer_list_helper(iterator it, iterator end) noexcept;
+	[[nodiscard]] constexpr static uint32_t initializer_list_helper(iterator it, iterator end) noexcept;
 	uint32_t m_value = 0;
 };
 

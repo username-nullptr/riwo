@@ -1248,8 +1248,10 @@ public:
 	void disconnect(Func0 &&func) noexcept
 		requires is_global_slot_v<slot_mode::async,Func0>
 	{
-		auto it = std::ranges::find_if(m_slots, [&func](const auto &info){
-			return info.func == &func and info.slot->m_obj == nullptr;
+		const auto identity = reinterpret_cast<const void*>(std::addressof(func));
+
+		auto it = std::ranges::find_if(m_slots, [identity](const auto &info) {
+			return info.func == identity and info.slot->m_obj == nullptr;
 		});
 		if( it != m_slots.end() )
 			m_slots.erase(it);
@@ -1259,8 +1261,9 @@ public:
 	void disconnect(const Obj &observer, Func0 &&func) noexcept
 		requires is_obj_slot_v<slot_mode::async,Obj,Func0>
 	{
-		auto it = std::ranges::find_if(m_slots, [&observer, &func](const auto &info) {
-			return info.slot->m_obj == observer.get() and info.func == &func;
+		const auto identity = reinterpret_cast<const void*>(std::addressof(func));
+		auto it = std::ranges::find_if(m_slots, [&observer, identity](const auto &info) {
+			return info.slot->m_obj == observer.get() and info.func == identity;
 		});
 		if( it != m_slots.end() )
 			m_slots.erase(it);

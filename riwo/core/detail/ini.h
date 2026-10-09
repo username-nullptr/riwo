@@ -793,14 +793,14 @@ private:
 		}
 		auto parsed_value = strtls::trimmed(str.substr(pos+1));
 		{
-			int i = 0;
-			for(; i<static_cast<int>(parsed_value.size()); i++)
+			size_t i = 0;
+			for(; i<parsed_value.size(); i++)
 			{
 				if( parsed_value[i] != static_cast<char_t>('=') )
 					break;
 			}
-			if( --i >= 0 )
-				parsed_value = parsed_value.substr(0,i);
+			if( i > 0 )
+				parsed_value = parsed_value.substr(0, i - 1);
 		}
 		if( parsed_value.size() == 1 )
 		{

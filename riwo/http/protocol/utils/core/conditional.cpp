@@ -2,16 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "conditional.h"
-// #include <array>
-// #include <cstdio>
-// #include <ctime>
-// #include <iomanip>
-// #include <sstream>
-// #include <chrono>
 
-namespace riwo::http
-{
-namespace
+namespace riwo::http { namespace
 {
 
 [[nodiscard]] std::string_view trim_ows(std::string_view value) noexcept
@@ -65,9 +57,9 @@ template <typename Func>
 {
 #if defined(_WIN32)
 	return _mkgmtime(value);
-#else
+#else //_WIN32
 	return timegm(value);
-#endif
+#endif //_WIN32
 }
 
 [[nodiscard]] bool parse_date_format
@@ -176,15 +168,18 @@ std::string format_http_date(std::chrono::system_clock::time_point value) noexce
 		utc.tm_mon < 0 or utc.tm_mon >= static_cast<int>(months.size()) )
 		return {};
 
+	const auto weekday = weekdays[static_cast<size_t>(utc.tm_wday)];
+	const auto month = months[static_cast<size_t>(utc.tm_mon)];
+
 	std::array<char,64> output {};
 	auto size = std::snprintf (
 		output.data(), output.size(),
 		"%.*s, %02d %.*s %04d %02d:%02d:%02d GMT",
-		static_cast<int>(weekdays[utc.tm_wday].size()),
-		weekdays[utc.tm_wday].data(),
+		static_cast<int>(weekday.size()),
+		weekday.data(),
 		utc.tm_mday,
-		static_cast<int>(months[utc.tm_mon].size()),
-		months[utc.tm_mon].data(),
+		static_cast<int>(month.size()),
+		month.data(),
 		utc.tm_year + 1900,
 		utc.tm_hour,
 		utc.tm_min,

@@ -4,6 +4,7 @@
 #ifndef RIWO_CORE_UTILS_STRING_TOOLS_H
 #define RIWO_CORE_UTILS_STRING_TOOLS_H
 
+#include <riwo/core/cxx/cplusplus.h>
 #include <riwo/core/cxx/string_concepts.h>
 #include <riwo/core/cxx/type_traits.h>
 #include <riwo/core/cxx/attributes.h>

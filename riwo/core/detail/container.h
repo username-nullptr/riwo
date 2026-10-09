@@ -15,8 +15,8 @@ const_parameters<Derived>::const_parameters(const parameters_t *parameters) :
 }
 
 template <typename Derived>
-optional<typename const_parameters<Derived>::value_t>
-const_parameters<Derived>::parameter(const concepts::text_p<char> auto &key) const noexcept
+auto const_parameters<Derived>::parameter
+(const concepts::text_p<char> auto &key) const noexcept -> optional<value_t>
 {
 	auto it = parameters().find(strtls::to_string(key));
 	if( it == parameters().end() )
@@ -26,11 +26,11 @@ const_parameters<Derived>::parameter(const concepts::text_p<char> auto &key) con
 
 template <typename Derived>
 bool const_parameters<Derived>::contains_parameter
-(const concepts::text_p<char> auto &key, const value_t &value) const noexcept
+(const concepts::text_p<char> auto &key, const value_t &expected_value) const noexcept
 {
 	auto it = parameters().find(strtls::to_string(key));
 	if( it != parameters().end() )
-		return it->second == value;
+		return it->second == expected_value;
 	return false;
 }
 
@@ -43,8 +43,7 @@ bool const_parameters<Derived>::contains_parameter
 }
 
 template <typename Derived>
-optional<typename const_parameters<Derived>::value_t>
-const_parameters<Derived>::parameter(size_t index) const
+auto const_parameters<Derived>::parameter(size_t index) const -> optional<value_t>
 {
 	if( not contains_parameter(index) )
 		runtime_error::loc_throw("index out of range.");
@@ -58,25 +57,23 @@ bool const_parameters<Derived>::contains_parameter(size_t index) const noexcept
 }
 
 template <typename Derived>
-const const_parameters<Derived>::parameters_t&
-const_parameters<Derived>::parameters() const noexcept
+auto const_parameters<Derived>::parameters() const noexcept -> const parameters_t&
 {
 	return *m_parameters;
 }
 
 template <typename Derived>
 template <concepts::text_p<char> T>
-mutable_parameters<Derived>::base_t::derived_t &mutable_parameters<Derived>::set_parameter
-(T &&key, typename base_t::value_t value) noexcept
+auto mutable_parameters<Derived>::set_parameter
+(T &&key, typename base_t::value_t parameter_value) noexcept -> base_t::derived_t &
 {
-	parameters()[strtls::to_string(std::forward<T>(key))] = std::move(value);
+	parameters()[strtls::to_string(std::forward<T>(key))] = std::move(parameter_value);
 	return static_cast<base_t::derived_t&>(*this);
 }
 
 template <typename Derived>
 template <concepts::text_p<char> T>
-mutable_parameters<Derived>::base_t::derived_t&
-mutable_parameters<Derived>::unset_parameter(const T &key) noexcept
+auto mutable_parameters<Derived>::unset_parameter(const T &key) noexcept -> base_t::derived_t&
 {
 	auto it = parameters().find(strtls::to_string(key));
 	if( it != parameters().end() )
@@ -85,8 +82,7 @@ mutable_parameters<Derived>::unset_parameter(const T &key) noexcept
 }
 
 template <typename Derived>
-mutable_parameters<Derived>::base_t::parameters_t&
-mutable_parameters<Derived>::parameters() noexcept
+auto mutable_parameters<Derived>::parameters() noexcept -> base_t::parameters_t&
 {
 	return remove_const(*this->m_parameters);
 }

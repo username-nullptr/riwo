@@ -82,6 +82,7 @@ endif()
 # CTest test. Interoperability runners use this for the Riwo peer process.
 function(add_riwo_test_program test_target source library)
 	add_executable(${test_target} ${source})
+	riwo_enable_strict_warnings(${test_target})
 	target_link_libraries(${test_target} PRIVATE ${library})
 
 	if ("${library}" MATCHES "^riwo\\.(http|websocket)$")

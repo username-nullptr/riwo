@@ -44,8 +44,7 @@ public:
 	) const noexcept;
 
 	[[nodiscard]] bool contains_parameter (
-		const concepts::text_p<char> auto &key,
-		const value_t &value
+		const concepts::text_p<char> auto &key, const value_t &expected_value
 	) const noexcept;
 
 	[[nodiscard]] bool contains_parameter (
@@ -68,7 +67,7 @@ class RIWO_CORE_TAPI mutable_parameters : public const_parameters<Derived>
 
 public:
 	template <concepts::text_p<char> T>
-	base_t::derived_t &set_parameter(T &&key, base_t::value_t value) noexcept;
+	base_t::derived_t &set_parameter(T &&key, base_t::value_t parameter_value) noexcept;
 
 	template <concepts::text_p<char> T>
 	base_t::derived_t &unset_parameter(const T &key) noexcept;

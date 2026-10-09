@@ -39,14 +39,11 @@ public:
 		case ENOSPC: result = "No space left on device"  ; break;
 		default: {
 			char error_str[1024] {0};
-			const auto buffer_size =
-					FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM,
-								  nullptr,
-								  code,
-								  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-								  reinterpret_cast<LPSTR>(&error_str),
-								  sizeof(error_str),
-								  nullptr);
+			const auto buffer_size = FormatMessage (
+				FORMAT_MESSAGE_FROM_SYSTEM, nullptr, static_cast<DWORD>(code),
+				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPSTR>(&error_str),
+				sizeof(error_str), nullptr
+			);
 			result = std::string(error_str, buffer_size);
 			break;}
 		}

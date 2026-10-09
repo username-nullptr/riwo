@@ -581,7 +581,7 @@ public:
 			if( error )
 				break;
 
-			token.stream->write(buffer, bytes);
+			token.stream->write(buffer, static_cast<std::streamsize>(bytes));
 			if( not *token.stream )
 			{
 				error = make_system_error_code(std::errc::io_error);
@@ -633,7 +633,7 @@ public:
 				}
 				co_return std::tuple<error_code,size_t>{error, 0};
 			}
-			file_token.stream->write(buf, bytes);
+			file_token.stream->write(buf, static_cast<std::streamsize>(bytes));
 			if( not *file_token.stream )
 			{
 				file_token.stream->close();

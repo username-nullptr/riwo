@@ -255,11 +255,20 @@ co_upgrade(http::basic_service_context<Exec> *active_context, upgrade_options ac
 					plan.request
 				);
 			};
-			auto validation_result = co_await asio::co_spawn (
-				active_context->get_executor(), invoke(), asio::as_tuple(deferred)
-			);
-			auto &[exception, rejection] = validation_result;
-			if( auto validation_error = exception_error(exception) )
+			upgrade_validation_result rejection;
+			error_code validation_error;
+			// Keep co_spawn's exception disposition separate from its value. With
+			// as_tuple, GCC may diagnose a move from an empty optional's storage.
+			try {
+				rejection = co_await asio::co_spawn (
+					active_context->get_executor(), invoke(),
+					asio::use_awaitable_t<Exec>{}
+				);
+			}
+			catch(...) {
+				validation_error = exception_error(std::current_exception());
+			}
+			if( validation_error )
 			{
 				reject_upgrade(plan,
 					upgrade_rejection {
@@ -293,11 +302,18 @@ co_upgrade(http::basic_service_context<Exec> *active_context, upgrade_options ac
 					std::move(origin)
 				);
 			};
-			auto validation_result = co_await asio::co_spawn (
-				active_context->get_executor(), invoke(), asio::as_tuple(deferred)
-			);
-			auto &[exception, rejection] = validation_result;
-			if( auto validation_error = exception_error(exception) )
+			upgrade_validation_result rejection;
+			error_code validation_error;
+			try {
+				rejection = co_await asio::co_spawn (
+					active_context->get_executor(), invoke(),
+					asio::use_awaitable_t<Exec>{}
+				);
+			}
+			catch(...) {
+				validation_error = exception_error(std::current_exception());
+			}
+			if( validation_error )
 			{
 				reject_upgrade(plan,
 					upgrade_rejection {

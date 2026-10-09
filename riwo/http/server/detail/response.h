@@ -1419,13 +1419,12 @@ private:
 		if( ranges.size() == 1 )
 		{
 			auto &value = ranges.back();
-			stream->seekg(value.begin, std::ios_base::beg);
-
+			stream->seekg(static_cast<std::streamoff>(value.begin), std::ios_base::beg);
 			while( not stream->eof() )
 			{
 				if( value.total <= buf_size )
 				{
-					stream->read(buf, value.total);
+					stream->read(buf, static_cast<std::streamsize>(value.total));
 					auto size = static_cast<size_t>(stream->gcount());
 
 					sum += write_body(buffer(buf,size), error);
@@ -1456,12 +1455,12 @@ private:
 			if( error )
 				return sum;
 
-			stream->seekg(value.begin, std::ios_base::beg);
+			stream->seekg(static_cast<std::streamoff>(value.begin), std::ios_base::beg);
 			while( not stream->eof() )
 			{
 				if( value.total <= buf_size )
 				{
-					stream->read(buf, value.total);
+					stream->read(buf, static_cast<std::streamsize>(value.total));
 					auto size = static_cast<size_t>(stream->gcount());
 					if( size == 0 )
 						break;
@@ -1492,9 +1491,8 @@ private:
 
 	template <typename FS>
 	[[nodiscard]] static asio::awaitable<std::tuple<error_code,size_t>,Exec>
-	co_send_range(std::shared_ptr<impl> self, FS &source_stream,
-		std::string boundary, std::string content_type_line,
-		std::vector<range_value> ranges)
+	co_send_range(std::shared_ptr<impl> self, FS &source_stream, std::string boundary,
+		std::string content_type_line, std::vector<range_value> ranges)
 	{
 		auto *stream = &source_stream;
 		assert(not ranges.empty());
@@ -1509,12 +1507,12 @@ private:
 		if( ranges.size() == 1 )
 		{
 			auto &value = ranges.back();
-			stream->seekg(value.begin, std::ios_base::beg);
+			stream->seekg(static_cast<std::streamoff>(value.begin), std::ios_base::beg);
 
 			while( not stream->eof() )
 			{
 				auto wanted = std::min(value.total, buf_size);
-				stream->read(buf, wanted);
+				stream->read(buf, static_cast<std::streamsize>(wanted));
 
 				auto size = static_cast<size_t>(stream->gcount());
 				auto [write_error, bytes] = co_await co_write_body (
@@ -1546,11 +1544,11 @@ private:
 			if( body_error )
 				co_return std::tuple<error_code,size_t>{body_error, sum};
 
-			stream->seekg(value.begin, std::ios_base::beg);
+			stream->seekg(static_cast<std::streamoff>(value.begin), std::ios_base::beg);
 			while( not stream->eof() )
 			{
 				auto wanted = std::min(value.total, buf_size);
-				stream->read(buf, wanted);
+				stream->read(buf, static_cast<std::streamsize>(wanted));
 
 				auto size = static_cast<size_t>(stream->gcount());
 				if( size == 0 )

@@ -122,9 +122,17 @@ auto to_percent_encoding(const Str &str, StrArg &&exclude, StrArg &&include, cha
 				result.resize(str_view.size() * 3);
 				expanded = true;
 			}
+			using unsigned_char_t = std::make_unsigned_t<char_t>;
+
+			const auto code_unit = static_cast<unsigned_char_t>(c);
 			result[length++] = percent;
-			result[length++] = detail::to_hex_upper<char_t>((c & static_cast<char_t>(0xf0)) >> 4);
-			result[length++] = detail::to_hex_upper<char_t>(c & static_cast<char_t>(0xf));
+
+			result[length++] = detail::to_hex_upper<char_t>(
+				static_cast<unsigned int>((code_unit & 0xf0U) >> 4U)
+			);
+			result[length++] = detail::to_hex_upper<char_t>(
+				static_cast<unsigned int>(code_unit & 0x0fU)
+			);
 		}
 	}
 	if( expanded )

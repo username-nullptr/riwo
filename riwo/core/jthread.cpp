@@ -12,8 +12,8 @@
 namespace riwo { namespace detail
 {
 
-stop_callback_base::stop_callback_base(execute_t execute) noexcept :
-	execute(execute)
+stop_callback_base::stop_callback_base(execute_t execute_callback) noexcept :
+	execute(execute_callback)
 {
 
 }

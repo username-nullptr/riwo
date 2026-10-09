@@ -17,12 +17,13 @@ namespace riwo::http { namespace
 
 	for(size_t offset=0; offset<input.size(); offset += 3)
 	{
-		uint32_t value = static_cast<unsigned char>(input[offset]) << 16;
+		uint32_t value = static_cast<uint32_t>(static_cast<unsigned char>(input[offset])) << 16U;
+
 		if( offset + 1 < input.size() )
-			value |= static_cast<unsigned char>(input[offset + 1]) << 8;
+			value |= static_cast<uint32_t>(static_cast<unsigned char>(input[offset + 1])) << 8U;
 
 		if( offset + 2 < input.size() )
-			value |= static_cast<unsigned char>(input[offset + 2]);
+			value |= static_cast<uint32_t>(static_cast<unsigned char>(input[offset + 2]));
 
 		output += alphabet[(value >> 18) & 0x3F];
 		output += alphabet[(value >> 12) & 0x3F];

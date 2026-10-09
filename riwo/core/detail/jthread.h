@@ -12,7 +12,7 @@ namespace riwo { namespace detail
 struct RIWO_CORE_API stop_callback_base
 {
 	using execute_t = void(*)(stop_callback_base*) noexcept;
-	explicit stop_callback_base(execute_t execute) noexcept;
+	explicit stop_callback_base(execute_t execute_callback) noexcept;
 
 	stop_callback_base *previous = nullptr;
 	stop_callback_base *next = nullptr;
@@ -27,15 +27,15 @@ struct RIWO_CORE_TAPI stop_callback_node final : stop_callback_base
 	RIWO_DISABLE_COPY_MOVE(stop_callback_node)
 
 	template <typename C>
-	explicit stop_callback_node(C &&callback)
+	explicit stop_callback_node(C &&completion_callback)
 		noexcept(std::is_nothrow_constructible_v<Callback,C>) :
 		stop_callback_base(&invoke),
-		callback(std::forward<C>(callback)) {}
+		callback(std::forward<C>(completion_callback)) {}
 
 	static void invoke(stop_callback_base *base) noexcept
 	{
-		auto &callback = static_cast<stop_callback_node*>(base)->callback;
-		std::invoke(std::forward<Callback>(callback));
+		auto &stored_callback = static_cast<stop_callback_node*>(base)->callback;
+		std::invoke(std::forward<Callback>(stored_callback));
 	}
 	Callback callback;
 };

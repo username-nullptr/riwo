@@ -4,9 +4,9 @@
 #ifndef RIWO_CORE_UTILS_DETAIL_STRING_TOOLS_H
 #define RIWO_CORE_UTILS_DETAIL_STRING_TOOLS_H
 
-#include <ranges>
 #include <algorithm>
 #include <utility>
+#include <ranges>
 
 namespace riwo::strtls { namespace detail
 {
@@ -730,19 +730,18 @@ auto trimmed(const concepts::any_text_p auto &text)
 		if( left >= view.size() )
 			return result;
 
-		int right = static_cast<int>(view.size() - 1);
-		while( right >= static_cast<int>(left) )
+		size_t right = view.size();
+		while( right > left )
 		{
-			if( view[right] >= 1 and view[right] <= 32 )
+			if( view[right - 1] >= 1 and view[right - 1] <= 32 )
 				--right;
 			else
 				break;
 		}
-		if( right < static_cast<int>(left) )
+		if( right == left )
 			return result;
 
-		result.assign(view.substr(left,
-			static_cast<size_t>(right) - left + 1));
+		result.assign(view.substr(left, right - left));
 		return result;
 	}
 }

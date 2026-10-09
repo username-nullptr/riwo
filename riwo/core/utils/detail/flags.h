@@ -165,9 +165,9 @@ constexpr flags<Enum> &flags<Enum>::set_flag(enum_t f, bool on) noexcept
 }
 
 template <concepts::flag_template Enum>
-constexpr int flags<Enum>::initializer_list_helper(iterator it, iterator end) noexcept
+constexpr uint32_t flags<Enum>::initializer_list_helper(iterator it, iterator end) noexcept
 {
-	return (it == end ? 0 : (static_cast<uint32_t>(*it) | initializer_list_helper(it + 1, end)));
+	return it == end ? 0U : static_cast<uint32_t>(*it) | initializer_list_helper(it + 1, end);
 }
 
 template <concepts::flag_template Enum>

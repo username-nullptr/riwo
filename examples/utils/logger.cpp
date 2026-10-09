@@ -10,9 +10,9 @@ int main(int argc, const char *argv[])
 	const std::filesystem::path log_directory = argc > 1 ?
 		argv[1] : "./logs";
 
-	riwo::utils::logger::config_t config {
-		.path = log_directory
-	};
+	riwo::utils::logger::config_t config {};
+	config.path = log_directory;
+
 	riwo::utils::logger::instance().set_config(config);
 	riwo::utils::logger::instance("network").set_config(config);
 

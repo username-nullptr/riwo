@@ -5,13 +5,15 @@ add_riwo_test(core core/basic.cpp riwo.core)
 add_riwo_test(core.facilities core/facilities.cpp riwo.core)
 add_riwo_test(core.runtime core/runtime.cpp riwo.core)
 add_riwo_test(core.jthread core/jthread.cpp riwo.core)
+
 # The native standard-library implementation is trusted. Force the fallback so
 # this target always exercises Riwo's compatibility implementation.
 target_compile_definitions(riwo.test.core.jthread PRIVATE
 	RIWO_HAS_STD_JTHREAD=0
 )
-
 add_library(riwo.test.core.fixture SHARED core/library_fixture.cpp)
+riwo_enable_strict_warnings(riwo.test.core.fixture)
+
 set_target_properties(riwo.test.core.fixture PROPERTIES
 	PREFIX ""
 	RUNTIME_OUTPUT_DIRECTORY ${RIWO_OUTPUT_DIR}/bin

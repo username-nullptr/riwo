@@ -16,7 +16,7 @@ class RIWO_HTTP_API session::impl
 public:
 	template <typename Rep, typename Period = std::ratio<1>>
 	impl(session *owner, const duration<Rep,Period> &seconds, const executor_t &exec) :
-		q_ptr(owner), m_second(seconds.count()), m_timer(exec) {}
+		q_ptr(owner), m_second(static_cast<uint64_t>(seconds.count())), m_timer(exec) {}
 
 	void start();
 
@@ -69,9 +69,12 @@ template <typename Rep, typename Period>
 session &session::set_lifecycle(const duration<Rep,Period> &seconds)
 {
 	namespace sc = std::chrono;
-	m_impl->m_second = sc::duration_cast<sc::seconds>(seconds).count();
+	m_impl->m_second = static_cast<uint64_t>(
+		sc::duration_cast<sc::seconds>(seconds).count()
+	);
 	if( m_impl->m_second == 0 )
 		m_impl->m_second = 1;
+
 	m_impl->m_restart = true;
 	m_impl->start();
 	return *this;
@@ -81,7 +84,9 @@ template <typename Rep, typename Period>
 session &session::expand(const duration<Rep,Period> &seconds)
 {
 	namespace sc = std::chrono;
-	m_impl->m_second += sc::duration_cast<sc::seconds>(seconds).count();
+	m_impl->m_second += static_cast<uint64_t>(
+		sc::duration_cast<sc::seconds>(seconds).count()
+	);
 	return expand();
 }
 

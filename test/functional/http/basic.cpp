@@ -130,6 +130,9 @@ public:
 	}
 
 protected:
+	using riwo::http::basic_connection<>::write_all;
+	using riwo::http::basic_connection<>::co_write_all;
+
 	size_t read_some(
 		riwo::mutable_buffer buffer, riwo::error_code &error
 	) noexcept override

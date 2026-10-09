@@ -60,7 +60,7 @@ void value_and_string_algorithms()
 {
 	riwo::value number("7f");
 	RIWO_TEST_CHECK_EQ(number.to_uint(16).value_or(0), 127U);
-	RIWO_TEST_CHECK_EQ(number.get<int>(16).value_or(0), 127);
+	RIWO_TEST_CHECK_EQ(number.get<int>(size_t {16}).value_or(0), 127);
 	RIWO_TEST_CHECK(number.is_alnum());
 	RIWO_TEST_CHECK(not number.is_digit());
 	RIWO_TEST_CHECK(riwo::value("-1.25").is_rlnum());

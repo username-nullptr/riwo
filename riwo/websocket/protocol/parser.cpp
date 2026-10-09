@@ -32,7 +32,7 @@ public:
 		const auto first = std::to_integer<uint8_t>(m_header_storage[0]);
 		const auto second = std::to_integer<uint8_t>(m_header_storage[1]);
 
-		const auto length_code = second & 0x7F;
+		const auto length_code = static_cast<uint8_t>(second & 0x7F);
 		const bool masked = (second & 0x80) != 0;
 
 		m_header = {};
@@ -42,7 +42,7 @@ public:
 
 		size_t offset = 2;
 		if( length_code <= 125 )
-			m_header.payload_size = length_code;
+			m_header.payload_size = static_cast<uint64_t>(length_code);
 
 		else if( length_code == 126 )
 		{

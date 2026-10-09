@@ -655,7 +655,7 @@ public:
 
 			return sys_unexpected(expected.error());
 		}
-		return std::move(sum);
+		return sum;
 	}
 
 	using all_buffer_t = std::vector<std::byte>;
@@ -816,9 +816,12 @@ public:
 				expected.despair(chunk.error());
 				break;
 			}
-			token->stream->seekp(chunk->offset, std::ios::beg);
-			token->stream->write(chunk->data.data(), chunk->data.size());
-
+			token->stream->seekp (
+				static_cast<std::streamoff>(chunk->offset), std::ios::beg
+			);
+			token->stream->write(chunk->data.data(),
+				static_cast<std::streamsize>(chunk->data.size())
+			);
 			if( not *token->stream )
 			{
 				expected.despair(std::make_error_code(std::errc::io_error));
@@ -947,9 +950,12 @@ public:
 				self->close_connection();
 				co_return std::tuple<error_code,size_t>{error, 0};
 			}
-			file_token->stream->seekp(chunk.offset, std::ios::beg);
-			file_token->stream->write(chunk.data.data(), chunk.data.size());
-
+			file_token->stream->seekp (
+				static_cast<std::streamoff>(chunk.offset), std::ios::beg
+			);
+			file_token->stream->write(chunk.data.data(),
+				static_cast<std::streamsize>(chunk.data.size())
+			);
 			if( not *file_token->stream )
 			{
 				file_token->stream->close();

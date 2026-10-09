@@ -111,7 +111,7 @@ public:
 		auto do_transfer = [&](size_t begin, size_t loc_total)
 		{
 			token->stream->clear();
-			token->stream->seekg(begin, std::ios::beg);
+			token->stream->seekg(static_cast<std::streamoff>(begin), std::ios::beg);
 
 			size_t loc_sum = 0;
 			while( loc_sum < loc_total )
@@ -301,9 +301,11 @@ public:
 		size_t already_completed, size_t total_size)
 	{
 		char data[128 * 1024] {};
-
 		file.stream->clear();
-		file.stream->seekg(begin_offset, std::ios::beg);
+
+		file.stream->seekg (
+			static_cast<std::streamoff>(begin_offset), std::ios::beg
+		);
 		size_t transferred = 0;
 
 		while( transferred < transfer_length )

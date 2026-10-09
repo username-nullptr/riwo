@@ -24,12 +24,12 @@ void low_load_utility_lifecycle_repetition()
 	{
 		riwo::utils::signal<void(size_t)> signal;
 		signal.connect([&](size_t value) { signal_received += value; });
-		signal(1);
+		signal(size_t {1});
 		signal.block();
-		signal(1);
+		signal(size_t {1});
 		signal.block(false);
 		signal.disconnect();
-		signal(1);
+		signal(size_t {1});
 	}
 	RIWO_TEST_CHECK_EQ(signal_received, signal_rounds);
 
@@ -82,7 +82,7 @@ void concurrent_signal_pressure()
 			while(not start.load(std::memory_order_acquire))
 				std::this_thread::yield();
 			for(size_t index = 0; index < emissions_per_thread; ++index)
-				signal(1);
+				signal(size_t {1});
 		});
 	}
 	std::array<std::thread,mutator_count> mutators;
@@ -109,7 +109,7 @@ void concurrent_signal_pressure()
 		mutator.join();
 	signal.disconnect();
 	const auto before = received.load();
-	signal(1);
+	signal(size_t {1});
 	RIWO_TEST_CHECK_EQ(received.load(), before);
 	RIWO_TEST_CHECK(before <= emitter_count * emissions_per_thread);
 	signal_count = nullptr;

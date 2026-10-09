@@ -35,7 +35,7 @@ concept topic_type = requires(std::string_view topic) {
 	"riwo.utils.sbus.topic." #value
 
 #define RIWO_UTILS_SBUS_TYPE(value) \
-	RIWO_UTILS_SBUS_TYPE_IMPL(RIWO_UTILS_SBUS_TOPIC(value));
+	RIWO_UTILS_SBUS_TYPE_IMPL(RIWO_UTILS_SBUS_TOPIC(value))
 
 #define RIWO_UTILS_SBUS_META_TYPE(value, ...) \
 	RIWO_UTILS_SBUS_TYPE(value) RIWO_META_FIELDS(__VA_ARGS__)
@@ -44,7 +44,7 @@ concept topic_type = requires(std::string_view topic) {
 	"riwo.utils.sbus.topic." __FILE__ RIWO_SHARP(:RIWO_AUTO_XX_NAME())
 
 #define RIWO_UTILS_SBUS_AUTO_TYPE \
-	RIWO_UTILS_SBUS_TYPE_IMPL(RIWO_UTILS_SBUS_AUTO_TOPIC);
+	RIWO_UTILS_SBUS_TYPE_IMPL(RIWO_UTILS_SBUS_AUTO_TOPIC)
 
 #define RIWO_UTILS_SBUS_AUTO_META_TYPE(...) \
 	RIWO_UTILS_SBUS_AUTO_TYPE RIWO_META_FIELDS(__VA_ARGS__)

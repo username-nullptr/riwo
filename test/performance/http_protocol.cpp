@@ -14,10 +14,14 @@ namespace
 
 #ifdef NDEBUG
 constexpr size_t protocol_cycle_count = 250'000 * riwo::test::performance_scale;
+#if RIWO_HTTP_ZLIB_SUPPORT
 constexpr size_t gzip_cycle_count = 2'000 * riwo::test::performance_scale;
+#endif
 #else
 constexpr size_t protocol_cycle_count = 10'000 * riwo::test::performance_scale;
+#if RIWO_HTTP_ZLIB_SUPPORT
 constexpr size_t gzip_cycle_count = 100 * riwo::test::performance_scale;
+#endif
 #endif
 
 using duration_t = std::chrono::steady_clock::duration;

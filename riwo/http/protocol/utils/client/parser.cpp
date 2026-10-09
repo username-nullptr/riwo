@@ -185,7 +185,9 @@ public:
 					return base_parser::make_error_code(parse_errc::invalid_size_format);
 
 				m_multipart_parser = std::make_unique<multipart_byte_ranges_parser>(*boundary);
-				m_body_norms = multipart_body_norms {.boundary = *boundary};
+				m_body_norms = multipart_body_norms {
+					.boundary = *boundary, .packages = {}
+				};
 				return {};
 			}
 		}

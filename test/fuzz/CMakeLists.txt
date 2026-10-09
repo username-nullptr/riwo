@@ -6,6 +6,7 @@ function(add_riwo_fuzzer module name source library)
 	set(target riwo.fuzz.${module}.${name})
 
 	add_executable(${target} ${source})
+	riwo_enable_strict_warnings(${target})
 	target_link_libraries(${target} PRIVATE ${library})
 
 	if (RIWO_FUZZER_RUNTIME_LIBRARY)

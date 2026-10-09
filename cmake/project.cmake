@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2025-2026 Xiaoqiang <username_nullptr@163.com>
 # SPDX-License-Identifier: MIT
 
-
 function(add_project target_name)
 
 	file(GLOB_RECURSE ${target_name}_sources "*.cpp" "*.c" "*.ixx")
@@ -28,6 +27,7 @@ function(add_project target_name)
 
 	target_compile_definitions(${target_name} PRIVATE ${target_micro}_EXPORTS)
 	target_compile_features(${target_name} PUBLIC cxx_std_20)
+	riwo_enable_strict_warnings(${target_name})
 
 	# Public headers use conforming variadic-macro expansion.  MSVC's legacy
 	# preprocessor cannot parse them, so installed consumers need the same mode

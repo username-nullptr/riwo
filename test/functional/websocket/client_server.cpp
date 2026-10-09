@@ -386,7 +386,7 @@ void pending_handshake_queue()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	ws::server_config config;
-	config.pending_handshake_timeout = 1s;
+	config.pending_handshake_timeout = 30s;
 	ws::server service(std::move(acceptor), config);
 
 	// Fix the server in accept mode, then remove the initial waiter so that the
@@ -409,6 +409,17 @@ void pending_handshake_queue()
 	const auto port = service.http_server().acceptor_wrap()
 		.acceptor().local_endpoint().port();
 	ws::client client(context.get_executor());
+	bool watchdog_expired = false;
+	asio::steady_timer watchdog(context.get_executor());
+	watchdog.expires_after(5s);
+	watchdog.async_wait([&](riwo::error_code error)
+	{
+		if( error == asio::error::operation_aborted )
+			return;
+		watchdog_expired = true;
+		client.cancel();
+		service.stop();
+	});
 	auto connected = asio::co_spawn(context,
 		[&]() -> riwo::awaitable<void>
 		{
@@ -419,15 +430,22 @@ void pending_handshake_queue()
 				riwo::use_awaitable);
 			RIWO_TEST_CHECK_EQ(response.body, "queued");
 			riwo::ignore_unused(co_await stream.close(riwo::use_awaitable));
+			riwo::ignore_unused(watchdog.cancel());
 			service.stop();
 			co_return;
 		}, asio::use_future);
 	auto accepted = asio::co_spawn(context,
 		[&]() -> riwo::awaitable<void>
 		{
-			asio::steady_timer delay(context.get_executor());
-			delay.expires_after(10ms);
-			co_await delay.async_wait(riwo::use_awaitable);
+			asio::steady_timer retry(context.get_executor());
+			while( service.pending_handshake_count() == 0 and
+				not watchdog_expired )
+			{
+				retry.expires_after(1ms);
+				co_await retry.async_wait(riwo::use_awaitable);
+			}
+			if( watchdog_expired )
+				co_return;
 			RIWO_TEST_CHECK_EQ(service.pending_handshake_count(), 1U);
 			auto connection = co_await service.accept(riwo::use_awaitable);
 			auto message = co_await connection.stream.read<std::string>(
@@ -440,6 +458,7 @@ void pending_handshake_queue()
 		}, asio::use_future);
 
 	context.run();
+	RIWO_TEST_CHECK(not watchdog_expired);
 	connected.get();
 	accepted.get();
 }

@@ -244,7 +244,9 @@ public:
 			.pid   = *pid              ,
 			.data  = std::move(_curr)
 		};
-		event.time = std::chrono::system_clock::now().time_since_epoch().count();
+		event.time = static_cast<uint64_t>(
+			std::chrono::system_clock::now().time_since_epoch().count()
+		);
 		publish<interface_t>(std::move(event));
 	}
 

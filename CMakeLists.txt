@@ -24,6 +24,7 @@ add_definitions (
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(platform)
+include(warnings)
 include(heavy_compile)
 
 include(options)

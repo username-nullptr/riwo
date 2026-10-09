@@ -24,8 +24,8 @@ public:
 	using token_type = CompletionToken;
 	constexpr std_error_token_t() = default;
 
-	constexpr explicit std_error_token_t(CompletionToken token) :
-		token(std::move(token)) {}
+	constexpr explicit std_error_token_t(CompletionToken completion_token) :
+		token(std::move(completion_token)) {}
 
 	template <typename OtherAllocator>
 	[[nodiscard]] constexpr auto rebind(const OtherAllocator &allocator) const
@@ -78,8 +78,8 @@ public:
 	using allocator_type = Allocator;
 
 	constexpr std_error_token_t() = default;
-	constexpr explicit std_error_token_t(token_type token) :
-		token(std::move(token)) {}
+	constexpr explicit std_error_token_t(token_type completion_token) :
+		token(std::move(completion_token)) {}
 
 	template <typename OtherAllocator>
 	[[nodiscard]] auto operator[](const OtherAllocator &allocator) const {
@@ -105,11 +105,11 @@ public:
 };
 
 template <typename Handler>
-class std_error_handler
+class RIWO_CORE_TAPI std_error_handler
 {
 public:
-	explicit std_error_handler(Handler handler) :
-		handler(std::move(handler)) {}
+	explicit std_error_handler(Handler completion_handler) :
+		handler(std::move(completion_handler)) {}
 
 	void operator()() {
 		std::move(handler)();
@@ -119,7 +119,11 @@ public:
 	void operator()(First &&first, Rest&&...rest)
 	{
 		using first_t = std::remove_cvref_t<First>;
+#if RIWO_USING_BOOST_ASIO
 		if constexpr( std::same_as<first_t,error_code> or std::same_as<first_t,std::error_code> )
+#else //RIWO_USING_BOOST_ASIO
+		if constexpr( std::same_as<first_t,std::error_code> )
+#endif //RIWO_USING_BOOST_ASIO
 		{
 			std::exception_ptr exception;
 			if( first )
