@@ -11,15 +11,22 @@ namespace fs = std::filesystem;
 namespace riwo
 {
 
+#if RIWO_USING_BOOST_ASIO && defined(__GNUC__) && !defined(__clang__)
+// Boost.System deliberately gives error_category a protected non-virtual
+// destructor. This static final category is never deleted polymorphically, but
+// GCC still diagnoses the supported inheritance pattern under
+// -Wnon-virtual-dtor.
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif //BOOST & GNU
+
 static class RIWO_DECL_HIDDEN library_category final : public error_category_t
 {
 	RIWO_DISABLE_COPY_MOVE(library_category)
 
 public:
 	library_category() = default;
-#if RIWO_USING_BOOST_ASIO
-	virtual ~library_category() = default;
-#else //RIWO_USING_BOOST_ASIO
+#if !RIWO_USING_BOOST_ASIO
 	~library_category() override = default;
 #endif //RIWO_USING_BOOST_ASIO
 
@@ -51,6 +58,10 @@ public:
 	}
 }
 g_library_category;
+
+#if RIWO_USING_BOOST_ASIO && defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic pop
+#endif //BOOST & GNU
 
 void *library::impl::interface(std::string_view ifname) const
 {

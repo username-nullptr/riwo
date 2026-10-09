@@ -6,15 +6,22 @@
 namespace riwo::http { namespace
 {
 
+#if RIWO_USING_BOOST_ASIO && defined(__GNUC__) && !defined(__clang__)
+// Boost.System deliberately gives error_category a protected non-virtual
+// destructor. This static final category is never deleted polymorphically, but
+// GCC still diagnoses the supported inheritance pattern under
+// -Wnon-virtual-dtor.
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif //BOOST & GNU
+
 class RIWO_DECL_HIDDEN error_category final : public error_category_t
 {
 	RIWO_DISABLE_COPY_MOVE(error_category)
 
 public:
 	error_category() = default;
-#if RIWO_USING_BOOST_ASIO
-	virtual ~error_category() = default;
-#else //RIWO_USING_BOOST_ASIO
+#if !RIWO_USING_BOOST_ASIO
 	~error_category() override = default;
 #endif //RIWO_USING_BOOST_ASIO
 
@@ -36,6 +43,10 @@ public:
 	}
 }
 g_error_category;
+
+#if RIWO_USING_BOOST_ASIO && defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic pop
+#endif //BOOST & GNU
 
 } //namespace
 
