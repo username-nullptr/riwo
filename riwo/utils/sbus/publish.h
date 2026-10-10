@@ -6,10 +6,7 @@
 
 #include <riwo/utils/sbus/interface.h>
 
-namespace riwo::utils::sbus
-{
-
-namespace concepts
+namespace riwo::utils::sbus { namespace concepts
 {
 
 template <typename T>

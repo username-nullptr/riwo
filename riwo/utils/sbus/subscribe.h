@@ -58,13 +58,13 @@ concept subscribe_type_func = []() consteval -> bool
 
 } //namespace concepts
 
-template <concepts::interface Interface,
-		  riwo::concepts::exec Exec = asio::any_io_executor>
+template <concepts::interface Interface, riwo::concepts::exec Exec = asio::any_io_executor>
 class RIWO_UTILS_TAPI basic_subscriber
 {
 public:
 	using interface_t = Interface;
 	using interface_ptr = std::shared_ptr<Interface>;
+
 	using executor_type = Exec;
 	using executor_t = executor_type;
 

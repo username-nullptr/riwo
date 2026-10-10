@@ -6,21 +6,8 @@
 
 #include <riwo/utils/global.h>
 
-namespace riwo::utils::sbus::concepts
+namespace riwo::utils::sbus { namespace concepts
 {
-
-template <typename Interface>
-concept interface = riwo::concepts::constructible<Interface> and requires
-	(Interface &interface, std::string_view topic, uint64_t sid, const char *buffer, size_t size)
-	{
-		Interface::publish(topic, buffer, size);
-		sid = interface.subscribe (
-			[](std::string_view, const void*, size_t) {}
-		);
-		interface.cancel_topic(topic);
-		interface.cancel_sid(sid);
-		interface.cancel();
-	};
 
 template <typename T>
 concept topic_type = requires(std::string_view topic) {
@@ -49,19 +36,35 @@ concept topic_type = requires(std::string_view topic) {
 #define RIWO_UTILS_SBUS_AUTO_META_TYPE(...) \
 	RIWO_UTILS_SBUS_AUTO_TYPE RIWO_META_FIELDS(__VA_ARGS__)
 
-} //namespace riwo::utils::sbus::concepts
+} //namespace concepts
 
-#include <riwo/utils/sbus/detail/local_interface.h>
-#include <riwo/utils/sbus/detail/udp_interface.h>
-
-namespace riwo::utils::sbus
+struct msg_path
 {
+	std::string domain {};
+	std::string topic {};
+};
 
-#if RIWO_UTILS_SBUS_DEFAULT_INTERFACE_UDP
-using default_interface = udp_interface;
-#else //local
-using default_interface = local_interface;
-#endif //
+class RIWO_UTILS_API interface
+{
+	RIWO_DISABLE_COPY_MOVE(interface)
+
+public:
+	using sid_t = uint64_t;
+
+	interface() = default;
+	virtual ~interface() = 0;
+
+	virtual void publish(const msg_path &path, const void *buffer, size_t size) = 0;
+	virtual sid_t subscribe(const msg_path &path, std::function<void(const void*, size_t)> func) = 0;
+	virtual sid_t subscribe(std::function<void(msg_path path, const void*, size_t)> func) = 0;
+
+	virtual void cancel(const msg_path &path) = 0;
+	virtual void cancel_sid(sid_t sid) = 0;
+	virtual void cancel() = 0;
+
+public:
+	static void set_default_domain();
+};
 
 } //namespace riwo::utils::sbus
 
