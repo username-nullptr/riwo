@@ -5,10 +5,45 @@
 
 #include <riwo/core/async_expected.h>
 
+#if RIWO_IO_URING_SUPPORT
+# if RIWO_USING_BOOST_ASIO
+#  if !defined(BOOST_ASIO_HAS_IO_URING)
+#   error "Riwo io_uring support must advertise Boost.Asio io_uring support"
+#  endif
+#  if defined(BOOST_ASIO_DISABLE_EPOLL)
+#   error "Riwo io_uring support must retain epoll as the portable reactor"
+#  endif
+# else
+#  if !defined(ASIO_HAS_IO_URING)
+#   error "Riwo io_uring support must advertise standalone Asio io_uring support"
+#  endif
+#  if defined(ASIO_DISABLE_EPOLL)
+#   error "Riwo io_uring support must retain epoll as the portable reactor"
+#  endif
+# endif
+#endif
+
 namespace
 {
 
 using namespace std::chrono_literals;
+
+void portable_reactor_remains_available()
+{
+	// io_uring may be compiled in while its setup syscall is denied by a
+	// container, seccomp profile, or LSM. Constructing and running an ordinary
+	// io_context must continue to use the platform reactor in that situation.
+	riwo::io_context_t context;
+	asio::steady_timer timer(context, 1ms);
+	bool invoked = false;
+	timer.async_wait([&](const riwo::error_code &error)
+	{
+		RIWO_TEST_CHECK(not error);
+		invoked = true;
+	});
+	context.run();
+	RIWO_TEST_CHECK(invoked);
+}
 
 void dispatch_and_post_ordering()
 {
@@ -311,6 +346,7 @@ void global_event_loop()
 int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
+		{"portable reactor remains available", portable_reactor_remains_available},
 		{"dispatch and post ordering", dispatch_and_post_ordering},
 		{"synchronous dispatch context selection", synchronous_dispatch_context_selection},
 		{"queued and delayed work", queued_and_delayed_work},

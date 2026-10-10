@@ -73,13 +73,20 @@ dependencies.
 | `RIWO_OPENSSL_SUPPORT` | OFF | TLS, HTTPS, and WSS | OpenSSL |
 | `RIWO_HTTP_ZLIB_SUPPORT` | OFF | HTTP gzip | zlib |
 | `RIWO_WEBSOCKET_ZLIB_SUPPORT` | OFF | RFC 7692 `permessage-deflate` | zlib |
-| `RIWO_IO_URING_SUPPORT` | OFF | Use Asio io_uring instead of epoll | Linux and liburing |
+| `RIWO_IO_URING_SUPPORT` | OFF | Enable Asio io_uring file I/O while retaining epoll as the portable reactor | Linux and liburing |
 | `RIWO_BUILD_UTILITIES_SBUS_UDP` | ON | UDP multicast soft-bus transport | Utilities module |
 | `RIWO_UTILS_SBUS_DEFAULT_INTERFACE` | `local` | Default unqualified soft-bus API; `local` or `udp` | UDP transport if set to `udp` |
 
 When HTTP gzip and WebSocket are both enabled, WebSocket compression is enabled
 as well. Otherwise `RIWO_WEBSOCKET_ZLIB_SUPPORT` controls WebSocket compression
 independently.
+
+With `RIWO_IO_URING_SUPPORT` enabled, Asio uses io_uring for regular-file
+operations and epoll for the platform reactor. Ordinary sockets, timers,
+signals, and the default event loop therefore remain available when the
+io_uring setup syscall is denied by a container, seccomp profile, or LSM.
+Applications that directly create Asio file objects must handle an unavailable
+io_uring service.
 
 *On Windows with a GNU toolchain, the default becomes static when CMake cannot
 find a shared `libstdc++-6.dll`. Explicitly requesting a shared build in that

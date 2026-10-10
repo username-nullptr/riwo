@@ -72,12 +72,17 @@ cmake --build build-secure --parallel
 | `RIWO_OPENSSL_SUPPORT` | OFF | TLS、HTTPS 与 WSS | OpenSSL |
 | `RIWO_HTTP_ZLIB_SUPPORT` | OFF | HTTP gzip | zlib |
 | `RIWO_WEBSOCKET_ZLIB_SUPPORT` | OFF | RFC 7692 `permessage-deflate` | zlib |
-| `RIWO_IO_URING_SUPPORT` | OFF | 使用 Asio io_uring 取代 epoll | Linux 与 liburing |
+| `RIWO_IO_URING_SUPPORT` | OFF | 启用 Asio io_uring 文件 I/O，同时保留 epoll 作为可移植 reactor | Linux 与 liburing |
 | `RIWO_BUILD_UTILITIES_SBUS_UDP` | ON | UDP 多播软总线传输 | Utilities 模块 |
 | `RIWO_UTILS_SBUS_DEFAULT_INTERFACE` | `local` | 未限定软总线 API 的默认实现：`local` 或 `udp` | 设为 `udp` 时需启用 UDP 传输 |
 
 同时启用 HTTP gzip 与 WebSocket 时，WebSocket 压缩也会启用；否则由
 `RIWO_WEBSOCKET_ZLIB_SUPPORT` 独立控制 WebSocket 压缩。
+
+启用 `RIWO_IO_URING_SUPPORT` 后，Asio 使用 io_uring 处理普通文件操作，使用
+epoll 作为平台 reactor。因此当容器、seccomp 或 LSM 策略拒绝 io_uring setup
+时，普通 socket、timer、signal 与默认事件循环仍然可用。直接创建 Asio 文件
+对象的应用需要处理 io_uring 服务不可用的情况。
 
 *Windows GNU 工具链找不到共享 `libstdc++-6.dll` 时，默认改为静态构建；
 此时显式请求共享构建会失败。*

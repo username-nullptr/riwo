@@ -77,21 +77,22 @@ if (RIWO_IO_URING_SUPPORT)
 		)
 	endif ()
 
+	# Keep epoll enabled. Asio can use io_uring for regular-file operations
+	# alongside the platform reactor; forcing io_uring to be the default makes
+	# every io_context fail when its setup syscall is blocked at runtime.
 	if (RIWO_USING_BOOST_ASIO)
 		target_compile_definitions(${target_name} PUBLIC
 			RIWO_IO_URING_SUPPORT=1
 			BOOST_ASIO_HAS_IO_URING=1
-			BOOST_ASIO_DISABLE_EPOLL=1
 		)
 	else ()
 		target_compile_definitions(${target_name} PUBLIC
 			RIWO_IO_URING_SUPPORT=1
 			ASIO_HAS_IO_URING=1
-			ASIO_DISABLE_EPOLL=1
 		)
 	endif ()
-	add_library(Riwo::uring UNKNOWN IMPORTED)
 
+	add_library(Riwo::uring UNKNOWN IMPORTED)
 	set_target_properties(Riwo::uring PROPERTIES
 		IMPORTED_LOCATION "${LIBURING_LIBRARY}"
 		INTERFACE_INCLUDE_DIRECTORIES "${LIBURING_INCLUDE_DIR}"

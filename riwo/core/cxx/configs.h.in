@@ -79,13 +79,13 @@
 
 #if RIWO_IO_URING_SUPPORT
 
+// Do not define *_DISABLE_EPOLL here. io_uring is an optional file-I/O
+// service; the portable reactor must remain usable under runtime restrictions.
 # if RIWO_USING_BOOST_ASIO
 #  define BOOST_ASIO_HAS_IO_URING  1
-#  define BOOST_ASIO_DISABLE_EPOLL  1
 
 # else //RIWO_USING_BOOST_ASIO
 #  define ASIO_HAS_IO_URING  1
-#  define ASIO_DISABLE_EPOLL  1
 # endif //RIWO_USING_BOOST_ASIO
 
 #else //RIWO_IO_URING_SUPPORT
