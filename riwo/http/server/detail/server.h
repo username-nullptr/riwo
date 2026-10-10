@@ -424,7 +424,7 @@ private:
 	[[nodiscard]] static std::string options_response_body(methods method)
 	{
 		std::string sum {};
-		for(uint16_t i=method::get; i<=method::connect; i<<=1)
+		for(uint16_t i=method::get; i<=method::connect; i=static_cast<uint16_t>(i<<1))
 		{
 			if( not ( method & i ) )
 				continue;

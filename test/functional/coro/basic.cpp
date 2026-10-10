@@ -317,7 +317,24 @@ void coroutine_utilities()
 	std::thread worker([&] { thread_completed = true; });
 	auto result = asio::co_spawn(context, [&]() -> riwo::awaitable<bool>
 	{
+		co_await 0_y;
+		co_await 00_mon;
+		co_await 0x0_d;
+		co_await 0b0_h;
+		co_await 0'0_min;
+		co_await 0_s;
 		co_await 0_ms;
+		co_await 0_us;
+		co_await 0_ns;
+		co_await 0.0_y;
+		co_await 0.0_mon;
+		co_await 0.0_d;
+		co_await 0.0_h;
+		co_await 0.0_min;
+		co_await 0.0_s;
+		co_await 0.0_ms;
+		co_await 0.0_us;
+		co_await 0.0_ns;
 		co_await riwo::coro::sleep_until(std::chrono::steady_clock::now());
 		co_await riwo::coro::wait(worker);
 		co_return thread_completed and not worker.joinable();

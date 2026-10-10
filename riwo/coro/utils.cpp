@@ -69,58 +69,61 @@ awaitable<asio::any_io_executor> goto_thread()
 namespace literals
 {
 
-awaitable<error_code> operator""_y(unsigned long long value)
+namespace
 {
-	using rep_t = std::chrono::years::rep;
-	return sleep_for(std::chrono::years(static_cast<rep_t>(value)));
+
+template <typename Duration>
+awaitable<error_code> sleep_literal(long double value)
+{
+	using duration_t = std::chrono::duration<long double, typename Duration::period>;
+	return sleep_for(duration_t(value));
 }
 
-awaitable<error_code> operator""_mon(unsigned long long value)
+} //namespace
+
+awaitable<error_code> operator""_y(long double value)
 {
-	using rep_t = std::chrono::months::rep;
-	return sleep_for(std::chrono::months(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::years>(value);
 }
 
-awaitable<error_code> operator""_d(unsigned long long value)
+awaitable<error_code> operator""_mon(long double value)
 {
-	using rep_t = std::chrono::days::rep;
-	return sleep_for(std::chrono::days(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::months>(value);
 }
 
-awaitable<error_code> operator""_h(unsigned long long value)
+awaitable<error_code> operator""_d(long double value)
 {
-	using rep_t = std::chrono::hours::rep;
-	return sleep_for(std::chrono::hours(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::days>(value);
 }
 
-awaitable<error_code> operator""_min(unsigned long long value)
+awaitable<error_code> operator""_h(long double value)
 {
-	using rep_t = std::chrono::minutes::rep;
-	return sleep_for(std::chrono::seconds(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::hours>(value);
 }
 
-awaitable<error_code> operator""_s(unsigned long long value)
+awaitable<error_code> operator""_min(long double value)
 {
-	using rep_t = std::chrono::seconds::rep;
-	return sleep_for(std::chrono::seconds(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::minutes>(value);
 }
 
-awaitable<error_code> operator""_ms(unsigned long long value)
+awaitable<error_code> operator""_s(long double value)
 {
-	using rep_t = std::chrono::milliseconds::rep;
-	return sleep_for(std::chrono::milliseconds(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::seconds>(value);
 }
 
-awaitable<error_code> operator""_us(unsigned long long value)
+awaitable<error_code> operator""_ms(long double value)
 {
-	using rep_t = std::chrono::microseconds::rep;
-	return sleep_for(std::chrono::microseconds(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::milliseconds>(value);
 }
 
-awaitable<error_code> operator""_ns(unsigned long long value)
+awaitable<error_code> operator""_us(long double value)
 {
-	using rep_t = std::chrono::nanoseconds::rep;
-	return sleep_for(std::chrono::nanoseconds(static_cast<rep_t>(value)));
+	return sleep_literal<std::chrono::microseconds>(value);
+}
+
+awaitable<error_code> operator""_ns(long double value)
+{
+	return sleep_literal<std::chrono::nanoseconds>(value);
 }
 
 }} //namespace riwo::coro::literals

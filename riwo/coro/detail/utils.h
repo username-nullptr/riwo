@@ -5,6 +5,7 @@
 #define RIWO_CORO_DETAIL_UTILS_H
 
 #include <riwo/core/execution.h>
+#include <limits>
 #include <thread>
 
 namespace riwo::coro
@@ -104,7 +105,155 @@ bool check_error(Token &token, const error_code &error, const char *message)
 	}
 }
 
-} //namespace riwo::coro
+namespace literals { namespace detail
+{
+
+struct duration_literal_value
+{
+	unsigned long long value = 0;
+	bool valid = true;
+	bool overflow = false;
+};
+
+template <char... Digits>
+consteval duration_literal_value parse_duration_literal()
+{
+	constexpr char digits[] = {Digits...};
+	duration_literal_value result;
+
+	size_t index = 0;
+	unsigned int base = 10;
+
+	if constexpr( sizeof...(Digits) > 1 )
+	{
+		if( digits[0] == '0' )
+		{
+			if( digits[1] == 'x' or digits[1] == 'X' )
+			{
+				base = 16;
+				index = 2;
+			}
+			else if( digits[1] == 'b' or digits[1] == 'B' )
+			{
+				base = 2;
+				index = 2;
+			}
+			else
+			{
+				base = 8;
+				index = 1;
+			}
+		}
+	}
+	for(; index < sizeof...(Digits); ++index)
+	{
+		const char character = digits[index];
+		if( character == '\'' )
+			continue;
+
+		unsigned int digit = 0;
+		if( character >= '0' and character <= '9' )
+			digit = static_cast<unsigned int>(character - '0');
+
+		else if( character >= 'a' and character <= 'f' )
+			digit = static_cast<unsigned int>(character - 'a' + 10);
+
+		else if( character >= 'A' and character <= 'F' )
+			digit = static_cast<unsigned int>(character - 'A' + 10);
+		else
+		{
+			result.valid = false;
+			continue;
+		}
+
+		if( digit >= base )
+		{
+			result.valid = false;
+			continue;
+		}
+		constexpr auto maximum = (std::numeric_limits<unsigned long long>::max)();
+		if( result.value > (maximum - digit) / base )
+			result.overflow = true;
+
+		else if( not result.overflow )
+			result.value = result.value * base + digit;
+	}
+	return result;
+}
+
+template <typename Duration, char... Digits>
+consteval Duration checked_duration_literal()
+{
+	constexpr auto value = parse_duration_literal<Digits...>();
+
+	static_assert(value.valid, "Invalid duration literal.");
+	static_assert(not value.overflow, "Duration literal is too large.");
+
+	using rep_t = Duration::rep;
+	static_assert (
+		value.value <= static_cast<unsigned long long>((std::numeric_limits<rep_t>::max)()),
+		"Duration literal cannot be represented by its duration type."
+	);
+	return Duration(static_cast<rep_t>(value.value));
+}
+
+} //namespace detail
+
+template <char... Digits>
+awaitable<error_code> operator""_y()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::years, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_mon()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::months, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_d()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::days, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_h()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::hours, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_min()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::minutes, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_s()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::seconds, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_ms()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::milliseconds, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_us()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::microseconds, Digits...>());
+}
+
+template <char... Digits>
+awaitable<error_code> operator""_ns()
+{
+	return sleep_for(detail::checked_duration_literal<std::chrono::nanoseconds, Digits...>());
+}
+
+} } //namespace riwo::coro::literals
 
 
 #endif //RIWO_CORO_DETAIL_UTILS_H

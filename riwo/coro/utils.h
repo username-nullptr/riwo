@@ -65,17 +65,42 @@ RIWO_CORO_TAPI bool check_error (
 namespace literals
 {
 
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_y  (unsigned long long value);
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_mon(unsigned long long value);
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_d  (unsigned long long value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_y  (long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_mon(long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_d  (long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_h  (long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_min(long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_s  (long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_ms (long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_us (long double value);
+[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_ns (long double value);
 
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_h  (unsigned long long value);
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_min(unsigned long long value);
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_s  (unsigned long long value);
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_y();
 
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_ms (unsigned long long value);
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_us (unsigned long long value);
-[[nodiscard]] RIWO_CORO_API awaitable<error_code> operator""_ns (unsigned long long value);
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_mon();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_d();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_h();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_min();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_s();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_ms();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_us();
+
+template <char... Digits>
+[[nodiscard]] RIWO_CORO_TAPI awaitable<error_code> operator""_ns();
 
 }} //namespace riwo::coro::literals
 #include <riwo/coro/detail/utils.h>
