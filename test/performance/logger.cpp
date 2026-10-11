@@ -181,7 +181,7 @@ void async_file_sink()
 	for(const auto &entry : std::filesystem::recursive_directory_iterator(directory.path()))
 	{
 		if(entry.is_regular_file())
-			bytes_written += entry.file_size();
+			bytes_written += static_cast<size_t>(entry.file_size());
 	}
 	RIWO_TEST_CHECK(bytes_written > 0);
 
