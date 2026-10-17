@@ -10,12 +10,14 @@ set(Riwo_SPDLOG_PROVIDER "@RIWO_SPDLOG_PROVIDER@")
 set(Riwo_OPENSSL_INSTALL_PREFIX "@RIWO_OPENSSL_INSTALL_PREFIX@")
 set(Riwo_ZLIB_INSTALL_PREFIX "@RIWO_ZLIB_INSTALL_PREFIX@")
 set(Riwo_VERSION "@PROJECT_VERSION@")
+set(Riwo_HTTP_EXP_NGHTTP2_PROVIDER "@RIWO_HTTP_EXP_NGHTTP2_PROVIDER@")
 
 # Resolve component availability before looking for dependencies.  A missing
 # component must not be obscured by an unrelated dependency failure.
 set(Riwo_core_FOUND TRUE)
 set(Riwo_coro_FOUND @RIWO_BUILD_CORO@)
 set(Riwo_http_FOUND @RIWO_BUILD_HTTP@)
+set(Riwo_http_exp_FOUND @RIWO_PACKAGE_HTTP_EXP_AVAILABLE@)
 set(Riwo_websocket_FOUND @RIWO_BUILD_WEBSOCKET@)
 set(Riwo_utils_FOUND @RIWO_BUILD_UTILITIES@)
 
@@ -126,6 +128,52 @@ if (@RIWO_OPENSSL_SUPPORT@)
 	find_dependency(OpenSSL)
 endif ()
 
+if (@RIWO_PACKAGE_HTTP_EXP_NEEDS_NGHTTP2@)
+	set(_riwo_http_exp_nghttp2_target "")
+
+	if (Riwo_HTTP_EXP_NGHTTP2_PROVIDER STREQUAL "config")
+		find_dependency(nghttp2 CONFIG)
+		foreach(_riwo_candidate
+			nghttp2::nghttp2 nghttp2::nghttp2_static nghttp2::nghttp2_shared)
+			if (TARGET ${_riwo_candidate})
+				set(_riwo_http_exp_nghttp2_target ${_riwo_candidate})
+				break()
+			endif ()
+		endforeach()
+
+	elseif (Riwo_HTTP_EXP_NGHTTP2_PROVIDER STREQUAL "pkg-config")
+		find_dependency(PkgConfig)
+		pkg_check_modules(RIWO_NGHTTP2 REQUIRED IMPORTED_TARGET libnghttp2)
+		set(_riwo_http_exp_nghttp2_target PkgConfig::RIWO_NGHTTP2)
+	else ()
+		find_path(Riwo_NGHTTP2_INCLUDE_DIR NAMES nghttp2/nghttp2.h)
+		find_library(Riwo_NGHTTP2_LIBRARY NAMES nghttp2 libnghttp2)
+
+		if (Riwo_NGHTTP2_INCLUDE_DIR AND Riwo_NGHTTP2_LIBRARY)
+			add_library(_riwo_http_exp_nghttp2_library UNKNOWN IMPORTED)
+
+			set_target_properties(_riwo_http_exp_nghttp2_library PROPERTIES
+				IMPORTED_LOCATION "${Riwo_NGHTTP2_LIBRARY}"
+				INTERFACE_INCLUDE_DIRECTORIES "${Riwo_NGHTTP2_INCLUDE_DIR}"
+			)
+			set(_riwo_http_exp_nghttp2_target _riwo_http_exp_nghttp2_library)
+		endif ()
+	endif ()
+
+	if (NOT _riwo_http_exp_nghttp2_target)
+		set(Riwo_FOUND FALSE)
+		set(Riwo_NOT_FOUND_MESSAGE
+			"Riwo HTTP_EXP was installed with HTTP/2 support, but nghttp2 was not found."
+		)
+		return()
+	endif ()
+
+	add_library(Riwo::http_exp_nghttp2 INTERFACE IMPORTED)
+	set_property(TARGET Riwo::http_exp_nghttp2 PROPERTY
+		INTERFACE_LINK_LIBRARIES ${_riwo_http_exp_nghttp2_target}
+	)
+endif ()
+
 set(_riwo_zlib_component_requested FALSE)
 
 if (NOT Riwo_FIND_COMPONENTS)
@@ -202,7 +250,7 @@ endif ()
 include("${CMAKE_CURRENT_LIST_DIR}/RiwoTargets.cmake")
 
 # Preserve the source-tree target names for consumers that already use them.
-foreach(_riwo_component core coro http websocket utils)
+foreach(_riwo_component core coro http http_exp websocket utils)
 	if (TARGET Riwo::${_riwo_component} AND NOT TARGET riwo.${_riwo_component})
 		add_library(riwo.${_riwo_component} INTERFACE IMPORTED)
 		set_property(TARGET riwo.${_riwo_component} PROPERTY
@@ -219,3 +267,5 @@ unset(_riwo_openssl_crypto_links)
 unset(_riwo_utils_component_requested)
 unset(_riwo_zlib_component_requested)
 unset(_riwo_zlib_dependency_required)
+unset(_riwo_candidate)
+unset(_riwo_http_exp_nghttp2_target)

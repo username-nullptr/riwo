@@ -102,7 +102,7 @@ if (TEST_EXPECT_SUCCESS)
 		message(FATAL_ERROR "The generated package does not expose core.")
 	endif ()
 
-	foreach(component coro http websocket utils)
+	foreach(component coro http http_exp websocket utils)
 		if (component IN_LIST expected_components)
 			set(expected_value ON)
 		else ()
@@ -118,7 +118,28 @@ if (TEST_EXPECT_SUCCESS)
 		endif ()
 	endforeach()
 
+	if (NOT "${TEST_EXPECT_HTTP2}" STREQUAL "")
+		set(http_exp_config
+			"${TEST_BINARY_DIR}/output/config_include/riwo/http_exp/cxx/configs.h"
+		)
+		if (NOT EXISTS "${http_exp_config}")
+			message(FATAL_ERROR
+				"Configuration '${TEST_NAME}' did not generate the HTTP_EXP config."
+			)
+		endif ()
+
+		file(READ "${http_exp_config}" http_exp_config_contents)
+		if (NOT http_exp_config_contents MATCHES
+			"#define RIWO_HTTP_EXP_HTTP2_SUPPORT ${TEST_EXPECT_HTTP2}")
+			message(FATAL_ERROR
+				"Configuration '${TEST_NAME}' generated an inconsistent HTTP/2 "
+				"capability; expected ${TEST_EXPECT_HTTP2}."
+			)
+		endif ()
+	endif ()
+
 	message(STATUS "Configuration '${TEST_NAME}' succeeded as expected.")
+
 else ()
 	if (configure_result EQUAL 0)
 		message(FATAL_ERROR

@@ -1,0 +1,79 @@
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-License-Identifier: MIT
+
+#ifndef RIWO_HTTP_EXP_CLIENT_CONFIG_H
+#define RIWO_HTTP_EXP_CLIENT_CONFIG_H
+
+#include <riwo/http_exp/protocol/policy.h>
+
+namespace riwo::http_exp
+{
+
+struct proxy_policy
+{
+	optional<riwo::url> forward_proxy {};
+};
+
+struct tls_policy
+{
+	bool verify_peer = true;
+	optional<std::filesystem::path> certificate_authority_file {};
+};
+
+struct timeout_policy
+{
+	milliseconds connect {30000};
+	milliseconds header {30000};
+	milliseconds body_idle {30000};
+	optional<milliseconds> overall {};
+	milliseconds pool_wait {30000};
+};
+
+struct pool_config
+{
+	size_t max_sessions_per_origin = 4;
+	size_t max_waiters_per_origin = 1024;
+	milliseconds idle_timeout {60000};
+};
+
+struct redirect_policy
+{
+	size_t max_redirects = 5;
+	bool allow_https_to_http = false;
+};
+
+struct retry_policy
+{
+	size_t max_attempts = 2;
+	bool retry_idempotent = true;
+	bool retry_non_idempotent = false;
+};
+
+struct message_limits
+{
+	size_t max_start_line_size = 8 * 1024;
+	size_t max_field_name_size = 8 * 1024;
+	size_t max_field_value_size = 16 * 1024;
+	size_t max_header_list_size = 64 * 1024;
+	size_t max_field_count = 100;
+	optional<uint64_t> max_body_size {};
+	uint64_t max_buffered_body = 8 * 1024 * 1024;
+	uint64_t max_discard_body = 1024 * 1024;
+};
+
+struct client_config
+{
+	protocol_policy protocols {};
+	proxy_policy proxy {};
+	tls_policy tls {};
+	timeout_policy timeout {};
+	pool_config pool {};
+	redirect_policy redirects {};
+	retry_policy retries {};
+	message_limits response_limits {};
+	bool automatic_decompression = true;
+};
+
+} //namespace riwo::http_exp
+
+#endif //RIWO_HTTP_EXP_CLIENT_CONFIG_H

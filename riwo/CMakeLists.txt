@@ -40,6 +40,18 @@ if (RIWO_BUILD_HTTP)
 	)
 endif ()
 
+if (RIWO_BUILD_HTTP_EXP)
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES http_exp.h)
+	add_subdirectory(http_exp)
+
+	riwo_install_module_headers(http_exp
+		PATTERN "v2.md" EXCLUDE
+		REGEX "/message/detail/request_head[.]h$" EXCLUDE
+		REGEX "/protocol/detail/" EXCLUDE
+		REGEX "/transport/detail/" EXCLUDE
+	)
+endif ()
+
 if (RIWO_BUILD_WEBSOCKET)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES websocket.h)
 	add_subdirectory(websocket)
@@ -53,7 +65,7 @@ if (RIWO_BUILD_UTILITIES)
 endif ()
 
 if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
-	foreach(target riwo.core riwo.coro riwo.http riwo.websocket riwo.utils)
+	foreach(target riwo.core riwo.coro riwo.http riwo.http_exp riwo.websocket riwo.utils)
 		if (TARGET ${target})
 			target_link_libraries(${target} PUBLIC riwo.test.sanitizer)
 		endif ()

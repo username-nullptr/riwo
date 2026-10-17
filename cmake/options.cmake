@@ -63,6 +63,34 @@ if (RIWO_BUILD_HTTP)
 	endif ()
 endif ()
 
+option(RIWO_BUILD_HTTP_EXP
+	"-- ${PRO_NAME}: Build module <HTTP_EXP>." OFF
+)
+set(RIWO_HTTP_EXP_SUPPORT ${RIWO_BUILD_HTTP_EXP})
+
+if (RIWO_BUILD_HTTP_EXP)
+	if (NOT RIWO_BUILD_CORO)
+		message(FATAL_ERROR "${PRO_NAME}: <HTTP_EXP> module depends on <Coroutine> module.")
+		unset(RIWO_BUILD_HTTP_EXP)
+	elseif (RIWO_OPENSSL_SUPPORT)
+		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS_EXP>.")
+	else ()
+		message(STATUS "${PRO_NAME}: Build module <HTTP_EXP>.")
+	endif ()
+endif ()
+
+set(RIWO_EXP_HTTP2_SUPPORT "AUTO" CACHE STRING
+	"HTTP/2 support for HTTP_EXP: AUTO, ON or OFF."
+)
+set_property(CACHE RIWO_EXP_HTTP2_SUPPORT PROPERTY STRINGS AUTO ON OFF)
+string(TOUPPER "${RIWO_EXP_HTTP2_SUPPORT}" RIWO_EXP_HTTP2_SUPPORT)
+
+if (NOT RIWO_EXP_HTTP2_SUPPORT MATCHES "^(AUTO|ON|OFF)$")
+	message(FATAL_ERROR
+		"${PRO_NAME}: RIWO_EXP_HTTP2_SUPPORT must be AUTO, ON or OFF."
+	)
+endif ()
+
 option(RIWO_BUILD_WEBSOCKET
 	"-- ${PRO_NAME}: Build module <WebSocket>." OFF
 )

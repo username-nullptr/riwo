@@ -36,6 +36,10 @@ if (RIWO_BUILD_HTTP)
 	add_riwo_test(http.loopback http/loopback.cpp riwo.http)
 endif ()
 
+if (RIWO_BUILD_HTTP_EXP)
+	add_riwo_test(http_exp.public-api http_exp/public_api.cpp riwo.http_exp)
+endif ()
+
 if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_test(websocket.protocol websocket/protocol.cpp riwo.websocket)
 	add_riwo_test(websocket.public-api websocket/public_api.cpp riwo.websocket)

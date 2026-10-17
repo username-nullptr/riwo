@@ -14,6 +14,9 @@
 #if RIWO_CONSUME_HTTP
 # include <riwo/http.h>
 #endif
+#if RIWO_CONSUME_HTTP_EXP
+# include <riwo/http_exp.h>
+#endif
 #if RIWO_CONSUME_WEBSOCKET
 # include <riwo/websocket.h>
 #endif
@@ -44,6 +47,14 @@ int main()
 	{
 		return 2;
 	}
+#endif
+
+#if RIWO_CONSUME_HTTP_EXP
+	// The experimental component is deliberately absent from <riwo.h>.  Its
+	// installed consumer must opt in through both the component and this header.
+	riwo::http_exp::method request_method(riwo::http_exp::method::get);
+	if(request_method.text() != "GET" or !request_method.is_safe())
+		return 4;
 #endif
 
 #if RIWO_CONSUME_UTILS

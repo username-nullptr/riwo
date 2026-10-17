@@ -4,7 +4,7 @@
 set(riwo_cmake_test_work_dir "${CMAKE_CURRENT_BINARY_DIR}/work")
 
 function(add_riwo_configure_case name)
-	cmake_parse_arguments(CASE "SUCCESS" "ERROR" "OPTIONS;COMPONENTS" ${ARGN})
+	cmake_parse_arguments(CASE "SUCCESS" "ERROR;HTTP2" "OPTIONS;COMPONENTS" ${ARGN})
 
 	string(MD5 case_work_id "configure-${name}")
 	string(SUBSTRING "${case_work_id}" 0 12 case_work_id)
@@ -35,6 +35,7 @@ function(add_riwo_configure_case name)
 			"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 			"-DTEST_EXPECT_SUCCESS=${case_expect_success}"
 			"-DTEST_EXPECT_ERROR=${CASE_ERROR}"
+			"-DTEST_EXPECT_HTTP2=${CASE_HTTP2}"
 			"-DTEST_OPTIONS=${case_options}"
 			"-DTEST_EXPECT_COMPONENTS=${case_components}"
 			-P "${CMAKE_CURRENT_SOURCE_DIR}/run_configure.cmake"
@@ -157,6 +158,59 @@ foreach(coro OFF ON)
 	endforeach()
 endforeach()
 
+add_riwo_configure_case(http-exp-without-coro
+	ERROR "<HTTP_EXP> module depends on <Coroutine> module"
+	OPTIONS
+		"RIWO_BUILD_CORO=OFF"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+)
+add_riwo_configure_case(http-exp-standalone SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core coro http_exp
+)
+add_riwo_configure_case(http-exp-coexists-with-http SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core coro http http_exp
+)
+add_riwo_configure_case(http-exp-http2-auto-unavailable SUCCESS
+	HTTP2 0
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=AUTO"
+		"CMAKE_DISABLE_FIND_PACKAGE_nghttp2=TRUE"
+		"CMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE"
+		"RIWO_NGHTTP2_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
+		"RIWO_NGHTTP2_LIBRARY=${CMAKE_COMMAND}"
+	COMPONENTS core coro http_exp
+)
+add_riwo_configure_case(http-exp-http2-required-unavailable
+	ERROR "RIWO_EXP_HTTP2_SUPPORT=ON requires an nghttp2 library"
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=ON"
+		"CMAKE_DISABLE_FIND_PACKAGE_nghttp2=TRUE"
+		"CMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE"
+		"RIWO_NGHTTP2_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
+		"RIWO_NGHTTP2_LIBRARY=${CMAKE_COMMAND}"
+)
+add_riwo_configure_case(http-exp-invalid-http2-mode
+	ERROR "RIWO_EXP_HTTP2_SUPPORT must be AUTO, ON or OFF"
+	OPTIONS "RIWO_EXP_HTTP2_SUPPORT=invalid"
+)
 add_riwo_configure_case(invalid-asio-provider
 	ERROR "Invalid RIWO_ASIO_PROVIDER='INVALID'"
 	OPTIONS "RIWO_ASIO_PROVIDER=invalid"
@@ -304,11 +358,14 @@ foreach(component coro http websocket utils)
 
 endforeach()
 
-string(JOIN "," riwo_consumer_components_arg ${riwo_consumer_components})
+if (RIWO_BUILD_HTTP_EXP)
+	list(APPEND riwo_consumer_components http_exp)
+endif ()
 
+string(JOIN "," riwo_consumer_components_arg ${riwo_consumer_components})
 set(riwo_missing_component unknown)
 
-foreach(component coro http websocket utils)
+foreach(component coro http http_exp websocket utils)
 	if (NOT component IN_LIST riwo_consumer_components)
 		set(riwo_missing_component ${component})
 		break()
