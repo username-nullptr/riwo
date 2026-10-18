@@ -11,23 +11,40 @@
 namespace riwo::http_exp
 {
 
-class RIWO_HTTP_EXP_API response
+template <core_concepts::exec Exec = asio::any_io_executor>
+class RIWO_HTTP_EXP_TAPI basic_response
 {
+	RIWO_DISABLE_COPY(basic_response)
+
 public:
-	using executor_type = asio::any_io_executor;
+	using executor_type = Exec;
+	using executor_t = executor_type;
+	using body_reader_type = basic_body_reader<executor_type>;
+	using body_reader_t = body_reader_type;
 
-	response();
-	~response();
-	response(const response &) = delete;
-	response &operator=(const response &) = delete;
-	response(response &&) noexcept;
-	response &operator=(response &&) noexcept;
+	basic_response()
+		requires std::default_initializable<executor_type> :
+		basic_response(executor_type{})
+	{
+	}
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
-	[[nodiscard]] protocol selected_protocol() const noexcept;
-	[[nodiscard]] http_exp::status status() const noexcept;
-	[[nodiscard]] const fields &headers() const noexcept;
-	[[nodiscard]] body_reader &body() noexcept;
+	template <typename Exec0>
+	explicit basic_response(Exec0 &&executor)
+		requires core_concepts::match_sched<Exec0,executor_type> :
+		executor_(get_executor_helper(std::forward<Exec0>(executor))),
+		body_(new body_reader_type(executor_))
+	{
+	}
+
+	~basic_response() = default;
+	basic_response(basic_response &&) noexcept = default;
+	basic_response &operator=(basic_response &&) noexcept = default;
+
+	[[nodiscard]] executor_type get_executor() const noexcept { return executor_; }
+	[[nodiscard]] protocol selected_protocol() const noexcept { return protocol_; }
+	[[nodiscard]] http_exp::status status() const noexcept { return head_.status; }
+	[[nodiscard]] const fields &headers() const noexcept { return head_.headers; }
+	[[nodiscard]] body_reader_type &body() noexcept { return *body_; }
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto read_all(Token &&token = {})
@@ -46,16 +63,20 @@ public:
 			executor_, std::forward<Token>(token));
 	}
 
-	[[nodiscard]] std::span<const std::byte> buffered_body() const noexcept;
-	void cancel() noexcept;
+	[[nodiscard]] std::span<const std::byte> buffered_body() const noexcept {
+		return buffered_body_;
+	}
+	void cancel() noexcept {}
 
 private:
-	executor_type executor_ {};
+	executor_type executor_;
 	protocol protocol_ = protocol::v1_1;
 	response_head head_ {};
-	std::unique_ptr<body_reader> body_;
+	std::unique_ptr<body_reader_type> body_;
 	std::vector<std::byte> buffered_body_;
 };
+
+using response = basic_response<>;
 
 } //namespace riwo::http_exp
 

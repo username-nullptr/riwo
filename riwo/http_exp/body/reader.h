@@ -10,19 +10,21 @@
 namespace riwo::http_exp
 {
 
-class response;
-class client_exchange;
-class server_exchange;
-
-class RIWO_HTTP_EXP_API body_reader
+template <core_concepts::exec Exec = asio::any_io_executor>
+class RIWO_HTTP_EXP_TAPI basic_body_reader
 {
-public:
-	using executor_type = asio::any_io_executor;
+	RIWO_DISABLE_COPY_MOVE(basic_body_reader)
 
-	body_reader(const body_reader &) = delete;
-	body_reader &operator=(const body_reader &) = delete;
-	body_reader(body_reader &&) = delete;
-	body_reader &operator=(body_reader &&) = delete;
+public:
+	using executor_type = Exec;
+	using executor_t = executor_type;
+
+	template <typename Exec0>
+	explicit basic_body_reader(Exec0 &&executor)
+		requires core_concepts::match_sched<Exec0,executor_type> :
+		executor_(get_executor_helper(std::forward<Exec0>(executor)))
+	{
+	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept { return executor_; }
 
@@ -48,12 +50,10 @@ public:
 	}
 
 private:
-	friend class response;
-	friend class client_exchange;
-	friend class server_exchange;
-	explicit body_reader(executor_type executor = {}) : executor_(std::move(executor)) {}
 	executor_type executor_;
 };
+
+using body_reader = basic_body_reader<>;
 
 } //namespace riwo::http_exp
 

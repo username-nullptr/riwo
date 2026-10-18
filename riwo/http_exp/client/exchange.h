@@ -11,21 +11,41 @@
 namespace riwo::http_exp
 {
 
-class RIWO_HTTP_EXP_API client_exchange
+template <core_concepts::exec Exec = asio::any_io_executor>
+class RIWO_HTTP_EXP_TAPI basic_client_exchange
 {
+	RIWO_DISABLE_COPY(basic_client_exchange)
+
 public:
-	using executor_type = asio::any_io_executor;
+	using executor_type = Exec;
+	using executor_t = executor_type;
+	using body_reader_type = basic_body_reader<executor_type>;
+	using body_reader_t = body_reader_type;
+	using body_writer_type = basic_body_writer<executor_type>;
+	using body_writer_t = body_writer_type;
 
-	client_exchange();
-	~client_exchange();
-	client_exchange(const client_exchange &) = delete;
-	client_exchange &operator=(const client_exchange &) = delete;
-	client_exchange(client_exchange &&) noexcept;
-	client_exchange &operator=(client_exchange &&) noexcept;
+	basic_client_exchange()
+		requires std::default_initializable<executor_type> :
+		basic_client_exchange(executor_type{})
+	{
+	}
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
-	[[nodiscard]] protocol selected_protocol() const noexcept;
-	[[nodiscard]] body_writer &request_body() noexcept;
+	template <typename Exec0>
+	explicit basic_client_exchange(Exec0 &&executor)
+		requires core_concepts::match_sched<Exec0,executor_type> :
+		executor_(get_executor_helper(std::forward<Exec0>(executor))),
+		request_body_(new body_writer_type(executor_)),
+		response_body_(new body_reader_type(executor_))
+	{
+	}
+
+	~basic_client_exchange() = default;
+	basic_client_exchange(basic_client_exchange &&) noexcept = default;
+	basic_client_exchange &operator=(basic_client_exchange &&) noexcept = default;
+
+	[[nodiscard]] executor_type get_executor() const noexcept { return executor_; }
+	[[nodiscard]] protocol selected_protocol() const noexcept { return protocol_; }
+	[[nodiscard]] body_writer_type &request_body() noexcept { return *request_body_; }
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto wait_response(Token &&token = {})
@@ -35,19 +55,21 @@ public:
 			executor_, std::forward<Token>(token));
 	}
 
-	[[nodiscard]] body_reader &response_body() noexcept;
-	void cancel() noexcept;
-	[[nodiscard]] stream_capabilities capabilities() const noexcept;
+	[[nodiscard]] body_reader_type &response_body() noexcept { return *response_body_; }
+	void cancel() noexcept {}
+	[[nodiscard]] stream_capabilities capabilities() const noexcept { return {}; }
 
 	template <typename Extension>
 	[[nodiscard]] Extension *extension() noexcept { return nullptr; }
 
 private:
-	executor_type executor_ {};
+	executor_type executor_;
 	protocol protocol_ = protocol::v1_1;
-	std::unique_ptr<body_writer> request_body_;
-	std::unique_ptr<body_reader> response_body_;
+	std::unique_ptr<body_writer_type> request_body_;
+	std::unique_ptr<body_reader_type> response_body_;
 };
+
+using client_exchange = basic_client_exchange<>;
 
 } //namespace riwo::http_exp
 

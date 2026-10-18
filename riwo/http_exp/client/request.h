@@ -12,12 +12,12 @@ namespace riwo::http_exp
 
 class RIWO_HTTP_EXP_API request
 {
+	RIWO_DISABLE_COPY(request)
+
 public:
 	request(http_exp::method request_method, riwo::url request_url);
 	~request();
 
-	request(const request &) = delete;
-	request &operator=(const request &) = delete;
 	request(request &&) noexcept;
 	request &operator=(request &&) noexcept;
 

@@ -9,6 +9,15 @@
 namespace riwo::http_exp::detail
 {
 
+template <typename Value, core_concepts::exec Exec>
+[[nodiscard]] Value unsupported_value(const Exec &exec)
+{
+	if constexpr( std::constructible_from<Value,const Exec&> )
+		return Value(exec);
+	else
+		return Value{};
+}
+
 template <typename Value, core_concepts::exec Exec, typename Token>
 [[nodiscard]] auto unsupported_result(const Exec &exec, Token &&token)
 {
@@ -25,8 +34,8 @@ template <typename Value, core_concepts::exec Exec, typename Token>
 	}
 	else
 	{
-		return initiate_io<Value>(exec, [error](auto handler) mutable {
-			std::move(handler)(error, Value{});
+		return initiate_io<Value>(exec, [error, exec](auto handler) mutable {
+			std::move(handler)(error, unsupported_value<Value>(exec));
 		}, std::forward<Token>(token));
 	}
 }

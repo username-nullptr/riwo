@@ -11,6 +11,8 @@ namespace riwo::http_exp::detail
 
 class connection
 {
+	RIWO_DISABLE_COPY_MOVE(connection)
+
 public:
 	using executor_type = asio::any_io_executor;
 	using io_handler = asio::any_completion_handler<void(error_code, size_t)>;
@@ -18,11 +20,6 @@ public:
 
 	connection() = default;
 	virtual ~connection() = default;
-	connection(const connection &) = delete;
-	connection &operator=(const connection &) = delete;
-	connection(connection &&) = delete;
-	connection &operator=(connection &&) = delete;
-
 	[[nodiscard]] virtual executor_type get_executor() const noexcept = 0;
 	virtual void read_some(mutable_buffer buffer, io_handler handler) = 0;
 	virtual void write(const_buffer buffer, io_handler handler) = 0;

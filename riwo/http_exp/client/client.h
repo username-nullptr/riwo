@@ -15,12 +15,18 @@ namespace riwo::http_exp
 template <core_concepts::exec Exec = asio::any_io_executor>
 class RIWO_HTTP_EXP_TAPI basic_client
 {
+	RIWO_DISABLE_COPY(basic_client)
+
 public:
 	using executor_type = Exec;
+	using executor_t = executor_type;
 	using config_type = client_config;
+	using config_t = config_type;
+	using exchange_type = basic_client_exchange<executor_type>;
+	using exchange_t = exchange_type;
+	using response_type = basic_response<executor_type>;
+	using response_t = response_type;
 
-	basic_client(const basic_client &) = delete;
-	basic_client &operator=(const basic_client &) = delete;
 	basic_client(basic_client &&) noexcept = default;
 	basic_client &operator=(basic_client &&) noexcept = default;
 
@@ -39,26 +45,28 @@ public:
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto send(request, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response>
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,response_type>
 	{
-		return detail::unsupported_result<response>(
+		return detail::unsupported_result<response_type>(
 			executor_, std::forward<Token>(token));
 	}
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto fetch(request, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response>
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,response_type>
 	{
-		return detail::unsupported_result<response>(
+		return detail::unsupported_result<response_type>(
 			executor_, std::forward<Token>(token));
 	}
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto open(request, body_spec, Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<
-			Token,error_code,client_exchange>
+			Token,error_code,exchange_type>
 	{
-		return detail::unsupported_result<client_exchange>(
+		return detail::unsupported_result<exchange_type>(
 			executor_, std::forward<Token>(token));
 	}
 
@@ -66,7 +74,7 @@ public:
 	[[nodiscard]] auto open(http_exp::method request_method, Url &&url,
 		body_spec spec, Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<
-			Token,error_code,client_exchange>
+			Token,error_code,exchange_type>
 	{
 		return open(request(std::move(request_method),
 			riwo::url(std::forward<Url>(url))), std::move(spec),
@@ -75,7 +83,8 @@ public:
 
 	template <typename Url, typename Token = use_sync_t>
 	[[nodiscard]] auto get(Url &&url, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response>
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,response_type>
 	{
 		return send(request(method::get, riwo::url(std::forward<Url>(url))),
 			std::forward<Token>(token));
@@ -83,7 +92,8 @@ public:
 
 	template <typename Url, typename Body, typename Token = use_sync_t>
 	[[nodiscard]] auto post(Url &&url, Body &&body, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response>
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,response_type>
 	{
 		request value(method::post, riwo::url(std::forward<Url>(url)));
 		value.body(std::forward<Body>(body));
