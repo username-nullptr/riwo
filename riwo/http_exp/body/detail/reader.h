@@ -135,7 +135,7 @@ auto basic_body_reader<Exec>::discard(Token &&token)
 		error_code error;
 		state_->discard(error);
 		if( error )
-			expected_value_or_throw(sys_expected<std::monostate>(
+			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
 	}
 	else

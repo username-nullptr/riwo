@@ -133,7 +133,7 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 		error_code error;
 		state_->finish(std::move(trailers), error);
 		if( error )
-			expected_value_or_throw(sys_expected<std::monostate>(
+			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
 	}
 	else

@@ -5,8 +5,8 @@
 #define RIWO_HTTP_EXP_SERVER_EXCHANGE_H
 
 #include <riwo/http_exp/body.h>
-#include <riwo/http_exp/message/request_head.h>
-#include <riwo/http_exp/message/response_head.h>
+#include <riwo/http_exp/protocol/request_head.h>
+#include <riwo/http_exp/protocol/response_head.h>
 #include <riwo/http_exp/protocol.h>
 
 namespace riwo::http_exp::detail

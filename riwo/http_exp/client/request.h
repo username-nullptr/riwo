@@ -5,7 +5,7 @@
 #define RIWO_HTTP_EXP_CLIENT_REQUEST_H
 
 #include <riwo/http_exp/body/source.h>
-#include <riwo/http_exp/message.h>
+#include <riwo/http_exp/protocol/request_head.h>
 
 namespace riwo::http_exp::detail
 {

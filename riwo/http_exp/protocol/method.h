@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_HTTP_EXP_MESSAGE_METHOD_H
-#define RIWO_HTTP_EXP_MESSAGE_METHOD_H
+#ifndef RIWO_HTTP_EXP_PROTOCOL_METHOD_H
+#define RIWO_HTTP_EXP_PROTOCOL_METHOD_H
 
 #include <riwo/http_exp/global.h>
 
@@ -49,4 +49,4 @@ struct std::hash<riwo::http_exp::method>
 		const riwo::http_exp::method &value) const noexcept;
 };
 
-#endif //RIWO_HTTP_EXP_MESSAGE_METHOD_H
+#endif //RIWO_HTTP_EXP_PROTOCOL_METHOD_H

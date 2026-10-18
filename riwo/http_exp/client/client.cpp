@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "client.h"
-#include <riwo/http_exp/message/request_head.h>
+#include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <charconv>
 

@@ -25,8 +25,10 @@ RIWO_DECLARE_OPERATORS_FOR_FLAGS(features);
 class parameter_owner final : public riwo::mutable_parameters<parameter_owner>
 {
 public:
-	parameter_owner() : mutable_parameters(&storage) {}
-	riwo::parameter_map storage;
+	parameter_owner() : mutable_parameters(nullptr) {
+		m_parameters = &storage;
+	}
+	riwo::parameter_map storage {};
 };
 
 void flags_and_parameters()

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_HTTP_EXP_MESSAGE_STATUS_H
-#define RIWO_HTTP_EXP_MESSAGE_STATUS_H
+#ifndef RIWO_HTTP_EXP_PROTOCOL_STATUS_H
+#define RIWO_HTTP_EXP_PROTOCOL_STATUS_H
 
 #include <riwo/http_exp/global.h>
 
@@ -44,4 +44,4 @@ private:
 
 } //namespace riwo::http_exp
 
-#endif //RIWO_HTTP_EXP_MESSAGE_STATUS_H
+#endif //RIWO_HTTP_EXP_PROTOCOL_STATUS_H

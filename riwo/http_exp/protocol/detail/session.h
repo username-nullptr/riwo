@@ -6,8 +6,8 @@
 
 #include <riwo/http_exp/body/reader.h>
 #include <riwo/http_exp/body/writer.h>
-#include <riwo/http_exp/message/request_head.h>
-#include <riwo/http_exp/message/response_head.h>
+#include <riwo/http_exp/protocol/request_head.h>
+#include <riwo/http_exp/protocol/response_head.h>
 #include <riwo/http_exp/protocol.h>
 
 namespace riwo::http_exp::detail

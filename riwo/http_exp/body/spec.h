@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_BODY_SPEC_H
 #define RIWO_HTTP_EXP_BODY_SPEC_H
 
-#include <riwo/http_exp/message/fields.h>
+#include <riwo/http_exp/protocol/fields.h>
 
 namespace riwo::http_exp
 {
