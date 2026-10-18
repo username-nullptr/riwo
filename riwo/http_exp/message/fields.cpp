@@ -126,4 +126,20 @@ optional<std::string_view> fields::find_first(std::string_view name) const
 	return found == values_.end() ? optional<std::string_view>{} : found->value;
 }
 
+fields::const_iterator fields::begin() const noexcept {
+	return values_.begin();
+}
+
+fields::const_iterator fields::end() const noexcept {
+	return values_.end();
+}
+
+bool fields::empty() const noexcept {
+	return values_.empty();
+}
+
+size_t fields::size() const noexcept {
+	return values_.size();
+}
+
 } //namespace riwo::http_exp

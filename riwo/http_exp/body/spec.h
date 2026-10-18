@@ -24,9 +24,9 @@ public:
 	[[nodiscard]] static body_spec known(uint64_t size, trailer_spec trailers = {});
 	[[nodiscard]] static body_spec streaming(trailer_spec trailers = {});
 
-	[[nodiscard]] mode type() const noexcept { return type_; }
-	[[nodiscard]] optional<uint64_t> length() const noexcept { return length_; }
-	[[nodiscard]] const trailer_spec &trailers() const noexcept { return trailers_; }
+	[[nodiscard]] mode type() const noexcept;
+	[[nodiscard]] optional<uint64_t> length() const noexcept;
+	[[nodiscard]] const trailer_spec &trailers() const noexcept;
 
 private:
 	body_spec(mode type, optional<uint64_t> length, trailer_spec trailers);

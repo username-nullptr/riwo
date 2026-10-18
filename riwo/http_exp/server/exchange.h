@@ -5,9 +5,15 @@
 #define RIWO_HTTP_EXP_SERVER_EXCHANGE_H
 
 #include <riwo/http_exp/body.h>
+#include <riwo/http_exp/message/request_head.h>
 #include <riwo/http_exp/message/response_head.h>
 #include <riwo/http_exp/protocol.h>
-#include <riwo/http_exp/server/request.h>
+
+namespace riwo::http_exp::detail
+{
+class server_exchange_state;
+class stream;
+}
 
 namespace riwo::http_exp
 {
@@ -24,57 +30,48 @@ public:
 	using body_reader_t = body_reader_type;
 	using body_writer_type = basic_body_writer<executor_type>;
 	using body_writer_t = body_writer_type;
-	using request_type = server_request;
+	using request_type = request_head;
 	using request_t = request_type;
 
 	template <typename Exec0>
 	explicit basic_server_exchange(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type> :
-		executor_(get_executor_helper(std::forward<Exec0>(executor))),
-		request_body_(new body_reader_type(executor_)),
-		response_body_(new body_writer_type(executor_))
-	{
-	}
+		requires core_concepts::match_sched<Exec0,executor_type>;
 
-	~basic_server_exchange() = default;
+	template <typename Exec0>
+	basic_server_exchange(Exec0 &&executor,
+		std::shared_ptr<detail::stream> stream, request_type request)
+		requires core_concepts::match_sched<Exec0,executor_type>;
 
-	[[nodiscard]] executor_type get_executor() const noexcept { return executor_; }
-	[[nodiscard]] protocol selected_protocol() const noexcept { return protocol_; }
-	[[nodiscard]] const request_type &request() const noexcept { return request_; }
-	[[nodiscard]] body_reader_type &request_body() noexcept { return *request_body_; }
-	[[nodiscard]] body_writer_type &response_body() noexcept { return *response_body_; }
+	~basic_server_exchange();
+
+	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] const request_type &request() const noexcept;
+	[[nodiscard]] body_reader_type &request_body() noexcept;
+	[[nodiscard]] body_writer_type &response_body() noexcept;
 
 	template <typename Token = use_sync_t>
 	auto respond(response_head, body_spec, Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code>
-	{
-		return detail::unsupported_operation(executor_, std::forward<Token>(token));
-	}
+		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	template <typename Body, typename Token = use_sync_t>
-	auto respond(response_head, Body &&, Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code>
-	{
-		return detail::unsupported_operation(executor_, std::forward<Token>(token));
-	}
+	auto respond(response_head head, Body &&body, Token &&token = {})
+		requires core_concepts::tf_opt_token<Token,error_code> &&
+		requires(Body &&value) { std::data(value); std::size(value); };
 
 	template <typename Token = use_sync_t>
 	auto inform(response_head, Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code>
-	{
-		return detail::unsupported_operation(executor_, std::forward<Token>(token));
-	}
+		requires core_concepts::tf_opt_token<Token,error_code>;
 
-	void cancel() noexcept {}
-	[[nodiscard]] stream_capabilities capabilities() const noexcept { return {}; }
+	void cancel() noexcept;
+	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 
 	template <typename Extension>
-	[[nodiscard]] Extension *extension() noexcept { return nullptr; }
+	[[nodiscard]] Extension *extension() noexcept;
 
 private:
 	executor_type executor_;
-	protocol protocol_ = protocol::v1_1;
-	request_type request_;
+	std::shared_ptr<detail::server_exchange_state> state_;
 	std::unique_ptr<body_reader_type> request_body_;
 	std::unique_ptr<body_writer_type> response_body_;
 };
@@ -82,5 +79,7 @@ private:
 using server_exchange = basic_server_exchange<>;
 
 } //namespace riwo::http_exp
+
+#include <riwo/http_exp/server/detail/exchange.h>
 
 #endif //RIWO_HTTP_EXP_SERVER_EXCHANGE_H

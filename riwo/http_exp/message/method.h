@@ -45,9 +45,8 @@ private:
 template <>
 struct std::hash<riwo::http_exp::method>
 {
-	[[nodiscard]] size_t operator()(const riwo::http_exp::method &value) const noexcept {
-		return std::hash<std::string_view>{}(value.text());
-	}
+	[[nodiscard]] size_t operator()(
+		const riwo::http_exp::method &value) const noexcept;
 };
 
 #endif //RIWO_HTTP_EXP_MESSAGE_METHOD_H

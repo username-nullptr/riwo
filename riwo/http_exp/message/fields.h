@@ -74,10 +74,10 @@ public:
 	[[nodiscard]] field_range find_all(std::string_view name) const;
 	[[nodiscard]] optional<std::string_view> find_first(std::string_view name) const;
 
-	[[nodiscard]] const_iterator begin() const noexcept { return values_.begin(); }
-	[[nodiscard]] const_iterator end() const noexcept { return values_.end(); }
-	[[nodiscard]] bool empty() const noexcept { return values_.empty(); }
-	[[nodiscard]] size_t size() const noexcept { return values_.size(); }
+	[[nodiscard]] const_iterator begin() const noexcept;
+	[[nodiscard]] const_iterator end() const noexcept;
+	[[nodiscard]] bool empty() const noexcept;
+	[[nodiscard]] size_t size() const noexcept;
 
 private:
 	container_type values_;

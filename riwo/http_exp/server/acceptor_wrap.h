@@ -30,22 +30,13 @@ public:
 	basic_acceptor_wrap &operator=(basic_acceptor_wrap &&) noexcept = default;
 
 	// Intentionally implicit: `server(std::move(tcp_acceptor))` remains valid.
-	basic_acceptor_wrap(acceptor_type &&acceptor) :
-		acceptor_(std::move(acceptor))
-	{
-	}
+	basic_acceptor_wrap(acceptor_type &&acceptor);
 
-	[[nodiscard]] executor_type get_executor() noexcept {
-		return acceptor_.get_executor();
-	}
+	[[nodiscard]] executor_type get_executor() noexcept;
 
-	[[nodiscard]] const acceptor_type &acceptor() const noexcept {
-		return acceptor_;
-	}
+	[[nodiscard]] const acceptor_type &acceptor() const noexcept;
 
-	[[nodiscard]] acceptor_type &acceptor() noexcept {
-		return acceptor_;
-	}
+	[[nodiscard]] acceptor_type &acceptor() noexcept;
 
 private:
 	acceptor_type acceptor_;
@@ -54,5 +45,7 @@ private:
 using acceptor_wrap = basic_acceptor_wrap<>;
 
 } //namespace riwo::http_exp
+
+#include <riwo/http_exp/server/detail/acceptor_wrap.h>
 
 #endif //RIWO_HTTP_EXP_SERVER_ACCEPTOR_WRAP_H

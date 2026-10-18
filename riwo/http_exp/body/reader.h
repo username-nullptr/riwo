@@ -4,8 +4,12 @@
 #ifndef RIWO_HTTP_EXP_BODY_READER_H
 #define RIWO_HTTP_EXP_BODY_READER_H
 
-#include <riwo/http_exp/body/detail/unsupported.h>
 #include <riwo/http_exp/message/fields.h>
+
+namespace riwo::http_exp::detail
+{
+class body_reader_state;
+}
 
 namespace riwo::http_exp
 {
@@ -21,40 +25,40 @@ public:
 
 	template <typename Exec0>
 	explicit basic_body_reader(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type> :
-		executor_(get_executor_helper(std::forward<Exec0>(executor)))
-	{
-	}
+		requires core_concepts::match_sched<Exec0,executor_type>;
 
-	[[nodiscard]] executor_type get_executor() const noexcept { return executor_; }
+	template <typename Exec0>
+	basic_body_reader(Exec0 &&executor,
+		std::shared_ptr<detail::body_reader_state> state)
+		requires core_concepts::match_sched<Exec0,executor_type>;
+
+	~basic_body_reader();
+
+	[[nodiscard]] executor_type get_executor() const noexcept;
 
 	template <typename Token = use_sync_t>
-	[[nodiscard]] auto read_some(mutable_buffer, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,size_t>
-	{
-		return detail::unsupported_result<size_t>(executor_, std::forward<Token>(token));
-	}
+	[[nodiscard]] auto read_some(mutable_buffer buffer, Token &&token = {})
+		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,size_t>;
 
 	template <typename Token = use_sync_t>
 	auto discard(Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code>
-	{
-		return detail::unsupported_operation(executor_, std::forward<Token>(token));
-	}
+		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto trailers(Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,fields>
-	{
-		return detail::unsupported_result<fields>(executor_, std::forward<Token>(token));
-	}
+		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,fields>;
+
+	void cancel() noexcept;
 
 private:
 	executor_type executor_;
+	std::shared_ptr<detail::body_reader_state> state_;
 };
 
 using body_reader = basic_body_reader<>;
 
 } //namespace riwo::http_exp
+
+#include <riwo/http_exp/body/detail/reader.h>
 
 #endif //RIWO_HTTP_EXP_BODY_READER_H

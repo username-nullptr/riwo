@@ -16,7 +16,7 @@ using native_executor = riwo::io_context_t::executor_type;
 using native_body_reader = http::basic_body_reader<native_executor>;
 using native_body_writer = http::basic_body_writer<native_executor>;
 using native_client_exchange = http::basic_client_exchange<native_executor>;
-using native_response = http::basic_response<native_executor>;
+using native_reply = http::basic_reply<native_executor>;
 using native_server_exchange = http::basic_server_exchange<native_executor>;
 using native_client = http::basic_client<native_executor>;
 using native_server = http::basic_server<native_executor>;
@@ -65,6 +65,7 @@ static_assert(!http::body_source_model<source_with_wrong_completion>);
 
 static_assert(std::copyable<http::protocol_policy>);
 static_assert(std::copyable<http::fields>);
+static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
 static_assert(std::copyable<http::body_spec>);
 static_assert(std::copyable<http::client_config>);
@@ -76,8 +77,8 @@ static_assert(!std::copy_constructible<http::client>);
 static_assert(std::is_nothrow_move_constructible_v<http::client>);
 static_assert(!std::copy_constructible<http::client_exchange>);
 static_assert(std::is_nothrow_move_constructible_v<http::client_exchange>);
-static_assert(!std::copy_constructible<http::response>);
-static_assert(std::is_nothrow_move_constructible_v<http::response>);
+static_assert(!std::copy_constructible<http::reply>);
+static_assert(std::is_nothrow_move_constructible_v<http::reply>);
 static_assert(!std::copy_constructible<http::server_exchange>);
 static_assert(!std::move_constructible<http::server_exchange>);
 static_assert(!std::copy_constructible<http::server>);
@@ -92,7 +93,7 @@ static_assert(!std::move_constructible<http::body_writer>);
 static_assert(std::constructible_from<native_body_reader,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_body_writer,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_client_exchange,riwo::io_context_t&>);
-static_assert(std::constructible_from<native_response,riwo::io_context_t&>);
+static_assert(std::constructible_from<native_reply,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_server_exchange,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_acceptor_wrap,
 	native_acceptor_wrap::acceptor_type&&>);
@@ -101,7 +102,7 @@ static_assert(std::constructible_from<native_server,native_acceptor_wrap&&>);
 static_assert(std::same_as<http::client::executor_type, asio::any_io_executor>);
 static_assert(std::same_as<http::client_exchange::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::response::executor_type, asio::any_io_executor>);
+static_assert(std::same_as<http::reply::executor_type, asio::any_io_executor>);
 static_assert(std::same_as<http::body_reader::executor_type,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::body_writer::executor_type,
@@ -112,19 +113,21 @@ static_assert(std::same_as<http::acceptor_wrap::executor_type,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::server::context_t,
 	http::server_exchange>);
+static_assert(std::same_as<http::server_exchange::request_type,
+	http::request_head>);
 static_assert(std::same_as<native_body_reader::executor_type,native_executor>);
 static_assert(std::same_as<native_body_writer::executor_type,native_executor>);
 static_assert(std::same_as<native_client_exchange::executor_type,native_executor>);
-static_assert(std::same_as<native_response::executor_type,native_executor>);
+static_assert(std::same_as<native_reply::executor_type,native_executor>);
 static_assert(std::same_as<native_server_exchange::executor_type,native_executor>);
-static_assert(std::same_as<native_client::response_type,native_response>);
+static_assert(std::same_as<native_client::reply_type,native_reply>);
 static_assert(std::same_as<native_client::exchange_type,native_client_exchange>);
 static_assert(std::same_as<native_server::context_t,native_server_exchange>);
 static_assert(std::same_as<native_server::service_executor_type,native_executor>);
 static_assert(std::same_as<split_server::context_t,
 	http::basic_server_exchange<native_strand>>);
 static_assert(noexcept(std::declval<const http::client &>().get_executor()));
-static_assert(noexcept(std::declval<const http::response &>().get_executor()));
+static_assert(noexcept(std::declval<const http::reply &>().get_executor()));
 static_assert(noexcept(std::declval<http::client_exchange &>().cancel()));
 static_assert(noexcept(std::declval<http::body_writer &>().cancel()));
 
@@ -190,7 +193,7 @@ struct fake_session final : http::detail::client_session
 	size_t available_stream_capacity() const noexcept override { return 1; }
 	bool draining() const noexcept override { return false; }
 	bool closed() const noexcept override { return false; }
-	void open(http::detail::request_head, http::body_spec,
+	void open(http::request_head, http::body_spec,
 		open_handler handler) override
 	{
 		std::move(handler)(riwo::error_code{}, std::make_shared<fake_stream>());
@@ -257,7 +260,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	native_body_reader reader(context);
 	native_body_writer writer(context);
 	native_client_exchange exchange(context);
-	native_response standalone_response(context);
+	native_reply standalone_reply(context);
 	native_server_exchange server_exchange(context);
 	native_client native(context);
 	native_acceptor_wrap acceptor_wrap{
@@ -271,7 +274,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(reader.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(writer.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(exchange.get_executor() == context.get_executor());
-	RIWO_TEST_CHECK(standalone_response.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK(standalone_reply.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(server_exchange.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(native.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(native_service.get_executor() == context.get_executor());
@@ -287,18 +290,18 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(client.get_executor() == executor);
 	bool completed = false;
 	client.send(http::request(http::method::get, "http://example.test/"),
-		[&](riwo::error_code error, http::response response) {
+		[&](riwo::error_code error, http::reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_supported));
-			RIWO_TEST_CHECK(response.get_executor() == executor);
+			RIWO_TEST_CHECK(reply.get_executor() == executor);
 			completed = true;
 		});
 	bool native_completed = false;
 	native.send(http::request(http::method::get, "http://example.test/"),
-		[&](riwo::error_code error, native_response response) {
+		[&](riwo::error_code error, native_reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_supported));
-			RIWO_TEST_CHECK(response.get_executor() == context.get_executor());
+			RIWO_TEST_CHECK(reply.get_executor() == context.get_executor());
 			native_completed = true;
 		});
 	context.run();

@@ -6,7 +6,6 @@
 
 #include <riwo/http_exp/server/acceptor_wrap.h>
 #include <riwo/http_exp/server/config.h>
-#include <riwo/http_exp/server/request.h>
 #include <riwo/http_exp/server/exchange.h>
 #include <riwo/http_exp/server/server.h>
 

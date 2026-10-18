@@ -55,4 +55,16 @@ body_spec body_spec::streaming(trailer_spec trailers) {
 	return {mode::streaming, nullopt, std::move(trailers)};
 }
 
+body_spec::mode body_spec::type() const noexcept {
+	return type_;
+}
+
+optional<uint64_t> body_spec::length() const noexcept {
+	return length_;
+}
+
+const body_spec::trailer_spec &body_spec::trailers() const noexcept {
+	return trailers_;
+}
+
 } //namespace riwo::http_exp

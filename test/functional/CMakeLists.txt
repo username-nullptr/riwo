@@ -38,6 +38,7 @@ endif ()
 
 if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.public-api http_exp/public_api.cpp riwo.http_exp)
+	add_riwo_test(http_exp.phase-a http_exp/phase_a.cpp riwo.http_exp)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)

@@ -104,3 +104,9 @@ bool operator==(const method &lhs, const method &rhs) noexcept {
 }
 
 } //namespace riwo::http_exp
+
+size_t std::hash<riwo::http_exp::method>::operator()(
+	const riwo::http_exp::method &value) const noexcept
+{
+	return std::hash<std::string_view>{}(value.text());
+}

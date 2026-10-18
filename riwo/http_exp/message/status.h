@@ -31,14 +31,12 @@ public:
 		service_unavailable = 503
 	};
 
-	constexpr status(well_known value) noexcept : code_(value) {}
+	status(well_known value) noexcept;
 	explicit status(uint16_t code);
 
-	[[nodiscard]] constexpr uint16_t code() const noexcept {
-		return code_;
-	}
+	[[nodiscard]] uint16_t code() const noexcept;
 
-	friend constexpr bool operator==(status, status) noexcept = default;
+	friend bool operator==(status, status) noexcept = default;
 
 private:
 	uint16_t code_;

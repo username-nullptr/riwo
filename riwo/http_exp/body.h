@@ -6,6 +6,8 @@
 
 #include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/body/source.h>
+#include <riwo/http_exp/body/memory.h>
+#include <riwo/http_exp/body/file.h>
 #include <riwo/http_exp/body/reader.h>
 #include <riwo/http_exp/body/writer.h>
 

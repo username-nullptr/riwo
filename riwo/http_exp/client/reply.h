@@ -1,0 +1,81 @@
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-License-Identifier: MIT
+
+#ifndef RIWO_HTTP_EXP_CLIENT_REPLY_H
+#define RIWO_HTTP_EXP_CLIENT_REPLY_H
+
+#include <riwo/http_exp/body/reader.h>
+#include <riwo/http_exp/message/response_head.h>
+#include <riwo/http_exp/protocol.h>
+
+namespace riwo::http_exp::detail
+{
+class body_reader_state;
+}
+
+namespace riwo::http_exp
+{
+
+template <core_concepts::exec Exec = asio::any_io_executor>
+class RIWO_HTTP_EXP_TAPI basic_reply
+{
+	RIWO_DISABLE_COPY(basic_reply)
+
+public:
+	using executor_type = Exec;
+	using executor_t = executor_type;
+	using body_reader_type = basic_body_reader<executor_type>;
+	using body_reader_t = body_reader_type;
+
+	basic_reply()
+		requires std::default_initializable<executor_type>;
+
+	template <typename Exec0>
+	explicit basic_reply(Exec0 &&executor)
+		requires core_concepts::match_sched<Exec0,executor_type>;
+
+	template <typename Exec0>
+	basic_reply(Exec0 &&executor, protocol selected_protocol,
+		response_head head, std::shared_ptr<detail::body_reader_state> body,
+		std::vector<std::byte> buffered_body = {},
+		std::shared_ptr<void> owner = {})
+		requires core_concepts::match_sched<Exec0,executor_type>;
+
+	~basic_reply();
+	basic_reply(basic_reply &&) noexcept = default;
+	basic_reply &operator=(basic_reply &&) noexcept = default;
+
+	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] http_exp::status status() const noexcept;
+	[[nodiscard]] const fields &headers() const noexcept;
+	[[nodiscard]] body_reader_type &body() noexcept;
+
+	template <typename Token = use_sync_t>
+	[[nodiscard]] auto read_all(Token &&token = {})
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,std::vector<std::byte>>;
+
+	template <typename Token = use_sync_t>
+	[[nodiscard]] auto save_file(std::filesystem::path path, Token &&token = {})
+		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,uint64_t>;
+
+	[[nodiscard]] std::span<const std::byte> buffered_body() const noexcept;
+	void cancel() noexcept;
+
+private:
+	executor_type executor_;
+	protocol protocol_ = protocol::v1_1;
+	response_head head_ {};
+	std::unique_ptr<body_reader_type> body_;
+	std::vector<std::byte> buffered_body_;
+	std::shared_ptr<void> owner_;
+};
+
+using reply = basic_reply<>;
+
+} //namespace riwo::http_exp
+
+#include <riwo/http_exp/client/detail/reply.h>
+
+#endif //RIWO_HTTP_EXP_CLIENT_REPLY_H
