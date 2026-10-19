@@ -178,6 +178,7 @@ set(_riwo_zlib_component_requested FALSE)
 
 if (NOT Riwo_FIND_COMPONENTS)
 	if (@RIWO_PACKAGE_HTTP_NEEDS_ZLIB@ OR
+		@RIWO_PACKAGE_HTTP_EXP_NEEDS_ZLIB@ OR
 		@RIWO_PACKAGE_WEBSOCKET_NEEDS_ZLIB@)
 		set(_riwo_zlib_component_requested TRUE)
 	endif ()
@@ -188,6 +189,11 @@ else ()
 		"http" IN_LIST Riwo_FIND_COMPONENTS OR
 		(Riwo_websocket_FOUND AND "websocket" IN_LIST Riwo_FIND_COMPONENTS)
 		))
+		set(_riwo_zlib_component_requested TRUE)
+	endif ()
+
+	if (@RIWO_PACKAGE_HTTP_EXP_NEEDS_ZLIB@ AND
+		"http_exp" IN_LIST Riwo_FIND_COMPONENTS)
 		set(_riwo_zlib_component_requested TRUE)
 	endif ()
 

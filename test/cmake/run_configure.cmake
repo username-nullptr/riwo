@@ -138,6 +138,26 @@ if (TEST_EXPECT_SUCCESS)
 		endif ()
 	endif ()
 
+	if (NOT "${TEST_EXPECT_ZLIB}" STREQUAL "")
+		set(http_exp_config
+			"${TEST_BINARY_DIR}/output/config_include/riwo/http_exp/cxx/configs.h"
+		)
+		if (NOT EXISTS "${http_exp_config}")
+			message(FATAL_ERROR
+				"Configuration '${TEST_NAME}' did not generate the HTTP_EXP config."
+			)
+		endif ()
+
+		file(READ "${http_exp_config}" http_exp_config_contents)
+		if (NOT http_exp_config_contents MATCHES
+			"#define RIWO_HTTP_EXP_ZLIB_SUPPORT ${TEST_EXPECT_ZLIB}")
+			message(FATAL_ERROR
+				"Configuration '${TEST_NAME}' generated an inconsistent zlib "
+				"capability; expected ${TEST_EXPECT_ZLIB}."
+			)
+		endif ()
+	endif ()
+
 	message(STATUS "Configuration '${TEST_NAME}' succeeded as expected.")
 
 else ()

@@ -4,7 +4,7 @@
 set(riwo_cmake_test_work_dir "${CMAKE_CURRENT_BINARY_DIR}/work")
 
 function(add_riwo_configure_case name)
-	cmake_parse_arguments(CASE "SUCCESS" "ERROR;HTTP2" "OPTIONS;COMPONENTS" ${ARGN})
+	cmake_parse_arguments(CASE "SUCCESS" "ERROR;HTTP2;ZLIB" "OPTIONS;COMPONENTS" ${ARGN})
 
 	string(MD5 case_work_id "configure-${name}")
 	string(SUBSTRING "${case_work_id}" 0 12 case_work_id)
@@ -36,6 +36,7 @@ function(add_riwo_configure_case name)
 			"-DTEST_EXPECT_SUCCESS=${case_expect_success}"
 			"-DTEST_EXPECT_ERROR=${CASE_ERROR}"
 			"-DTEST_EXPECT_HTTP2=${CASE_HTTP2}"
+			"-DTEST_EXPECT_ZLIB=${CASE_ZLIB}"
 			"-DTEST_OPTIONS=${case_options}"
 			"-DTEST_EXPECT_COMPONENTS=${case_components}"
 			-P "${CMAKE_CURRENT_SOURCE_DIR}/run_configure.cmake"
@@ -211,6 +212,40 @@ add_riwo_configure_case(http-exp-invalid-http2-mode
 	ERROR "RIWO_EXP_HTTP2_SUPPORT must be AUTO, ON or OFF"
 	OPTIONS "RIWO_EXP_HTTP2_SUPPORT=invalid"
 )
+set(riwo_http_exp_zlib_options
+	"RIWO_BUILD_CORO=ON"
+	"RIWO_BUILD_HTTP=OFF"
+	"RIWO_BUILD_HTTP_EXP=ON"
+	"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	"RIWO_HTTP_EXP_ZLIB_SUPPORT=ON"
+	"ZLIB_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
+	"ZLIB_LIBRARY=${CMAKE_COMMAND}"
+)
+add_riwo_configure_case(http-exp-zlib-default-off SUCCESS
+	ZLIB 0
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		"CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+	COMPONENTS core coro http_exp
+)
+add_riwo_configure_case(http-exp-zlib-enabled SUCCESS
+	ZLIB 1
+	OPTIONS ${riwo_http_exp_zlib_options}
+	COMPONENTS core coro http_exp
+)
+add_riwo_configure_case(http-exp-zlib-required-unavailable
+	ERROR "ZLIB"
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		"RIWO_HTTP_EXP_ZLIB_SUPPORT=ON"
+		"CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+)
 add_riwo_configure_case(invalid-asio-provider
 	ERROR "Invalid RIWO_ASIO_PROVIDER='INVALID'"
 	OPTIONS "RIWO_ASIO_PROVIDER=invalid"
@@ -340,7 +375,23 @@ add_riwo_package_probe_case(websocket-restores-zlib
 	COMPONENTS core coro http websocket
 	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
-
+set(riwo_http_exp_zlib_static_options
+	"RIWO_BUILD_STATIC=ON"
+	${riwo_http_exp_zlib_options}
+)
+add_riwo_package_probe_case(http-exp-ignores-unrequested-zlib FOUND
+	COMPONENT coro
+	OPTIONS ${riwo_http_exp_zlib_static_options}
+	COMPONENTS core coro http_exp
+	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+)
+add_riwo_package_probe_case(http-exp-restores-zlib
+	COMPONENT http_exp
+	ERROR "dependency ZLIB"
+	OPTIONS ${riwo_http_exp_zlib_static_options}
+	COMPONENTS core coro http_exp
+	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+)
 set(riwo_consumer_components core)
 
 foreach(component coro http websocket utils)
