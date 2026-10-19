@@ -14,22 +14,28 @@ class basic_reply<Exec>::impl
 {
 public:
 	impl(executor_type executor_value, protocol protocol_value,
-		response_head head_value, std::shared_ptr<detail::body_reader_state> state,
+		protocol response_protocol_value, response_head head_value,
+		std::shared_ptr<detail::body_reader_state> state,
 		std::vector<std::byte> buffered_body_value,
-		std::shared_ptr<void> owner_value) :
+		std::shared_ptr<void> owner_value, uint64_t max_buffered_body_value) :
 		executor(std::move(executor_value)), protocol_value(protocol_value),
+		response_protocol_value(response_protocol_value),
 		head(std::move(head_value)),
 		body(std::make_unique<body_reader_type>(executor, std::move(state))),
-		buffered_body(std::move(buffered_body_value)), owner(std::move(owner_value))
+		buffered_body(std::move(buffered_body_value)),
+		owner(std::move(owner_value)),
+		max_buffered_body(max_buffered_body_value)
 	{
 	}
 
 	executor_type executor;
 	protocol protocol_value;
+	protocol response_protocol_value;
 	response_head head;
 	std::unique_ptr<body_reader_type> body;
 	std::vector<std::byte> buffered_body;
 	std::shared_ptr<void> owner;
+	uint64_t max_buffered_body;
 };
 
 template <core_concepts::exec Exec>
@@ -53,12 +59,13 @@ template <typename Exec0>
 basic_reply<Exec>::basic_reply(Exec0 &&executor,
 	protocol selected_protocol, response_head head,
 	std::shared_ptr<detail::body_reader_state> body,
-	std::vector<std::byte> buffered_body, std::shared_ptr<void> owner)
+		std::vector<std::byte> buffered_body, std::shared_ptr<void> owner,
+		uint64_t max_buffered_body, protocol response_protocol)
 	requires core_concepts::match_sched<Exec0,executor_type> :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)), selected_protocol,
-		std::move(head), std::move(body), std::move(buffered_body),
-		std::move(owner)))
+		response_protocol, std::move(head), std::move(body),
+		std::move(buffered_body), std::move(owner), max_buffered_body))
 {
 }
 
@@ -73,6 +80,11 @@ auto basic_reply<Exec>::get_executor() const noexcept -> executor_type {
 template <core_concepts::exec Exec>
 protocol basic_reply<Exec>::selected_protocol() const noexcept {
 	return m_impl->protocol_value;
+}
+
+template <core_concepts::exec Exec>
+protocol basic_reply<Exec>::http_version() const noexcept {
+	return m_impl->response_protocol_value;
 }
 
 template <core_concepts::exec Exec>
@@ -96,7 +108,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<
 		Token,error_code,std::vector<std::byte>>
 {
-	static constexpr size_t limit = 8 * 1024 * 1024;
+	const auto limit = m_impl->max_buffered_body;
 	if constexpr( is_error_code_token_v<Token> || is_sync_opt_token_v<Token> )
 	{
 		std::vector<std::byte> result;
@@ -134,6 +146,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 			body_reader_type *reader;
 			std::vector<std::byte> result;
 			std::array<std::byte,8192> buffer;
+			uint64_t limit;
 			asio::any_completion_handler<void(error_code,std::vector<std::byte>)>
 				handler;
 
@@ -149,7 +162,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 						std::move(self->handler)(error, std::vector<std::byte>{});
 						return;
 					}
-					if( read.bytes > limit - self->result.size() )
+					if( read.bytes > self->limit - self->result.size() )
 					{
 						std::move(self->handler)(
 							make_error_code(errc::buffer_limit_exceeded),
@@ -173,6 +186,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 		[state = m_impl](auto handler) mutable {
 			auto value = std::make_shared<operation>();
 			value->reader = state->body.get();
+			value->limit = state->max_buffered_body;
 			value->handler = decltype(value->handler)(std::move(handler));
 			value->start();
 		}, std::forward<Token>(token));

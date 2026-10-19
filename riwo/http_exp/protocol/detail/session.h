@@ -16,12 +16,16 @@ namespace riwo::http_exp::detail
 class RIWO_HTTP_EXP_API stream
 {
 public:
+	using endpoint_type = asio::ip::tcp::endpoint;
 	using response_handler = asio::any_completion_handler<void(
 		error_code, response_head)>;
 	using operation_handler = asio::any_completion_handler<void(error_code)>;
 
 	virtual ~stream() = default;
 	[[nodiscard]] virtual protocol selected_protocol() const noexcept = 0;
+	[[nodiscard]] virtual protocol response_protocol() const noexcept {
+		return selected_protocol();
+	}
 	[[nodiscard]] virtual stream_capabilities capabilities() const noexcept;
 	[[nodiscard]] virtual request_head request() const;
 	[[nodiscard]] virtual std::shared_ptr<body_reader_state>
@@ -29,6 +33,10 @@ public:
 	[[nodiscard]] virtual std::shared_ptr<body_writer_state>
 	outbound_body() const noexcept;
 	[[nodiscard]] virtual response_head wait_response_sync(error_code &error) noexcept;
+	[[nodiscard]] virtual endpoint_type remote_endpoint(
+		error_code &error) const noexcept;
+	[[nodiscard]] virtual endpoint_type local_endpoint(
+		error_code &error) const noexcept;
 	virtual void wait_response(response_handler handler);
 	virtual void respond_sync(response_head head, body_spec spec,
 		error_code &error) noexcept;

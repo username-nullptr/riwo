@@ -265,7 +265,9 @@ void fake_boundaries_and_unsupported_entry_points()
 	native_client_exchange exchange(context);
 	native_reply standalone_reply(context);
 	native_server_exchange server_exchange(context);
-	native_client native(context);
+	http::client_config config;
+	config.pool.max_sessions_per_origin = 0;
+	native_client native(context, config);
 	native_acceptor_wrap acceptor_wrap{
 		native_acceptor_wrap::acceptor_type(context)};
 	native_server native_service(std::move(acceptor_wrap));
@@ -289,13 +291,13 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(transport.get_executor() == executor);
 	RIWO_TEST_CHECK_EQ(session.available_stream_capacity(), 1U);
 
-	http::client client(executor);
+	http::client client(executor, config);
 	RIWO_TEST_CHECK(client.get_executor() == executor);
 	bool completed = false;
 	client.send(http::request(http::method::get, "https://example.test/"),
 		[&](riwo::error_code error, http::reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
-				http::make_error_code(http::errc::operation_not_supported));
+				http::make_error_code(http::errc::operation_not_permitted));
 			RIWO_TEST_CHECK(reply.get_executor() == executor);
 			completed = true;
 		});
@@ -303,7 +305,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	native.send(http::request(http::method::get, "https://example.test/"),
 		[&](riwo::error_code error, native_reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
-				http::make_error_code(http::errc::operation_not_supported));
+				http::make_error_code(http::errc::operation_not_permitted));
 			RIWO_TEST_CHECK(reply.get_executor() == context.get_executor());
 			native_completed = true;
 		});

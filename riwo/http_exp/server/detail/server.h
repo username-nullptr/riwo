@@ -113,7 +113,7 @@ private:
 				return;
 			}
 			auto connection = detail::accept_h1(std::move(*socket),
-			self->config.request_limits,
+				self->config.request_limits, self->config.timeout,
 			[self]
 			(error_code accept_error, std::shared_ptr<detail::stream> stream,
 				request_head request) mutable {
@@ -147,6 +147,52 @@ private:
 				auto target = std::string_view(exchange.request().target);
 				if( auto query = target.find('?'); query != std::string_view::npos )
 					target = target.substr(0, query);
+
+				auto method_list = [](const std::vector<http_exp::method> &values) {
+					std::string result;
+					for( const auto &value : values )
+					{
+						if( !result.empty() ) result += ", ";
+						result += value.text();
+					}
+					return result;
+				};
+				auto all_methods = [self]() {
+					std::vector<http_exp::method> values;
+					for( const auto &route : self->routes )
+						for( const auto &value : route.methods )
+							if( std::ranges::none_of(values,
+								[&value](const http_exp::method &item) {
+									return item == value;
+								}) )
+								values.push_back(value);
+					if( std::ranges::none_of(values,
+						[](const http_exp::method &item) {
+							return item == http_exp::method(
+								http_exp::method::options);
+						}) )
+						values.emplace_back(http_exp::method::options);
+					return values;
+				};
+
+				if( target == "*" )
+				{
+					response_head head;
+					head.headers.add("Allow", method_list(all_methods()));
+					if( exchange.request().method ==
+						http_exp::method(http_exp::method::options) )
+						co_await exchange.respond(std::move(head),
+							std::string_view{}, riwo::use_awaitable);
+					else
+					{
+						head.status = status(uint16_t(405));
+						co_await exchange.respond(std::move(head),
+							std::string_view("method not allowed\n"),
+							riwo::use_awaitable);
+					}
+					co_return;
+				}
+
 				auto selected = std::ranges::find_if(self->routes,
 				[target](const route &value) { return value.path == target; });
 				if( selected != self->routes.end() )
@@ -158,18 +204,27 @@ private:
 						co_await selected->handler(exchange);
 					else
 					{
-						error_code ignored;
-						exchange.respond({status(uint16_t(405)), {}},
-							body_spec::empty(), ignored);
+						response_head head {status(uint16_t(405)), {}};
+						head.headers.add("Allow", method_list(selected->methods));
+						head.headers.add("Content-Type",
+							"text/plain; charset=utf-8");
+						co_await exchange.respond(std::move(head),
+							std::string_view("method not allowed\n"),
+							riwo::use_awaitable);
+						co_return;
 					}
 				}
 				else if( self->default_handler )
 					co_await self->default_handler(exchange);
 				else
 				{
-					error_code ignored;
-					exchange.respond({status::not_found, {}},
-						body_spec::empty(), ignored);
+					response_head head {status::not_found, {}};
+					head.headers.add("Content-Type",
+						"text/plain; charset=utf-8");
+					co_await exchange.respond(std::move(head),
+						std::string_view("not found\n"),
+						riwo::use_awaitable);
+					co_return;
 				}
 
 				error_code ignored;
@@ -188,9 +243,15 @@ private:
 				}
 				if( !handled )
 				{
-					error_code ignored;
-					exchange.respond({status::internal_server_error, {}},
-						body_spec::empty(), ignored);
+						response_head head {
+							status::internal_server_error, {}
+						};
+						head.headers.add("Content-Type",
+							"text/plain; charset=utf-8");
+						error_code ignored;
+						exchange.respond(std::move(head),
+							std::string_view("internal server error\n"),
+							ignored);
 				}
 			}
 			co_return;

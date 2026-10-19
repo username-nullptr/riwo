@@ -41,6 +41,20 @@ protocol server_exchange_state::selected_protocol() const noexcept {
 	return m_impl->stream_ ? m_impl->stream_->selected_protocol() : protocol::v1_1;
 }
 
+std::string server_exchange_state::remote_address() const {
+	if( !m_impl->stream_ ) return {};
+	error_code error;
+	auto endpoint = m_impl->stream_->remote_endpoint(error);
+	return error ? std::string{} : endpoint.address().to_string();
+}
+
+uint16_t server_exchange_state::remote_port() const noexcept {
+	if( !m_impl->stream_ ) return 0;
+	error_code error;
+	auto endpoint = m_impl->stream_->remote_endpoint(error);
+	return error ? 0 : endpoint.port();
+}
+
 stream_capabilities server_exchange_state::capabilities() const noexcept {
 	return m_impl->stream_ ? m_impl->stream_->capabilities() : stream_capabilities{};
 }

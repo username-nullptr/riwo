@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_TRANSPORT_CONNECTION_H
 
 #include <riwo/http_exp/global.h>
+#include <chrono>
 
 namespace riwo::http_exp
 {
@@ -18,6 +19,7 @@ public:
 	using io_handler = asio::any_completion_handler<void(error_code, size_t)>;
 	using close_handler = asio::any_completion_handler<void(error_code)>;
 	using endpoint_type = asio::ip::tcp::endpoint;
+	using timeout_type = std::chrono::milliseconds;
 
 	connection() = default;
 	virtual ~connection() = default;
@@ -26,6 +28,12 @@ public:
 	virtual void write(const_buffer buffer, io_handler handler) = 0;
 	virtual void close(close_handler handler) = 0;
 	virtual void cancel() noexcept = 0;
+	virtual void set_read_timeout(optional<timeout_type> value) {
+		ignore_unused(value);
+	}
+	virtual void set_write_timeout(optional<timeout_type> value) {
+		ignore_unused(value);
+	}
 
 	[[nodiscard]] virtual bool is_open() const noexcept {
 		return true;

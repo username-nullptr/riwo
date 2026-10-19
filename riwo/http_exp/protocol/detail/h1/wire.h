@@ -34,7 +34,8 @@ struct parsed_response
 };
 
 [[nodiscard]] sys_expected<std::string> serialize_request(
-	const request_head &head, const body_spec &spec, protocol version) noexcept;
+	const request_head &head, const body_spec &spec, protocol version,
+	bool absolute_form = false) noexcept;
 
 [[nodiscard]] sys_expected<std::string> serialize_response(
 	const response_head &head, const body_spec &spec, protocol version,

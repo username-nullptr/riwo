@@ -39,6 +39,18 @@ void stream::wait_response(response_handler handler) {
 	std::move(handler)(unsupported(), response_head{});
 }
 
+auto stream::remote_endpoint(error_code &error) const noexcept -> endpoint_type
+{
+	error = unsupported();
+	return {};
+}
+
+auto stream::local_endpoint(error_code &error) const noexcept -> endpoint_type
+{
+	error = unsupported();
+	return {};
+}
+
 void stream::respond_sync(response_head, body_spec, error_code &error) noexcept {
 	error = unsupported();
 }

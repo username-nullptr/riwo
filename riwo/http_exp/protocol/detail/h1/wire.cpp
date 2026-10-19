@@ -39,6 +39,27 @@ namespace riwo::http_exp::detail::h1 { namespace
 	return false;
 }
 
+[[nodiscard]] bool valid_host_value(std::string_view value) noexcept
+{
+	if( value.empty() ) return false;
+	return std::ranges::none_of(value, [](unsigned char byte) {
+		return byte <= 0x20U || byte == 0x7fU || byte == '/' ||
+			byte == '?' || byte == '#' || byte == '@';
+	});
+}
+
+[[nodiscard]] std::string authority_from_url(const riwo::url &value)
+{
+	auto host = std::string(value.host());
+	if( host.find(':') != std::string::npos && !host.starts_with('[') )
+		host = '[' + host + ']';
+	const auto scheme = std::string_view(value.protocol());
+	const auto default_port = scheme == "https" ? 443 : 80;
+	if( value.port() != 0 && value.port() != default_port )
+		host += ':' + std::to_string(value.port());
+	return host;
+}
+
 [[nodiscard]] sys_expected<protocol> parse_version(
 	std::string_view value) noexcept
 {
@@ -182,17 +203,22 @@ struct parsed_fields
 } //namespace
 
 sys_expected<std::string> serialize_request(const request_head &head,
-	const body_spec &spec, protocol version) noexcept
+	const body_spec &spec, protocol version, bool absolute_form) noexcept
 {
 	try {
 		if( version == protocol::v1_0 &&
 			spec.type() == body_spec::mode::streaming )
 			return sys_unexpected(make_error_code(errc::operation_not_supported));
+		if( spec.type() == body_spec::mode::head )
+			return sys_unexpected(make_error_code(errc::operation_not_supported));
 		std::string result;
 		result.reserve(256);
 		result += head.method.text();
 		result += ' ';
-		result += head.target;
+		if( absolute_form )
+			result += head.url.to_string();
+		else
+			result += head.target;
 		result += ' ';
 		result += version_text(version);
 		result += "\r\nHost: ";
@@ -241,7 +267,8 @@ sys_expected<std::string> serialize_response(const response_head &head,
 		result += reason(code);
 		result += "\r\n";
 		append_fields(result, head.headers, true);
-		if( body_allowed && spec.type() == body_spec::mode::known_length )
+		if( body_allowed && (spec.type() == body_spec::mode::known_length ||
+			spec.type() == body_spec::mode::head) )
 		{
 			result += "Content-Length: ";
 			result += std::to_string(*spec.length());
@@ -279,14 +306,57 @@ sys_expected<parsed_request> parse_request(std::string_view wire,
 		if( !parsed ) return sys_unexpected(parsed.error());
 		parsed_request result;
 		result.head.method = http_exp::method(std::string(line.substr(0, first)));
-		result.head.target = std::string(line.substr(first + 1, last - first - 1));
-		if( result.head.target.empty() )
+		const auto raw_target = line.substr(first + 1, last - first - 1);
+		if( raw_target.empty() ||
+			raw_target.find_first_of(std::string_view(" \t\r\n")) !=
+				std::string_view::npos )
 			return sys_unexpected(make_error_code(errc::invalid_target));
 		result.head.headers = std::move(parsed->values);
 		result.head.scheme = "http";
-		if( auto host = result.head.headers.find_first("Host") )
-			result.head.authority = std::string(*host);
 		result.version = *parsed_version;
+
+		size_t host_count = 0;
+		std::string_view host_value {};
+		for( const auto &field : result.head.headers )
+		{
+			if( equal_ci(field.name, "Host") )
+			{
+				++host_count;
+				host_value = field.value;
+			}
+		}
+		if( host_count > 1 )
+			return sys_unexpected(make_error_code(
+				errc::connection_protocol_error));
+		if( result.version == protocol::v1_1 && host_count != 1 )
+			return sys_unexpected(make_error_code(
+				errc::connection_protocol_error));
+		if( host_count == 1 && !valid_host_value(host_value) )
+			return sys_unexpected(make_error_code(
+				errc::invalid_field_value));
+
+		if( raw_target.starts_with("http://") ||
+			raw_target.starts_with("https://") )
+		{
+			riwo::url target_url {std::string(raw_target)};
+			if( !target_url.is_valid() || target_url.host().empty() ||
+				target_url.has_fragment() )
+				return sys_unexpected(make_error_code(errc::invalid_target));
+			result.head.url = target_url;
+			result.head.scheme = std::string(target_url.protocol());
+			result.head.authority = authority_from_url(target_url);
+			std::string origin(target_url.encoded_path());
+			if( origin.empty() ) origin = "/";
+			if( target_url.has_query() )
+				origin += '?' + target_url.encoded_query();
+			result.head.target = std::move(origin);
+		}
+		else
+		{
+			result.head.target = std::string(raw_target);
+			if( host_count == 1 )
+				result.head.authority = std::string(host_value);
+		}
 		result.close = parsed->close || result.version == protocol::v1_0;
 		if( parsed->chunked ) result.framing = body_framing::chunked;
 		else if( parsed->content_length )
@@ -319,6 +389,8 @@ sys_expected<parsed_response> parse_response(std::string_view wire,
 		if( !parsed_version ) return sys_unexpected(parsed_version.error());
 		auto code_text = line.substr(first + 1,
 			(second == std::string_view::npos ? line.size() : second) - first - 1);
+		if( code_text.size() != 3 )
+			return sys_unexpected(make_error_code(errc::invalid_status));
 		uint16_t code = 0;
 		auto code_result = std::from_chars(code_text.data(),
 			code_text.data() + code_text.size(), code);

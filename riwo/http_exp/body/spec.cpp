@@ -55,6 +55,10 @@ body_spec body_spec::streaming(trailer_spec trailers) {
 	return {mode::streaming, nullopt, std::move(trailers)};
 }
 
+body_spec body_spec::head(uint64_t content_length) {
+	return {mode::head, content_length, {}};
+}
+
 body_spec::mode body_spec::type() const noexcept {
 	return type_;
 }

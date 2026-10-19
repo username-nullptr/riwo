@@ -27,6 +27,8 @@ public:
 	void write(const_buffer buffer, io_handler handler) override;
 	void close(close_handler handler) override;
 	void cancel() noexcept override;
+	void set_read_timeout(optional<timeout_type> value) override;
+	void set_write_timeout(optional<timeout_type> value) override;
 	[[nodiscard]] bool is_open() const noexcept override;
 
 	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,

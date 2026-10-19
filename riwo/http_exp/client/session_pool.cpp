@@ -31,6 +31,9 @@ public:
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return m_inner->selected_protocol();
 	}
+	[[nodiscard]] protocol response_protocol() const noexcept override {
+		return m_inner->response_protocol();
+	}
 	[[nodiscard]] stream_capabilities capabilities() const noexcept override {
 		return m_inner->capabilities();
 	}

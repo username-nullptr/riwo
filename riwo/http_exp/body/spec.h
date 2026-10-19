@@ -18,11 +18,12 @@ public:
 		friend bool operator==(const trailer_spec &, const trailer_spec &) = default;
 	};
 
-	enum class mode { empty, known_length, streaming };
+	enum class mode { empty, known_length, streaming, head };
 
 	[[nodiscard]] static body_spec empty();
 	[[nodiscard]] static body_spec known(uint64_t size, trailer_spec trailers = {});
 	[[nodiscard]] static body_spec streaming(trailer_spec trailers = {});
+	[[nodiscard]] static body_spec head(uint64_t content_length);
 
 	[[nodiscard]] mode type() const noexcept;
 	[[nodiscard]] optional<uint64_t> length() const noexcept;

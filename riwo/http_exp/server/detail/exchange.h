@@ -18,6 +18,8 @@ public:
 		request_head request = {});
 	~server_exchange_state();
 	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] std::string remote_address() const;
+	[[nodiscard]] uint16_t remote_port() const noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 	[[nodiscard]] const request_head &request() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_reader_state> request_body() const noexcept;
@@ -95,6 +97,16 @@ auto basic_server_exchange<Exec>::get_executor() const noexcept -> executor_type
 template <core_concepts::exec Exec>
 protocol basic_server_exchange<Exec>::selected_protocol() const noexcept {
 	return m_impl->state->selected_protocol();
+}
+
+template <core_concepts::exec Exec>
+std::string basic_server_exchange<Exec>::remote_address() const {
+	return m_impl->state->remote_address();
+}
+
+template <core_concepts::exec Exec>
+uint16_t basic_server_exchange<Exec>::remote_port() const noexcept {
+	return m_impl->state->remote_port();
 }
 
 template <core_concepts::exec Exec>

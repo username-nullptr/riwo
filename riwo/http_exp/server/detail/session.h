@@ -28,7 +28,8 @@ using server_connection_ptr = std::shared_ptr<server_connection>;
 
 [[nodiscard]] RIWO_HTTP_EXP_API server_connection_ptr accept_h1(
 	asio::ip::tcp::socket socket,
-	message_limits limits, server_accept_handler handler);
+	message_limits limits, timeout_policy timeouts,
+	server_accept_handler handler);
 
 } //namespace riwo::http_exp::detail
 

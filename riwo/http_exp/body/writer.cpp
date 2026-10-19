@@ -14,7 +14,8 @@ public:
 	impl(std::shared_ptr<body_writer_adapter> output, body_spec description,
 		bool output_ready) :
 		adapter(std::move(output)), spec(std::move(description)), ready(output_ready),
-		ended(spec.type() == body_spec::mode::empty && output_ready)
+		ended((spec.type() == body_spec::mode::empty ||
+			spec.type() == body_spec::mode::head) && output_ready)
 	{
 	}
 
@@ -296,13 +297,15 @@ void body_writer_state::configure(body_spec spec, bool ready) noexcept
 		return;
 	state->spec = std::move(spec);
 	state->ready = ready;
-	state->ended = ready && state->spec.type() == body_spec::mode::empty;
+	state->ended = ready && (state->spec.type() == body_spec::mode::empty ||
+		state->spec.type() == body_spec::mode::head);
 }
 
 void body_writer_state::set_ready(bool ready) noexcept
 {
 	m_impl->ready = ready;
-	if( ready && m_impl->spec.type() == body_spec::mode::empty )
+	if( ready && (m_impl->spec.type() == body_spec::mode::empty ||
+		m_impl->spec.type() == body_spec::mode::head) )
 		m_impl->ended = true;
 }
 

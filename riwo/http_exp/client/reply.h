@@ -38,7 +38,9 @@ public:
 	basic_reply(Exec0 &&executor, protocol selected_protocol,
 		response_head head, std::shared_ptr<detail::body_reader_state> body,
 		std::vector<std::byte> buffered_body = {},
-		std::shared_ptr<void> owner = {})
+		std::shared_ptr<void> owner = {},
+		uint64_t max_buffered_body = 8U * 1024U * 1024U,
+		protocol response_protocol = protocol::v1_1)
 		requires core_concepts::match_sched<Exec0,executor_type>;
 
 	~basic_reply();
@@ -47,6 +49,7 @@ public:
 
 	[[nodiscard]] executor_type get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] protocol http_version() const noexcept;
 	[[nodiscard]] http_exp::status status() const noexcept;
 	[[nodiscard]] const fields &headers() const noexcept;
 	[[nodiscard]] body_reader_type &body() noexcept;

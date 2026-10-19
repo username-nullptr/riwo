@@ -83,6 +83,7 @@ struct negotiated_transport
 	endpoint remote {};
 	endpoint local {};
 	optional<std::string> alpn {};
+	bool absolute_form = false;
 };
 
 class RIWO_HTTP_EXP_API connector

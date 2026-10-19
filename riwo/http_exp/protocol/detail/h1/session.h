@@ -13,21 +13,24 @@ namespace riwo::http_exp::detail::h1
 
 [[nodiscard]] std::shared_ptr<client_session>
 make_client_session(asio::any_io_executor executor, protocol version,
-	message_limits limits = {});
+	message_limits limits = {}, timeout_policy timeouts = {},
+	bool absolute_form = false);
 
 [[nodiscard]] std::shared_ptr<client_session>
 make_client_session(asio::any_io_executor executor, protocol version,
 	message_limits limits,
-	std::shared_ptr<::riwo::http_exp::connection> transport);
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	timeout_policy timeouts = {}, bool absolute_form = false);
 
 [[nodiscard]] std::shared_ptr<server_session>
 make_server_session(asio::ip::tcp::socket socket,
-	message_limits limits = {});
+	message_limits limits = {}, timeout_policy timeouts = {});
 
 [[nodiscard]] std::shared_ptr<server_session>
 make_server_session(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
-	protocol version, message_limits limits = {});
+	protocol version, message_limits limits = {},
+	timeout_policy timeouts = {});
 
 } //namespace riwo::http_exp::detail::h1
 

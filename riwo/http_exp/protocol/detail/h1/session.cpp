@@ -89,6 +89,18 @@ struct connection final
 	return make_error_code(errc::connection_protocol_error);
 }
 
+[[nodiscard]] error_code timeout_error() noexcept {
+	return asio::error::make_error_code(asio::error::timed_out);
+}
+
+[[nodiscard]] std::chrono::milliseconds bounded_timeout(
+	std::chrono::milliseconds idle, const timeout_policy &timeouts)
+{
+	if( timeouts.overall && *timeouts.overall < idle )
+		return *timeouts.overall;
+	return idle;
+}
+
 [[nodiscard]] bool has_token(const fields &values, std::string_view name,
 	std::string_view token)
 {
@@ -116,6 +128,44 @@ struct connection final
 		}
 	}
 	return false;
+}
+
+[[nodiscard]] bool has_unsupported_expectation(const fields &values)
+{
+	auto range = values.find_all("Expect");
+	for( auto iterator = range.begin(); iterator != range.end(); ++iterator )
+	{
+		std::string_view text = iterator->value;
+		while( !text.empty() )
+		{
+			const auto comma = text.find(',');
+			auto item = text.substr(0, comma);
+			while( !item.empty() &&
+				(item.front() == ' ' || item.front() == '\t') )
+				item.remove_prefix(1);
+			while( !item.empty() &&
+				(item.back() == ' ' || item.back() == '\t') )
+				item.remove_suffix(1);
+			if( item.empty() || item.size() != 12 ||
+				!std::ranges::equal(item, std::string_view("100-continue"),
+					[](char lhs, char rhs) {
+						return std::tolower(static_cast<unsigned char>(lhs)) ==
+							std::tolower(static_cast<unsigned char>(rhs));
+					}) )
+				return true;
+			if( comma == std::string_view::npos ) break;
+			text.remove_prefix(comma + 1);
+		}
+	}
+	return false;
+}
+
+[[nodiscard]] std::string error_response(std::uint16_t code,
+	std::string_view reason)
+{
+	return "HTTP/1.1 " + std::to_string(code) + " " +
+		std::string(reason) + "\r\nContent-Length: 0\r\n"
+		"Connection: close\r\n\r\n";
 }
 
 [[nodiscard]] bool reusable_response(const response_head &head,
@@ -228,9 +278,10 @@ class reader_adapter final : public body_reader_adapter,
 {
 public:
 	reader_adapter(std::shared_ptr<connection> connection_value,
-		body_framing framing_value, uint64_t length, message_limits limits) :
+		body_framing framing_value, uint64_t length, message_limits limits,
+		timeout_policy timeouts = {}) :
 		connection_(std::move(connection_value)), framing_(framing_value),
-		remaining_(length), limits_(std::move(limits))
+		remaining_(length), limits_(std::move(limits)), timeouts_(timeouts)
 	{
 	}
 
@@ -251,6 +302,7 @@ public:
 	{
 		error.clear();
 		try {
+			if( !apply_read_timeout(error) ) return {};
 			auto result = read_sync(buffer, error);
 			if( is_eof(error) )
 				error = make_error_code(errc::body_length_mismatch);
@@ -265,6 +317,27 @@ public:
 	}
 
 	void read_some(mutable_buffer buffer, read_handler handler) override;
+
+	[[nodiscard]] bool apply_read_timeout(error_code &error) noexcept
+	{
+		auto value = timeouts_.body_idle;
+		if( timeouts_.overall )
+		{
+			const auto remaining = *deadline_ - std::chrono::steady_clock::now();
+			if( remaining <= std::chrono::milliseconds(0) )
+			{
+				error = timeout_error();
+				return false;
+			}
+			const auto remaining_ms = std::chrono::duration_cast<
+				std::chrono::milliseconds>(remaining);
+			if( value.count() <= 0 || remaining_ms < value )
+				value = remaining_ms;
+		}
+		if( value.count() > 0 )
+			connection_->transport->set_read_timeout(value);
+		return true;
+	}
 
 	[[nodiscard]] fields trailers_sync(error_code &error) noexcept override
 	{
@@ -498,6 +571,10 @@ private:
 	body_framing framing_;
 	uint64_t remaining_ = 0;
 	message_limits limits_;
+	timeout_policy timeouts_;
+	std::optional<std::chrono::steady_clock::time_point> deadline_ =
+		timeouts_.overall ? std::optional<std::chrono::steady_clock::time_point>(
+			std::chrono::steady_clock::now() + *timeouts_.overall) : std::nullopt;
 	fields trailers_;
 	uint64_t delivered_ = 0;
 	uint64_t chunk_remaining_ = 0;
@@ -521,6 +598,12 @@ public:
 	void start()
 	{
 		error_code error;
+		if( !owner_->apply_read_timeout(error) )
+		{
+			owner_->ended_ = true;
+			finish(error, {});
+			return;
+		}
 		if( owner_->ended_ || owner_->framing_ == body_framing::none )
 		{
 			owner_->ended_ = true;
@@ -750,8 +833,14 @@ void reader_adapter::read_some(mutable_buffer buffer, read_handler handler)
 class writer_adapter final : public body_writer_adapter
 {
 public:
-	explicit writer_adapter(std::shared_ptr<connection> connection_value) :
-		connection_(std::move(connection_value))
+	explicit writer_adapter(std::shared_ptr<connection> connection_value,
+		bool suppress_body = false, timeout_policy timeouts = {}) :
+		connection_(std::move(connection_value)),
+		suppress_body_(suppress_body), timeouts_(timeouts),
+		deadline_(timeouts_.overall ? std::optional<
+			std::chrono::steady_clock::time_point>(
+				std::chrono::steady_clock::now() + *timeouts_.overall) :
+				std::nullopt)
 	{
 	}
 
@@ -764,6 +853,8 @@ public:
 	{
 		error.clear();
 		try {
+			if( !apply_write_timeout(error) ) return 0;
+			if( suppress_body_ ) return buffer.size();
 			if( chunked_ )
 			{
 				auto header = serialize_chunk_header(buffer.size());
@@ -785,6 +876,17 @@ public:
 
 	void write(const_buffer buffer, write_handler handler) override
 	{
+		error_code timeout;
+		if( !apply_write_timeout(timeout) )
+		{
+			std::move(handler)(timeout, 0);
+			return;
+		}
+		if( suppress_body_ )
+		{
+			std::move(handler)(error_code{}, buffer.size());
+			return;
+		}
 		if( !chunked_ )
 		{
 			connection_->write(buffer, std::move(handler));
@@ -824,7 +926,7 @@ public:
 	void finish_sync(fields trailers, error_code &error) noexcept override
 	{
 		error.clear();
-		if( chunked_ )
+		if( chunked_ && !suppress_body_ )
 		{
 			try {
 				auto wire = serialize_last_chunk(trailers);
@@ -839,7 +941,7 @@ public:
 
 	void finish(fields trailers, finish_handler handler) override
 	{
-		if( !chunked_ )
+		if( !chunked_ || suppress_body_ )
 		{
 			if( finish_handler_ ) finish_handler_(error_code{});
 			std::move(handler)(error_code{});
@@ -863,8 +965,32 @@ public:
 	}
 
 private:
+	[[nodiscard]] bool apply_write_timeout(error_code &error) noexcept
+	{
+		auto value = timeouts_.body_idle;
+		if( timeouts_.overall )
+		{
+			const auto remaining = *deadline_ - std::chrono::steady_clock::now();
+			if( remaining <= std::chrono::milliseconds(0) )
+			{
+				error = timeout_error();
+				return false;
+			}
+			const auto remaining_ms = std::chrono::duration_cast<
+				std::chrono::milliseconds>(remaining);
+			if( value.count() <= 0 || remaining_ms < value )
+				value = remaining_ms;
+		}
+		if( value.count() > 0 )
+			connection_->transport->set_write_timeout(value);
+		return true;
+	}
+
 	std::shared_ptr<connection> connection_;
 	bool chunked_ = false;
+	bool suppress_body_ = false;
+	timeout_policy timeouts_;
+	std::optional<std::chrono::steady_clock::time_point> deadline_;
 	std::function<void(error_code)> finish_handler_;
 };
 
@@ -875,19 +1001,25 @@ public:
 	h1_stream(std::shared_ptr<connection> connection_value, protocol version,
 		body_spec outbound_spec, body_framing inbound_framing,
 		uint64_t inbound_length, message_limits limits, bool client,
-		bool head_request = false, request_head request_value = {}) :
+		bool head_request = false, request_head request_value = {},
+		timeout_policy timeouts = {}) :
 		connection_(std::move(connection_value)),
-		version_(version), limits_(std::move(limits)), client_(client),
+		version_(version), response_protocol_(version),
+		limits_(std::move(limits)), timeouts_(timeouts), client_(client),
 		head_request_(head_request), request_(std::move(request_value)),
 		reader_(std::make_shared<reader_adapter>(
-			connection_, inbound_framing, inbound_length, limits_)),
-		writer_(std::make_shared<writer_adapter>(connection_)),
+			connection_, inbound_framing, inbound_length, limits_, timeouts_)),
+		writer_(std::make_shared<writer_adapter>(connection_,
+			!client && head_request, timeouts_)),
 		inbound_(make_body_reader_state(reader_, !client_,
 			limits_.max_discard_body)),
 		outbound_(make_body_writer_state(writer_, outbound_spec, client_))
 	{
 		if( !client_ && inbound_framing == body_framing::none )
 			inbound_->set_finished();
+		connection_->transport->set_read_timeout(bounded_timeout(
+			client_ ? timeouts_.header : timeouts_.body_idle, timeouts_));
+		connection_->transport->set_write_timeout(timeouts_.body_idle);
 		writer_->configure(std::move(outbound_spec));
 		if( !client_ )
 			keep_alive_ = version_ != protocol::v1_0 &&
@@ -916,6 +1048,17 @@ public:
 
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return version_;
+	}
+	[[nodiscard]] protocol response_protocol() const noexcept override {
+		return response_protocol_;
+	}
+	[[nodiscard]] endpoint_type remote_endpoint(
+		error_code &error) const noexcept override {
+		return connection_->transport->remote_endpoint(error);
+	}
+	[[nodiscard]] endpoint_type local_endpoint(
+		error_code &error) const noexcept override {
+		return connection_->transport->local_endpoint(error);
 	}
 
 	[[nodiscard]] stream_capabilities capabilities() const noexcept override {
@@ -952,7 +1095,9 @@ public:
 			}
 			if( parsed->head.status.code() < 200 ) continue;
 			response_ = parsed->head;
-			keep_alive_ = reusable_response(response_, version_);
+			response_protocol_ = parsed->version;
+			connection_->transport->set_read_timeout(timeouts_.body_idle);
+			keep_alive_ = reusable_response(response_, parsed->version);
 			response_ready_ = true;
 			reader_->configure(parsed->framing, parsed->content_length);
 			if( parsed->framing == body_framing::none && client_ )
@@ -988,13 +1133,19 @@ public:
 			error = make_error_code(errc::operation_not_permitted);
 			return;
 		}
+		if( spec.type() == body_spec::mode::head && !head_request_ )
+		{
+			error = make_error_code(errc::operation_not_permitted);
+			return;
+		}
 		auto wire = serialize_response(head, spec, version_, !keep_alive_);
 		if( !wire )
 		{
 			error = wire.error();
 			return;
 		}
-		const bool empty = spec.type() == body_spec::mode::empty;
+		const bool empty = spec.type() == body_spec::mode::empty ||
+			spec.type() == body_spec::mode::head;
 		writer_->configure(std::move(spec));
 		(void)connection_->write_sync(asio::buffer(*wire), error);
 		if( !client_ && !error && empty )
@@ -1009,6 +1160,12 @@ public:
 			std::move(handler)(make_error_code(errc::operation_not_permitted));
 			return;
 		}
+		if( spec.type() == body_spec::mode::head && !head_request_ )
+		{
+			std::move(handler)(
+				make_error_code(errc::operation_not_permitted));
+			return;
+		}
 		auto wire_value = serialize_response(head, spec, version_,
 			!keep_alive_);
 		if( !wire_value )
@@ -1016,7 +1173,8 @@ public:
 			std::move(handler)(wire_value.error());
 			return;
 		}
-		const bool empty = spec.type() == body_spec::mode::empty;
+		const bool empty = spec.type() == body_spec::mode::empty ||
+			spec.type() == body_spec::mode::head;
 		writer_->configure(std::move(spec));
 		auto wire = std::make_shared<std::string>(std::move(*wire_value));
 		auto weak = weak_from_this();
@@ -1090,8 +1248,11 @@ private:
 				return;
 			}
 			self->response_ = parsed->head;
+			self->response_protocol_ = parsed->version;
+			self->connection_->transport->set_read_timeout(
+				self->timeouts_.body_idle);
 			self->keep_alive_ = reusable_response(self->response_,
-				self->version_);
+				parsed->version);
 			self->response_ready_ = true;
 			self->reader_->configure(parsed->framing, parsed->content_length);
 			if( parsed->framing == body_framing::none && self->client_ )
@@ -1131,7 +1292,9 @@ private:
 
 	std::shared_ptr<connection> connection_;
 	protocol version_;
+	protocol response_protocol_;
 	message_limits limits_;
+	timeout_policy timeouts_;
 	bool client_;
 	bool head_request_;
 	request_head request_ {};
@@ -1152,20 +1315,33 @@ class h1_client_session final : public client_session,
 {
 public:
 	h1_client_session(asio::any_io_executor executor, protocol version,
-		message_limits limits) : executor_(std::move(executor)), version_(version),
-		limits_(std::move(limits)), connection_(
+		message_limits limits, timeout_policy timeouts = {},
+		bool absolute_form = false) :
+		executor_(std::move(executor)), version_(version),
+		limits_(std::move(limits)), timeouts_(timeouts),
+		absolute_form_(absolute_form), connection_(
 			std::make_shared<connection>(executor_)), resolver_(executor_)
 	{
+		connection_->transport->set_read_timeout(
+			bounded_timeout(timeouts_.body_idle, timeouts_));
+		connection_->transport->set_write_timeout(
+			bounded_timeout(timeouts_.body_idle, timeouts_));
 	}
 
 	h1_client_session(asio::any_io_executor executor, protocol version,
 		message_limits limits,
-		std::shared_ptr<::riwo::http_exp::connection> transport) :
+		std::shared_ptr<::riwo::http_exp::connection> transport,
+		timeout_policy timeouts = {}, bool absolute_form = false) :
 		executor_(std::move(executor)), version_(version),
-		limits_(std::move(limits)),
+		limits_(std::move(limits)), timeouts_(timeouts),
+		absolute_form_(absolute_form),
 		connection_(std::make_shared<connection>(std::move(transport))),
 		resolver_(executor_), preconnected_(true)
 	{
+		connection_->transport->set_read_timeout(
+			bounded_timeout(timeouts_.body_idle, timeouts_));
+		connection_->transport->set_write_timeout(
+			bounded_timeout(timeouts_.body_idle, timeouts_));
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
@@ -1213,7 +1389,7 @@ public:
 	{
 		error.clear();
 		if( !begin_open(error) ) return {};
-		auto wire = serialize_request(head, spec, version_);
+		auto wire = serialize_request(head, spec, version_, absolute_form_);
 		if( !wire )
 		{
 			error = wire.error();
@@ -1255,7 +1431,7 @@ public:
 			std::move(handler)(begin_error, std::shared_ptr<stream>{});
 			return;
 		}
-		auto wire_value = serialize_request(head, spec, version_);
+		auto wire_value = serialize_request(head, spec, version_, absolute_form_);
 		if( !wire_value )
 		{
 			std::move(handler)(wire_value.error(), std::shared_ptr<stream>{});
@@ -1349,7 +1525,7 @@ private:
 		const bool head_request = head.method.known() == method::head;
 		auto result = std::make_shared<h1_stream>(connection_, version_,
 			std::move(spec), body_framing::none, 0, limits_, true,
-			head_request, std::move(head));
+			head_request, std::move(head), timeouts_);
 		auto weak = weak_from_this();
 		result->set_release_handler(
 		[weak](bool reusable) {
@@ -1362,6 +1538,8 @@ private:
 	executor_type executor_;
 	protocol version_;
 	message_limits limits_;
+	timeout_policy timeouts_;
+	bool absolute_form_ = false;
 	std::shared_ptr<connection> connection_;
 	asio::ip::tcp::resolver resolver_;
 	bool preconnected_ = false;
@@ -1375,15 +1553,18 @@ class h1_server_session final : public server_session,
 	public std::enable_shared_from_this<h1_server_session>
 {
 public:
-	h1_server_session(asio::ip::tcp::socket socket, message_limits limits) :
+	h1_server_session(asio::ip::tcp::socket socket, message_limits limits,
+		timeout_policy timeouts = {}) :
 		executor_(socket.get_executor()), limits_(std::move(limits)),
+		timeouts_(timeouts),
 		connection_(std::make_shared<connection>(std::move(socket)))
 	{
 	}
 
 	h1_server_session(std::shared_ptr<::riwo::http_exp::connection> transport,
-		protocol version, message_limits limits) :
+		protocol version, message_limits limits, timeout_policy timeouts = {}) :
 		executor_(transport->get_executor()), limits_(std::move(limits)),
+		timeouts_(timeouts),
 		connection_(std::make_shared<connection>(std::move(transport))),
 		version_(version)
 	{
@@ -1436,6 +1617,8 @@ public:
 			return;
 		}
 		in_use_ = true;
+		connection_->transport->set_read_timeout(timeouts_.header);
+		connection_->transport->set_write_timeout(timeouts_.body_idle);
 		auto self = shared_from_this();
 		read_head(connection_,
 			limits_.max_header_list_size + limits_.max_start_line_size,
@@ -1450,15 +1633,51 @@ public:
 			auto parsed = parse_request(wire, self->limits_);
 			if( !parsed )
 			{
+				const auto code = static_cast<std::uint16_t>(
+					parsed.error() ==
+						make_error_code(errc::header_limit_exceeded) ? 431 : 400);
+				error_code ignored;
+				(void)self->connection_->write_sync(asio::buffer(
+					error_response(code, code == 431 ?
+						"Request Header Fields Too Large" : "Bad Request")),
+					ignored);
 				self->release_stream(false);
 				std::move(handler)(parsed.error(), std::shared_ptr<stream>{});
 				return;
 			}
 			self->version_ = parsed->version;
+			if( parsed->head.headers.find_first("Expect") )
+			{
+				if( has_unsupported_expectation(parsed->head.headers) )
+				{
+					error_code ignored;
+					(void)self->connection_->write_sync(asio::buffer(
+						error_response(417, "Expectation Failed")), ignored);
+					self->release_stream(false);
+					std::move(handler)(make_error_code(errc::invalid_field_value),
+						std::shared_ptr<stream>{});
+					return;
+				}
+				if( parsed->version == protocol::v1_1 )
+				{
+					error_code expect_error;
+					(void)self->connection_->write_sync(asio::buffer(
+						std::string_view("HTTP/1.1 100 Continue\r\n\r\n")),
+						expect_error);
+					if( expect_error )
+					{
+						self->release_stream(false);
+						std::move(handler)(expect_error,
+							std::shared_ptr<stream>{});
+						return;
+					}
+				}
+			}
 			auto result = std::make_shared<h1_stream>(self->connection_,
 				parsed->version, body_spec::empty(), parsed->framing,
-				parsed->content_length, self->limits_, false, false,
-				std::move(parsed->head));
+				parsed->content_length, self->limits_, false,
+				parsed->head.method.known() == method::head,
+				std::move(parsed->head), self->timeouts_);
 			std::weak_ptr<h1_server_session> weak = self;
 			result->set_release_handler(
 			[weak](bool reusable) {
@@ -1479,6 +1698,7 @@ public:
 private:
 	executor_type executor_;
 	message_limits limits_;
+	timeout_policy timeouts_;
 	std::shared_ptr<connection> connection_;
 	protocol version_ = protocol::v1_1;
 	bool in_use_ = false;
@@ -1489,35 +1709,39 @@ private:
 } //namespace
 
 std::shared_ptr<client_session> make_client_session(
-	asio::any_io_executor executor, protocol version, message_limits limits)
+	asio::any_io_executor executor, protocol version, message_limits limits,
+	timeout_policy timeouts, bool absolute_form)
 {
 	return std::make_shared<h1_client_session>(
-		std::move(executor), version, std::move(limits));
+		std::move(executor), version, std::move(limits), timeouts,
+		absolute_form);
 }
 
 std::shared_ptr<client_session> make_client_session(
 	asio::any_io_executor executor, protocol version, message_limits limits,
-	std::shared_ptr<::riwo::http_exp::connection> transport)
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	timeout_policy timeouts, bool absolute_form)
 {
 	return std::make_shared<h1_client_session>(
 		std::move(executor), version, std::move(limits),
-		std::move(transport));
+		std::move(transport), timeouts, absolute_form);
 }
 
 std::shared_ptr<server_session> make_server_session(
-	asio::ip::tcp::socket socket, message_limits limits)
+	asio::ip::tcp::socket socket, message_limits limits,
+	timeout_policy timeouts)
 {
 	return std::make_shared<h1_server_session>(
-		std::move(socket), std::move(limits));
+		std::move(socket), std::move(limits), timeouts);
 }
 
 std::shared_ptr<server_session> make_server_session(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
 	protocol version,
-	message_limits limits)
+	message_limits limits, timeout_policy timeouts)
 {
 	return std::make_shared<h1_server_session>(
-		std::move(transport), version, std::move(limits));
+		std::move(transport), version, std::move(limits), timeouts);
 }
 
 } //namespace riwo::http_exp::detail::h1
@@ -1573,11 +1797,13 @@ public:
 };
 
 server_connection_ptr accept_h1(asio::ip::tcp::socket socket,
-	message_limits limits,
+	message_limits limits, timeout_policy timeouts,
 	server_accept_handler handler)
 {
+	error_code option_error;
+	(void)socket.set_option(asio::ip::tcp::no_delay(true), option_error);
 	auto session = std::make_shared<h1::h1_server_session>(
-		std::move(socket), std::move(limits));
+		std::move(socket), std::move(limits), timeouts);
 	auto value = std::make_shared<h1_server_loop>();
 	value->session = session;
 	value->handler = std::move(handler);

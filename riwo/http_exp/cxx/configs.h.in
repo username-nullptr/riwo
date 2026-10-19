@@ -14,8 +14,13 @@
 #cmakedefine01 RIWO_HTTP_EXP_HTTP2_SUPPORT
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
 
+#ifndef RIWO_HTTP_EXP_ZLIB_SUPPORT
+#cmakedefine01 RIWO_HTTP_EXP_ZLIB_SUPPORT
+#endif //RIWO_HTTP_EXP_ZLIB_SUPPORT
+
 namespace riwo::http_exp {
 constexpr bool http2_available_v = RIWO_HTTP_EXP_HTTP2_SUPPORT;
+constexpr bool gzip_available_v = RIWO_HTTP_EXP_ZLIB_SUPPORT;
 } //namespace riwo::http_exp
 
 

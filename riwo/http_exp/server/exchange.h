@@ -46,6 +46,8 @@ public:
 
 	[[nodiscard]] executor_type get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] std::string remote_address() const;
+	[[nodiscard]] uint16_t remote_port() const noexcept;
 	[[nodiscard]] const request_type &request() const noexcept;
 	[[nodiscard]] body_reader_type &request_body() noexcept;
 	[[nodiscard]] body_writer_type &response_body() noexcept;

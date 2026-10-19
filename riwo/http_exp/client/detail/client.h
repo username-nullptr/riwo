@@ -14,9 +14,11 @@ class stream;
 struct send_result
 {
 	protocol selected_protocol = protocol::v1_1;
+	protocol response_protocol = protocol::v1_1;
 	response_head head {};
 	std::shared_ptr<body_reader_state> body;
 	std::shared_ptr<void> owner;
+	uint64_t max_buffered_body = 8U * 1024U * 1024U;
 };
 
 class RIWO_HTTP_EXP_API client_state
@@ -115,7 +117,8 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 		auto result = m_impl->state->send(std::move(request_value), token);
 		return token ? reply_type(m_impl->executor) : reply_type(m_impl->executor,
 			result.selected_protocol, std::move(result.head), std::move(result.body),
-			{}, std::move(result.owner));
+			{}, std::move(result.owner), result.max_buffered_body,
+			result.response_protocol);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
@@ -126,7 +129,8 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 				sys_unexpected(error)));
 		return reply_type(m_impl->executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), {},
-			std::move(result.owner));
+			std::move(result.owner), result.max_buffered_body,
+			result.response_protocol);
 	}
 	else
 	{
@@ -147,7 +151,8 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 				}
 				std::move(handler)(error_code{}, reply_type(executor,
 					result.selected_protocol, std::move(result.head),
-					std::move(result.body), {}, std::move(result.owner)));
+					std::move(result.body), {}, std::move(result.owner),
+					result.max_buffered_body, result.response_protocol));
 			});
 		}, std::forward<Token>(token));
 	}
@@ -164,12 +169,14 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 		auto result = m_impl->state->send(std::move(request_value), token);
 		if( token ) return reply_type(m_impl->executor);
 		reply_type active(m_impl->executor, result.selected_protocol,
-			result.head, result.body, {}, result.owner);
+			result.head, result.body, {}, result.owner,
+			result.max_buffered_body, result.response_protocol);
 		auto bytes = active.read_all(token);
 		if( token ) return reply_type(m_impl->executor);
 		return reply_type(m_impl->executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
-			std::move(result.owner));
+			std::move(result.owner), result.max_buffered_body,
+			result.response_protocol);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
@@ -179,11 +186,13 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 			return expected_value_or_throw(sys_expected<reply_type>(
 				sys_unexpected(error)));
 		reply_type active(m_impl->executor, result.selected_protocol,
-			result.head, result.body, {}, result.owner);
+			result.head, result.body, {}, result.owner,
+			result.max_buffered_body, result.response_protocol);
 		auto bytes = active.read_all();
 		return reply_type(m_impl->executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
-			std::move(result.owner));
+			std::move(result.owner), result.max_buffered_body,
+			result.response_protocol);
 	}
 	else
 	{
@@ -204,7 +213,8 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 				}
 				auto active = std::make_shared<reply_type>(executor,
 					result.selected_protocol, result.head, result.body,
-					std::vector<std::byte>{}, result.owner);
+					std::vector<std::byte>{}, result.owner,
+					result.max_buffered_body, result.response_protocol);
 				active->read_all(
 				[handler = std::move(handler), executor, active,
 				 result = std::move(result)]
@@ -218,7 +228,8 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 					std::move(handler)(error_code{}, reply_type(executor,
 						result.selected_protocol, std::move(result.head),
 						std::move(result.body), std::move(bytes),
-						std::move(result.owner)));
+						std::move(result.owner), result.max_buffered_body,
+						result.response_protocol));
 				});
 			});
 		}, std::forward<Token>(token));

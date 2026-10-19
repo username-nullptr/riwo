@@ -7,6 +7,7 @@
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <riwo/http_exp/protocol/detail/h1/session.h>
+#include <riwo/http_exp/body/detail/decoder.h>
 #include <charconv>
 
 namespace riwo::http_exp::detail
@@ -136,6 +137,48 @@ namespace
 	}
 }
 
+[[nodiscard]] std::string decodable_encoding(const response_head &head)
+{
+	if( !gzip_available_v ) return {};
+	std::string_view value;
+	auto values = head.headers.find_all("Content-Encoding");
+	for( auto iterator = values.begin(); iterator != values.end(); ++iterator )
+		value = iterator->value;
+	while( !value.empty() &&
+		(value.front() == ' ' || value.front() == '\t') )
+		value.remove_prefix(1);
+	while( !value.empty() &&
+		(value.back() == ' ' || value.back() == '\t') )
+		value.remove_suffix(1);
+	std::string lower(value);
+	std::ranges::transform(lower, lower.begin(), [](unsigned char byte) {
+		return static_cast<char>(std::tolower(byte));
+	});
+	if( lower == "gzip" || lower == "x-gzip" || lower == "deflate" )
+		return lower == "x-gzip" ? "gzip" : lower;
+	return {};
+}
+
+[[nodiscard]] std::shared_ptr<body_reader_state> decoded_body(
+	std::shared_ptr<body_reader_state> body, response_head &head,
+	bool automatic_decompression)
+{
+	if( !automatic_decompression || !body || body->is_finished() )
+		return body;
+	auto encoding = decodable_encoding(head);
+	if( encoding.empty() ) return body;
+	head.headers.erase("Content-Encoding");
+	head.headers.erase("Content-Length");
+	return make_decoding_body_reader(std::move(body), std::move(encoding));
+}
+
+void add_accept_encoding(request_head &head, const client_config &config)
+{
+	if( !config.automatic_decompression || !gzip_available_v ) return;
+	if( head.headers.find_first("Accept-Encoding") ) return;
+	head.headers.add("Accept-Encoding", "gzip, deflate");
+}
+
 } //namespace
 
 class client_state::impl
@@ -234,6 +277,7 @@ send_result client_state::send(request request_value,
 		error = head.error();
 		return {};
 	}
+	add_accept_encoding(*head, m_impl->config);
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
@@ -317,9 +361,15 @@ send_result client_state::send(request request_value,
 		return {};
 	}
 	body->set_ready();
-	return {
-		active_stream->selected_protocol(), std::move(response),
-		std::move(body), std::move(active_stream)
+	body = decoded_body(std::move(body), response,
+		m_impl->config.automatic_decompression);
+	return send_result {
+		.selected_protocol = active_stream->selected_protocol(),
+		.response_protocol = active_stream->response_protocol(),
+		.head = std::move(response),
+		.body = std::move(body),
+		.owner = std::move(active_stream),
+		.max_buffered_body = m_impl->config.response_limits.max_buffered_body
 	};
 }
 
@@ -337,6 +387,7 @@ void client_state::send(request request_value, send_handler handler)
 		std::move(handler)(head.error(), send_result{});
 		return;
 	}
+	add_accept_encoding(*head, m_impl->config);
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
@@ -351,16 +402,21 @@ void client_state::send(request request_value, send_handler handler)
 		send_handler handler;
 		std::array<std::byte,8192> buffer;
 		uint64_t total = 0;
+			uint64_t max_buffered_body = 8U * 1024U * 1024U;
+			bool automatic_decompression = true;
 
 		operation(std::shared_ptr<stream> stream_value,
 			optional<const_buffer> body_value,
 			std::shared_ptr<body_source> source_value, body_spec description,
-			fields trailer_values, send_handler completion) :
+				fields trailer_values, uint64_t max_buffered_body_value,
+				bool automatic_decompression_value, send_handler completion) :
 			active_stream(std::move(stream_value)), body(body_value),
 			source(std::move(source_value)),
 			writer(active_stream ? active_stream->outbound_body() : nullptr),
 			spec(std::move(description)), trailers(std::move(trailer_values)),
-			handler(std::move(completion))
+				handler(std::move(completion)),
+				max_buffered_body(max_buffered_body_value),
+				automatic_decompression(automatic_decompression_value)
 		{
 		}
 
@@ -471,9 +527,17 @@ void client_state::send(request request_value, send_handler handler)
 					return;
 				}
 				body->set_ready();
+				body = decoded_body(std::move(body), head,
+					self->automatic_decompression);
 				auto result = send_result {
-					self->active_stream->selected_protocol(), std::move(head),
-					std::move(body), self->active_stream
+					.selected_protocol =
+						self->active_stream->selected_protocol(),
+					.response_protocol =
+						self->active_stream->response_protocol(),
+					.head = std::move(head),
+					.body = std::move(body),
+					.owner = self->active_stream,
+					.max_buffered_body = self->max_buffered_body
 				};
 				std::move(self->handler)(error_code{}, std::move(result));
 			});
@@ -489,7 +553,10 @@ void client_state::send(request request_value, send_handler handler)
 
 	m_impl->open(*head, spec,
 	[request_body, source = std::move(source), spec = std::move(spec),
-	 trailers = std::move(trailers), handler = std::move(handler)]
+	 trailers = std::move(trailers),
+	 max_buffered_body = m_impl->config.response_limits.max_buffered_body,
+	 automatic_decompression = m_impl->config.automatic_decompression,
+	 handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{
 		if( error )
@@ -499,6 +566,7 @@ void client_state::send(request request_value, send_handler handler)
 		}
 		std::make_shared<operation>(std::move(active_stream), request_body,
 			std::move(source), std::move(spec), std::move(trailers),
+			max_buffered_body, automatic_decompression,
 			std::move(handler))->start();
 	});
 }

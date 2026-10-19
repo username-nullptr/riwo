@@ -11,8 +11,198 @@
 # include <openssl/ssl.h>
 #endif
 
+#include <atomic>
+#include <array>
+#include <cerrno>
+#include <charconv>
+#include <chrono>
+#include <thread>
+#include <vector>
+
+#if !defined(_WIN32)
+# include <poll.h>
+# include <sys/socket.h>
+#endif
+
 namespace riwo::http_exp::detail { namespace
 {
+
+// Phase C has a configured nghttp2 capability probe but no runnable HTTP/2
+// client Session. Do not advertise h2 until the phase-D factory exists.
+constexpr bool h2_client_session_available = false;
+
+[[nodiscard]] std::vector<asio::ip::tcp::endpoint> resolve_with_timeout(
+	asio::any_io_executor executor, std::string_view host, uint16_t port,
+	std::chrono::milliseconds timeout, error_code &error)
+{
+	error.clear();
+	if( timeout.count() <= 0 )
+	{
+		asio::ip::tcp::resolver resolver(std::move(executor));
+		auto results = resolver.resolve(host, std::to_string(port), error);
+		std::vector<asio::ip::tcp::endpoint> endpoints;
+		if( error ) return endpoints;
+		for( const auto &value : results )
+			endpoints.push_back(value.endpoint());
+		return endpoints;
+	}
+
+	asio::io_context context;
+	asio::ip::tcp::resolver resolver(context);
+	std::vector<asio::ip::tcp::endpoint> endpoints;
+	bool completed = false;
+	resolver.async_resolve(host, std::to_string(port),
+	[&](error_code resolve_error,
+		asio::ip::tcp::resolver::results_type results)
+	{
+		error = resolve_error;
+		if( !error )
+			for( const auto &value : results )
+				endpoints.push_back(value.endpoint());
+		completed = true;
+	});
+	context.run_for(timeout);
+	if( !completed )
+	{
+		error = asio::error::make_error_code(asio::error::timed_out);
+		resolver.cancel();
+	}
+	return endpoints;
+}
+
+template <typename Socket>
+void connect_with_timeout(Socket &socket,
+	const std::vector<asio::ip::tcp::endpoint> &endpoints,
+	std::chrono::milliseconds timeout, error_code &error)
+{
+	error.clear();
+	if( timeout.count() <= 0 )
+	{
+		asio::connect(socket, endpoints, error);
+		return;
+	}
+
+#if !defined(_WIN32)
+	const auto deadline = std::chrono::steady_clock::now() + timeout;
+	for( const auto &endpoint : endpoints )
+	{
+		const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now());
+		if( remaining.count() <= 0 )
+		{
+			error = asio::error::make_error_code(asio::error::timed_out);
+			return;
+		}
+		socket.open(endpoint.protocol(), error);
+		if( error ) return;
+		socket.non_blocking(true, error);
+		if( error ) return;
+		const auto native_result = ::connect(socket.native_handle(),
+			endpoint.data(), static_cast<socklen_t>(endpoint.size()));
+		if( native_result != 0 && errno != EINPROGRESS && errno != EWOULDBLOCK )
+		{
+			error = std::error_code(errno, std::system_category());
+			error_code ignored;
+			socket.close(ignored);
+			continue;
+		}
+		if( native_result != 0 )
+		{
+			pollfd descriptor {
+				.fd = socket.native_handle(),
+				.events = POLLOUT,
+				.revents = 0
+			};
+			const auto result = ::poll(&descriptor, 1,
+				static_cast<int>(remaining.count()));
+			if( result == 0 )
+			{
+				error = asio::error::make_error_code(asio::error::timed_out);
+				error_code ignored;
+				socket.close(ignored);
+				return;
+			}
+			if( result < 0 )
+			{
+				error = asio::error::make_error_code(
+					asio::error::try_again);
+				error_code ignored;
+				socket.close(ignored);
+				return;
+			}
+			int value = 0;
+			socklen_t size = sizeof(value);
+			if( ::getsockopt(socket.native_handle(), SOL_SOCKET, SO_ERROR,
+				&value, &size) != 0 || value != 0 )
+			{
+				error = std::error_code(value != 0 ? value : errno,
+					std::system_category());
+				error_code ignored;
+				socket.close(ignored);
+				continue;
+			}
+		}
+		socket.non_blocking(false, error);
+		if( error )
+		{
+			error_code ignored;
+			socket.close(ignored);
+			return;
+		}
+		return;
+	}
+	if( !error )
+		error = asio::error::make_error_code(asio::error::host_unreachable);
+#else
+	std::atomic<bool> finished {false};
+	std::atomic<bool> timed_out {false};
+	std::jthread watchdog([&]
+	{
+		const auto deadline = std::chrono::steady_clock::now() + timeout;
+		while( !finished && std::chrono::steady_clock::now() < deadline )
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		if( finished ) return;
+		timed_out = true;
+		error_code ignored;
+		socket.close(ignored);
+	});
+	asio::connect(socket, endpoints, error);
+	finished = true;
+	watchdog.request_stop();
+	if( timed_out )
+		error = asio::error::make_error_code(asio::error::timed_out);
+#endif
+}
+
+#if RIWO_OPENSSL_SUPPORT
+void tls_handshake_with_timeout(tls_socket &socket,
+	std::chrono::milliseconds timeout, error_code &error)
+{
+	error.clear();
+	if( timeout.count() <= 0 )
+	{
+		socket.handshake(asio::ssl::stream_base::client, error);
+		return;
+	}
+	std::atomic<bool> finished {false};
+	std::atomic<bool> timed_out {false};
+	std::jthread watchdog([&]
+	{
+		const auto deadline = std::chrono::steady_clock::now() + timeout;
+		while( !finished && std::chrono::steady_clock::now() < deadline )
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		if( finished ) return;
+		timed_out = true;
+		error_code ignored;
+		socket.next_layer().close(ignored);
+	});
+	socket.handshake(asio::ssl::stream_base::client, error);
+	finished = true;
+	watchdog.request_stop();
+	if( timed_out )
+		error = asio::error::make_error_code(asio::error::timed_out);
+}
+#endif
 
 [[nodiscard]] std::string lower(std::string_view text)
 {
@@ -21,6 +211,33 @@ namespace riwo::http_exp::detail { namespace
 		return static_cast<char>(std::tolower(value));
 	});
 	return result;
+}
+
+struct proxy_target
+{
+	std::string host {};
+	uint16_t port = 80;
+};
+
+[[nodiscard]] optional<proxy_target> parse_proxy(const session_key &key)
+{
+	if( !key.proxy.endpoint ) return std::nullopt;
+	riwo::url value(*key.proxy.endpoint);
+	if( !value.is_valid() || lower(value.protocol()) != "http" ||
+		value.host().empty() )
+		return std::nullopt;
+	return proxy_target {
+		.host = std::string(value.host()),
+		.port = static_cast<uint16_t>(value.port() == 0 ? 80 : value.port())
+	};
+}
+
+[[nodiscard]] std::string origin_authority(const session_key &key)
+{
+	auto host = key.host;
+	if( host.find(':') != std::string::npos && !host.starts_with('[') )
+		host = '[' + host + ']';
+	return host + ':' + std::to_string(key.port);
 }
 
 [[nodiscard]] bool valid_policy(const protocol_policy_identity &policy) noexcept
@@ -70,6 +287,26 @@ void mix(size_t &seed, size_t value) noexcept
 	return result;
 }
 
+[[nodiscard]] std::vector<protocol> alpn_preference(const session_key &key)
+{
+	std::vector<protocol> result;
+	for( const auto value : key.protocols.preference )
+	{
+		if( value == protocol::v1_0 ) continue;
+		if( value == protocol::v2 && !h2_client_session_available ) continue;
+		if( key.protocols.requirement == protocol_requirement::require_http1 &&
+			value != protocol::v1_1 )
+			continue;
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+		if( key.protocols.requirement == protocol_requirement::require_http2 &&
+			value != protocol::v2 )
+			continue;
+#endif
+		result.push_back(value);
+	}
+	return result;
+}
+
 [[nodiscard]] optional<protocol> protocol_from_alpn(std::string_view value)
 {
 	if( value == "http/1.1" ) return protocol::v1_1;
@@ -114,50 +351,99 @@ public:
 		const session_key &key, const client_config &config) noexcept override
 	{
 		try {
-			ignore_unused(config);
 			auto selected = negotiate_protocol(make_policy(key), key);
 			if( !selected ) return sys_unexpected(selected.error());
 
-			asio::ip::tcp::resolver resolver(m_executor);
 			error_code error;
-			auto endpoints = resolver.resolve(key.host, std::to_string(key.port),
-				error);
+			auto proxy = parse_proxy(key);
+			if( key.proxy.endpoint && !proxy )
+				return sys_unexpected(make_error_code(errc::invalid_target));
+
+			const auto connect_host = proxy ? proxy->host : key.host;
+			const auto connect_port = proxy ? proxy->port : key.port;
+			auto endpoints = resolve_with_timeout(m_executor, connect_host,
+				connect_port, config.timeout.connect, error);
 			if( error ) return sys_unexpected(error);
 			if( endpoints.empty() )
 				return sys_unexpected(asio::error::make_error_code(
 					asio::error::host_not_found));
 
+			auto tcp = std::make_shared<tcp_connection>(m_executor);
+			connect_with_timeout(tcp->socket(), endpoints,
+				config.timeout.connect, error);
+			if( error ) return sys_unexpected(error);
+			tcp->socket().set_option(asio::ip::tcp::no_delay(true), error);
+			if( error ) return sys_unexpected(error);
+
 			if( key.scheme != "https" )
 			{
-				auto transport =
-					std::make_shared<tcp_connection>(m_executor);
-				asio::connect(transport->socket(), endpoints, error);
+				auto remote = tcp->remote_endpoint(error);
 				if( error ) return sys_unexpected(error);
-				transport->socket().set_option(asio::ip::tcp::no_delay(true),
-					error);
-				if( error ) return sys_unexpected(error);
-				auto remote = transport->remote_endpoint(error);
-				if( error ) return sys_unexpected(error);
-				auto local = transport->local_endpoint(error);
+				auto local = tcp->local_endpoint(error);
 				if( error ) return sys_unexpected(error);
 				return negotiated_transport {
-					.stream = std::move(transport),
+					.stream = std::move(tcp),
 					.selected_protocol = *selected,
 					.remote = remote,
-					.local = local
+					.local = local,
+					.absolute_form = proxy.has_value()
 				};
 			}
 
-			if( key.scheme != "https" )
-				return sys_unexpected(make_error_code(
-					errc::operation_not_supported));
 #if RIWO_OPENSSL_SUPPORT
+			if( proxy )
+			{
+				const auto authority = origin_authority(key);
+				const std::string request = "CONNECT " + authority +
+					" HTTP/1.1\r\nHost: " + authority + "\r\n\r\n";
+				tcp->set_read_timeout(config.timeout.connect);
+				tcp->set_write_timeout(config.timeout.connect);
+				(void)tcp->write_sync(asio::buffer(request), error);
+				if( error ) return sys_unexpected(error);
+
+				std::string response;
+				std::array<char,4096> buffer {};
+				while( response.find("\r\n\r\n") == std::string::npos )
+				{
+					const auto read = tcp->read_some_sync(riwo::buffer(buffer),
+						error);
+					if( error ) return sys_unexpected(error);
+					if( read == 0 )
+						return sys_unexpected(make_error_code(
+							errc::negotiation_failed));
+					response.append(buffer.data(), read);
+					if( response.size() > 64U * 1024U )
+						return sys_unexpected(make_error_code(
+							errc::header_limit_exceeded));
+				}
+				auto line_end = response.find("\r\n");
+				auto first = response.find(' ');
+				auto second = first == std::string::npos ? std::string::npos :
+					response.find(' ', first + 1);
+				if( first == std::string::npos || second == std::string::npos )
+					return sys_unexpected(make_error_code(
+						errc::connection_protocol_error));
+				uint16_t code = 0;
+				const auto code_text = std::string_view(response).substr(
+					first + 1, second - first - 1);
+				const auto parsed_code = std::from_chars(code_text.data(),
+					code_text.data() + code_text.size(), code);
+				if( parsed_code.ec != std::errc{} ||
+					parsed_code.ptr != code_text.data() + code_text.size() ||
+					code != 200 )
+					return sys_unexpected(make_error_code(
+						errc::negotiation_failed));
+				(void)line_end;
+				tcp->set_read_timeout(std::nullopt);
+				tcp->set_write_timeout(std::nullopt);
+			}
+
 			asio::ssl::context context(asio::ssl::context::tls_client);
 			if( auto context_error = configure_tls_context(
 				context, key.tls, error); context_error )
 				return sys_unexpected(context_error);
 
-			tls_socket socket(m_executor, context);
+			tls_socket socket(std::move(tcp->socket()), context);
 			error_code address_error;
 			ignore_unused(asio::ip::make_address(key.host, address_error));
 			if( address_error && ::SSL_set_tlsext_host_name(
@@ -172,20 +458,14 @@ public:
 				if( error ) return sys_unexpected(error);
 			}
 
-			auto offered = alpn_wire(key.protocols.preference);
+			auto offered = alpn_wire(alpn_preference(key));
 			if( !offered.empty() && ::SSL_set_alpn_protos(
 				socket.native_handle(), offered.data(),
 				static_cast<unsigned int>(offered.size())) != 0 )
 				return sys_unexpected(make_error_code(
 					errc::negotiation_failed));
 
-			asio::connect(socket.next_layer(), endpoints, error);
-			if( error ) return sys_unexpected(error);
-			socket.next_layer().set_option(asio::ip::tcp::no_delay(true),
-				error);
-			if( error ) return sys_unexpected(error);
-
-			socket.handshake(asio::ssl::stream_base::client, error);
+			tls_handshake_with_timeout(socket, config.timeout.connect, error);
 			if( error ) return sys_unexpected(error);
 
 			const unsigned char *alpn_data = nullptr;
@@ -235,7 +515,7 @@ public:
 					errc::negotiation_failed));
 # endif
 
-			auto native = socket.next_layer().remote_endpoint(error);
+			auto remote = socket.next_layer().remote_endpoint(error);
 			if( error ) return sys_unexpected(error);
 			auto local = socket.next_layer().local_endpoint(error);
 			if( error ) return sys_unexpected(error);
@@ -244,7 +524,7 @@ public:
 			return negotiated_transport {
 				.stream = std::move(transport),
 				.selected_protocol = *selected,
-				.remote = native,
+				.remote = remote,
 				.local = local,
 				.alpn = std::move(alpn)
 			};
@@ -280,7 +560,8 @@ public:
 		auto selected = transport.selected_protocol;
 		auto limits = config.response_limits;
 		return h1::make_client_session(std::move(executor), selected,
-			std::move(limits), std::move(transport.stream));
+			std::move(limits), std::move(transport.stream), config.timeout,
+			transport.absolute_form);
 	}
 };
 
