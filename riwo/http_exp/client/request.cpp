@@ -6,71 +6,6 @@
 namespace riwo::http_exp
 {
 
-namespace
-{
-
-class borrowed_body_source
-{
-public:
-	explicit borrowed_body_source(const_buffer body) : body_(body) {}
-
-	[[nodiscard]] optional<uint64_t> size() const noexcept {
-		return body_.size();
-	}
-
-	[[nodiscard]] bool replayable() const noexcept {
-		return true;
-	}
-
-	[[nodiscard]] size_t read_some(mutable_buffer buffer,
-		error_code &error) noexcept
-	{
-		error.clear();
-		if( cancelled_ )
-		{
-			error = asio::error::make_error_code(asio::error::operation_aborted);
-			return 0;
-		}
-		if( buffer.size() == 0 ) return 0;
-		if( offset_ == body_.size() )
-		{
-			error = asio::error::make_error_code(asio::error::eof);
-			return 0;
-		}
-		const auto size = std::min(buffer.size(), body_.size() - offset_);
-		std::memcpy(buffer.data(),
-			static_cast<const std::byte*>(body_.data()) + offset_, size);
-		offset_ += size;
-		return size;
-	}
-
-	void read_some(mutable_buffer buffer,
-		asio::any_completion_handler<void(error_code,size_t)> handler)
-	{
-		error_code error;
-		auto size = read_some(buffer, error);
-		std::move(handler)(error, size);
-	}
-
-	void rewind(asio::any_completion_handler<void(error_code)> handler)
-	{
-		offset_ = 0;
-		cancelled_ = false;
-		std::move(handler)(error_code{});
-	}
-
-	void cancel() noexcept {
-		cancelled_ = true;
-	}
-
-private:
-	const_buffer body_;
-	size_t offset_ = 0;
-	bool cancelled_ = false;
-};
-
-} //namespace
-
 request::request(http_exp::method request_method, riwo::url request_url) :
 	m_impl(std::make_unique<impl>(
 		std::move(request_method), std::move(request_url)))
@@ -97,17 +32,24 @@ const http_exp::fields &request::headers() const noexcept {
 	return m_impl->head.headers;
 }
 
-request &request::borrowed_body(const_buffer body)
+request &request::body(const const_buffer &bytes)
 {
-	m_impl->source = detail::make_body_source(borrowed_body_source(body));
+	m_impl->body = bytes;
+	m_impl->source.reset();
 	m_impl->file.clear();
-	m_impl->body_spec = http_exp::body_spec::known(body.size());
+	m_impl->body_spec = http_exp::body_spec::known(bytes.size());
 	m_impl->trailers = {};
 	return *this;
 }
 
+request &request::borrowed_body(const_buffer body)
+{
+	return this->body(body);
+}
+
 request &request::file(std::filesystem::path path)
 {
+	m_impl->body.reset();
 	m_impl->source.reset();
 	m_impl->file = std::move(path);
 	m_impl->body_spec = http_exp::body_spec::streaming();
@@ -145,7 +87,8 @@ const body_spec &request::body_description() const noexcept {
 }
 
 bool request::has_body_source() const noexcept {
-	return static_cast<bool>(m_impl->source) || !m_impl->file.empty();
+	return m_impl->body.has_value() || static_cast<bool>(m_impl->source) ||
+		!m_impl->file.empty();
 }
 
 } //namespace riwo::http_exp

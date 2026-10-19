@@ -142,60 +142,87 @@ auto basic_server_exchange<Exec>::respond(response_head head, body_spec spec,
 }
 
 template <core_concepts::exec Exec>
-template <typename Body, typename Token>
-auto basic_server_exchange<Exec>::respond(response_head head, Body &&body,
-	Token &&token)
-	requires core_concepts::tf_opt_token<Token,error_code> &&
-	requires(Body &&value) { std::data(value); std::size(value); }
+template <typename Token>
+auto basic_server_exchange<Exec>::respond(response_head head,
+	const const_buffer &body, Token &&token)
+	requires core_concepts::tf_opt_token<Token,error_code>
 {
-	using value_type = std::remove_cv_t<std::remove_reference_t<
-		decltype(*std::data(body))>>;
-	static_assert(std::is_trivially_copyable_v<value_type>);
-	const auto values = std::span(std::data(body), std::size(body));
-	const auto bytes = std::as_bytes(values);
-
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		respond(std::move(head), body_spec::known(bytes.size()), token);
+		respond(std::move(head), body_spec::known(body.size()), token);
 		if( token ) return;
-		(void)response_body().write(const_buffer(bytes.data(), bytes.size()), token);
+		(void)response_body().write(body, token);
 		if( token ) return;
 		response_body().finish({}, token);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
-		respond(std::move(head), body_spec::known(bytes.size()));
-		(void)response_body().write(const_buffer(bytes.data(), bytes.size()));
+		respond(std::move(head), body_spec::known(body.size()));
+		(void)response_body().write(body);
 		response_body().finish();
 	}
 	else
 	{
-		auto owned = std::make_shared<std::vector<std::byte>>(
-			bytes.begin(), bytes.end());
-		return initiate_io_void(m_impl->executor,
-		[this, head = std::move(head), owned](auto handler) mutable
+		using token_t = std::remove_cvref_t<Token>;
+		if constexpr( is_detached_v<token_unbound_t<token_t>> )
 		{
-			respond(std::move(head), body_spec::known(owned->size()),
-			[this, owned, handler = std::move(handler)](error_code error) mutable
+			auto owned = std::make_shared<std::vector<std::byte>>(body.size());
+			if( body.size() != 0 )
+				std::memcpy(owned->data(), body.data(), body.size());
+			return initiate_io_void(m_impl->executor,
+			[this, head = std::move(head), owned](auto handler) mutable
 			{
-				if( error )
-				{
-					std::move(handler)(error);
-					return;
-				}
-				response_body().write(riwo::buffer(*owned),
+				respond(std::move(head), body_spec::known(owned->size()),
 				[this, owned, handler = std::move(handler)]
-				(error_code write_error, size_t) mutable
+				(error_code error) mutable
 				{
-					if( write_error )
+					if( error )
 					{
-						std::move(handler)(write_error);
+						std::move(handler)(error);
 						return;
 					}
-					response_body().finish({}, std::move(handler));
+					response_body().write(riwo::buffer(*owned),
+					[this, owned, handler = std::move(handler)]
+					(error_code write_error, size_t) mutable
+					{
+						if( write_error )
+						{
+							std::move(handler)(write_error);
+							return;
+						}
+						response_body().finish({}, std::move(handler));
+					});
 				});
-			});
-		}, std::forward<Token>(token));
+			}, std::forward<Token>(token));
+		}
+		else
+		{
+			return initiate_io_void(m_impl->executor,
+			[this, head = std::move(head), body](auto handler) mutable
+			{
+				respond(std::move(head), body_spec::known(body.size()),
+				[this, body, handler = std::move(handler)]
+				(error_code error) mutable
+				{
+					if( error )
+					{
+						std::move(handler)(error);
+						return;
+					}
+					response_body().write(body,
+					[this, handler = std::move(handler)]
+					(error_code write_error, size_t) mutable
+					{
+						if( write_error )
+						{
+							std::move(handler)(write_error);
+							return;
+						}
+						response_body().finish({}, std::move(handler));
+					});
+				});
+			}, std::forward<Token>(token));
+		}
 	}
 }
 

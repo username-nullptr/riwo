@@ -37,9 +37,11 @@ public:
 
 	[[nodiscard]] executor_type get_executor() const noexcept;
 
+	// Asynchronous writes borrow the buffer until completion. Detached writes
+	// make an owned copy because the caller has no completion lifetime barrier.
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto write(const_buffer buffer, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,size_t>;
+		requires core_concepts::tf_opt_token<Token,error_code,size_t>;
 
 	template <typename Token = use_sync_t>
 	auto finish(fields trailers = {}, Token &&token = {})

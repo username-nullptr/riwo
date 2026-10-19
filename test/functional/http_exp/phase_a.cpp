@@ -433,6 +433,39 @@ void writer_state_machine()
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK(trailer_adapter->finished_);
 
+	auto borrowed_adapter = std::make_shared<fake_writer_adapter>();
+	borrowed_adapter->hold();
+	auto borrowed_state = http::detail::make_body_writer_state(borrowed_adapter,
+		http::body_spec::known(3), true);
+	http::body_writer borrowed_writer(context, borrowed_state);
+	std::string borrowed_body = "abc";
+	bool borrowed_done = false;
+	borrowed_writer.write(riwo::buffer(borrowed_body),
+	[&](riwo::error_code value, size_t count) {
+		RIWO_TEST_CHECK(!value);
+		RIWO_TEST_CHECK_EQ(count, 3U);
+		borrowed_done = true;
+	});
+	borrowed_body = "xyz";
+	borrowed_adapter->complete();
+	RIWO_TEST_CHECK(borrowed_done);
+	RIWO_TEST_CHECK_EQ(borrowed_adapter->bytes_, "xyz");
+	borrowed_writer.finish({}, error);
+	RIWO_TEST_CHECK(!error);
+
+	auto detached_adapter = std::make_shared<fake_writer_adapter>();
+	detached_adapter->hold();
+	auto detached_state = http::detail::make_body_writer_state(detached_adapter,
+		http::body_spec::known(3), true);
+	http::body_writer detached_writer(context, detached_state);
+	std::string detached_body = "abc";
+	detached_writer.write(riwo::buffer(detached_body), riwo::detached);
+	detached_body = "xyz";
+	detached_adapter->complete();
+	RIWO_TEST_CHECK_EQ(detached_adapter->bytes_, "abc");
+	detached_writer.finish({}, error);
+	RIWO_TEST_CHECK(!error);
+
 	auto overlap_adapter = std::make_shared<fake_writer_adapter>();
 	overlap_adapter->hold();
 	auto overlap = http::detail::make_body_writer_state(overlap_adapter,
@@ -492,7 +525,7 @@ void client_open_and_metadata()
 	RIWO_TEST_CHECK_EQ(std::string_view(data.data(), size), "reply");
 
 	http::request with_body(http::method::post, "http://example.test/");
-	with_body.body(std::string("bound"));
+	with_body.body("bound");
 	(void)client.open(std::move(with_body), http::body_spec::streaming(), error);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
@@ -505,11 +538,29 @@ void client_open_and_metadata()
 		http::make_error_code(http::errc::invalid_target));
 
 	http::request send_request(http::method::post, "http://example.test/send");
-	send_request.body(std::string("abc"));
+	send_request.body("abc");
 	auto reply = client.send(std::move(send_request), error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(reply.status(), http::status::created);
 	RIWO_TEST_CHECK_EQ(session->last_stream->writer_adapter->bytes_, "abc");
+
+	std::string borrowed_request_body = "before";
+	http::request borrowed_request(http::method::post,
+		"http://example.test/send-borrowed");
+	borrowed_request.body(riwo::buffer(borrowed_request_body));
+	borrowed_request_body = "after!";
+	(void)client.send(std::move(borrowed_request), error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(session->last_stream->writer_adapter->bytes_, "after!");
+
+	const std::array binary_body {'a', '\0', 'b'};
+	http::request binary_request(http::method::post,
+		"http://example.test/send-binary");
+	binary_request.body(riwo::buffer(binary_body));
+	(void)client.send(std::move(binary_request), error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(session->last_stream->writer_adapter->bytes_,
+		std::string("a\0b", 3));
 
 	auto fetched = client.fetch(
 		http::request(http::method::get, "http://example.test/fetch"), error);
@@ -521,7 +572,7 @@ void client_open_and_metadata()
 	bool asynchronous = false;
 	http::request async_request(http::method::post,
 		"http://example.test/async-send");
-	async_request.body(std::string("async"));
+	async_request.body("async");
 	client.send(std::move(async_request),
 	[&](riwo::error_code send_error,
 		http::basic_reply<riwo::io_context_t::executor_type> async_reply)
@@ -608,6 +659,51 @@ void server_exchange_state_machine()
 	exchange.respond({http::status::ok, {}}, http::body_spec::empty(), error);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
+
+	auto buffered_stream = std::make_shared<fake_stream>(
+		http::body_spec::empty());
+	buffered_stream->writer = http::detail::make_body_writer_state(
+		buffered_stream->writer_adapter, http::body_spec::empty(), false);
+	http::basic_server_exchange<riwo::io_context_t::executor_type> buffered(
+		context, buffered_stream, {});
+	buffered.respond({http::status::ok, {}}, "hello", error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(buffered_stream->writer_adapter->bytes_, "hello");
+	RIWO_TEST_CHECK(buffered_stream->writer_adapter->finished_);
+
+	auto borrowed_stream = std::make_shared<fake_stream>(
+		http::body_spec::empty());
+	borrowed_stream->writer_adapter->hold();
+	borrowed_stream->writer = http::detail::make_body_writer_state(
+		borrowed_stream->writer_adapter, http::body_spec::empty(), false);
+	http::basic_server_exchange<riwo::io_context_t::executor_type>
+		borrowed_exchange(context, borrowed_stream, {});
+	std::string borrowed_response_body = "abc";
+	bool response_done = false;
+	borrowed_exchange.respond({http::status::ok, {}},
+		riwo::buffer(borrowed_response_body),
+	[&](riwo::error_code value) {
+		RIWO_TEST_CHECK(!value);
+		response_done = true;
+	});
+	borrowed_response_body = "xyz";
+	borrowed_stream->writer_adapter->complete();
+	RIWO_TEST_CHECK(response_done);
+	RIWO_TEST_CHECK_EQ(borrowed_stream->writer_adapter->bytes_, "xyz");
+
+	auto detached_stream = std::make_shared<fake_stream>(
+		http::body_spec::empty());
+	detached_stream->writer_adapter->hold();
+	detached_stream->writer = http::detail::make_body_writer_state(
+		detached_stream->writer_adapter, http::body_spec::empty(), false);
+	http::basic_server_exchange<riwo::io_context_t::executor_type>
+		detached_exchange(context, detached_stream, {});
+	std::string detached_response_body = "abc";
+	detached_exchange.respond({http::status::ok, {}},
+		riwo::buffer(detached_response_body), riwo::detached);
+	detached_response_body = "xyz";
+	detached_stream->writer_adapter->complete();
+	RIWO_TEST_CHECK_EQ(detached_stream->writer_adapter->bytes_, "abc");
 
 	auto informational_stream = std::make_shared<fake_stream>(
 		http::body_spec::empty());

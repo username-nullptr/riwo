@@ -11,6 +11,7 @@ Enable examples and every module you want to inspect:
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DRIWO_BUILD_EXAMPLES=ON
@@ -101,6 +102,27 @@ File transfer uses a separate pair:
 `https_server` is built only with OpenSSL support. `proxy_client` requires an
 external proxy. Paths derived from request data must be validated by the
 application; `resource_root` is not a sandbox.
+
+## Experimental HTTP
+
+Requires `RIWO_BUILD_HTTP_EXP=ON`. These examples intentionally exercise the
+HTTP/1.x path while the experimental module's higher protocol layers continue
+to evolve.
+
+| Program | Demonstrates | Arguments / default |
+| --- | --- | --- |
+| [`server`](http_exp/server.cpp) | Health, echo, streaming response, trailers, fallback route | `[port]`; 8084 |
+| [`client`](http_exp/client.cpp) | Buffered GET/POST and streamed response/trailers | `[base-url]`; local server on 8084 |
+
+Run the pair in separate terminals:
+
+```sh
+./build/output/examples/http_exp/server
+./build/output/examples/http_exp/client
+```
+
+The client explicitly requires HTTP/1.x so it remains a focused smoke test even
+when HTTP/2 support is compiled into `http_exp` later.
 
 ## WebSocket
 

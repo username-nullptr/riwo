@@ -79,8 +79,9 @@ public:
 		requires core_concepts::dis_detached_tf_opt_token<
 			Token,error_code,reply_type>;
 
-	template <typename Url, typename Body, typename Token = use_sync_t>
-	[[nodiscard]] auto post(Url &&url, Body &&body, Token &&token = {})
+	template <typename Url, typename Token = use_sync_t>
+	[[nodiscard]] auto post(Url &&url, const const_buffer &body,
+		Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<
 			Token,error_code,reply_type>;
 

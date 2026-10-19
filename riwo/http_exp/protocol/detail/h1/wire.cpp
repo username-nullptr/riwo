@@ -366,14 +366,12 @@ sys_expected<uint64_t> parse_chunk_size(std::string_view line) noexcept
 	return result;
 }
 
-std::string serialize_chunk(const_buffer buffer)
+std::string serialize_chunk_header(size_t buffer_size)
 {
 	char size[2 * sizeof(size_t) + 1] {};
 	auto converted = std::to_chars(std::begin(size), std::end(size) - 1,
-		buffer.size(), 16);
+		buffer_size, 16);
 	std::string result(size, converted.ptr);
-	result += "\r\n";
-	result.append(static_cast<const char*>(buffer.data()), buffer.size());
 	result += "\r\n";
 	return result;
 }

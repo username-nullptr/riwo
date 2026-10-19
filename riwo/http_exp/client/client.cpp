@@ -19,6 +19,11 @@ struct request_access
 		return value.m_impl->source;
 	}
 
+	[[nodiscard]] static optional<const_buffer>
+	body(const request &value) noexcept {
+		return value.m_impl->body;
+	}
+
 	[[nodiscard]] static fields trailers(const request &value) {
 		return value.m_impl->trailers;
 	}
@@ -29,6 +34,7 @@ struct request_access
 		try {
 			file_body_source source(value.m_impl->file);
 			const auto size = source.size();
+			value.m_impl->body.reset();
 			value.m_impl->source = make_body_source(std::move(source));
 			value.m_impl->body_spec = body_spec::known(
 				*size, value.m_impl->body_spec.trailers());
@@ -228,6 +234,7 @@ send_result client_state::send(request request_value,
 		error = head.error();
 		return {};
 	}
+	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
 	auto active_stream = m_impl->open_sync(*head, spec, error);
@@ -244,7 +251,19 @@ send_result client_state::send(request request_value,
 		return {};
 	}
 
-	if( source )
+	if( request_body )
+	{
+		auto written = writer->write(*request_body, error);
+		if( !error && written != request_body->size() )
+			error = make_error_code(errc::body_length_mismatch);
+		if( !error ) writer->finish(std::move(trailers), error);
+		if( error )
+		{
+			active_stream->cancel();
+			return {};
+		}
+	}
+	else if( source )
 	{
 		std::array<std::byte,8192> buffer;
 		uint64_t total = 0;
@@ -318,11 +337,13 @@ void client_state::send(request request_value, send_handler handler)
 		std::move(handler)(head.error(), send_result{});
 		return;
 	}
+	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
 	struct operation : std::enable_shared_from_this<operation>
 	{
 		std::shared_ptr<stream> active_stream;
+		optional<const_buffer> body;
 		std::shared_ptr<body_source> source;
 		std::shared_ptr<body_writer_state> writer;
 		body_spec spec;
@@ -332,9 +353,11 @@ void client_state::send(request request_value, send_handler handler)
 		uint64_t total = 0;
 
 		operation(std::shared_ptr<stream> stream_value,
+			optional<const_buffer> body_value,
 			std::shared_ptr<body_source> source_value, body_spec description,
 			fields trailer_values, send_handler completion) :
-			active_stream(std::move(stream_value)), source(std::move(source_value)),
+			active_stream(std::move(stream_value)), body(body_value),
+			source(std::move(source_value)),
 			writer(active_stream ? active_stream->outbound_body() : nullptr),
 			spec(std::move(description)), trailers(std::move(trailer_values)),
 			handler(std::move(completion))
@@ -348,12 +371,29 @@ void client_state::send(request request_value, send_handler handler)
 				fail(make_error_code(errc::operation_not_permitted));
 				return;
 			}
+			if( body )
+			{
+				write_body();
+				return;
+			}
 			if( !source )
 			{
 				wait_response();
 				return;
 			}
 			read_next();
+		}
+
+		void write_body()
+		{
+			auto self = shared_from_this();
+			writer->write(*body,
+			[self = std::move(self)](error_code error, size_t written) mutable {
+				if( error ) self->fail(error);
+				else if( written != self->body->size() )
+					self->fail(make_error_code(errc::body_length_mismatch));
+				else self->finish_request();
+			});
 		}
 
 		void read_next()
@@ -448,7 +488,7 @@ void client_state::send(request request_value, send_handler handler)
 	};
 
 	m_impl->open(*head, spec,
-	[source = std::move(source), spec = std::move(spec),
+	[request_body, source = std::move(source), spec = std::move(spec),
 	 trailers = std::move(trailers), handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{
@@ -457,7 +497,7 @@ void client_state::send(request request_value, send_handler handler)
 			std::move(handler)(error, send_result{});
 			return;
 		}
-		std::make_shared<operation>(std::move(active_stream),
+		std::make_shared<operation>(std::move(active_stream), request_body,
 			std::move(source), std::move(spec), std::move(trailers),
 			std::move(handler))->start();
 	});

@@ -25,7 +25,7 @@ function(riwo_add_example category name)
 	add_executable(${target} ${EXAMPLE_SOURCES})
 	# riwo_enable_strict_warnings(${target})
 
-	if (category MATCHES "^(http|websocket)$")
+	if (category MATCHES "^(http|http_exp|websocket)$")
 		riwo_limit_heavy_compile(${target})
 	endif ()
 
@@ -99,6 +99,12 @@ if (RIWO_BUILD_HTTP)
 	endif ()
 endif ()
 
+# Experimental HTTP/1.x API
+if (RIWO_BUILD_HTTP_EXP)
+	riwo_add_example(http_exp client LIBRARIES riwo.http_exp)
+	riwo_add_example(http_exp server LIBRARIES riwo.http_exp)
+endif ()
+
 # WebSocket protocol
 if (RIWO_BUILD_WEBSOCKET)
 	riwo_add_example(websocket client            LIBRARIES riwo.websocket)
@@ -163,6 +169,8 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	http/server_aop.cpp
 	http/server_file.cpp
 	http/server_session.cpp
+	http_exp/client.cpp
+	http_exp/server.cpp
 	websocket/mixed_http_client.cpp
 	websocket/mixed_http_server.cpp
 	websocket/protocol.cpp

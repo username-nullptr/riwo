@@ -27,6 +27,7 @@ The following enables every module so every functional area is present:
 ```sh
 cmake -S . -B build-test -DBUILD_TESTING=ON \
   -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Debug

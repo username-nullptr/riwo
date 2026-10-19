@@ -54,10 +54,11 @@ public:
 	auto respond(response_head, body_spec, Token &&token = {})
 		requires core_concepts::tf_opt_token<Token,error_code>;
 
-	template <typename Body, typename Token = use_sync_t>
-	auto respond(response_head head, Body &&body, Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code> &&
-		requires(Body &&value) { std::data(value); std::size(value); };
+	// Asynchronous responses borrow body until completion, except detached,
+	// which owns a copy.
+	template <typename Token = use_sync_t>
+	auto respond(response_head head, const const_buffer &body, Token &&token = {})
+		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	template <typename Token = use_sync_t>
 	auto inform(response_head, Token &&token = {})

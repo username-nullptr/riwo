@@ -297,13 +297,14 @@ auto basic_client<Exec>::get(Url &&url, Token &&token)
 }
 
 template <core_concepts::exec Exec>
-template <typename Url, typename Body, typename Token>
-auto basic_client<Exec>::post(Url &&url, Body &&body, Token &&token)
+template <typename Url, typename Token>
+auto basic_client<Exec>::post(Url &&url, const const_buffer &body,
+	Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<
 		Token,error_code,reply_type>
 {
 	request value(method::post, riwo::url(std::forward<Url>(url)));
-	value.body(std::forward<Body>(body));
+	value.body(body);
 	return send(std::move(value), std::forward<Token>(token));
 }
 

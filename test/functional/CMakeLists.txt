@@ -41,6 +41,7 @@ if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.phase-a http_exp/phase_a.cpp riwo.http_exp)
 	add_riwo_test(http_exp.phase-b http_exp/phase_b.cpp riwo.http_exp)
 	add_riwo_test(http_exp.phase-c http_exp/phase_c.cpp riwo.http_exp)
+	add_riwo_test(http_exp.application http_exp/application.cpp riwo.http_exp)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)

@@ -246,7 +246,7 @@ void semantic_value_contracts()
 
 	http::request request(http::method::post, "http://example.test/resource");
 	request.headers().set("content-type", "text/plain");
-	request.body(std::string("abc"));
+	request.body("abc");
 	RIWO_TEST_CHECK_EQ(request.body_description().length().value(), 3U);
 	http::request custom_source(http::method::put, "http://example.test/resource");
 	custom_source.source(source_model{});

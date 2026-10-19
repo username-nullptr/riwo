@@ -98,7 +98,7 @@ void h1_client_server_round_trip()
 			fetched.buffered_body().size()), "hello-http-exp");
 
 		auto posted = co_await client.post(base + "/echo",
-			std::string("post-body"), riwo::use_awaitable);
+			"post-body", riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(posted.status(), http::status::created);
 		RIWO_TEST_CHECK_EQ(co_await read_body(posted.body()), "post-body");
 

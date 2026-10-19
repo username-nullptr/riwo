@@ -742,12 +742,16 @@ public:
 		try {
 			if( chunked_ )
 			{
-				auto wire = serialize_chunk(buffer);
-				(void)connection_->write_sync(asio::buffer(wire), error);
+				auto header = serialize_chunk_header(buffer.size());
+				(void)connection_->write_sync(asio::buffer(header), error);
+				if( error ) return 0;
+				auto size = connection_->write_sync(buffer, error);
+				if( error || size != buffer.size() ) return size;
+				constexpr std::string_view ending = "\r\n";
+				(void)connection_->write_sync(asio::buffer(ending), error);
+				return size;
 			}
-			else
-				(void)connection_->write_sync(buffer, error);
-			return error ? 0 : buffer.size();
+			return connection_->write_sync(buffer, error);
 		}
 		catch(...) {
 			error = exception_error(std::current_exception());
@@ -757,14 +761,39 @@ public:
 
 	void write(const_buffer buffer, write_handler handler) override
 	{
-		auto wire = std::make_shared<std::string>();
-		if( chunked_ ) *wire = serialize_chunk(buffer);
-		else wire->assign(static_cast<const char*>(buffer.data()), buffer.size());
-		const auto payload_size = buffer.size();
-		connection_->write(asio::buffer(*wire),
-		[wire, payload_size,
+		if( !chunked_ )
+		{
+			connection_->write(buffer, std::move(handler));
+			return;
+		}
+
+		auto connection = connection_;
+		auto header = std::make_shared<std::string>(
+			serialize_chunk_header(buffer.size()));
+		connection->write(asio::buffer(*header),
+		[connection = std::move(connection), header, buffer,
 		 handler = std::move(handler)](error_code error, size_t) mutable {
-			std::move(handler)(error, error ? 0 : payload_size);
+			if( error )
+			{
+				std::move(handler)(error, 0);
+				return;
+			}
+			connection->write(buffer,
+			[connection = std::move(connection), buffer,
+			 handler = std::move(handler)]
+			(error_code body_error, size_t size) mutable {
+				if( body_error || size != buffer.size() )
+				{
+					std::move(handler)(body_error, size);
+					return;
+				}
+				constexpr std::string_view ending = "\r\n";
+				connection->write(asio::buffer(ending),
+				[size, handler = std::move(handler)]
+				(error_code ending_error, size_t) mutable {
+					std::move(handler)(ending_error, size);
+				});
+			});
 		});
 	}
 

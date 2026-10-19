@@ -31,13 +31,8 @@ public:
 	[[nodiscard]] http_exp::fields &headers() noexcept;
 	[[nodiscard]] const http_exp::fields &headers() const noexcept;
 
-	template <typename Bytes>
-	request &body(Bytes &&bytes)
-		requires requires(Bytes &&value) {
-			std::data(value);
-			std::size(value);
-		};
-
+	// The buffer is borrowed until the send/fetch completion.
+	request &body(const const_buffer &bytes);
 	request &borrowed_body(const_buffer body);
 	request &file(std::filesystem::path path);
 	request &trailers(fields values);

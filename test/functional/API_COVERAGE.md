@@ -45,6 +45,22 @@ behavior rather than by implementation source file.
 - `interop/http_interop.py`: independent client/server compatibility when a local
   backend is available.
 
+## Experimental HTTP
+
+- `http_exp/public_api.cpp`: public types, completion signatures, configuration,
+  client/server construction, and compile-time ownership contracts.
+- `http_exp/phase_a.cpp`: body sources/readers/writers, exchange state machines,
+  request metadata, informational responses, and reply convenience operations.
+- `http_exp/phase_b.cpp`: HTTP/1.0 and HTTP/1.1 loopback, buffered/file/streaming
+  bodies, trailers, slow reads, and cancellation.
+- `http_exp/phase_c.cpp`: protocol selection, session keys/factories, pool
+  capacity/fairness/expiry, cleartext preface detection, and keep-alive reuse.
+- `http_exp/application.cpp`: public-API application workflow covering routing,
+  query targets, authentication rejection and body draining, state mutation,
+  case-insensitive headers, streaming events/trailers, and 404 responses.
+- `interop/http_interop.py`: independent HTTP_EXP client/server compatibility
+  when a local backend is available.
+
 ## WebSocket
 
 - `websocket/protocol.cpp`: errors, randomness, opcode/close helpers, masking,

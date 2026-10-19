@@ -68,7 +68,7 @@ struct session_key
 	friend bool operator==(const session_key &, const session_key &) = default;
 };
 
-struct session_key_hash
+struct RIWO_HTTP_EXP_API session_key_hash
 {
 	[[nodiscard]] size_t operator()(const session_key &value) const noexcept;
 };

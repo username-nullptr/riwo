@@ -50,7 +50,7 @@ struct parsed_response
 [[nodiscard]] sys_expected<uint64_t> parse_chunk_size(
 	std::string_view line) noexcept;
 
-[[nodiscard]] std::string serialize_chunk(const_buffer buffer);
+[[nodiscard]] std::string serialize_chunk_header(size_t size);
 [[nodiscard]] std::string serialize_last_chunk(const fields &trailers);
 
 } //namespace riwo::http_exp::detail::h1

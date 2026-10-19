@@ -9,7 +9,7 @@
 namespace riwo::http_exp
 {
 
-class connection
+class RIWO_HTTP_EXP_API connection
 {
 	RIWO_DISABLE_COPY_MOVE(connection)
 
