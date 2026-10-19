@@ -3,94 +3,114 @@
 
 #include "preface.h"
 
-namespace riwo::http_exp::transport
+namespace riwo::http_exp
 {
 
-bounded_plaintext_preface_detector::bounded_plaintext_preface_detector(
+class RIWO_DECL_HIDDEN http2_preface_detector::impl
+{
+public:
+	explicit impl(size_t max_bytes_value) :
+		max_bytes(std::max(max_bytes_value, http2_preface.size()))
+	{
+	}
+
+	size_t max_bytes;
+	std::string buffer;
+	preface_result result = preface_result::need_more;
+};
+
+http2_preface_detector::http2_preface_detector(
 	size_t max_bytes) :
-	m_max_bytes(std::max(max_bytes, http2_preface.size()))
+	m_impl(std::make_unique<impl>(max_bytes))
 {
 }
 
-preface_result bounded_plaintext_preface_detector::feed(const_buffer input)
+http2_preface_detector::~http2_preface_detector() =
+	default;
+
+preface_result http2_preface_detector::feed(const_buffer input)
 {
-	if( m_result != preface_result::need_more )
-		return m_result;
+	if( m_impl->result != preface_result::need_more )
+		return m_impl->result;
 
 	const auto *data = static_cast<const char *>(input.data());
-	const auto available = m_max_bytes -
-		std::min(m_max_bytes, m_buffer.size());
+	const auto available = m_impl->max_bytes -
+		std::min(m_impl->max_bytes, m_impl->buffer.size());
 	const auto count = std::min(input.size(), available);
 	for( size_t index = 0; index < count; ++index )
 	{
-		m_buffer.push_back(data[index]);
-		const auto position = m_buffer.size() - 1;
+		m_impl->buffer.push_back(data[index]);
+		const auto position = m_impl->buffer.size() - 1;
 		if( position < http2_preface.size() )
 		{
-			if( m_buffer[position] != http2_preface[position] )
+			if( m_impl->buffer[position] != http2_preface[position] )
 			{
-				m_result = preface_result::http1;
+				m_impl->result = preface_result::http1;
 				auto remaining = std::min(input.size() - index - 1,
 					available - index - 1);
 				if( remaining != 0 )
-					m_buffer.append(data + index + 1, remaining);
-				return m_result;
+					m_impl->buffer.append(data + index + 1, remaining);
+				return m_impl->result;
 			}
 			if( position + 1 == http2_preface.size() )
 			{
-				m_result = preface_result::http2;
+				m_impl->result = preface_result::http2;
 				auto remaining = std::min(input.size() - index - 1,
 					available - index - 1);
 				if( remaining != 0 )
-					m_buffer.append(data + index + 1, remaining);
-				return m_result;
+					m_impl->buffer.append(data + index + 1, remaining);
+				return m_impl->result;
 			}
 		}
 	}
-	if( m_buffer.size() >= m_max_bytes )
-		m_result = preface_result::http1;
-	return m_result;
+	if( m_impl->buffer.size() >= m_impl->max_bytes )
+		m_impl->result = preface_result::http1;
+	return m_impl->result;
 }
 
-preface_result bounded_plaintext_preface_detector::result() const noexcept {
-	return m_result;
+preface_result http2_preface_detector::result() const noexcept {
+	return m_impl->result;
 }
 
 const std::string &
-bounded_plaintext_preface_detector::buffer() const noexcept {
-	return m_buffer;
+http2_preface_detector::buffer() const noexcept {
+	return m_impl->buffer;
 }
 
-std::string bounded_plaintext_preface_detector::take_buffer()
+size_t http2_preface_detector::buffered_size() const noexcept {
+	return m_impl->buffer.size();
+}
+
+std::string http2_preface_detector::take_buffer()
 {
-	auto result = std::move(m_buffer);
-	m_buffer.clear();
+	auto result = std::move(m_impl->buffer);
+	m_impl->buffer.clear();
 	return result;
 }
 
-void bounded_plaintext_preface_detector::reset() noexcept
+void http2_preface_detector::reset() noexcept
 {
-	m_buffer.clear();
-	m_result = preface_result::need_more;
+	m_impl->buffer.clear();
+	m_impl->result = preface_result::need_more;
 }
 
-void bounded_plaintext_preface_detector::detect(
+void http2_preface_detector::detect(
 	const std::shared_ptr<connection> &stream, detect_handler handler)
 {
-	if( !stream || m_result != preface_result::need_more )
+	if( !stream || m_impl->result != preface_result::need_more )
 	{
-		std::move(handler)(error_code{}, m_result, take_buffer());
+		std::move(handler)(error_code{}, m_impl->result, take_buffer());
 		return;
 	}
 
 	struct operation final : std::enable_shared_from_this<operation>
 	{
-		bounded_plaintext_preface_detector *detector;
+		http2_preface_detector *detector;
 		std::shared_ptr<connection> stream;
 		detect_handler handler;
 		std::array<char,http2_preface.size()> buffer {};
 
-		operation(bounded_plaintext_preface_detector *detector_value,
+		operation(http2_preface_detector *detector_value,
 			std::shared_ptr<connection> stream_value,
 			detect_handler completion) : detector(detector_value),
 			stream(std::move(stream_value)), handler(std::move(completion))
@@ -127,4 +147,4 @@ void bounded_plaintext_preface_detector::detect(
 		std::move(handler))->start();
 }
 
-} //namespace riwo::http_exp::transport
+} //namespace riwo::http_exp

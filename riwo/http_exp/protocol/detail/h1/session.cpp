@@ -9,23 +9,22 @@
 namespace riwo::http_exp::detail::h1 { namespace
 {
 
-namespace htransport = ::riwo::http_exp::transport;
-
 struct connection final
 {
 	explicit connection(asio::any_io_executor executor) :
-		transport(std::make_shared<htransport::tcp_connection>(
+		transport(std::make_shared<::riwo::http_exp::tcp_connection>(
 			std::move(executor)))
 	{
 	}
 
 	explicit connection(asio::ip::tcp::socket value) :
-		transport(std::make_shared<htransport::tcp_connection>(
+		transport(std::make_shared<::riwo::http_exp::tcp_connection>(
 			std::move(value)))
 	{
 	}
 
-	explicit connection(std::shared_ptr<htransport::connection> value) :
+	explicit connection(
+		std::shared_ptr<::riwo::http_exp::connection> value) :
 		transport(std::move(value))
 	{
 	}
@@ -43,13 +42,13 @@ struct connection final
 	}
 
 	void read_some(mutable_buffer buffer,
-		htransport::connection::io_handler handler)
+		::riwo::http_exp::connection::io_handler handler)
 	{
 		transport->read_some(buffer, std::move(handler));
 	}
 
 	void write(const_buffer buffer,
-		htransport::connection::io_handler handler)
+		::riwo::http_exp::connection::io_handler handler)
 	{
 		transport->write(buffer, std::move(handler));
 	}
@@ -61,7 +60,7 @@ struct connection final
 	}
 
 	void connect_async(std::string_view host, uint16_t port,
-		htransport::connection::close_handler handler)
+		::riwo::http_exp::connection::close_handler handler)
 	{
 		transport->connect_async(host, port, std::move(handler));
 	}
@@ -77,7 +76,7 @@ struct connection final
 		transport->cancel();
 	}
 
-	std::shared_ptr<htransport::connection> transport;
+	std::shared_ptr<::riwo::http_exp::connection> transport;
 	std::string pending;
 	bool closed = false;
 };
@@ -1110,7 +1109,7 @@ public:
 
 	h1_client_session(asio::any_io_executor executor, protocol version,
 		message_limits limits,
-		std::shared_ptr<htransport::connection> transport) :
+		std::shared_ptr<::riwo::http_exp::connection> transport) :
 		executor_(std::move(executor)), version_(version),
 		limits_(std::move(limits)),
 		connection_(std::make_shared<connection>(std::move(transport))),
@@ -1331,7 +1330,7 @@ public:
 	{
 	}
 
-	h1_server_session(std::shared_ptr<htransport::connection> transport,
+	h1_server_session(std::shared_ptr<::riwo::http_exp::connection> transport,
 		protocol version, message_limits limits) :
 		executor_(transport->get_executor()), limits_(std::move(limits)),
 		connection_(std::make_shared<connection>(std::move(transport))),
@@ -1447,7 +1446,7 @@ std::shared_ptr<client_session> make_client_session(
 
 std::shared_ptr<client_session> make_client_session(
 	asio::any_io_executor executor, protocol version, message_limits limits,
-	std::shared_ptr<::riwo::http_exp::transport::connection> transport)
+	std::shared_ptr<::riwo::http_exp::connection> transport)
 {
 	return std::make_shared<h1_client_session>(
 		std::move(executor), version, std::move(limits),
@@ -1462,7 +1461,7 @@ std::shared_ptr<server_session> make_server_session(
 }
 
 std::shared_ptr<server_session> make_server_session(
-	std::shared_ptr<::riwo::http_exp::transport::connection> transport,
+	std::shared_ptr<::riwo::http_exp::connection> transport,
 	protocol version,
 	message_limits limits)
 {

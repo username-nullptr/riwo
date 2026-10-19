@@ -78,7 +78,7 @@ struct session_key_hash
 
 struct negotiated_transport
 {
-	std::shared_ptr<::riwo::http_exp::transport::connection> stream {};
+	std::shared_ptr<::riwo::http_exp::connection> stream {};
 	protocol selected_protocol = protocol::v1_1;
 	endpoint remote {};
 	endpoint local {};

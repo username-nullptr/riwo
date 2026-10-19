@@ -8,7 +8,7 @@
 
 #if RIWO_OPENSSL_SUPPORT
 
-namespace riwo::http_exp::transport
+namespace riwo::http_exp
 {
 
 using tls_socket = asio::ssl::stream<asio::ip::tcp::socket>;
@@ -39,15 +39,14 @@ public:
 	[[nodiscard]] endpoint_type local_endpoint(
 		error_code &error) const noexcept override;
 
-	[[nodiscard]] tls_socket &socket() noexcept { return m_socket; }
+	[[nodiscard]] tls_socket &socket() noexcept;
 
 private:
-	tls_socket m_socket;
-	bool m_open = true;
-	executor_type m_executor;
+	class impl;
+	std::unique_ptr<impl> m_impl {};
 };
 
-} //namespace riwo::http_exp::transport
+} //namespace riwo::http_exp
 
 #endif //RIWO_OPENSSL_SUPPORT
 

@@ -6,7 +6,7 @@
 
 #include <riwo/http_exp/transport/connection.h>
 
-namespace riwo::http_exp::transport
+namespace riwo::http_exp
 {
 
 class RIWO_HTTP_EXP_API tcp_connection final : public connection,
@@ -17,7 +17,7 @@ class RIWO_HTTP_EXP_API tcp_connection final : public connection,
 public:
 	explicit tcp_connection(asio::any_io_executor executor);
 	explicit tcp_connection(asio::ip::tcp::socket socket);
-	~tcp_connection() override = default;
+	~tcp_connection() override;
 
 	[[nodiscard]] executor_type get_executor() const noexcept override;
 	void read_some(mutable_buffer buffer, io_handler handler) override;
@@ -40,13 +40,13 @@ public:
 	[[nodiscard]] endpoint_type local_endpoint(
 		error_code &error) const noexcept override;
 
-	[[nodiscard]] asio::ip::tcp::socket &socket() noexcept { return m_socket; }
+	[[nodiscard]] asio::ip::tcp::socket &socket() noexcept;
 
 private:
-	asio::ip::tcp::socket m_socket;
-	executor_type m_executor;
+	class impl;
+	std::unique_ptr<impl> m_impl {};
 };
 
-} //namespace riwo::http_exp::transport
+} //namespace riwo::http_exp
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_TCP_CONNECTION_H

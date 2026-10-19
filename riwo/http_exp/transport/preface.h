@@ -6,7 +6,7 @@
 
 #include <riwo/http_exp/transport/connection.h>
 
-namespace riwo::http_exp::transport
+namespace riwo::http_exp
 {
 
 enum class preface_result
@@ -20,23 +20,22 @@ enum class preface_result
 // discarding bytes. Every byte offered to the detector remains available for
 // the selected protocol, which is what lets the server replay a non-matching
 // prefix to the HTTP/1 parser.
-class RIWO_HTTP_EXP_API bounded_plaintext_preface_detector
+class RIWO_HTTP_EXP_API http2_preface_detector
 {
-	RIWO_DISABLE_COPY_MOVE(bounded_plaintext_preface_detector)
+	RIWO_DISABLE_COPY_MOVE(http2_preface_detector)
 
 public:
 	using detect_handler = asio::any_completion_handler<void(
 		error_code, preface_result, std::string)>;
 
-	explicit bounded_plaintext_preface_detector(
+	explicit http2_preface_detector(
 		size_t max_bytes = http2_preface.size());
+	~http2_preface_detector();
 
 	[[nodiscard]] preface_result feed(const_buffer input);
 	[[nodiscard]] preface_result result() const noexcept;
 	[[nodiscard]] const std::string &buffer() const noexcept;
-	[[nodiscard]] size_t buffered_size() const noexcept {
-		return m_buffer.size();
-	}
+	[[nodiscard]] size_t buffered_size() const noexcept;
 	[[nodiscard]] std::string take_buffer();
 	void reset() noexcept;
 
@@ -48,11 +47,10 @@ public:
 	};
 
 private:
-	size_t m_max_bytes;
-	std::string m_buffer;
-	preface_result m_result = preface_result::need_more;
+	class impl;
+	std::unique_ptr<impl> m_impl {};
 };
 
-} //namespace riwo::http_exp::transport
+} //namespace riwo::http_exp
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_PREFACE_H

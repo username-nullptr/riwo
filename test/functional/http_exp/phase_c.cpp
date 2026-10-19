@@ -468,23 +468,23 @@ void idle_expiry()
 
 void plaintext_preface_detector()
 {
-	http::transport::bounded_plaintext_preface_detector detector;
+	http::http2_preface_detector detector;
 	auto preface = std::string(
-		http::transport::bounded_plaintext_preface_detector::http2_preface);
+		http::http2_preface_detector::http2_preface);
 	auto first = detector.feed(riwo::const_buffer(
 		std::string_view(preface).substr(0, 7)));
-	RIWO_TEST_CHECK(first == http::transport::preface_result::need_more);
+	RIWO_TEST_CHECK(first == http::preface_result::need_more);
 	auto second = detector.feed(riwo::const_buffer(
 		std::string_view(preface).substr(7)));
-	RIWO_TEST_CHECK(second == http::transport::preface_result::http2);
+	RIWO_TEST_CHECK(second == http::preface_result::http2);
 	RIWO_TEST_CHECK_EQ(detector.buffer(), preface);
 
-	http::transport::bounded_plaintext_preface_detector http1;
+	http::http2_preface_detector http1;
 	const std::string request = "GET / HTTP/1.1\r\nHost: example.test\r\n\r\n";
 	auto result = http1.feed(riwo::const_buffer(request));
-	RIWO_TEST_CHECK(result == http::transport::preface_result::http1);
+	RIWO_TEST_CHECK(result == http::preface_result::http1);
 	const auto inspected = request.substr(0,
-		http::transport::bounded_plaintext_preface_detector::
+		http::http2_preface_detector::
 			http2_preface.size());
 	RIWO_TEST_CHECK_EQ(http1.buffer(), inspected);
 	RIWO_TEST_CHECK_EQ(http1.take_buffer(), inspected);

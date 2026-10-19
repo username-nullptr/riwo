@@ -6,7 +6,7 @@
 
 #include <riwo/http_exp/global.h>
 
-namespace riwo::http_exp::transport
+namespace riwo::http_exp
 {
 
 class connection
@@ -79,6 +79,6 @@ public:
 	}
 };
 
-} //namespace riwo::http_exp::transport
+} //namespace riwo::http_exp
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_CONNECTION_H

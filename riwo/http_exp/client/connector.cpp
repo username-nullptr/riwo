@@ -14,8 +14,6 @@
 namespace riwo::http_exp::detail { namespace
 {
 
-namespace htransport = ::riwo::http_exp::transport;
-
 [[nodiscard]] std::string lower(std::string_view text)
 {
 	std::string result(text);
@@ -132,7 +130,7 @@ public:
 			if( key.scheme != "https" )
 			{
 				auto transport =
-					std::make_shared<htransport::tcp_connection>(m_executor);
+					std::make_shared<tcp_connection>(m_executor);
 				asio::connect(transport->socket(), endpoints, error);
 				if( error ) return sys_unexpected(error);
 				transport->socket().set_option(asio::ip::tcp::no_delay(true),
@@ -159,7 +157,7 @@ public:
 				context, key.tls, error); context_error )
 				return sys_unexpected(context_error);
 
-			htransport::tls_socket socket(m_executor, context);
+			tls_socket socket(m_executor, context);
 			error_code address_error;
 			ignore_unused(asio::ip::make_address(key.host, address_error));
 			if( address_error && ::SSL_set_tlsext_host_name(
@@ -241,7 +239,7 @@ public:
 			if( error ) return sys_unexpected(error);
 			auto local = socket.next_layer().local_endpoint(error);
 			if( error ) return sys_unexpected(error);
-			auto transport = std::make_shared<htransport::tls_connection>(
+			auto transport = std::make_shared<tls_connection>(
 				std::move(socket));
 			return negotiated_transport {
 				.stream = std::move(transport),

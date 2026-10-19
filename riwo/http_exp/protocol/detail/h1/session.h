@@ -18,7 +18,7 @@ make_client_session(asio::any_io_executor executor, protocol version,
 [[nodiscard]] std::shared_ptr<client_session>
 make_client_session(asio::any_io_executor executor, protocol version,
 	message_limits limits,
-	std::shared_ptr<::riwo::http_exp::transport::connection> transport);
+	std::shared_ptr<::riwo::http_exp::connection> transport);
 
 [[nodiscard]] std::shared_ptr<server_session>
 make_server_session(asio::ip::tcp::socket socket,
@@ -26,7 +26,7 @@ make_server_session(asio::ip::tcp::socket socket,
 
 [[nodiscard]] std::shared_ptr<server_session>
 make_server_session(
-	std::shared_ptr<::riwo::http_exp::transport::connection> transport,
+	std::shared_ptr<::riwo::http_exp::connection> transport,
 	protocol version, message_limits limits = {});
 
 } //namespace riwo::http_exp::detail::h1

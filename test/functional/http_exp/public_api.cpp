@@ -158,7 +158,7 @@ riwo::awaitable<void> native_server_handler(native_server_exchange&) {
 static_assert(http::concepts::request_handler<
 	decltype(native_server_handler),native_executor>);
 
-struct fake_connection final : http::transport::connection
+struct fake_connection final : http::connection
 {
 	explicit fake_connection(executor_type executor) : executor_(std::move(executor)) {}
 	executor_type get_executor() const noexcept override { return executor_; }

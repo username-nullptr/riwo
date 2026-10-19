@@ -5,11 +5,24 @@
 
 #if RIWO_OPENSSL_SUPPORT
 
-namespace riwo::http_exp::transport
+namespace riwo::http_exp
 {
 
+class RIWO_DECL_HIDDEN tls_connection::impl
+{
+public:
+	explicit impl(tls_socket value) :
+		socket(std::move(value)), executor(socket.get_executor())
+	{
+	}
+
+	tls_socket socket;
+	bool open = true;
+	executor_type executor;
+};
+
 tls_connection::tls_connection(tls_socket socket) :
-	m_socket(std::move(socket)), m_executor(m_socket.get_executor())
+	m_impl(std::make_unique<impl>(std::move(socket)))
 {
 }
 
@@ -19,12 +32,12 @@ tls_connection::~tls_connection()
 }
 
 auto tls_connection::get_executor() const noexcept -> executor_type {
-	return m_executor;
+	return m_impl->executor;
 }
 
 void tls_connection::read_some(mutable_buffer buffer, io_handler handler)
 {
-	m_socket.async_read_some(buffer,
+	m_impl->socket.async_read_some(buffer,
 	[handler = std::move(handler)](error_code error, size_t size) mutable {
 		std::move(handler)(error, size);
 	});
@@ -32,7 +45,7 @@ void tls_connection::read_some(mutable_buffer buffer, io_handler handler)
 
 void tls_connection::write(const_buffer buffer, io_handler handler)
 {
-	asio::async_write(m_socket, buffer,
+	asio::async_write(m_impl->socket, buffer,
 	[handler = std::move(handler)](error_code error, size_t size) mutable {
 		std::move(handler)(error, size);
 	});
@@ -41,16 +54,16 @@ void tls_connection::write(const_buffer buffer, io_handler handler)
 void tls_connection::close(close_handler handler)
 {
 	auto self = shared_from_this();
-	asio::post(m_socket.get_executor(),
+	asio::post(m_impl->socket.get_executor(),
 	[self = std::move(self), handler = std::move(handler)]() mutable {
 		error_code ignored;
-		if( self->m_open )
+		if( self->m_impl->open )
 		{
-			self->m_open = false;
-			self->m_socket.shutdown(ignored);
-			self->m_socket.next_layer().shutdown(
+			self->m_impl->open = false;
+			self->m_impl->socket.shutdown(ignored);
+			self->m_impl->socket.next_layer().shutdown(
 				asio::ip::tcp::socket::shutdown_both, ignored);
-			self->m_socket.next_layer().close(ignored);
+			self->m_impl->socket.next_layer().close(ignored);
 		}
 		std::move(handler)(error_code{});
 	});
@@ -58,17 +71,17 @@ void tls_connection::close(close_handler handler)
 
 void tls_connection::cancel() noexcept
 {
-	if( !m_open ) return;
-	m_open = false;
+	if( !m_impl->open ) return;
+	m_impl->open = false;
 	error_code ignored;
-	m_socket.next_layer().cancel(ignored);
-	m_socket.next_layer().shutdown(asio::ip::tcp::socket::shutdown_both,
+	m_impl->socket.next_layer().cancel(ignored);
+	m_impl->socket.next_layer().shutdown(asio::ip::tcp::socket::shutdown_both,
 		ignored);
-	m_socket.next_layer().close(ignored);
+	m_impl->socket.next_layer().close(ignored);
 }
 
 bool tls_connection::is_open() const noexcept {
-	return m_open && m_socket.next_layer().is_open();
+	return m_impl->open && m_impl->socket.next_layer().is_open();
 }
 
 size_t tls_connection::read_some_sync(mutable_buffer buffer,
@@ -76,11 +89,11 @@ size_t tls_connection::read_some_sync(mutable_buffer buffer,
 {
 	error.clear();
 	try {
-		return m_socket.read_some(buffer, error);
+		return m_impl->socket.read_some(buffer, error);
 	}
 	catch(...) {
 		error = exception_error(std::current_exception());
-		m_open = false;
+		m_impl->open = false;
 		return 0;
 	}
 }
@@ -90,11 +103,11 @@ size_t tls_connection::write_sync(const_buffer buffer,
 {
 	error.clear();
 	try {
-		return asio::write(m_socket, buffer, error);
+		return asio::write(m_impl->socket, buffer, error);
 	}
 	catch(...) {
 		error = exception_error(std::current_exception());
-		m_open = false;
+		m_impl->open = false;
 		return 0;
 	}
 }
@@ -103,16 +116,20 @@ auto tls_connection::remote_endpoint(error_code &error) const noexcept
 	-> endpoint_type
 {
 	error.clear();
-	return m_socket.next_layer().remote_endpoint(error);
+	return m_impl->socket.next_layer().remote_endpoint(error);
 }
 
 auto tls_connection::local_endpoint(error_code &error) const noexcept
 	-> endpoint_type
 {
 	error.clear();
-	return m_socket.next_layer().local_endpoint(error);
+	return m_impl->socket.next_layer().local_endpoint(error);
 }
 
-} //namespace riwo::http_exp::transport
+tls_socket &tls_connection::socket() noexcept {
+	return m_impl->socket;
+}
+
+} //namespace riwo::http_exp
 
 #endif //RIWO_OPENSSL_SUPPORT
