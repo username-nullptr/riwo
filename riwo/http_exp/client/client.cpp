@@ -29,6 +29,47 @@ struct request_access
 		return value.m_impl->trailers;
 	}
 
+	[[nodiscard]] static size_t retry_attempt(const request &value) noexcept {
+		return value.m_impl->retry_attempt;
+	}
+
+	[[nodiscard]] static size_t redirect_count(const request &value) noexcept {
+		return value.m_impl->redirect_count;
+	}
+
+	[[nodiscard]] static request clone(const request &value,
+		optional<riwo::url> target = {}, optional<method> request_method = {},
+		bool drop_body = false, bool strip_credentials = false)
+	{
+		request result(request_method ? *request_method : value.method(),
+			target ? std::move(*target) : value.url());
+		result.m_impl->head.headers = value.m_impl->head.headers;
+		if( strip_credentials )
+		{
+			result.m_impl->head.headers.erase("Authorization");
+			result.m_impl->head.headers.erase("Proxy-Authorization");
+			result.m_impl->head.headers.erase("Cookie");
+		}
+		result.m_impl->retry_attempt = value.m_impl->retry_attempt;
+		result.m_impl->redirect_count = value.m_impl->redirect_count;
+		if( !drop_body )
+		{
+			result.m_impl->body_spec = value.m_impl->body_spec;
+			result.m_impl->body = value.m_impl->body;
+			result.m_impl->source = value.m_impl->source;
+			result.m_impl->trailers = value.m_impl->trailers;
+		}
+		return result;
+	}
+
+	static void increment_retry(request &value) noexcept {
+		++value.m_impl->retry_attempt;
+	}
+
+	static void increment_redirect(request &value) noexcept {
+		++value.m_impl->redirect_count;
+	}
+
 	[[nodiscard]] static error_code prepare(request &value) noexcept
 	{
 		if( value.m_impl->file.empty() ) return {};
@@ -179,6 +220,127 @@ void add_accept_encoding(request_head &head, const client_config &config)
 	head.headers.add("Accept-Encoding", "gzip, deflate");
 }
 
+[[nodiscard]] uint16_t effective_port(const riwo::url &value) noexcept
+{
+	if( value.port() != 0 ) return value.port();
+	if( value.protocol() == "http" ) return 80;
+	if( value.protocol() == "https" ) return 443;
+	return 0;
+}
+
+[[nodiscard]] bool same_origin(const riwo::url &lhs,
+	const riwo::url &rhs) noexcept
+{
+	try {
+		return lower(lhs.protocol()) == lower(rhs.protocol()) &&
+			lower(lhs.host()) == lower(rhs.host()) &&
+			effective_port(lhs) == effective_port(rhs);
+	}
+	catch(...) {
+		return false;
+	}
+}
+
+[[nodiscard]] bool retry_allowed(const request &value,
+	const retry_policy &policy, request_delivery delivery) noexcept
+{
+	if( delivery == request_delivery::possibly_processed ||
+		request_access::retry_attempt(value) >= policy.max_attempts )
+		return false;
+	if( value.method().is_idempotent() )
+	{
+		if( !policy.retry_idempotent ) return false;
+	}
+	else if( !policy.retry_non_idempotent ) return false;
+	const auto source = request_access::source(value);
+	return !source || source->replayable();
+}
+
+[[nodiscard]] error_code rewind_sync(
+	const std::shared_ptr<body_source> &source) noexcept
+{
+	if( !source ) return {};
+	try {
+		struct state
+		{
+			std::mutex mutex;
+			bool completed = false;
+			error_code error;
+		};
+		auto result = std::make_shared<state>();
+		source->rewind([result](error_code error) {
+			const std::lock_guard lock(result->mutex);
+			result->error = error;
+			result->completed = true;
+		});
+		const std::lock_guard lock(result->mutex);
+		return result->completed ? result->error :
+			make_error_code(errc::operation_not_supported);
+	}
+	catch(...) {
+		return exception_error(std::current_exception());
+	}
+}
+
+[[nodiscard]] std::unique_ptr<request> make_redirect_request(
+	const request &value, const response_head &response,
+	const redirect_policy &policy, error_code &error) noexcept
+{
+	error.clear();
+	const auto code = response.status.code();
+	if( code != 301 && code != 302 && code != 303 &&
+		code != 307 && code != 308 )
+		return {};
+	if( request_access::redirect_count(value) >= policy.max_redirects )
+		return {};
+	const auto location = response.headers.find_first("Location");
+	if( !location ) return {};
+	try {
+		auto target = riwo::url::resolve(value.url(), *location);
+		if( !target.is_valid() || target.host().empty() )
+		{
+			error = make_error_code(errc::invalid_target);
+			return {};
+		}
+		const auto from_scheme = lower(value.url().protocol());
+		const auto to_scheme = lower(target.protocol());
+		if( to_scheme != "http" && to_scheme != "https" )
+		{
+			error = make_error_code(errc::invalid_target);
+			return {};
+		}
+		if( from_scheme == "https" && to_scheme == "http" &&
+			!policy.allow_https_to_http )
+			return {};
+
+		auto next_method = value.method();
+		bool drop_body = false;
+		if( code == 303 && value.method().known() != method::head )
+		{
+			next_method = method::get;
+			drop_body = true;
+		}
+		else if( (code == 301 || code == 302) &&
+			value.method().known() == method::post )
+		{
+			next_method = method::get;
+			drop_body = true;
+		}
+		const auto source = request_access::source(value);
+		if( !drop_body && source && !source->replayable() ) return {};
+		const auto strip_credentials = !same_origin(value.url(), target);
+		auto next = std::make_unique<request>(request_access::clone(value,
+			std::move(target), std::move(next_method), drop_body,
+			strip_credentials));
+		request_access::increment_redirect(*next);
+		return next;
+	}
+	catch(...) {
+		error = exception_error(std::current_exception());
+		return {};
+	}
+}
+
 } //namespace
 
 class client_state::impl
@@ -281,10 +443,34 @@ send_result client_state::send(request request_value,
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
+	auto retry_request = [&](request_delivery delivery, bool rewind_body,
+		send_result &result) -> bool
+	{
+		if( !retry_allowed(request_value, m_impl->config.retries, delivery) )
+			return false;
+		try
+		{
+			auto next = request_access::clone(request_value);
+			request_access::increment_retry(next);
+			if( rewind_body )
+			{
+				error = rewind_sync(source);
+				if( error ) return true;
+			}
+			result = send(std::move(next), error);
+		}
+		catch(...) {
+			error = exception_error(std::current_exception());
+		}
+		return true;
+	};
 	auto active_stream = m_impl->open_sync(*head, spec, error);
 	if( error || !active_stream )
 	{
 		if( !error ) error = make_error_code(errc::operation_not_supported);
+		send_result retried;
+		if( retry_request(request_delivery::not_started, false, retried) )
+			return retried;
 		return {};
 	}
 	auto writer = active_stream->outbound_body();
@@ -303,7 +489,10 @@ send_result client_state::send(request request_value,
 		if( !error ) writer->finish(std::move(trailers), error);
 		if( error )
 		{
+			const auto delivery = active_stream->delivery();
 			active_stream->cancel();
+			send_result retried;
+			if( retry_request(delivery, false, retried) ) return retried;
 			return {};
 		}
 	}
@@ -341,8 +530,11 @@ send_result client_state::send(request request_value,
 		if( !error ) writer->finish(std::move(trailers), error);
 		if( error )
 		{
+			const auto delivery = active_stream->delivery();
 			source->cancel();
 			active_stream->cancel();
+			send_result retried;
+			if( retry_request(delivery, true, retried) ) return retried;
 			return {};
 		}
 	}
@@ -350,7 +542,12 @@ send_result client_state::send(request request_value,
 	auto response = active_stream->wait_response_sync(error);
 	if( error )
 	{
+		const auto delivery = active_stream->delivery();
+		if( source ) source->cancel();
 		active_stream->cancel();
+		send_result retried;
+		if( retry_request(delivery, source != nullptr, retried) )
+			return retried;
 		return {};
 	}
 	auto body = active_stream->inbound_body();
@@ -359,6 +556,32 @@ send_result client_state::send(request request_value,
 		error = make_error_code(errc::operation_not_permitted);
 		active_stream->cancel();
 		return {};
+	}
+	error_code redirect_error;
+	auto redirect = make_redirect_request(request_value, response,
+		m_impl->config.redirects, redirect_error);
+	if( redirect_error )
+	{
+		error = redirect_error;
+		active_stream->cancel();
+		return {};
+	}
+	if( redirect )
+	{
+		body->set_ready();
+		body->discard(error);
+		if( error )
+		{
+			active_stream->cancel();
+			return {};
+		}
+		if( auto redirect_source = request_access::source(*redirect) )
+		{
+			redirect_source->cancel();
+			error = rewind_sync(redirect_source);
+			if( error ) return {};
+		}
+		return send(std::move(*redirect), error);
 	}
 	body->set_ready();
 	body = decoded_body(std::move(body), response,
@@ -393,6 +616,8 @@ void client_state::send(request request_value, send_handler handler)
 	auto trailers = request_access::trailers(request_value);
 	struct operation : std::enable_shared_from_this<operation>
 	{
+		std::shared_ptr<client_state> owner;
+		request request_value;
 		std::shared_ptr<stream> active_stream;
 		optional<const_buffer> body;
 		std::shared_ptr<body_source> source;
@@ -402,21 +627,29 @@ void client_state::send(request request_value, send_handler handler)
 		send_handler handler;
 		std::array<std::byte,8192> buffer;
 		uint64_t total = 0;
-			uint64_t max_buffered_body = 8U * 1024U * 1024U;
-			bool automatic_decompression = true;
+		uint64_t max_buffered_body = 8U * 1024U * 1024U;
+		bool automatic_decompression = true;
+		retry_policy retries;
+		redirect_policy redirects;
 
-		operation(std::shared_ptr<stream> stream_value,
+		operation(std::shared_ptr<client_state> owner_value,
+			request original_request, std::shared_ptr<stream> stream_value,
 			optional<const_buffer> body_value,
 			std::shared_ptr<body_source> source_value, body_spec description,
-				fields trailer_values, uint64_t max_buffered_body_value,
-				bool automatic_decompression_value, send_handler completion) :
+			fields trailer_values, uint64_t max_buffered_body_value,
+			bool automatic_decompression_value, retry_policy retry_values,
+			redirect_policy redirect_values, send_handler completion) :
+			owner(std::move(owner_value)),
+			request_value(std::move(original_request)),
 			active_stream(std::move(stream_value)), body(body_value),
 			source(std::move(source_value)),
 			writer(active_stream ? active_stream->outbound_body() : nullptr),
 			spec(std::move(description)), trailers(std::move(trailer_values)),
-				handler(std::move(completion)),
-				max_buffered_body(max_buffered_body_value),
-				automatic_decompression(automatic_decompression_value)
+			handler(std::move(completion)),
+			max_buffered_body(max_buffered_body_value),
+			automatic_decompression(automatic_decompression_value),
+			retries(std::move(retry_values)),
+			redirects(std::move(redirect_values))
 		{
 		}
 
@@ -526,6 +759,20 @@ void client_state::send(request request_value, send_handler handler)
 					self->fail(make_error_code(errc::operation_not_permitted));
 					return;
 				}
+				error_code redirect_error;
+				auto redirect = make_redirect_request(self->request_value, head,
+					self->redirects, redirect_error);
+				if( redirect_error )
+				{
+					self->fail(redirect_error);
+					return;
+				}
+				if( redirect )
+				{
+					body->set_ready();
+					self->follow_redirect(std::move(*redirect), std::move(body));
+					return;
+				}
 				body->set_ready();
 				body = decoded_body(std::move(body), head,
 					self->automatic_decompression);
@@ -543,30 +790,119 @@ void client_state::send(request request_value, send_handler handler)
 			});
 		}
 
+		void follow_redirect(request next,
+			std::shared_ptr<body_reader_state> response_body)
+		{
+			auto self = shared_from_this();
+			response_body->discard(
+			[self = std::move(self), next = std::move(next)]
+			(error_code error) mutable {
+				if( error )
+				{
+					self->fail(error);
+					return;
+				}
+				auto redirect_source = request_access::source(next);
+				if( !redirect_source )
+				{
+					auto owner = self->owner;
+					auto completion = std::move(self->handler);
+					owner->send(std::move(next), std::move(completion));
+					return;
+				}
+				redirect_source->cancel();
+				redirect_source->rewind(
+				[owner = self->owner, next = std::move(next),
+				 completion = std::move(self->handler)]
+				(error_code rewind_error) mutable {
+					if( rewind_error )
+					{
+						std::move(completion)(rewind_error, send_result{});
+						return;
+					}
+					owner->send(std::move(next), std::move(completion));
+				});
+			});
+		}
+
 		void fail(error_code error)
 		{
+			const auto delivery = active_stream ? active_stream->delivery() :
+				request_delivery::not_started;
 			if( source ) source->cancel();
 			if( active_stream ) active_stream->cancel();
+			if( retry_allowed(request_value, retries, delivery) )
+			{
+				std::unique_ptr<request> next;
+				try
+				{
+					next = std::make_unique<request>(
+						request_access::clone(request_value));
+					request_access::increment_retry(*next);
+				}
+				catch(...) {
+					error = exception_error(std::current_exception());
+					std::move(handler)(error, send_result{});
+					return;
+				}
+				if( !source )
+				{
+					auto completion = std::move(handler);
+					owner->send(std::move(*next), std::move(completion));
+					return;
+				}
+				source->rewind(
+				[owner = owner, next = std::move(next),
+				 completion = std::move(handler)]
+				(error_code rewind_error) mutable {
+					if( rewind_error )
+					{
+						std::move(completion)(rewind_error, send_result{});
+						return;
+					}
+					owner->send(std::move(*next), std::move(completion));
+				});
+				return;
+			}
 			std::move(handler)(error, send_result{});
 		}
 	};
 
+	auto owner = shared_from_this();
 	m_impl->open(*head, spec,
-	[request_body, source = std::move(source), spec = std::move(spec),
+	[owner, request_value = std::move(request_value), request_body,
+	 source = std::move(source), spec = std::move(spec),
 	 trailers = std::move(trailers),
 	 max_buffered_body = m_impl->config.response_limits.max_buffered_body,
 	 automatic_decompression = m_impl->config.automatic_decompression,
+	 retries = m_impl->config.retries, redirects = m_impl->config.redirects,
 	 handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{
 		if( error )
 		{
+			if( retry_allowed(request_value, retries,
+				request_delivery::not_started) )
+			{
+				try
+				{
+					auto next = request_access::clone(request_value);
+					request_access::increment_retry(next);
+					owner->send(std::move(next), std::move(handler));
+					return;
+				}
+				catch(...) {
+					error = exception_error(std::current_exception());
+				}
+			}
 			std::move(handler)(error, send_result{});
 			return;
 		}
-		std::make_shared<operation>(std::move(active_stream), request_body,
+		std::make_shared<operation>(owner, std::move(request_value),
+			std::move(active_stream), request_body,
 			std::move(source), std::move(spec), std::move(trailers),
 			max_buffered_body, automatic_decompression,
+			std::move(retries), std::move(redirects),
 			std::move(handler))->start();
 	});
 }

@@ -4,6 +4,9 @@
 #include "detail/connector.h"
 #include "detail/factory.h"
 #include <riwo/http_exp/protocol/detail/h1/session.h>
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+# include <riwo/http_exp/protocol/detail/h2/session.h>
+#endif
 #include <riwo/http_exp/transport/tcp_connection.h>
 
 #if RIWO_OPENSSL_SUPPORT
@@ -27,9 +30,8 @@
 namespace riwo::http_exp::detail { namespace
 {
 
-// Phase C has a configured nghttp2 capability probe but no runnable HTTP/2
-// client Session. Do not advertise h2 until the phase-D factory exists.
-constexpr bool h2_client_session_available = false;
+constexpr bool h2_client_session_available =
+	RIWO_HTTP_EXP_HTTP2_SUPPORT != 0;
 
 [[nodiscard]] std::vector<asio::ip::tcp::endpoint> resolve_with_timeout(
 	asio::any_io_executor executor, std::string_view host, uint16_t port,
@@ -232,7 +234,8 @@ struct proxy_target
 	};
 }
 
-[[nodiscard]] std::string origin_authority(const session_key &key)
+[[maybe_unused,nodiscard]] std::string origin_authority(
+	const session_key &key)
 {
 	auto host = key.host;
 	if( host.find(':') != std::string::npos && !host.starts_with('[') )
@@ -293,7 +296,9 @@ void mix(size_t &seed, size_t value) noexcept
 	for( const auto value : key.protocols.preference )
 	{
 		if( value == protocol::v1_0 ) continue;
+	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		if( value == protocol::v2 && !h2_client_session_available ) continue;
+	#endif
 		if( key.protocols.requirement == protocol_requirement::require_http1 &&
 			value != protocol::v1_1 )
 			continue;
@@ -552,6 +557,11 @@ public:
 	{
 		if( !transport.stream )
 			return sys_unexpected(make_error_code(errc::negotiation_failed));
+	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+		if( transport.selected_protocol == protocol::v2 )
+			return h2::make_client_session(std::move(transport.stream), config,
+				transport.remote, transport.local);
+	#endif
 		if( !http1(transport.selected_protocol) )
 			return sys_unexpected(make_error_code(
 				errc::operation_not_supported));

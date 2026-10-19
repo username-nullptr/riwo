@@ -21,7 +21,8 @@ struct send_result
 	uint64_t max_buffered_body = 8U * 1024U * 1024U;
 };
 
-class RIWO_HTTP_EXP_API client_state
+class RIWO_HTTP_EXP_API client_state :
+	public std::enable_shared_from_this<client_state>
 {
 	RIWO_DISABLE_COPY_MOVE(client_state)
 

@@ -23,6 +23,8 @@ public:
 	std::shared_ptr<detail::body_source> source;
 	std::filesystem::path file;
 	http_exp::fields trailers;
+	size_t retry_attempt = 1;
+	size_t redirect_count = 0;
 };
 
 template <typename Source>

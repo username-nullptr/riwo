@@ -15,9 +15,8 @@
 namespace riwo::http_exp::detail
 {
 
-class decoding_body_reader_adapter::impl
+struct decoding_body_reader_adapter::impl
 {
-public:
 	impl(std::shared_ptr<body_reader_state> source_value,
 		std::string encoding_value) :
 		source(std::move(source_value)), encoding(std::move(encoding_value))

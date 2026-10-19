@@ -55,6 +55,9 @@ behavior rather than by implementation source file.
   bodies, trailers, slow reads, and cancellation.
 - `http_exp/phase_c.cpp`: protocol selection, session keys/factories, pool
   capacity/fairness/expiry, cleartext preface detection, and keep-alive reuse.
+- `http_exp/phase_d.cpp`: HTTP/2 prior knowledge, multiplexed streams,
+  request/response bodies and trailers, RST_STREAM/GOAWAY mapping, automatic
+  retry, redirects, and replayable-source rewind behavior.
 - `http_exp/application.cpp`: public-API application workflow covering routing,
   query targets, authentication rejection and body draining, state mutation,
   case-insensitive headers, streaming events/trailers, and 404 responses.

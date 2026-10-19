@@ -41,6 +41,12 @@ if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.phase-a http_exp/phase_a.cpp riwo.http_exp)
 	add_riwo_test(http_exp.phase-b http_exp/phase_b.cpp riwo.http_exp)
 	add_riwo_test(http_exp.phase-c http_exp/phase_c.cpp riwo.http_exp)
+	if (TARGET Riwo::http_exp_nghttp2)
+		add_riwo_test(http_exp.phase-d http_exp/phase_d.cpp riwo.http_exp)
+		target_link_libraries(riwo.test.http_exp.phase-d PRIVATE
+			Riwo::http_exp_nghttp2
+		)
+	endif ()
 	add_riwo_test(http_exp.application http_exp/application.cpp riwo.http_exp)
 	add_riwo_test(http_exp.regressions http_exp/regressions.cpp riwo.http_exp)
 endif ()

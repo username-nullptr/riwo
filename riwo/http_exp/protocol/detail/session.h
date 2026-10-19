@@ -45,6 +45,9 @@ public:
 	virtual void inform_sync(response_head head, error_code &error) noexcept;
 	virtual void inform(response_head head, operation_handler handler);
 	[[nodiscard]] virtual bool reusable() const noexcept { return false; }
+	[[nodiscard]] virtual request_delivery delivery() const noexcept {
+		return request_delivery::possibly_processed;
+	}
 	virtual void cancel() noexcept = 0;
 };
 

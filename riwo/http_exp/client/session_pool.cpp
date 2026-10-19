@@ -25,6 +25,7 @@ public:
 	}
 
 	~pooled_stream() override {
+		if( m_inner && !m_inner->reusable() ) m_inner->cancel();
 		abandon(false);
 	}
 
@@ -47,6 +48,9 @@ public:
 	[[nodiscard]] std::shared_ptr<body_writer_state>
 	outbound_body() const noexcept override {
 		return m_inner->outbound_body();
+	}
+	[[nodiscard]] request_delivery delivery() const noexcept override {
+		return m_inner->delivery();
 	}
 	[[nodiscard]] response_head wait_response_sync(
 		error_code &error) noexcept override {
@@ -213,6 +217,10 @@ public:
 						release_slot(key, selected, false);
 						return {};
 					}
+				#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+					if( selected->session->selected_protocol() == protocol::v2 )
+						release_slot(key, selected, true);
+				#endif
 					return wrap(key, selected, std::move(active));
 				}
 
@@ -391,6 +399,10 @@ private:
 		for( auto &item : value.sessions )
 		{
 			if( !usable(item) ) continue;
+		#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+			if( item->session->selected_protocol() == protocol::v2 &&
+				!item->session->try_reserve_stream() ) continue;
+		#endif
 			item->busy = true;
 			++item->generation;
 			if( item->idle_timer )
@@ -515,6 +527,10 @@ private:
 						self->schedule_pump(key);
 						return;
 					}
+				#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+					if( selected->session->selected_protocol() == protocol::v2 )
+						self->release_slot(key, selected, true);
+				#endif
 					self->complete(item, error_code{},
 						self->wrap(key, selected, std::move(active)));
 					self->schedule_pump(key);
@@ -584,22 +600,30 @@ private:
 		bool reusable)
 	{
 		std::shared_ptr<client_session> session;
+		bool remove = false;
 		{
 			std::lock_guard lock(mutex);
-			if( !value || !value->busy ) return;
-			value->busy = false;
+			if( !value || value->removed ) return;
+			const bool was_busy = value->busy;
+			ignore_unused(was_busy);
+			if( value->busy ) value->busy = false;
 			value->idle_since = clock_type::now();
 			session = value->session;
 			if( !reusable || !session || session->closed() ||
 				session->draining() )
-				value->removed = true;
+				remove = value->removed = true;
 			else
+			{
+			#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+				if( session->selected_protocol() != protocol::v2 || !was_busy )
+			#endif
 				schedule_idle_locked(key, value);
+			}
 			condition.notify_all();
 		}
-		if( value->removed && session )
+		if( remove && session )
 			session->graceful_shutdown([](error_code) {});
-		if( value->removed ) remove_slot(key, value);
+		if( remove ) remove_slot(key, value);
 		schedule_pump(key);
 	}
 

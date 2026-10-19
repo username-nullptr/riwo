@@ -26,8 +26,7 @@ int main(int argc, const char *argv[])
 		const std::string base = argc > 1 ?
 			argv[1] : "http://127.0.0.1:8084";
 		riwo::io_context_t context;
-		http::client_config config;
-		config.protocols.requirement = http::protocol_requirement::require_http1;
+		http::client_config config {};
 		http::client client(context, config);
 
 		auto health = client.get(base + "/health");
