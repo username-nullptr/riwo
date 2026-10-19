@@ -68,6 +68,8 @@ static_assert(std::copyable<http::fields>);
 static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
 static_assert(std::copyable<http::body_spec>);
+static_assert(std::copyable<http::body_read_result>);
+static_assert(std::is_trivially_copyable_v<http::body_read_result>);
 static_assert(std::copyable<http::client_config>);
 static_assert(std::copyable<http::server_config>);
 
@@ -129,6 +131,7 @@ static_assert(std::same_as<split_server::context_t,
 static_assert(noexcept(std::declval<const http::client &>().get_executor()));
 static_assert(noexcept(std::declval<const http::reply &>().get_executor()));
 static_assert(noexcept(std::declval<http::client_exchange &>().cancel()));
+static_assert(noexcept(std::declval<const http::body_reader &>().is_finished()));
 static_assert(noexcept(std::declval<http::body_writer &>().cancel()));
 
 riwo::awaitable<void> server_handler(http::server_exchange&) {

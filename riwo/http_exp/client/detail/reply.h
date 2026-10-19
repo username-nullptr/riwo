@@ -104,20 +104,16 @@ auto basic_reply<Exec>::read_all(Token &&token)
 		error_code error;
 		for(;;)
 		{
-			auto size = body().read_some(riwo::buffer(buffer), error);
-			if( error == asio::error::make_error_code(asio::error::eof) )
-			{
-				error.clear();
-				break;
-			}
+			auto read = body().read_some(riwo::buffer(buffer), error);
 			if( error ) break;
-			if( size > limit - result.size() )
+			if( read.bytes > limit - result.size() )
 			{
 				error = make_error_code(errc::buffer_limit_exceeded);
 				break;
 			}
 			result.insert(result.end(), buffer.begin(), buffer.begin() +
-				static_cast<std::ptrdiff_t>(size));
+				static_cast<std::ptrdiff_t>(read.bytes));
+			if( read.eof ) break;
 		}
 		if constexpr( is_error_code_token_v<Token> )
 		{
@@ -145,20 +141,15 @@ auto basic_reply<Exec>::read_all(Token &&token)
 			{
 				auto self = this->shared_from_this();
 				reader->read_some(riwo::buffer(buffer),
-				[self = std::move(self)](error_code error, size_t size) mutable
+				[self = std::move(self)]
+				(error_code error, body_read_result read) mutable
 				{
-					if( error == asio::error::make_error_code(asio::error::eof) )
-					{
-						std::move(self->handler)(error_code{},
-							std::move(self->result));
-						return;
-					}
 					if( error )
 					{
 						std::move(self->handler)(error, std::vector<std::byte>{});
 						return;
 					}
-					if( size > limit - self->result.size() )
+					if( read.bytes > limit - self->result.size() )
 					{
 						std::move(self->handler)(
 							make_error_code(errc::buffer_limit_exceeded),
@@ -166,7 +157,14 @@ auto basic_reply<Exec>::read_all(Token &&token)
 						return;
 					}
 					self->result.insert(self->result.end(), self->buffer.begin(),
-						self->buffer.begin() + static_cast<std::ptrdiff_t>(size));
+						self->buffer.begin() +
+							static_cast<std::ptrdiff_t>(read.bytes));
+					if( read.eof )
+					{
+						std::move(self->handler)(error_code{},
+							std::move(self->result));
+						return;
+					}
 					self->start();
 				});
 			}
@@ -196,21 +194,17 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 		std::array<std::byte,8192> buffer;
 		while( !error )
 		{
-			auto size = body().read_some(riwo::buffer(buffer), error);
-			if( error == asio::error::make_error_code(asio::error::eof) )
-			{
-				error.clear();
-				break;
-			}
+			auto read = body().read_some(riwo::buffer(buffer), error);
 			if( error ) break;
 			stream.write(reinterpret_cast<const char*>(buffer.data()),
-				static_cast<std::streamsize>(size));
+				static_cast<std::streamsize>(read.bytes));
 			if( !stream )
 			{
 				error = make_system_error_code(std::errc::io_error);
 				break;
 			}
-			total += size;
+			total += read.bytes;
+			if( read.eof ) break;
 		}
 		if constexpr( is_error_code_token_v<Token> )
 		{
@@ -243,13 +237,9 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 				}
 				auto self = this->shared_from_this();
 				reader->read_some(riwo::buffer(buffer),
-				[self = std::move(self)](error_code error, size_t size) mutable
+				[self = std::move(self)]
+				(error_code error, body_read_result read) mutable
 				{
-					if( error == asio::error::make_error_code(asio::error::eof) )
-					{
-						std::move(self->handler)(error_code{}, self->total);
-						return;
-					}
 					if( error )
 					{
 						std::move(self->handler)(error, self->total);
@@ -257,14 +247,19 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 					}
 					self->stream.write(
 						reinterpret_cast<const char*>(self->buffer.data()),
-						static_cast<std::streamsize>(size));
+						static_cast<std::streamsize>(read.bytes));
 					if( !self->stream )
 					{
 						std::move(self->handler)(
 							make_system_error_code(std::errc::io_error), self->total);
 						return;
 					}
-					self->total += size;
+					self->total += read.bytes;
+					if( read.eof )
+					{
+						std::move(self->handler)(error_code{}, self->total);
+						return;
+					}
 					self->start();
 				});
 			}

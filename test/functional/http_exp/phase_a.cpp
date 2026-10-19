@@ -20,25 +20,22 @@ public:
 	{
 	}
 
-	size_t read_some_sync(riwo::mutable_buffer buffer,
+	http::body_read_result read_some_sync(riwo::mutable_buffer buffer,
 		riwo::error_code &error) noexcept override
 	{
 		error.clear();
 		if( cancelled_ )
 		{
 			error = asio::error::make_error_code(asio::error::operation_aborted);
-			return 0;
+			return {};
 		}
-		if( buffer.size() == 0 ) return 0;
+		if( buffer.size() == 0 ) return {};
 		if( offset_ == bytes_.size() )
-		{
-			error = asio::error::make_error_code(asio::error::eof);
-			return 0;
-		}
+			return {0, true};
 		const auto size = std::min(buffer.size(), bytes_.size() - offset_);
 		std::memcpy(buffer.data(), bytes_.data() + offset_, size);
 		offset_ += size;
-		return size;
+		return {size, offset_ == bytes_.size()};
 	}
 
 	void read_some(riwo::mutable_buffer buffer, read_handler handler) override
@@ -50,8 +47,8 @@ public:
 			return;
 		}
 		riwo::error_code error;
-		auto size = read_some_sync(buffer, error);
-		std::move(handler)(error, size);
+		auto result = read_some_sync(buffer, error);
+		std::move(handler)(error, result);
 	}
 
 	http::fields trailers_sync(riwo::error_code &error) noexcept override
@@ -72,7 +69,7 @@ public:
 			auto handler = std::move(*pending_);
 			pending_.reset();
 			std::move(handler)(asio::error::make_error_code(
-				asio::error::operation_aborted), 0);
+				asio::error::operation_aborted), http::body_read_result{});
 		}
 	}
 
@@ -83,8 +80,8 @@ public:
 		auto handler = std::move(*pending_);
 		pending_.reset();
 		riwo::error_code error;
-		auto size = read_some_sync(pending_buffer_, error);
-		std::move(handler)(error, size);
+		auto result = read_some_sync(pending_buffer_, error);
+		std::move(handler)(error, result);
 	}
 
 private:
@@ -344,7 +341,8 @@ void reader_state_machine()
 	http::body_reader unbound(context);
 	std::array<char,8> data{};
 	riwo::error_code error;
-	RIWO_TEST_CHECK_EQ(unbound.read_some(riwo::buffer(data), error), 0U);
+	RIWO_TEST_CHECK_EQ(
+		unbound.read_some(riwo::buffer(data), error).bytes, 0U);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
 
@@ -353,19 +351,50 @@ void reader_state_machine()
 	auto adapter = std::make_shared<fake_reader_adapter>("payload", trailers);
 	auto state = http::detail::make_body_reader_state(adapter, true);
 	http::body_reader reader(context, state);
+	RIWO_TEST_CHECK(!reader.is_finished());
 	(void)reader.trailers(error);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
-
-	auto size = reader.read_some(riwo::buffer(data), error);
+	auto read = reader.read_some(riwo::mutable_buffer{}, error);
 	RIWO_TEST_CHECK(!error);
-	RIWO_TEST_CHECK_EQ(std::string_view(data.data(), size), "payload");
-	RIWO_TEST_CHECK_EQ(reader.read_some(riwo::buffer(data), error), 0U);
-	RIWO_TEST_CHECK_EQ(error, asio::error::make_error_code(asio::error::eof));
+	RIWO_TEST_CHECK_EQ(read.bytes, 0U);
+	RIWO_TEST_CHECK(!read.eof);
+	RIWO_TEST_CHECK(!reader.is_finished());
+
+	read = reader.read_some(riwo::buffer(data), error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(std::string_view(data.data(), read.bytes), "payload");
+	RIWO_TEST_CHECK(read.eof);
+	RIWO_TEST_CHECK(reader.is_finished());
+	read = reader.read_some(riwo::buffer(data), error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(read.bytes, 0U);
+	RIWO_TEST_CHECK(read.eof);
 	auto received_trailers = reader.trailers(error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(received_trailers.find_first("digest").value(),
 		"sha-256=value");
+
+	auto discard_adapter = std::make_shared<fake_reader_adapter>("discarded");
+	http::body_reader discard_reader(context,
+		http::detail::make_body_reader_state(discard_adapter, true));
+	RIWO_TEST_CHECK(!discard_reader.is_finished());
+	discard_reader.discard(error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK(discard_reader.is_finished());
+	read = discard_reader.read_some(riwo::buffer(data), error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(read.bytes, 0U);
+	RIWO_TEST_CHECK(read.eof);
+
+	auto empty_adapter = std::make_shared<fake_reader_adapter>();
+	http::body_reader empty_reader(context,
+		http::detail::make_body_reader_state(empty_adapter, true));
+	read = empty_reader.read_some(riwo::buffer(data), error);
+	RIWO_TEST_CHECK(!error);
+	RIWO_TEST_CHECK_EQ(read.bytes, 0U);
+	RIWO_TEST_CHECK(read.eof);
+	RIWO_TEST_CHECK(empty_reader.is_finished());
 
 	auto overlap_adapter = std::make_shared<fake_reader_adapter>("xy");
 	overlap_adapter->hold();
@@ -374,14 +403,15 @@ void reader_state_machine()
 	bool second = false;
 	overlap->read_some(riwo::buffer(data),
 		http::detail::body_reader_state::read_handler(
-		[&](riwo::error_code value, size_t count) {
+		[&](riwo::error_code value, http::body_read_result result) {
 			RIWO_TEST_CHECK(!value);
-			RIWO_TEST_CHECK_EQ(count, 2U);
+			RIWO_TEST_CHECK_EQ(result.bytes, 2U);
+			RIWO_TEST_CHECK(result.eof);
 			first = true;
 		}));
 	overlap->read_some(riwo::buffer(data),
 		http::detail::body_reader_state::read_handler(
-		[&](riwo::error_code value, size_t) {
+		[&](riwo::error_code value, http::body_read_result) {
 			RIWO_TEST_CHECK_EQ(value,
 				http::make_error_code(http::errc::operation_in_progress));
 			second = true;
@@ -514,15 +544,17 @@ void client_open_and_metadata()
 
 	std::array<char,8> data{};
 	RIWO_TEST_CHECK_EQ(exchange.response_body().read_some(
-		riwo::buffer(data), error), 0U);
+		riwo::buffer(data), error).bytes, 0U);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
 	auto head = exchange.wait_response(error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(head.status, http::status::created);
-	auto size = exchange.response_body().read_some(riwo::buffer(data), error);
+	auto read = exchange.response_body().read_some(riwo::buffer(data), error);
 	RIWO_TEST_CHECK(!error);
-	RIWO_TEST_CHECK_EQ(std::string_view(data.data(), size), "reply");
+	RIWO_TEST_CHECK_EQ(std::string_view(data.data(), read.bytes), "reply");
+	RIWO_TEST_CHECK(read.eof);
+	RIWO_TEST_CHECK(exchange.response_body().is_finished());
 
 	http::request with_body(http::method::post, "http://example.test/");
 	with_body.body("bound");

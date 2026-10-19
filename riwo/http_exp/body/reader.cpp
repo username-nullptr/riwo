@@ -22,7 +22,7 @@ public:
 	optional<fields> trailer_cache;
 	bool ready = false;
 	bool pending = false;
-	bool eof = false;
+	bool finished = false;
 	bool cancelled = false;
 };
 
@@ -31,10 +31,6 @@ namespace
 
 [[nodiscard]] error_code operation_error(errc value) noexcept {
 	return make_error_code(value);
-}
-
-[[nodiscard]] bool is_eof(const error_code &error) noexcept {
-	return error == asio::error::make_error_code(asio::error::eof);
 }
 
 } //namespace
@@ -47,7 +43,7 @@ body_reader_state::body_reader_state(std::shared_ptr<body_reader_adapter> adapte
 
 body_reader_state::~body_reader_state() = default;
 
-size_t body_reader_state::read_some(mutable_buffer buffer,
+body_read_result body_reader_state::read_some(mutable_buffer buffer,
 	error_code &error) noexcept
 {
 	error.clear();
@@ -55,29 +51,23 @@ size_t body_reader_state::read_some(mutable_buffer buffer,
 	if( state->pending )
 	{
 		error = operation_error(errc::operation_in_progress);
-		return 0;
+		return {};
 	}
 	if( !state->ready || !state->adapter || state->cancelled )
 	{
 		error = operation_error(errc::operation_not_permitted);
-		return 0;
+		return {};
 	}
-	if( buffer.size() == 0 )
-		return 0;
-	if( state->eof )
-	{
-		error = asio::error::make_error_code(asio::error::eof);
-		return 0;
-	}
+	if( state->finished ) return {0, true};
+	if( buffer.size() == 0 ) return {};
 
 	state->pending = true;
-	auto size = state->adapter->read_some_sync(buffer, error);
+	auto result = state->adapter->read_some_sync(buffer, error);
 	state->pending = false;
-	if( is_eof(error) )
-		state->eof = true;
-	else if( !error && size == 0 )
+	if( !error && result.bytes == 0 && !result.eof )
 		error = operation_error(errc::body_length_mismatch);
-	return size;
+	if( !error && result.eof ) state->finished = true;
+	return result;
 }
 
 void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
@@ -85,22 +75,24 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
 	auto state = m_impl;
 	if( state->pending )
 	{
-		std::move(handler)(operation_error(errc::operation_in_progress), 0);
+		std::move(handler)(operation_error(errc::operation_in_progress),
+			body_read_result{});
 		return;
 	}
 	if( !state->ready || !state->adapter || state->cancelled )
 	{
-		std::move(handler)(operation_error(errc::operation_not_permitted), 0);
+		std::move(handler)(operation_error(errc::operation_not_permitted),
+			body_read_result{});
+		return;
+	}
+	if( state->finished )
+	{
+		std::move(handler)(error_code{}, body_read_result{0, true});
 		return;
 	}
 	if( buffer.size() == 0 )
 	{
-		std::move(handler)(error_code{}, 0);
-		return;
-	}
-	if( state->eof )
-	{
-		std::move(handler)(asio::error::make_error_code(asio::error::eof), 0);
+		std::move(handler)(error_code{}, body_read_result{});
 		return;
 	}
 
@@ -108,19 +100,19 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
 	try {
 		state->adapter->read_some(buffer,
 		[state, handler = std::move(handler)]
-		(error_code error, size_t size) mutable
+		(error_code error, body_read_result result) mutable
 		{
 			state->pending = false;
-			if( is_eof(error) )
-				state->eof = true;
-			else if( !error && size == 0 )
+			if( !error && result.bytes == 0 && !result.eof )
 				error = operation_error(errc::body_length_mismatch);
-			std::move(handler)(error, size);
+			if( !error && result.eof ) state->finished = true;
+			std::move(handler)(error, result);
 		});
 	}
 	catch(...) {
 		state->pending = false;
-		std::move(handler)(exception_error(std::current_exception()), 0);
+		std::move(handler)(exception_error(std::current_exception()),
+			body_read_result{});
 	}
 }
 
@@ -138,7 +130,7 @@ void body_reader_state::discard(error_code &error) noexcept
 		error = operation_error(errc::operation_not_permitted);
 		return;
 	}
-	if( state->eof )
+	if( state->finished )
 		return;
 
 	state->pending = true;
@@ -146,27 +138,27 @@ void body_reader_state::discard(error_code &error) noexcept
 	uint64_t discarded = 0;
 	for(;;)
 	{
-		auto size = state->adapter->read_some_sync(riwo::buffer(buffer), error);
-		if( is_eof(error) )
-		{
-			state->eof = true;
-			error.clear();
-			break;
-		}
+		auto result = state->adapter->read_some_sync(riwo::buffer(buffer), error);
 		if( error )
 			break;
-		if( size == 0 )
+		if( result.bytes == 0 && !result.eof )
 		{
 			error = operation_error(errc::body_length_mismatch);
 			break;
 		}
-		if( size > state->max_discard - std::min(state->max_discard, discarded) )
+		if( result.bytes > state->max_discard -
+			std::min(state->max_discard, discarded) )
 		{
 			error = operation_error(errc::buffer_limit_exceeded);
 			state->adapter->cancel();
 			break;
 		}
-		discarded += size;
+		discarded += result.bytes;
+		if( result.eof )
+		{
+			state->finished = true;
+			break;
+		}
 	}
 	state->pending = false;
 }
@@ -184,7 +176,7 @@ void body_reader_state::discard(operation_handler handler)
 		std::move(handler)(operation_error(errc::operation_not_permitted));
 		return;
 	}
-	if( state->eof )
+	if( state->finished )
 	{
 		std::move(handler)(error_code{});
 		return;
@@ -208,8 +200,9 @@ void body_reader_state::discard(operation_handler handler)
 			auto self = shared_from_this();
 			try {
 				state->adapter->read_some(riwo::buffer(buffer),
-				[self = std::move(self)](error_code error, size_t size) mutable {
-					self->complete(error, size);
+				[self = std::move(self)]
+				(error_code error, body_read_result result) mutable {
+					self->complete(error, result);
 				});
 			}
 			catch(...) {
@@ -217,32 +210,32 @@ void body_reader_state::discard(operation_handler handler)
 			}
 		}
 
-		void complete(error_code error, size_t size)
+		void complete(error_code error, body_read_result result)
 		{
-			if( is_eof(error) )
-			{
-				state->eof = true;
-				finish({});
-				return;
-			}
 			if( error )
 			{
 				finish(error);
 				return;
 			}
-			if( size == 0 )
+			if( result.bytes == 0 && !result.eof )
 			{
 				finish(operation_error(errc::body_length_mismatch));
 				return;
 			}
-			if( size > state->max_discard -
+			if( result.bytes > state->max_discard -
 				std::min(state->max_discard, discarded) )
 			{
 				state->adapter->cancel();
 				finish(operation_error(errc::buffer_limit_exceeded));
 				return;
 			}
-			discarded += size;
+			discarded += result.bytes;
+			if( result.eof )
+			{
+				state->finished = true;
+				finish({});
+				return;
+			}
 			start();
 		}
 
@@ -266,7 +259,7 @@ fields body_reader_state::trailers(error_code &error) noexcept
 		error = operation_error(errc::operation_in_progress);
 		return {};
 	}
-	if( !state->ready || !state->adapter || state->cancelled || !state->eof )
+	if( !state->ready || !state->adapter || state->cancelled || !state->finished )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return {};
@@ -290,7 +283,7 @@ void body_reader_state::trailers(trailers_handler handler)
 		std::move(handler)(operation_error(errc::operation_in_progress), fields{});
 		return;
 	}
-	if( !state->ready || !state->adapter || state->cancelled || !state->eof )
+	if( !state->ready || !state->adapter || state->cancelled || !state->finished )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted), fields{});
 		return;
@@ -331,12 +324,12 @@ void body_reader_state::set_ready(bool ready) noexcept {
 	m_impl->ready = ready;
 }
 
-void body_reader_state::set_ended(bool ended) noexcept {
-	m_impl->eof = ended;
+void body_reader_state::set_finished(bool finished) noexcept {
+	m_impl->finished = finished;
 }
 
-bool body_reader_state::ended() const noexcept {
-	return m_impl->eof;
+bool body_reader_state::is_finished() const noexcept {
+	return m_impl->finished;
 }
 
 std::shared_ptr<body_reader_state> make_body_reader_state(

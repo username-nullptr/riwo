@@ -16,17 +16,10 @@ namespace http = riwo::http_exp;
 	std::array<char,1024> buffer {};
 	for(;;)
 	{
-		try {
-			auto size = co_await reader.read_some(riwo::buffer(buffer),
-				riwo::use_awaitable);
-			result.append(buffer.data(), size);
-		}
-		catch(const std::system_error &exception)
-		{
-			if( exception.code() ==
-				asio::error::make_error_code(asio::error::eof) ) break;
-			throw;
-		}
+		auto read = co_await reader.read_some(riwo::buffer(buffer),
+			riwo::use_awaitable);
+		result.append(buffer.data(), read.bytes);
+		if( read.eof ) break;
 	}
 	co_return result;
 }
@@ -134,17 +127,12 @@ void h1_client_server_round_trip()
 		size_t received = 0;
 		for(;;)
 		{
-			try {
-				received += co_await chunks.body().read_some(
-					riwo::buffer(slow_buffer), riwo::use_awaitable);
-			}
-			catch(const std::system_error &exception)
-			{
-				if( exception.code() ==
-					asio::error::make_error_code(asio::error::eof) ) break;
-				throw;
-			}
+			auto read = co_await chunks.body().read_some(
+				riwo::buffer(slow_buffer), riwo::use_awaitable);
+			received += read.bytes;
+			if( read.eof ) break;
 		}
+		RIWO_TEST_CHECK(chunks.body().is_finished());
 		RIWO_TEST_CHECK_EQ(received, 128U * 1024U);
 		auto trailers = chunks.body().trailers();
 		RIWO_TEST_CHECK_EQ(trailers.find_first("digest").value(), "test-value");

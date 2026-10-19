@@ -15,17 +15,10 @@ namespace http = riwo::http_exp;
 	std::array<char,1024> buffer {};
 	for(;;)
 	{
-		try {
-			auto size = co_await reader.read_some(
-				riwo::buffer(buffer), riwo::use_awaitable);
-			result.append(buffer.data(), size);
-		}
-		catch(const std::system_error &exception)
-		{
-			if( exception.code() ==
-				asio::error::make_error_code(asio::error::eof) ) break;
-			throw;
-		}
+		auto read = co_await reader.read_some(
+			riwo::buffer(buffer), riwo::use_awaitable);
+		result.append(buffer.data(), read.bytes);
+		if( read.eof ) break;
 	}
 	co_return result;
 }

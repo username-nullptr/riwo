@@ -246,19 +246,21 @@ public:
 
 	[[nodiscard]] body_framing framing() const noexcept { return framing_; }
 
-	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,
+	[[nodiscard]] body_read_result read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept override
 	{
 		error.clear();
 		try {
-			auto size = read_sync(buffer, error);
-			if( error ) notify_end(error);
-			return size;
+			auto result = read_sync(buffer, error);
+			if( is_eof(error) )
+				error = make_error_code(errc::body_length_mismatch);
+			if( error || result.eof ) notify_end(error);
+			return result;
 		}
 		catch(...) {
 			error = exception_error(std::current_exception());
 			notify_end(error);
-			return 0;
+			return {};
 		}
 	}
 
@@ -417,21 +419,20 @@ private:
 		}
 	}
 
-	[[nodiscard]] size_t read_sync(mutable_buffer buffer, error_code &error)
+	[[nodiscard]] body_read_result read_sync(
+		mutable_buffer buffer, error_code &error)
 	{
 		if( ended_ || framing_ == body_framing::none )
 		{
 			ended_ = true;
-			error = asio::error::make_error_code(asio::error::eof);
-			return 0;
+			return {0, true};
 		}
 		if( framing_ == body_framing::content_length )
 		{
 			if( remaining_ == 0 )
 			{
 				ended_ = true;
-				error = asio::error::make_error_code(asio::error::eof);
-				return 0;
+				return {0, true};
 			}
 			auto size = copy_pending(buffer, static_cast<size_t>(
 				std::min<uint64_t>(remaining_, SIZE_MAX)), error);
@@ -440,30 +441,40 @@ private:
 				auto target = mutable_buffer(buffer.data(), static_cast<size_t>(
 					std::min<uint64_t>(buffer.size(), remaining_)));
 				size = connection_->read_some_sync(target, error);
-				if( !error && !account(size, error) ) return 0;
+				remaining_ -= std::min<uint64_t>(remaining_, size);
+				if( is_eof(error) )
+					error = remaining_ == 0 ? error_code{} :
+						make_error_code(errc::body_length_mismatch);
+				if( !error && size != 0 && !account(size, error) ) return {};
 			}
-			remaining_ -= std::min<uint64_t>(remaining_, size);
-			return size;
+			else remaining_ -= std::min<uint64_t>(remaining_, size);
+			const bool eof = !error && remaining_ == 0;
+			if( eof ) ended_ = true;
+			return {size, eof};
 		}
 		if( framing_ == body_framing::until_eof )
 		{
 			auto size = copy_pending(buffer, SIZE_MAX, error);
-			if( size != 0 || error ) return size;
+			if( size != 0 || error ) return {size, false};
 			size = connection_->read_some_sync(buffer, error);
-			if( is_eof(error) ) ended_ = true;
-			else if( !error && !account(size, error) ) return 0;
-			return size;
+			const bool eof = is_eof(error);
+			if( eof )
+			{
+				error.clear();
+				ended_ = true;
+			}
+			if( !error && size != 0 && !account(size, error) ) return {};
+			return {size, eof && !error};
 		}
 		for(;;)
 		{
 			if( reading_trailers_ )
 			{
-				if( !read_trailers_sync(error) ) return 0;
-				error = asio::error::make_error_code(asio::error::eof);
-				return 0;
+				if( !read_trailers_sync(error) ) return {};
+				return {0, true};
 			}
-			if( need_chunk_crlf_ && !consume_chunk_crlf_sync(error) ) return 0;
-			if( chunk_remaining_ == 0 && !read_chunk_line_sync(error) ) return 0;
+			if( need_chunk_crlf_ && !consume_chunk_crlf_sync(error) ) return {};
+			if( chunk_remaining_ == 0 && !read_chunk_line_sync(error) ) return {};
 			if( reading_trailers_ ) continue;
 			auto size = copy_pending(buffer, static_cast<size_t>(
 				std::min<uint64_t>(chunk_remaining_, SIZE_MAX)), error);
@@ -472,11 +483,11 @@ private:
 				auto target = mutable_buffer(buffer.data(), static_cast<size_t>(
 					std::min<uint64_t>(buffer.size(), chunk_remaining_)));
 				size = connection_->read_some_sync(target, error);
-				if( !error && !account(size, error) ) return 0;
+				if( !error && !account(size, error) ) return {};
 			}
 			chunk_remaining_ -= std::min<uint64_t>(chunk_remaining_, size);
 			if( chunk_remaining_ == 0 ) need_chunk_crlf_ = true;
-			return size;
+			return {size, false};
 		}
 	}
 
@@ -513,7 +524,7 @@ public:
 		if( owner_->ended_ || owner_->framing_ == body_framing::none )
 		{
 			owner_->ended_ = true;
-			finish(asio::error::make_error_code(asio::error::eof), 0);
+			finish({}, {0, true});
 			return;
 		}
 		if( owner_->framing_ == body_framing::content_length )
@@ -521,7 +532,7 @@ public:
 			if( owner_->remaining_ == 0 )
 			{
 				owner_->ended_ = true;
-				finish(asio::error::make_error_code(asio::error::eof), 0);
+				finish({}, {0, true});
 				return;
 			}
 			auto size = owner_->copy_pending(target_, static_cast<size_t>(
@@ -529,7 +540,9 @@ public:
 			if( size != 0 || error )
 			{
 				owner_->remaining_ -= std::min<uint64_t>(owner_->remaining_, size);
-				finish(error, size);
+				const bool eof = !error && owner_->remaining_ == 0;
+				if( eof ) owner_->ended_ = true;
+				finish(error, {size, eof});
 				return;
 			}
 			direct_read(static_cast<size_t>(std::min<uint64_t>(
@@ -541,7 +554,7 @@ public:
 			auto size = owner_->copy_pending(target_, SIZE_MAX, error);
 			if( size != 0 || error )
 			{
-				finish(error, size);
+				finish(error, {size, false});
 				return;
 			}
 			direct_read(target_.size(), false);
@@ -557,11 +570,20 @@ private:
 		owner_->connection_->read_some(
 			mutable_buffer(target_.data(), size),
 		[self = std::move(self), fixed](error_code error, size_t count) mutable {
-			if( is_eof(error) && !fixed ) self->owner_->ended_ = true;
-			if( !error && !self->owner_->account(count, error) ) count = 0;
+			const bool transport_eof = is_eof(error);
 			if( fixed ) self->owner_->remaining_ -=
 				std::min<uint64_t>(self->owner_->remaining_, count);
-			self->finish(error, count);
+			if( transport_eof )
+				error = !fixed || self->owner_->remaining_ == 0 ? error_code{} :
+					make_error_code(errc::body_length_mismatch);
+			if( !error && count != 0 &&
+				!self->owner_->account(count, error) ) count = 0;
+			bool eof = false;
+			if( fixed )
+				eof = !error && self->owner_->remaining_ == 0;
+			else eof = transport_eof && !error;
+			if( eof ) self->owner_->ended_ = true;
+			self->finish(error, {count, eof});
 		});
 	}
 
@@ -572,7 +594,7 @@ private:
 		[self = std::move(self)](error_code error, size_t size) mutable {
 			if( error )
 			{
-				self->finish(error, 0);
+				self->finish(error, {});
 				return;
 			}
 			self->owner_->connection_->pending.append(
@@ -594,7 +616,7 @@ private:
 						if( owner_->connection_->pending.size() >
 							owner_->limits_.max_header_list_size )
 						{
-							finish(make_error_code(errc::header_limit_exceeded), 0);
+							finish(make_error_code(errc::header_limit_exceeded), {});
 							return;
 						}
 						fill();
@@ -604,7 +626,7 @@ private:
 					{
 						owner_->connection_->pending.erase(0, 2);
 						owner_->ended_ = true;
-						finish(asio::error::make_error_code(asio::error::eof), 0);
+						finish({}, {0, true});
 						return;
 					}
 					auto line = std::string_view(owner_->connection_->pending)
@@ -613,7 +635,7 @@ private:
 					if( colon == std::string_view::npos || owner_->trailers_.size() >=
 						owner_->limits_.max_field_count )
 					{
-						finish(protocol_error(), 0);
+						finish(protocol_error(), {});
 						return;
 					}
 					auto value = line.substr(colon + 1);
@@ -634,7 +656,7 @@ private:
 					}
 					if( !owner_->connection_->pending.starts_with("\r\n") )
 					{
-						finish(protocol_error(), 0);
+						finish(protocol_error(), {});
 						return;
 					}
 					owner_->connection_->pending.erase(0, 2);
@@ -648,7 +670,7 @@ private:
 						if( owner_->connection_->pending.size() >
 							owner_->limits_.max_start_line_size )
 						{
-							finish(make_error_code(errc::header_limit_exceeded), 0);
+							finish(make_error_code(errc::header_limit_exceeded), {});
 							return;
 						}
 						fill();
@@ -659,7 +681,7 @@ private:
 					auto chunk = parse_chunk_size(line);
 					if( !chunk )
 					{
-						finish(chunk.error(), 0);
+						finish(chunk.error(), {});
 						return;
 					}
 					owner_->connection_->pending.erase(0, end + 2);
@@ -676,7 +698,7 @@ private:
 						std::min<uint64_t>(owner_->chunk_remaining_, size);
 					if( owner_->chunk_remaining_ == 0 )
 						owner_->need_chunk_crlf_ = true;
-					finish(error, size);
+					finish(error, {size, false});
 					return;
 				}
 				direct_chunk_read();
@@ -684,7 +706,7 @@ private:
 			}
 		}
 		catch(...) {
-			finish(exception_error(std::current_exception()), 0);
+			finish(exception_error(std::current_exception()), {});
 		}
 	}
 
@@ -701,14 +723,16 @@ private:
 				std::min<uint64_t>(self->owner_->chunk_remaining_, size);
 			if( self->owner_->chunk_remaining_ == 0 )
 				self->owner_->need_chunk_crlf_ = true;
-			self->finish(error, size);
+			self->finish(error, {size, false});
 		});
 	}
 
-	void finish(error_code error, size_t size)
+	void finish(error_code error, body_read_result result)
 	{
-		if( error ) owner_->notify_end(error);
-		std::move(handler_)(error, size);
+		if( is_eof(error) )
+			error = make_error_code(errc::body_length_mismatch);
+		if( error || result.eof ) owner_->notify_end(error);
+		std::move(handler_)(error, result);
 	}
 
 	std::shared_ptr<reader_adapter> owner_;
@@ -863,7 +887,7 @@ public:
 		outbound_(make_body_writer_state(writer_, outbound_spec, client_))
 	{
 		if( !client_ && inbound_framing == body_framing::none )
-			inbound_->set_ended();
+			inbound_->set_finished();
 		writer_->configure(std::move(outbound_spec));
 		if( !client_ )
 			keep_alive_ = version_ != protocol::v1_0 &&
@@ -933,8 +957,8 @@ public:
 			reader_->configure(parsed->framing, parsed->content_length);
 			if( parsed->framing == body_framing::none && client_ )
 			{
-				inbound_->set_ended();
-				body_finished(asio::error::make_error_code(asio::error::eof));
+				inbound_->set_finished();
+				body_finished({});
 			}
 			return response_;
 		}
@@ -1072,9 +1096,8 @@ private:
 			self->reader_->configure(parsed->framing, parsed->content_length);
 			if( parsed->framing == body_framing::none && self->client_ )
 			{
-				self->inbound_->set_ended();
-				self->body_finished(
-					asio::error::make_error_code(asio::error::eof));
+				self->inbound_->set_finished();
+				self->body_finished({});
 			}
 			std::move(handler)(error_code{}, self->response_);
 		});
@@ -1083,8 +1106,7 @@ private:
 	void body_finished(error_code error)
 	{
 		if( !client_ ) return;
-		auto eof = error == asio::error::make_error_code(asio::error::eof);
-		release(eof && keep_alive_ &&
+		release(!error && keep_alive_ &&
 			reader_->framing() != body_framing::until_eof);
 	}
 

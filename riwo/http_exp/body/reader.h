@@ -14,6 +14,12 @@ class body_reader_state;
 namespace riwo::http_exp
 {
 
+struct body_read_result
+{
+	size_t bytes = 0;
+	bool eof = false;
+};
+
 template <core_concepts::exec Exec = asio::any_io_executor>
 class RIWO_HTTP_EXP_TAPI basic_body_reader
 {
@@ -35,10 +41,12 @@ public:
 	~basic_body_reader();
 
 	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] bool is_finished() const noexcept;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto read_some(mutable_buffer buffer, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,size_t>;
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,body_read_result>;
 
 	template <typename Token = use_sync_t>
 	auto discard(Token &&token = {})

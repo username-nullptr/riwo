@@ -14,13 +14,14 @@ class RIWO_HTTP_EXP_API body_reader_adapter
 	RIWO_DISABLE_COPY_MOVE(body_reader_adapter)
 
 public:
-	using read_handler = asio::any_completion_handler<void(error_code,size_t)>;
+	using read_handler = asio::any_completion_handler<
+		void(error_code,body_read_result)>;
 	using trailers_handler = asio::any_completion_handler<void(error_code,fields)>;
 
 	body_reader_adapter() = default;
 	virtual ~body_reader_adapter();
 
-	[[nodiscard]] virtual size_t read_some_sync(mutable_buffer buffer,
+	[[nodiscard]] virtual body_read_result read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept = 0;
 	virtual void read_some(mutable_buffer buffer, read_handler handler) = 0;
 	[[nodiscard]] virtual fields trailers_sync(error_code &error) noexcept = 0;
@@ -42,7 +43,7 @@ public:
 		bool ready = false, uint64_t max_discard = 1024 * 1024);
 	~body_reader_state();
 
-	[[nodiscard]] size_t read_some(mutable_buffer buffer,
+	[[nodiscard]] body_read_result read_some(mutable_buffer buffer,
 		error_code &error) noexcept;
 	void read_some(mutable_buffer buffer, read_handler handler);
 	void discard(error_code &error) noexcept;
@@ -51,8 +52,8 @@ public:
 	void trailers(trailers_handler handler);
 	void cancel() noexcept;
 	void set_ready(bool ready = true) noexcept;
-	void set_ended(bool ended = true) noexcept;
-	[[nodiscard]] bool ended() const noexcept;
+	void set_finished(bool finished = true) noexcept;
+	[[nodiscard]] bool is_finished() const noexcept;
 
 private:
 	class impl;
@@ -105,7 +106,7 @@ basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 basic_body_reader<Exec>::~basic_body_reader() {
-	if( m_impl->state && !m_impl->state->ended() ) m_impl->state->cancel();
+	if( m_impl->state && !m_impl->state->is_finished() ) m_impl->state->cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -114,23 +115,30 @@ auto basic_body_reader<Exec>::get_executor() const noexcept -> executor_type {
 }
 
 template <core_concepts::exec Exec>
+bool basic_body_reader<Exec>::is_finished() const noexcept {
+	return m_impl->state->is_finished();
+}
+
+template <core_concepts::exec Exec>
 template <typename Token>
 auto basic_body_reader<Exec>::read_some(mutable_buffer buffer, Token &&token)
-	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,size_t>
+	requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,body_read_result>
 {
 	if constexpr( is_error_code_token_v<Token> )
 		return m_impl->state->read_some(buffer, token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto size = m_impl->state->read_some(buffer, error);
+		auto result = m_impl->state->read_some(buffer, error);
 		return expected_value_or_throw(error ?
-			sys_expected<size_t>(sys_unexpected(error)) : sys_expected<size_t>(size));
+			sys_expected<body_read_result>(sys_unexpected(error)) :
+			sys_expected<body_read_result>(result));
 	}
 	else
 	{
 		auto state = m_impl->state;
-		return initiate_io<size_t>(m_impl->executor,
+		return initiate_io<body_read_result>(m_impl->executor,
 		[state = std::move(state), buffer](auto handler) mutable {
 			state->read_some(buffer,
 				typename detail::body_reader_state::read_handler(
