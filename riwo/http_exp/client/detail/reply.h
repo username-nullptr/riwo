@@ -10,6 +10,29 @@ namespace riwo::http_exp
 {
 
 template <core_concepts::exec Exec>
+class basic_reply<Exec>::impl
+{
+public:
+	impl(executor_type executor_value, protocol protocol_value,
+		response_head head_value, std::shared_ptr<detail::body_reader_state> state,
+		std::vector<std::byte> buffered_body_value,
+		std::shared_ptr<void> owner_value) :
+		executor(std::move(executor_value)), protocol_value(protocol_value),
+		head(std::move(head_value)),
+		body(std::make_unique<body_reader_type>(executor, std::move(state))),
+		buffered_body(std::move(buffered_body_value)), owner(std::move(owner_value))
+	{
+	}
+
+	executor_type executor;
+	protocol protocol_value;
+	response_head head;
+	std::unique_ptr<body_reader_type> body;
+	std::vector<std::byte> buffered_body;
+	std::shared_ptr<void> owner;
+};
+
+template <core_concepts::exec Exec>
 basic_reply<Exec>::basic_reply()
 	requires std::default_initializable<executor_type> :
 	basic_reply(executor_type{})
@@ -32,10 +55,10 @@ basic_reply<Exec>::basic_reply(Exec0 &&executor,
 	std::shared_ptr<detail::body_reader_state> body,
 	std::vector<std::byte> buffered_body, std::shared_ptr<void> owner)
 	requires core_concepts::match_sched<Exec0,executor_type> :
-	executor_(get_executor_helper(std::forward<Exec0>(executor))),
-	protocol_(selected_protocol), head_(std::move(head)),
-	body_(new body_reader_type(executor_, std::move(body))),
-	buffered_body_(std::move(buffered_body)), owner_(std::move(owner))
+	m_impl(std::make_shared<impl>(
+		get_executor_helper(std::forward<Exec0>(executor)), selected_protocol,
+		std::move(head), std::move(body), std::move(buffered_body),
+		std::move(owner)))
 {
 }
 
@@ -44,27 +67,27 @@ basic_reply<Exec>::~basic_reply() = default;
 
 template <core_concepts::exec Exec>
 auto basic_reply<Exec>::get_executor() const noexcept -> executor_type {
-	return executor_;
+	return m_impl->executor;
 }
 
 template <core_concepts::exec Exec>
 protocol basic_reply<Exec>::selected_protocol() const noexcept {
-	return protocol_;
+	return m_impl->protocol_value;
 }
 
 template <core_concepts::exec Exec>
 http_exp::status basic_reply<Exec>::status() const noexcept {
-	return head_.status;
+	return m_impl->head.status;
 }
 
 template <core_concepts::exec Exec>
 const fields &basic_reply<Exec>::headers() const noexcept {
-	return head_.headers;
+	return m_impl->head.headers;
 }
 
 template <core_concepts::exec Exec>
 auto basic_reply<Exec>::body() noexcept -> body_reader_type& {
-	return *body_;
+	return *m_impl->body;
 }
 
 template <core_concepts::exec Exec>
@@ -148,10 +171,10 @@ auto basic_reply<Exec>::read_all(Token &&token)
 				});
 			}
 		};
-		return initiate_io<std::vector<std::byte>>(executor_,
-		[this](auto handler) mutable {
+		return initiate_io<std::vector<std::byte>>(m_impl->executor,
+		[state = m_impl](auto handler) mutable {
 			auto value = std::make_shared<operation>();
-			value->reader = body_.get();
+			value->reader = state->body.get();
 			value->handler = decltype(value->handler)(std::move(handler));
 			value->start();
 		}, std::forward<Token>(token));
@@ -246,10 +269,10 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 				});
 			}
 		};
-		return initiate_io<uint64_t>(executor_,
-		[this, path = std::move(path)](auto handler) mutable {
+		return initiate_io<uint64_t>(m_impl->executor,
+		[state = m_impl, path = std::move(path)](auto handler) mutable {
 			auto value = std::make_shared<operation>();
-			value->reader = body_.get();
+			value->reader = state->body.get();
 			value->stream.open(path, std::ios::binary | std::ios::trunc);
 			value->handler = decltype(value->handler)(std::move(handler));
 			value->start();
@@ -260,12 +283,12 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 template <core_concepts::exec Exec>
 std::span<const std::byte>
 basic_reply<Exec>::buffered_body() const noexcept {
-	return buffered_body_;
+	return m_impl->buffered_body;
 }
 
 template <core_concepts::exec Exec>
 void basic_reply<Exec>::cancel() noexcept {
-	if( body_ ) body_->cancel();
+	if( m_impl->body ) m_impl->body->cancel();
 }
 
 } //namespace riwo::http_exp

@@ -29,7 +29,8 @@ public:
 	using send_handler = asio::any_completion_handler<void(
 		error_code,send_result)>;
 
-	explicit client_state(std::shared_ptr<client_session> session = {});
+	client_state(asio::any_io_executor executor, client_config config,
+		std::shared_ptr<client_session> session = {});
 	~client_state();
 	[[nodiscard]] std::shared_ptr<stream> open(request request_value,
 		body_spec spec, error_code &error) noexcept;
@@ -39,17 +40,36 @@ public:
 	void send(request request_value, send_handler handler);
 
 private:
-	std::shared_ptr<client_session> session_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 [[nodiscard]] RIWO_HTTP_EXP_API
 std::shared_ptr<client_state> make_client_state(
+	asio::any_io_executor executor, client_config config,
 	std::shared_ptr<client_session> session = {});
 
 } //namespace riwo::http_exp::detail
 
 namespace riwo::http_exp
 {
+
+template <core_concepts::exec Exec>
+class basic_client<Exec>::impl
+{
+public:
+	impl(executor_type executor_value, config_type config_value,
+		std::shared_ptr<detail::client_session> session) :
+		executor(std::move(executor_value)), config(std::move(config_value)),
+		state(detail::make_client_state(asio::any_io_executor(executor), config,
+			std::move(session)))
+	{
+	}
+
+	executor_type executor;
+	config_type config;
+	std::shared_ptr<detail::client_state> state;
+};
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
@@ -68,20 +88,20 @@ basic_client<Exec>::basic_client(Exec0 &&executor,
 	requires (
 		!std::same_as<std::remove_cvref_t<Exec0>,basic_client> &&
 		core_concepts::match_sched<Exec0,executor_type>) :
-	executor_(get_executor_helper(std::forward<Exec0>(executor))),
-	config_(std::move(config)),
-	state_(detail::make_client_state(std::move(session)))
+	m_impl(std::make_shared<impl>(
+		get_executor_helper(std::forward<Exec0>(executor)),
+		std::move(config), std::move(session)))
 {
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::get_executor() const noexcept -> executor_type {
-	return executor_;
+	return m_impl->executor;
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::config() const noexcept -> const config_type& {
-	return config_;
+	return m_impl->config;
 }
 
 template <core_concepts::exec Exec>
@@ -92,27 +112,27 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto result = state_->send(std::move(request_value), token);
-		return token ? reply_type(executor_) : reply_type(executor_,
+		auto result = m_impl->state->send(std::move(request_value), token);
+		return token ? reply_type(m_impl->executor) : reply_type(m_impl->executor,
 			result.selected_protocol, std::move(result.head), std::move(result.body),
 			{}, std::move(result.owner));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto result = state_->send(std::move(request_value), error);
+		auto result = m_impl->state->send(std::move(request_value), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<reply_type>(
 				sys_unexpected(error)));
-		return reply_type(executor_, result.selected_protocol,
+		return reply_type(m_impl->executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), {},
 			std::move(result.owner));
 	}
 	else
 	{
-		auto state = state_;
-		auto executor = executor_;
-		return initiate_io<reply_type>(executor_,
+		auto state = m_impl->state;
+		auto executor = m_impl->executor;
+		return initiate_io<reply_type>(m_impl->executor,
 		[state = std::move(state), executor,
 		 request_value = std::move(request_value)](auto handler) mutable
 		{
@@ -141,35 +161,35 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto result = state_->send(std::move(request_value), token);
-		if( token ) return reply_type(executor_);
-		reply_type active(executor_, result.selected_protocol,
+		auto result = m_impl->state->send(std::move(request_value), token);
+		if( token ) return reply_type(m_impl->executor);
+		reply_type active(m_impl->executor, result.selected_protocol,
 			result.head, result.body, {}, result.owner);
 		auto bytes = active.read_all(token);
-		if( token ) return reply_type(executor_);
-		return reply_type(executor_, result.selected_protocol,
+		if( token ) return reply_type(m_impl->executor);
+		return reply_type(m_impl->executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto result = state_->send(std::move(request_value), error);
+		auto result = m_impl->state->send(std::move(request_value), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<reply_type>(
 				sys_unexpected(error)));
-		reply_type active(executor_, result.selected_protocol,
+		reply_type active(m_impl->executor, result.selected_protocol,
 			result.head, result.body, {}, result.owner);
 		auto bytes = active.read_all();
-		return reply_type(executor_, result.selected_protocol,
+		return reply_type(m_impl->executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner));
 	}
 	else
 	{
-		auto state = state_;
-		auto executor = executor_;
-		return initiate_io<reply_type>(executor_,
+		auto state = m_impl->state;
+		auto executor = m_impl->executor;
+		return initiate_io<reply_type>(m_impl->executor,
 		[state = std::move(state), executor,
 		 request_value = std::move(request_value)](auto handler) mutable
 		{
@@ -214,23 +234,25 @@ auto basic_client<Exec>::open(request request_value, body_spec spec,
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto stream = state_->open(std::move(request_value), std::move(spec), token);
-		return exchange_type(executor_, std::move(stream));
+		auto stream = m_impl->state->open(
+			std::move(request_value), std::move(spec), token);
+		return exchange_type(m_impl->executor, std::move(stream));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto stream = state_->open(std::move(request_value), std::move(spec), error);
+		auto stream = m_impl->state->open(
+			std::move(request_value), std::move(spec), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<exchange_type>(
 				sys_unexpected(error)));
-		return exchange_type(executor_, std::move(stream));
+		return exchange_type(m_impl->executor, std::move(stream));
 	}
 	else
 	{
-		auto state = state_;
-		auto executor = executor_;
-		return initiate_io<exchange_type>(executor_,
+		auto state = m_impl->state;
+		auto executor = m_impl->executor;
+		return initiate_io<exchange_type>(m_impl->executor,
 		[state = std::move(state), executor,
 		 request_value = std::move(request_value), spec = std::move(spec)]
 		(auto handler) mutable

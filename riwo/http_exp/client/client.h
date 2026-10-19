@@ -85,9 +85,8 @@ public:
 			Token,error_code,reply_type>;
 
 private:
-	executor_type executor_;
-	config_type config_;
-	std::shared_ptr<detail::client_state> state_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 using client = basic_client<>;

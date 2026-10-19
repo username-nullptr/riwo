@@ -32,7 +32,8 @@ public:
 	[[nodiscard]] bool is_safe() const noexcept;
 	[[nodiscard]] bool is_idempotent() const noexcept;
 
-	friend bool operator==(const method &lhs, const method &rhs) noexcept;
+	friend RIWO_HTTP_EXP_API bool operator==(
+		const method &lhs, const method &rhs) noexcept;
 
 private:
 	std::string token_;

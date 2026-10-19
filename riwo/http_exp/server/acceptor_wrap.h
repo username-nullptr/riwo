@@ -39,7 +39,8 @@ public:
 	[[nodiscard]] acceptor_type &acceptor() noexcept;
 
 private:
-	acceptor_type acceptor_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 using acceptor_wrap = basic_acceptor_wrap<>;

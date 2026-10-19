@@ -64,12 +64,8 @@ public:
 	void cancel() noexcept;
 
 private:
-	executor_type executor_;
-	protocol protocol_ = protocol::v1_1;
-	response_head head_ {};
-	std::unique_ptr<body_reader_type> body_;
-	std::vector<std::byte> buffered_body_;
-	std::shared_ptr<void> owner_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 using reply = basic_reply<>;

@@ -4,6 +4,7 @@
 #include "client.h"
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/protocol/detail/h1/session.h>
 #include <charconv>
 
 namespace riwo::http_exp::detail
@@ -13,23 +14,23 @@ struct request_access
 {
 	[[nodiscard]] static std::shared_ptr<body_source>
 	source(const request &value) noexcept {
-		return value.source_;
+		return value.m_impl->source;
 	}
 
 	[[nodiscard]] static fields trailers(const request &value) {
-		return value.trailers_;
+		return value.m_impl->trailers;
 	}
 
 	[[nodiscard]] static error_code prepare(request &value) noexcept
 	{
-		if( value.file_.empty() ) return {};
+		if( value.m_impl->file.empty() ) return {};
 		try {
-			file_body_source source(value.file_);
+			file_body_source source(value.m_impl->file);
 			const auto size = source.size();
-			value.source_ = make_body_source(std::move(source));
-			value.body_spec_ = body_spec::known(
-				*size, value.body_spec_.trailers());
-			value.file_.clear();
+			value.m_impl->source = make_body_source(std::move(source));
+			value.m_impl->body_spec = body_spec::known(
+				*size, value.m_impl->body_spec.trailers());
+			value.m_impl->file.clear();
 			return {};
 		}
 		catch(...) {
@@ -129,8 +130,71 @@ namespace
 
 } //namespace
 
-client_state::client_state(std::shared_ptr<client_session> session) :
-	session_(std::move(session))
+class client_state::impl
+{
+public:
+	impl(asio::any_io_executor executor_value, client_config config_value,
+		std::shared_ptr<client_session> session_value) :
+		executor(std::move(executor_value)), config(std::move(config_value)),
+		injected_session(std::move(session_value))
+	{
+	}
+
+	[[nodiscard]] std::shared_ptr<client_session> make_session(
+		const request_head &head, error_code &error) const noexcept
+	{
+		error.clear();
+		if( injected_session ) return injected_session;
+		if( head.scheme != "http" )
+		{
+			error = make_error_code(errc::operation_not_supported);
+			return {};
+		}
+		try {
+			if( config.protocols.preference.empty() )
+			{
+				error = make_error_code(errc::negotiation_failed);
+				return {};
+			}
+			optional<protocol> selected;
+			for( const auto value : config.protocols.preference )
+			{
+				if( value != protocol::v1_0 && value != protocol::v1_1 )
+					continue;
+				if( selected )
+				{
+					if( *selected == value )
+					{
+						error = make_error_code(errc::negotiation_failed);
+						return {};
+					}
+					continue;
+				}
+				selected = value;
+			}
+			if( !selected )
+			{
+				error = make_error_code(errc::negotiation_failed);
+				return {};
+			}
+			return h1::make_client_session(executor, *selected,
+				config.response_limits);
+		}
+		catch(...) {
+			error = exception_error(std::current_exception());
+			return {};
+		}
+	}
+
+	asio::any_io_executor executor;
+	client_config config;
+	std::shared_ptr<client_session> injected_session;
+};
+
+client_state::client_state(asio::any_io_executor executor, client_config config,
+	std::shared_ptr<client_session> session) :
+	m_impl(std::make_shared<impl>(std::move(executor), std::move(config),
+		std::move(session)))
 {
 }
 
@@ -140,47 +204,44 @@ std::shared_ptr<stream> client_state::open(request request_value,
 	body_spec spec, error_code &error) noexcept
 {
 	error.clear();
-	if( !session_ )
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return {};
-	}
 	auto head = freeze_request(request_value, spec, true);
 	if( !head )
 	{
 		error = head.error();
 		return {};
 	}
-	return session_->open_sync(std::move(*head), std::move(spec), error);
+	auto session = m_impl->make_session(*head, error);
+	if( error ) return {};
+	return session->open_sync(std::move(*head), std::move(spec), error);
 }
 
 void client_state::open(request request_value, body_spec spec,
 	open_handler handler)
 {
-	if( !session_ )
-	{
-		std::move(handler)(make_error_code(errc::operation_not_supported),
-			std::shared_ptr<stream>{});
-		return;
-	}
 	auto head = freeze_request(request_value, spec, true);
 	if( !head )
 	{
 		std::move(handler)(head.error(), std::shared_ptr<stream>{});
 		return;
 	}
-	session_->open(std::move(*head), std::move(spec), std::move(handler));
+	error_code error;
+	auto session = m_impl->make_session(*head, error);
+	if( error )
+	{
+		std::move(handler)(error, std::shared_ptr<stream>{});
+		return;
+	}
+	session->open(std::move(*head), std::move(spec),
+	[session, handler = std::move(handler)]
+	(error_code open_error, std::shared_ptr<stream> value) mutable {
+		std::move(handler)(open_error, std::move(value));
+	});
 }
 
 send_result client_state::send(request request_value,
 	error_code &error) noexcept
 {
 	error.clear();
-	if( !session_ )
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return {};
-	}
 	if( auto prepare_error = request_access::prepare(request_value) )
 	{
 		error = prepare_error;
@@ -195,7 +256,9 @@ send_result client_state::send(request request_value,
 	}
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
-	auto active_stream = session_->open_sync(std::move(*head), spec, error);
+	auto session = m_impl->make_session(*head, error);
+	if( error ) return {};
+	auto active_stream = session->open_sync(std::move(*head), spec, error);
 	if( error || !active_stream )
 	{
 		if( !error ) error = make_error_code(errc::operation_not_supported);
@@ -271,12 +334,6 @@ send_result client_state::send(request request_value,
 
 void client_state::send(request request_value, send_handler handler)
 {
-	if( !session_ )
-	{
-		std::move(handler)(make_error_code(errc::operation_not_supported),
-			send_result{});
-		return;
-	}
 	if( auto prepare_error = request_access::prepare(request_value) )
 	{
 		std::move(handler)(prepare_error, send_result{});
@@ -291,6 +348,13 @@ void client_state::send(request request_value, send_handler handler)
 	}
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
+	error_code session_error;
+	auto session = m_impl->make_session(*head, session_error);
+	if( session_error )
+	{
+		std::move(handler)(session_error, send_result{});
+		return;
+	}
 
 	struct operation : std::enable_shared_from_this<operation>
 	{
@@ -419,8 +483,8 @@ void client_state::send(request request_value, send_handler handler)
 		}
 	};
 
-	session_->open(std::move(*head), spec,
-	[source = std::move(source), spec = std::move(spec),
+	session->open(std::move(*head), spec,
+	[session, source = std::move(source), spec = std::move(spec),
 	 trailers = std::move(trailers), handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{
@@ -436,9 +500,11 @@ void client_state::send(request request_value, send_handler handler)
 }
 
 std::shared_ptr<client_state> make_client_state(
+	asio::any_io_executor executor, client_config config,
 	std::shared_ptr<client_session> session)
 {
-	return std::make_shared<client_state>(std::move(session));
+	return std::make_shared<client_state>(std::move(executor),
+		std::move(config), std::move(session));
 }
 
 } //namespace riwo::http_exp::detail

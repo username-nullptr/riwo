@@ -41,7 +41,7 @@ namespace
 
 body_reader_state::body_reader_state(std::shared_ptr<body_reader_adapter> adapter,
 	bool ready, uint64_t max_discard) :
-	impl_(std::make_shared<impl>(std::move(adapter), ready, max_discard))
+	m_impl(std::make_shared<impl>(std::move(adapter), ready, max_discard))
 {
 }
 
@@ -51,7 +51,7 @@ size_t body_reader_state::read_some(mutable_buffer buffer,
 	error_code &error) noexcept
 {
 	error.clear();
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		error = operation_error(errc::operation_in_progress);
@@ -82,7 +82,7 @@ size_t body_reader_state::read_some(mutable_buffer buffer,
 
 void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress), 0);
@@ -127,7 +127,7 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
 void body_reader_state::discard(error_code &error) noexcept
 {
 	error.clear();
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		error = operation_error(errc::operation_in_progress);
@@ -173,7 +173,7 @@ void body_reader_state::discard(error_code &error) noexcept
 
 void body_reader_state::discard(operation_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress));
@@ -260,7 +260,7 @@ void body_reader_state::discard(operation_handler handler)
 fields body_reader_state::trailers(error_code &error) noexcept
 {
 	error.clear();
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		error = operation_error(errc::operation_in_progress);
@@ -284,7 +284,7 @@ fields body_reader_state::trailers(error_code &error) noexcept
 
 void body_reader_state::trailers(trailers_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress), fields{});
@@ -321,18 +321,18 @@ void body_reader_state::trailers(trailers_handler handler)
 
 void body_reader_state::cancel() noexcept
 {
-	auto state = impl_;
+	auto state = m_impl;
 	state->cancelled = true;
 	if( state->adapter )
 		state->adapter->cancel();
 }
 
 void body_reader_state::set_ready(bool ready) noexcept {
-	impl_->ready = ready;
+	m_impl->ready = ready;
 }
 
 bool body_reader_state::ended() const noexcept {
-	return impl_->eof;
+	return m_impl->eof;
 }
 
 std::shared_ptr<body_reader_state> make_body_reader_state(

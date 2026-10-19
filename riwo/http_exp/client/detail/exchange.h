@@ -27,7 +27,7 @@ public:
 
 private:
 	class impl;
-	std::shared_ptr<impl> impl_;
+	std::shared_ptr<impl> m_impl;
 };
 
 [[nodiscard]] RIWO_HTTP_EXP_API
@@ -38,6 +38,26 @@ std::shared_ptr<client_exchange_state> make_client_exchange_state(
 
 namespace riwo::http_exp
 {
+
+template <core_concepts::exec Exec>
+class basic_client_exchange<Exec>::impl
+{
+public:
+	impl(executor_type executor_value, std::shared_ptr<detail::stream> stream) :
+		executor(std::move(executor_value)),
+		state(detail::make_client_exchange_state(std::move(stream))),
+		request_body(std::make_unique<body_writer_type>(
+			executor, state->request_body())),
+		response_body(std::make_unique<body_reader_type>(
+			executor, state->response_body()))
+	{
+	}
+
+	executor_type executor;
+	std::shared_ptr<detail::client_exchange_state> state;
+	std::unique_ptr<body_writer_type> request_body;
+	std::unique_ptr<body_reader_type> response_body;
+};
 
 template <core_concepts::exec Exec>
 basic_client_exchange<Exec>::basic_client_exchange()
@@ -56,7 +76,7 @@ basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 basic_client_exchange<Exec>::~basic_client_exchange() {
-	if( state_ ) state_->cancel();
+	if( m_impl && m_impl->state ) m_impl->state->cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -64,26 +84,24 @@ template <typename Exec0>
 basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor,
 	std::shared_ptr<detail::stream> stream)
 	requires core_concepts::match_sched<Exec0,executor_type> :
-	executor_(get_executor_helper(std::forward<Exec0>(executor))),
-	state_(detail::make_client_exchange_state(std::move(stream))),
-	request_body_(new body_writer_type(executor_, state_->request_body())),
-	response_body_(new body_reader_type(executor_, state_->response_body()))
+	m_impl(std::make_shared<impl>(
+		get_executor_helper(std::forward<Exec0>(executor)), std::move(stream)))
 {
 }
 
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::get_executor() const noexcept -> executor_type {
-	return executor_;
+	return m_impl->executor;
 }
 
 template <core_concepts::exec Exec>
 protocol basic_client_exchange<Exec>::selected_protocol() const noexcept {
-	return state_->selected_protocol();
+	return m_impl->state->selected_protocol();
 }
 
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::request_body() noexcept -> body_writer_type& {
-	return *request_body_;
+	return *m_impl->request_body;
 }
 
 template <core_concepts::exec Exec>
@@ -92,19 +110,19 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response_head>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return state_->wait_response(token);
+		return m_impl->state->wait_response(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto head = state_->wait_response(error);
+		auto head = m_impl->state->wait_response(error);
 		return expected_value_or_throw(error ?
 			sys_expected<response_head>(sys_unexpected(error)) :
 			sys_expected<response_head>(std::move(head)));
 	}
 	else
 	{
-		auto state = state_;
-		return initiate_io<response_head>(executor_,
+		auto state = m_impl->state;
+		return initiate_io<response_head>(m_impl->executor,
 		[state = std::move(state)](auto handler) mutable {
 			state->wait_response(
 				typename detail::client_exchange_state::response_handler(
@@ -115,17 +133,17 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::response_body() noexcept -> body_reader_type& {
-	return *response_body_;
+	return *m_impl->response_body;
 }
 
 template <core_concepts::exec Exec>
 void basic_client_exchange<Exec>::cancel() noexcept {
-	state_->cancel();
+	m_impl->state->cancel();
 }
 
 template <core_concepts::exec Exec>
 stream_capabilities basic_client_exchange<Exec>::capabilities() const noexcept {
-	return state_->capabilities();
+	return m_impl->state->capabilities();
 }
 
 template <core_concepts::exec Exec>

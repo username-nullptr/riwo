@@ -30,7 +30,7 @@ public:
 
 private:
 	class impl;
-	std::shared_ptr<impl> impl_;
+	std::shared_ptr<impl> m_impl;
 };
 
 [[nodiscard]] RIWO_HTTP_EXP_API
@@ -43,6 +43,27 @@ namespace riwo::http_exp
 {
 
 template <core_concepts::exec Exec>
+class basic_server_exchange<Exec>::impl
+{
+public:
+	impl(executor_type executor_value, std::shared_ptr<detail::stream> stream,
+		request_type request) : executor(std::move(executor_value)),
+		state(detail::make_server_exchange_state(
+			std::move(stream), std::move(request))),
+		request_body(std::make_unique<body_reader_type>(
+			executor, state->request_body())),
+		response_body(std::make_unique<body_writer_type>(
+			executor, state->response_body()))
+	{
+	}
+
+	executor_type executor;
+	std::shared_ptr<detail::server_exchange_state> state;
+	std::unique_ptr<body_reader_type> request_body;
+	std::unique_ptr<body_writer_type> response_body;
+};
+
+template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor)
 	requires core_concepts::match_sched<Exec0,executor_type> :
@@ -52,7 +73,7 @@ basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 basic_server_exchange<Exec>::~basic_server_exchange() {
-	if( state_ ) state_->cancel();
+	if( m_impl->state ) m_impl->state->cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -60,37 +81,35 @@ template <typename Exec0>
 basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
 	std::shared_ptr<detail::stream> stream, request_type request_value)
 	requires core_concepts::match_sched<Exec0,executor_type> :
-	executor_(get_executor_helper(std::forward<Exec0>(executor))),
-	state_(detail::make_server_exchange_state(
-		std::move(stream), std::move(request_value))),
-	request_body_(new body_reader_type(executor_, state_->request_body())),
-	response_body_(new body_writer_type(executor_, state_->response_body()))
+	m_impl(std::make_shared<impl>(
+		get_executor_helper(std::forward<Exec0>(executor)),
+		std::move(stream), std::move(request_value)))
 {
 }
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::get_executor() const noexcept -> executor_type {
-	return executor_;
+	return m_impl->executor;
 }
 
 template <core_concepts::exec Exec>
 protocol basic_server_exchange<Exec>::selected_protocol() const noexcept {
-	return state_->selected_protocol();
+	return m_impl->state->selected_protocol();
 }
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::request() const noexcept -> const request_type& {
-	return state_->request();
+	return m_impl->state->request();
 }
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::request_body() noexcept -> body_reader_type& {
-	return *request_body_;
+	return *m_impl->request_body;
 }
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::response_body() noexcept -> body_writer_type& {
-	return *response_body_;
+	return *m_impl->response_body;
 }
 
 template <core_concepts::exec Exec>
@@ -100,19 +119,19 @@ auto basic_server_exchange<Exec>::respond(response_head head, body_spec spec,
 	requires core_concepts::tf_opt_token<Token,error_code>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		state_->respond(std::move(head), std::move(spec), token);
+		m_impl->state->respond(std::move(head), std::move(spec), token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		state_->respond(std::move(head), std::move(spec), error);
+		m_impl->state->respond(std::move(head), std::move(spec), error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
 	}
 	else
 	{
-		auto state = state_;
-		return initiate_io_void(executor_,
+		auto state = m_impl->state;
+		return initiate_io_void(m_impl->executor,
 		[state = std::move(state), head = std::move(head), spec = std::move(spec)]
 		(auto handler) mutable {
 			state->respond(std::move(head), std::move(spec),
@@ -153,7 +172,7 @@ auto basic_server_exchange<Exec>::respond(response_head head, Body &&body,
 	{
 		auto owned = std::make_shared<std::vector<std::byte>>(
 			bytes.begin(), bytes.end());
-		return initiate_io_void(executor_,
+		return initiate_io_void(m_impl->executor,
 		[this, head = std::move(head), owned](auto handler) mutable
 		{
 			respond(std::move(head), body_spec::known(owned->size()),
@@ -186,19 +205,19 @@ auto basic_server_exchange<Exec>::inform(response_head head, Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		state_->inform(std::move(head), token);
+		m_impl->state->inform(std::move(head), token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		state_->inform(std::move(head), error);
+		m_impl->state->inform(std::move(head), error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
 	}
 	else
 	{
-		auto state = state_;
-		return initiate_io_void(executor_,
+		auto state = m_impl->state;
+		return initiate_io_void(m_impl->executor,
 		[state = std::move(state), head = std::move(head)]
 		(auto handler) mutable {
 			state->inform(std::move(head),
@@ -210,12 +229,12 @@ auto basic_server_exchange<Exec>::inform(response_head head, Token &&token)
 
 template <core_concepts::exec Exec>
 void basic_server_exchange<Exec>::cancel() noexcept {
-	state_->cancel();
+	m_impl->state->cancel();
 }
 
 template <core_concepts::exec Exec>
 stream_capabilities basic_server_exchange<Exec>::capabilities() const noexcept {
-	return state_->capabilities();
+	return m_impl->state->capabilities();
 }
 
 template <core_concepts::exec Exec>

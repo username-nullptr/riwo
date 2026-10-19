@@ -121,23 +121,8 @@ public:
 	[[nodiscard]] acceptor_wrap_type &acceptor_wrap() noexcept;
 
 private:
-	struct route
-	{
-		std::string path;
-		std::vector<http_exp::method> methods;
-		request_handler_type handler;
-	};
-
-	void register_route(std::string path,
-		std::vector<http_exp::method> methods, request_handler_type handler);
-
-	acceptor_wrap_type acceptor_wrap_;
-	service_executor_type service_executor_;
-	config_type config_;
-	std::vector<route> routes_;
-	request_handler_type default_handler_;
-	server_error_handler_type server_error_handler_;
-	service_error_handler_type service_error_handler_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 template <core_concepts::exec Exec = asio::any_io_executor,
@@ -148,7 +133,7 @@ using tcp_server = basic_tcp_server<>;
 using server = tcp_server;
 
 } //namespace riwo::http_exp
-
 #include <riwo/http_exp/server/detail/server.h>
+
 
 #endif //RIWO_HTTP_EXP_SERVER_SERVER_H

@@ -17,6 +17,10 @@ stream_capabilities stream::capabilities() const noexcept {
 	return {};
 }
 
+request_head stream::request() const {
+	return {};
+}
+
 std::shared_ptr<body_reader_state> stream::inbound_body() const noexcept {
 	return make_body_reader_state();
 }

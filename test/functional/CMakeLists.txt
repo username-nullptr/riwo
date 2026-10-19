@@ -39,6 +39,7 @@ endif ()
 if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.public-api http_exp/public_api.cpp riwo.http_exp)
 	add_riwo_test(http_exp.phase-a http_exp/phase_a.cpp riwo.http_exp)
+	add_riwo_test(http_exp.phase-b http_exp/phase_b.cpp riwo.http_exp)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)
@@ -99,6 +100,40 @@ if (Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
 
 		message(STATUS
 			"${PRO_NAME}: HTTP interoperability backend: ${riwo_http_interop_backend}"
+		)
+	endif ()
+
+	if (RIWO_BUILD_HTTP_EXP)
+		find_program(RIWO_TEST_HTTP_EXP_CURL_EXECUTABLE NAMES curl)
+
+		if (RIWO_TEST_HTTP_EXP_CURL_EXECUTABLE)
+			set(riwo_http_exp_interop_backend curl)
+			set(riwo_http_exp_interop_arguments
+				--curl ${RIWO_TEST_HTTP_EXP_CURL_EXECUTABLE}
+			)
+		else ()
+			set(riwo_http_exp_interop_backend python-stdlib)
+			set(riwo_http_exp_interop_arguments)
+		endif ()
+
+		add_riwo_test_program(riwo.test.http_exp.interop-peer
+			http_exp/interop_peer.cpp riwo.http_exp
+		)
+		add_riwo_ctest(riwo.http_exp.interop
+			${Python3_EXECUTABLE}
+			${CMAKE_CURRENT_SOURCE_DIR}/interop/http_interop.py
+			--peer $<TARGET_FILE:riwo.test.http_exp.interop-peer>
+			--backend ${riwo_http_exp_interop_backend}
+			${riwo_http_exp_interop_arguments}
+		)
+		configure_riwo_functional_test(riwo.http_exp.interop)
+		set_property(TEST riwo.http_exp.interop APPEND PROPERTY
+			LABELS interop external
+		)
+
+		message(STATUS
+			"${PRO_NAME}: HTTP_EXP interoperability backend: "
+			"${riwo_http_exp_interop_backend}"
 		)
 	endif ()
 

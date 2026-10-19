@@ -55,7 +55,7 @@ public:
 
 private:
 	class impl;
-	std::shared_ptr<impl> impl_;
+	std::shared_ptr<impl> m_impl;
 };
 
 [[nodiscard]] RIWO_HTTP_EXP_API
@@ -67,6 +67,20 @@ std::shared_ptr<body_reader_state> make_body_reader_state(
 
 namespace riwo::http_exp
 {
+
+template <core_concepts::exec Exec>
+class basic_body_reader<Exec>::impl
+{
+public:
+	impl(executor_type executor_value,
+		std::shared_ptr<detail::body_reader_state> state_value) :
+		executor(std::move(executor_value)), state(std::move(state_value))
+	{
+	}
+
+	executor_type executor;
+	std::shared_ptr<detail::body_reader_state> state;
+};
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
@@ -82,19 +96,20 @@ template <typename Exec0>
 basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor,
 	std::shared_ptr<detail::body_reader_state> state)
 	requires core_concepts::match_sched<Exec0,executor_type> :
-	executor_(get_executor_helper(std::forward<Exec0>(executor))),
-	state_(state ? std::move(state) : detail::make_body_reader_state())
+	m_impl(std::make_shared<impl>(
+		get_executor_helper(std::forward<Exec0>(executor)),
+		state ? std::move(state) : detail::make_body_reader_state()))
 {
 }
 
 template <core_concepts::exec Exec>
 basic_body_reader<Exec>::~basic_body_reader() {
-	if( state_ && !state_->ended() ) state_->cancel();
+	if( m_impl->state && !m_impl->state->ended() ) m_impl->state->cancel();
 }
 
 template <core_concepts::exec Exec>
 auto basic_body_reader<Exec>::get_executor() const noexcept -> executor_type {
-	return executor_;
+	return m_impl->executor;
 }
 
 template <core_concepts::exec Exec>
@@ -103,18 +118,18 @@ auto basic_body_reader<Exec>::read_some(mutable_buffer buffer, Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,size_t>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return state_->read_some(buffer, token);
+		return m_impl->state->read_some(buffer, token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto size = state_->read_some(buffer, error);
+		auto size = m_impl->state->read_some(buffer, error);
 		return expected_value_or_throw(error ?
 			sys_expected<size_t>(sys_unexpected(error)) : sys_expected<size_t>(size));
 	}
 	else
 	{
-		auto state = state_;
-		return initiate_io<size_t>(executor_,
+		auto state = m_impl->state;
+		return initiate_io<size_t>(m_impl->executor,
 		[state = std::move(state), buffer](auto handler) mutable {
 			state->read_some(buffer,
 				typename detail::body_reader_state::read_handler(
@@ -129,19 +144,19 @@ auto basic_body_reader<Exec>::discard(Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		state_->discard(token);
+		m_impl->state->discard(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		state_->discard(error);
+		m_impl->state->discard(error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
 	}
 	else
 	{
-		auto state = state_;
-		return initiate_io_void(executor_,
+		auto state = m_impl->state;
+		return initiate_io_void(m_impl->executor,
 		[state = std::move(state)](auto handler) mutable {
 			state->discard(typename detail::body_reader_state::operation_handler(
 				std::move(handler)));
@@ -155,19 +170,19 @@ auto basic_body_reader<Exec>::trailers(Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,fields>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return state_->trailers(token);
+		return m_impl->state->trailers(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto value = state_->trailers(error);
+		auto value = m_impl->state->trailers(error);
 		return expected_value_or_throw(error ?
 			sys_expected<fields>(sys_unexpected(error)) :
 			sys_expected<fields>(std::move(value)));
 	}
 	else
 	{
-		auto state = state_;
-		return initiate_io<fields>(executor_,
+		auto state = m_impl->state;
+		return initiate_io<fields>(m_impl->executor,
 		[state = std::move(state)](auto handler) mutable {
 			state->trailers(typename detail::body_reader_state::trailers_handler(
 				std::move(handler)));
@@ -177,7 +192,7 @@ auto basic_body_reader<Exec>::trailers(Token &&token)
 
 template <core_concepts::exec Exec>
 void basic_body_reader<Exec>::cancel() noexcept {
-	state_->cancel();
+	m_impl->state->cancel();
 }
 
 } //namespace riwo::http_exp

@@ -62,10 +62,8 @@ public:
 	[[nodiscard]] Extension *extension() noexcept;
 
 private:
-	executor_type executor_;
-	std::shared_ptr<detail::client_exchange_state> state_;
-	std::unique_ptr<body_writer_type> request_body_;
-	std::unique_ptr<body_reader_type> response_body_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 using client_exchange = basic_client_exchange<>;

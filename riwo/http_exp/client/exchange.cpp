@@ -29,33 +29,33 @@ public:
 };
 
 client_exchange_state::client_exchange_state(std::shared_ptr<stream> stream) :
-	impl_(std::make_shared<impl>(std::move(stream)))
+	m_impl(std::make_shared<impl>(std::move(stream)))
 {
 }
 
 client_exchange_state::~client_exchange_state() = default;
 
 protocol client_exchange_state::selected_protocol() const noexcept {
-	return impl_->stream_ ? impl_->stream_->selected_protocol() : protocol::v1_1;
+	return m_impl->stream_ ? m_impl->stream_->selected_protocol() : protocol::v1_1;
 }
 
 stream_capabilities client_exchange_state::capabilities() const noexcept {
-	return impl_->stream_ ? impl_->stream_->capabilities() : stream_capabilities{};
+	return m_impl->stream_ ? m_impl->stream_->capabilities() : stream_capabilities{};
 }
 
 std::shared_ptr<body_writer_state>
 client_exchange_state::request_body() const noexcept {
-	return impl_->request_body_;
+	return m_impl->request_body_;
 }
 
 std::shared_ptr<body_reader_state>
 client_exchange_state::response_body() const noexcept {
-	return impl_->response_body_;
+	return m_impl->response_body_;
 }
 
 response_head client_exchange_state::wait_response(error_code &error) noexcept
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->wait_pending )
 	{
 		error = make_error_code(errc::operation_in_progress);
@@ -85,7 +85,7 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 
 void client_exchange_state::wait_response(response_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->wait_pending )
 	{
 		std::move(handler)(make_error_code(errc::operation_in_progress),
@@ -105,7 +105,7 @@ void client_exchange_state::wait_response(response_handler handler)
 	}
 	state->wait_pending = true;
 	state->stream_->wait_response(
-	[state = std::move(state), handler = std::move(handler)]
+	[state, handler = std::move(handler)]
 	(error_code error, response_head result) mutable
 	{
 		state->wait_pending = false;
@@ -121,10 +121,10 @@ void client_exchange_state::wait_response(response_handler handler)
 
 void client_exchange_state::cancel() noexcept
 {
-	impl_->request_body_->cancel();
-	impl_->response_body_->cancel();
-	if( impl_->stream_ )
-		impl_->stream_->cancel();
+	m_impl->request_body_->cancel();
+	m_impl->response_body_->cancel();
+	if( m_impl->stream_ )
+		m_impl->stream_->cancel();
 }
 
 std::shared_ptr<client_exchange_state> make_client_exchange_state(

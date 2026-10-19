@@ -289,7 +289,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	http::client client(executor);
 	RIWO_TEST_CHECK(client.get_executor() == executor);
 	bool completed = false;
-	client.send(http::request(http::method::get, "http://example.test/"),
+	client.send(http::request(http::method::get, "https://example.test/"),
 		[&](riwo::error_code error, http::reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_supported));
@@ -297,7 +297,7 @@ void fake_boundaries_and_unsupported_entry_points()
 			completed = true;
 		});
 	bool native_completed = false;
-	native.send(http::request(http::method::get, "http://example.test/"),
+	native.send(http::request(http::method::get, "https://example.test/"),
 		[&](riwo::error_code error, native_reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_supported));
@@ -334,8 +334,7 @@ void server_facade_contract()
 	RIWO_TEST_CHECK(service.acceptor_wrap().acceptor().is_open());
 
 	service.start(error);
-	RIWO_TEST_CHECK_EQ(error,
-		http::make_error_code(http::errc::operation_not_supported));
+	RIWO_TEST_CHECK(!error);
 
 	service
 		.unbound_request("/events")

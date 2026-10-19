@@ -31,38 +31,38 @@ public:
 
 server_exchange_state::server_exchange_state(std::shared_ptr<stream> stream,
 	request_head request) :
-	impl_(std::make_shared<impl>(std::move(stream), std::move(request)))
+	m_impl(std::make_shared<impl>(std::move(stream), std::move(request)))
 {
 }
 
 server_exchange_state::~server_exchange_state() = default;
 
 protocol server_exchange_state::selected_protocol() const noexcept {
-	return impl_->stream_ ? impl_->stream_->selected_protocol() : protocol::v1_1;
+	return m_impl->stream_ ? m_impl->stream_->selected_protocol() : protocol::v1_1;
 }
 
 stream_capabilities server_exchange_state::capabilities() const noexcept {
-	return impl_->stream_ ? impl_->stream_->capabilities() : stream_capabilities{};
+	return m_impl->stream_ ? m_impl->stream_->capabilities() : stream_capabilities{};
 }
 
 const request_head &server_exchange_state::request() const noexcept {
-	return impl_->request_;
+	return m_impl->request_;
 }
 
 std::shared_ptr<body_reader_state>
 server_exchange_state::request_body() const noexcept {
-	return impl_->request_body_;
+	return m_impl->request_body_;
 }
 
 std::shared_ptr<body_writer_state>
 server_exchange_state::response_body() const noexcept {
-	return impl_->response_body_;
+	return m_impl->response_body_;
 }
 
 void server_exchange_state::respond(response_head head, body_spec spec,
 	error_code &error) noexcept
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->response_pending )
 	{
 		error = make_error_code(errc::operation_in_progress);
@@ -87,7 +87,7 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 void server_exchange_state::respond(response_head head, body_spec spec,
 	operation_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->response_pending )
 	{
 		std::move(handler)(make_error_code(errc::operation_in_progress));
@@ -101,7 +101,7 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 	state->response_pending = true;
 	state->response_body_->configure(spec);
 	state->stream_->respond(std::move(head), spec,
-	[state = std::move(state), handler = std::move(handler)]
+	[state, handler = std::move(handler)]
 	(error_code error) mutable
 	{
 		state->response_pending = false;
@@ -123,12 +123,12 @@ void server_exchange_state::inform(response_head head,
 		error = make_error_code(errc::invalid_status);
 		return;
 	}
-	if( !impl_->stream_ || impl_->response_started )
+	if( !m_impl->stream_ || m_impl->response_started )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return;
 	}
-	impl_->stream_->inform_sync(std::move(head), error);
+	m_impl->stream_->inform_sync(std::move(head), error);
 }
 
 void server_exchange_state::inform(response_head head,
@@ -140,20 +140,20 @@ void server_exchange_state::inform(response_head head,
 		std::move(handler)(make_error_code(errc::invalid_status));
 		return;
 	}
-	if( !impl_->stream_ || impl_->response_started )
+	if( !m_impl->stream_ || m_impl->response_started )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted));
 		return;
 	}
-	impl_->stream_->inform(std::move(head), std::move(handler));
+	m_impl->stream_->inform(std::move(head), std::move(handler));
 }
 
 void server_exchange_state::cancel() noexcept
 {
-	impl_->request_body_->cancel();
-	impl_->response_body_->cancel();
-	if( impl_->stream_ )
-		impl_->stream_->cancel();
+	m_impl->request_body_->cancel();
+	m_impl->response_body_->cancel();
+	if( m_impl->stream_ )
+		m_impl->stream_->cancel();
 }
 
 std::shared_ptr<server_exchange_state> make_server_exchange_state(

@@ -62,7 +62,7 @@ namespace
 
 body_writer_state::body_writer_state(std::shared_ptr<body_writer_adapter> adapter,
 	body_spec spec, bool ready) :
-	impl_(std::make_shared<impl>(std::move(adapter), std::move(spec), ready))
+	m_impl(std::make_shared<impl>(std::move(adapter), std::move(spec), ready))
 {
 }
 
@@ -71,7 +71,7 @@ body_writer_state::~body_writer_state() = default;
 size_t body_writer_state::write(const_buffer buffer, error_code &error) noexcept
 {
 	error.clear();
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		error = operation_error(errc::operation_in_progress);
@@ -124,7 +124,7 @@ size_t body_writer_state::write(const_buffer buffer, error_code &error) noexcept
 
 void body_writer_state::write(const_buffer buffer, write_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress), 0);
@@ -194,7 +194,7 @@ void body_writer_state::write(const_buffer buffer, write_handler handler)
 void body_writer_state::finish(fields trailers, error_code &error) noexcept
 {
 	error.clear();
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		error = operation_error(errc::operation_in_progress);
@@ -232,7 +232,7 @@ void body_writer_state::finish(fields trailers, error_code &error) noexcept
 
 void body_writer_state::finish(fields trailers, finish_handler handler)
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress));
@@ -283,7 +283,7 @@ void body_writer_state::finish(fields trailers, finish_handler handler)
 
 void body_writer_state::cancel() noexcept
 {
-	auto state = impl_;
+	auto state = m_impl;
 	state->terminated = true;
 	if( state->adapter )
 		state->adapter->cancel();
@@ -291,7 +291,7 @@ void body_writer_state::cancel() noexcept
 
 void body_writer_state::configure(body_spec spec, bool ready) noexcept
 {
-	auto state = impl_;
+	auto state = m_impl;
 	if( state->pending || state->accepted != 0 || state->ended || state->terminated )
 		return;
 	state->spec = std::move(spec);
@@ -301,17 +301,17 @@ void body_writer_state::configure(body_spec spec, bool ready) noexcept
 
 void body_writer_state::set_ready(bool ready) noexcept
 {
-	impl_->ready = ready;
-	if( ready && impl_->spec.type() == body_spec::mode::empty )
-		impl_->ended = true;
+	m_impl->ready = ready;
+	if( ready && m_impl->spec.type() == body_spec::mode::empty )
+		m_impl->ended = true;
 }
 
 bool body_writer_state::ended() const noexcept {
-	return impl_->ended;
+	return m_impl->ended;
 }
 
 uint64_t body_writer_state::accepted_size() const noexcept {
-	return impl_->accepted;
+	return m_impl->accepted;
 }
 
 std::shared_ptr<body_writer_state> make_body_writer_state(

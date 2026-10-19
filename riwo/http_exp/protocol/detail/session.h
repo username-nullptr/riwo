@@ -23,6 +23,7 @@ public:
 	virtual ~stream() = default;
 	[[nodiscard]] virtual protocol selected_protocol() const noexcept = 0;
 	[[nodiscard]] virtual stream_capabilities capabilities() const noexcept;
+	[[nodiscard]] virtual request_head request() const;
 	[[nodiscard]] virtual std::shared_ptr<body_reader_state>
 	inbound_body() const noexcept;
 	[[nodiscard]] virtual std::shared_ptr<body_writer_state>

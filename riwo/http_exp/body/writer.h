@@ -48,8 +48,8 @@ public:
 	void cancel() noexcept;
 
 private:
-	executor_type executor_;
-	std::shared_ptr<detail::body_writer_state> state_;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 using body_writer = basic_body_writer<>;

@@ -29,6 +29,11 @@ public:
 	memory_body_source();
 	explicit memory_body_source(std::vector<std::byte> bytes);
 	explicit memory_body_source(const_buffer bytes);
+	~memory_body_source();
+	memory_body_source(const memory_body_source &other);
+	memory_body_source &operator=(const memory_body_source &other);
+	memory_body_source(memory_body_source &&) noexcept;
+	memory_body_source &operator=(memory_body_source &&) noexcept;
 
 	[[nodiscard]] optional<uint64_t> size() const noexcept;
 	[[nodiscard]] bool replayable() const noexcept;
@@ -40,9 +45,8 @@ public:
 	void cancel() noexcept;
 
 private:
-	std::vector<std::byte> bytes_;
-	size_t offset_ = 0;
-	bool cancelled_ = false;
+	class impl;
+	std::unique_ptr<impl> m_impl;
 };
 
 class RIWO_HTTP_EXP_API file_body_source
@@ -66,7 +70,7 @@ public:
 
 private:
 	class impl;
-	std::unique_ptr<impl> impl_;
+	std::unique_ptr<impl> m_impl;
 };
 
 static_assert(body_source_model<memory_body_source>);

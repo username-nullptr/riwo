@@ -51,11 +51,8 @@ public:
 
 private:
 	friend struct detail::request_access;
-	http_exp::request_head head_;
-	http_exp::body_spec body_spec_ = http_exp::body_spec::empty();
-	std::shared_ptr<detail::body_source> source_;
-	std::filesystem::path file_;
-	http_exp::fields trailers_;
+	class impl;
+	std::unique_ptr<impl> m_impl;
 };
 
 } //namespace riwo::http_exp
