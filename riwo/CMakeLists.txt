@@ -47,7 +47,10 @@ if (RIWO_BUILD_HTTP_EXP)
 	riwo_install_module_headers(http_exp
 		PATTERN "v2.md" EXCLUDE
 		REGEX "/protocol/detail/" EXCLUDE
-		REGEX "/transport/detail/" EXCLUDE
+		REGEX "/transport/connection[.]h$" EXCLUDE
+		REGEX "/transport/tcp_connection[.]h$" EXCLUDE
+		REGEX "/transport/tls_connection[.]h$" EXCLUDE
+		REGEX "/transport/preface[.]h$" EXCLUDE
 	)
 endif ()
 

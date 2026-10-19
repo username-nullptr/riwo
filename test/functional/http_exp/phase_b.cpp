@@ -82,7 +82,9 @@ void h1_client_server_round_trip()
 
 	const auto port = service.acceptor().local_endpoint().port();
 	const auto base = std::format("http://127.0.0.1:{}", port);
-	http::client client(context);
+	http::client_config client_config;
+	client_config.pool.idle_timeout = std::chrono::milliseconds(1);
+	http::client client(context, client_config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		auto fetched = co_await client.fetch(
@@ -158,7 +160,9 @@ void h1_client_server_round_trip()
 		service.stop();
 		co_return;
 	}, asio::use_future);
-	context.run();
+	riwo::ignore_unused(context.run_for(std::chrono::seconds(5)));
+	RIWO_TEST_CHECK(completed.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
 	completed.get();
 }
 
@@ -179,6 +183,7 @@ void h1_0_and_cancel()
 	const auto port = service.acceptor().local_endpoint().port();
 	http::client_config config;
 	config.protocols.preference = {http::protocol::v1_0};
+	config.pool.idle_timeout = std::chrono::milliseconds(1);
 	http::client client(context, config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
@@ -192,7 +197,9 @@ void h1_0_and_cancel()
 		service.stop();
 		co_return;
 	}, asio::use_future);
-	context.run();
+	riwo::ignore_unused(context.run_for(std::chrono::seconds(5)));
+	RIWO_TEST_CHECK(completed.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
 	completed.get();
 }
 

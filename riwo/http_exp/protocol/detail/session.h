@@ -36,6 +36,7 @@ public:
 		operation_handler handler);
 	virtual void inform_sync(response_head head, error_code &error) noexcept;
 	virtual void inform(response_head head, operation_handler handler);
+	[[nodiscard]] virtual bool reusable() const noexcept { return false; }
 	virtual void cancel() noexcept = 0;
 };
 
@@ -53,6 +54,21 @@ public:
 	[[nodiscard]] virtual size_t available_stream_capacity() const noexcept = 0;
 	[[nodiscard]] virtual bool draining() const noexcept = 0;
 	[[nodiscard]] virtual bool closed() const noexcept = 0;
+	// Capacity is reserved and released on the Session strand. Pools use these
+	// hooks to avoid a check-then-open race; the default keeps custom test and
+	// application sessions source-compatible.
+	[[nodiscard]] virtual bool try_reserve_stream() noexcept {
+		return available_stream_capacity() != 0;
+	}
+	virtual void release_stream(bool reusable) noexcept {
+		ignore_unused(reusable);
+	}
+	// The pool uses this observation to return a Session to the idle set as
+	// soon as the response boundary is known, without waiting for the final
+	// application handle to be destroyed.
+	virtual void set_release_handler(std::function<void(bool)> handler) {
+		ignore_unused(handler);
+	}
 	[[nodiscard]] virtual std::shared_ptr<stream> open_sync(request_head head,
 		body_spec spec, error_code &error) noexcept;
 	virtual void open(request_head head, body_spec spec, open_handler handler) = 0;

@@ -7,7 +7,7 @@
 namespace riwo::http_exp::detail
 {
 
-class server_exchange_state::impl
+class RIWO_HTTP_EXP_TAPI server_exchange_state::impl
 {
 public:
 	impl(std::shared_ptr<stream> value, request_head metadata) :
@@ -150,6 +150,7 @@ void server_exchange_state::inform(response_head head,
 
 void server_exchange_state::cancel() noexcept
 {
+	if( m_impl->stream_ && m_impl->stream_->reusable() ) return;
 	m_impl->request_body_->cancel();
 	m_impl->response_body_->cancel();
 	if( m_impl->stream_ )

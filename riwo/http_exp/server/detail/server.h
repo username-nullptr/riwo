@@ -59,6 +59,10 @@ public:
 		running = false;
 		error_code ignored;
 		acceptor_wrap.acceptor().cancel(ignored);
+		acceptor_wrap.acceptor().close(ignored);
+		for( auto &value : connections )
+			if( value ) value->cancel();
+		connections.clear();
 	}
 
 	void register_route(std::string path,
@@ -108,7 +112,8 @@ private:
 				self->report_server_error(error);
 				return;
 			}
-			detail::accept_h1(std::move(*socket), self->config.request_limits,
+			auto connection = detail::accept_h1(std::move(*socket),
+			self->config.request_limits,
 			[self]
 			(error_code accept_error, std::shared_ptr<detail::stream> stream,
 				request_head request) mutable {
@@ -119,6 +124,11 @@ private:
 				}
 				self->serve(std::move(stream), std::move(request));
 			});
+			std::erase_if(self->connections,
+				[](const detail::server_connection_ptr &value) {
+					return !value || value->closed();
+				});
+			self->connections.push_back(std::move(connection));
 		});
 	}
 
@@ -195,6 +205,7 @@ public:
 	request_handler_type default_handler;
 	server_error_handler_type server_error_handler;
 	service_error_handler_type service_error_handler;
+	std::vector<detail::server_connection_ptr> connections;
 	bool running = false;
 };
 

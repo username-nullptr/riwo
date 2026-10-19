@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "client.h"
+#include "detail/connector.h"
+#include "detail/session_pool.h"
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <riwo/http_exp/protocol/detail/h1/session.h>
@@ -138,47 +140,19 @@ public:
 		executor(std::move(executor_value)), config(std::move(config_value)),
 		injected_session(std::move(session_value))
 	{
+		if( !injected_session )
+			pool = std::make_shared<session_pool>(executor, config);
 	}
 
-	[[nodiscard]] std::shared_ptr<client_session> make_session(
-		const request_head &head, error_code &error) const noexcept
+	[[nodiscard]] std::shared_ptr<stream> open_sync(const request_head &head,
+		body_spec spec, error_code &error) noexcept
 	{
 		error.clear();
-		if( injected_session ) return injected_session;
-		if( head.scheme != "http" )
-		{
-			error = make_error_code(errc::operation_not_supported);
-			return {};
-		}
 		try {
-			if( config.protocols.preference.empty() )
-			{
-				error = make_error_code(errc::negotiation_failed);
-				return {};
-			}
-			optional<protocol> selected;
-			for( const auto value : config.protocols.preference )
-			{
-				if( value != protocol::v1_0 && value != protocol::v1_1 )
-					continue;
-				if( selected )
-				{
-					if( *selected == value )
-					{
-						error = make_error_code(errc::negotiation_failed);
-						return {};
-					}
-					continue;
-				}
-				selected = value;
-			}
-			if( !selected )
-			{
-				error = make_error_code(errc::negotiation_failed);
-				return {};
-			}
-			return h1::make_client_session(executor, *selected,
-				config.response_limits);
+			if( injected_session )
+				return injected_session->open_sync(head, std::move(spec), error);
+			return pool->open_sync(make_session_key(head, config), head,
+				std::move(spec), error);
 		}
 		catch(...) {
 			error = exception_error(std::current_exception());
@@ -186,9 +160,22 @@ public:
 		}
 	}
 
+	void open(const request_head &head, body_spec spec,
+		client_session::open_handler handler)
+	{
+		if( injected_session )
+		{
+			injected_session->open(head, std::move(spec), std::move(handler));
+			return;
+		}
+		pool->open(make_session_key(head, config), head, std::move(spec),
+			std::move(handler));
+	}
+
 	asio::any_io_executor executor;
 	client_config config;
 	std::shared_ptr<client_session> injected_session;
+	std::shared_ptr<session_pool> pool;
 };
 
 client_state::client_state(asio::any_io_executor executor, client_config config,
@@ -210,9 +197,7 @@ std::shared_ptr<stream> client_state::open(request request_value,
 		error = head.error();
 		return {};
 	}
-	auto session = m_impl->make_session(*head, error);
-	if( error ) return {};
-	return session->open_sync(std::move(*head), std::move(spec), error);
+	return m_impl->open_sync(*head, std::move(spec), error);
 }
 
 void client_state::open(request request_value, body_spec spec,
@@ -224,18 +209,7 @@ void client_state::open(request request_value, body_spec spec,
 		std::move(handler)(head.error(), std::shared_ptr<stream>{});
 		return;
 	}
-	error_code error;
-	auto session = m_impl->make_session(*head, error);
-	if( error )
-	{
-		std::move(handler)(error, std::shared_ptr<stream>{});
-		return;
-	}
-	session->open(std::move(*head), std::move(spec),
-	[session, handler = std::move(handler)]
-	(error_code open_error, std::shared_ptr<stream> value) mutable {
-		std::move(handler)(open_error, std::move(value));
-	});
+	m_impl->open(*head, std::move(spec), std::move(handler));
 }
 
 send_result client_state::send(request request_value,
@@ -256,9 +230,7 @@ send_result client_state::send(request request_value,
 	}
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
-	auto session = m_impl->make_session(*head, error);
-	if( error ) return {};
-	auto active_stream = session->open_sync(std::move(*head), spec, error);
+	auto active_stream = m_impl->open_sync(*head, spec, error);
 	if( error || !active_stream )
 	{
 		if( !error ) error = make_error_code(errc::operation_not_supported);
@@ -348,14 +320,6 @@ void client_state::send(request request_value, send_handler handler)
 	}
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
-	error_code session_error;
-	auto session = m_impl->make_session(*head, session_error);
-	if( session_error )
-	{
-		std::move(handler)(session_error, send_result{});
-		return;
-	}
-
 	struct operation : std::enable_shared_from_this<operation>
 	{
 		std::shared_ptr<stream> active_stream;
@@ -483,8 +447,8 @@ void client_state::send(request request_value, send_handler handler)
 		}
 	};
 
-	session->open(std::move(*head), spec,
-	[session, source = std::move(source), spec = std::move(spec),
+	m_impl->open(*head, spec,
+	[source = std::move(source), spec = std::move(spec),
 	 trailers = std::move(trailers), handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{

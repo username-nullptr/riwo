@@ -5,7 +5,7 @@
 
 #include <riwo/http_exp.h>
 #include <riwo/http_exp/protocol/detail/session.h>
-#include <riwo/http_exp/transport/detail/connection.h>
+#include <riwo/http_exp/transport/connection.h>
 
 namespace
 {
@@ -158,7 +158,7 @@ riwo::awaitable<void> native_server_handler(native_server_exchange&) {
 static_assert(http::concepts::request_handler<
 	decltype(native_server_handler),native_executor>);
 
-struct fake_connection final : http::detail::connection
+struct fake_connection final : http::transport::connection
 {
 	explicit fake_connection(executor_type executor) : executor_(std::move(executor)) {}
 	executor_type get_executor() const noexcept override { return executor_; }

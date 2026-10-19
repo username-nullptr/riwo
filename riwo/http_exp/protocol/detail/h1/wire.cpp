@@ -208,7 +208,12 @@ sys_expected<std::string> serialize_request(const request_head &head,
 		else if( spec.type() == body_spec::mode::streaming )
 			result += "Transfer-Encoding: chunked\r\n";
 		append_trailer_declaration(result, spec.trailers());
-		result += "Connection: close\r\n\r\n";
+		// HTTP/1.1 is persistent by default. HTTP/1.0 must opt in explicitly;
+		// Session capacity decides whether the connection is reusable after
+		// the response boundary is known.
+		if( version == protocol::v1_0 )
+			result += "Connection: keep-alive\r\n";
+		result += "\r\n";
 		return result;
 	}
 	catch(...) {

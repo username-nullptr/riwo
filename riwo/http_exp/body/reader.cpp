@@ -331,6 +331,10 @@ void body_reader_state::set_ready(bool ready) noexcept {
 	m_impl->ready = ready;
 }
 
+void body_reader_state::set_ended(bool ended) noexcept {
+	m_impl->eof = ended;
+}
+
 bool body_reader_state::ended() const noexcept {
 	return m_impl->eof;
 }

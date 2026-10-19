@@ -51,6 +51,7 @@ public:
 	void trailers(trailers_handler handler);
 	void cancel() noexcept;
 	void set_ready(bool ready = true) noexcept;
+	void set_ended(bool ended = true) noexcept;
 	[[nodiscard]] bool ended() const noexcept;
 
 private:
