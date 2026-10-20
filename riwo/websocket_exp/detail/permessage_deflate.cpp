@@ -13,20 +13,20 @@ namespace riwo::websocket_exp::detail
 struct RIWO_DECL_HIDDEN permessage_inflater::impl
 {
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
-	z_stream stream {};
+	z_stream m_stream {};
 #endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 
-	uint8_t window_bits = 15;
-	bool no_context_takeover = true;
+	uint8_t m_window_bits = 15;
+	bool m_no_context_takeover = true;
 
-	bool initialized = false;
-	size_t message_input_size = 0;
+	bool m_initialized = false;
+	size_t m_message_input_size = 0;
 
 	~impl()
 	{
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
-		if( initialized )
-			inflateEnd(&stream);
+		if( m_initialized )
+			inflateEnd(&m_stream);
 #endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 	}
 };
@@ -143,14 +143,14 @@ error_code permessage_inflater::reset(uint8_t window_bits, bool no_context_takeo
 		return make_system_error_code(std::errc::invalid_argument);
 	try {
 		auto state = std::make_unique<impl>();
-		state->window_bits = window_bits;
-		state->no_context_takeover = no_context_takeover;
+		state->m_window_bits = window_bits;
+		state->m_no_context_takeover = no_context_takeover;
 
 		const auto zlib_window_bits = window_bits == 8 ? 9 : window_bits;
-		if( inflateInit2(&state->stream, -static_cast<int>(zlib_window_bits)) != Z_OK )
+		if( inflateInit2(&state->m_stream, -static_cast<int>(zlib_window_bits)) != Z_OK )
 			return make_system_error_code(std::errc::io_error);
 
-		state->initialized = true;
+		state->m_initialized = true;
 		m_impl = std::move(state);
 		return {};
 	}
@@ -177,13 +177,13 @@ sys_expected<std::vector<std::byte>> permessage_inflater::inflate_chunk
 {
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 	try {
-		if( not m_impl or not m_impl->initialized )
+		if( not m_impl or not m_impl->m_initialized )
 			return sys_unexpected(make_system_error_code(std::errc::io_error));
 
-		if( payload.size() > std::numeric_limits<size_t>::max() - m_impl->message_input_size )
+		if( payload.size() > std::numeric_limits<size_t>::max() - m_impl->m_message_input_size )
 			return sys_unexpected(make_system_error_code(std::errc::value_too_large));
 
-		m_impl->message_input_size += payload.size();
+		m_impl->m_message_input_size += payload.size();
 
 		std::vector<std::byte> result;
 		std::array<std::byte, 16 * 1024> output {};
@@ -200,16 +200,16 @@ sys_expected<std::vector<std::byte>> permessage_inflater::inflate_chunk
 				const auto size = static_cast<uInt>(std::min<size_t>(
 					input.size() - offset, std::numeric_limits<uInt>::max())
 				);
-				m_impl->stream.next_in = reinterpret_cast<Bytef*>(
+				m_impl->m_stream.next_in = reinterpret_cast<Bytef*>(
 					const_cast<std::byte*>(input.data() + offset)
 				);
-				m_impl->stream.avail_in = size;
+				m_impl->m_stream.avail_in = size;
 				do {
-					m_impl->stream.next_out = reinterpret_cast<Bytef*>(output.data());
-					m_impl->stream.avail_out = static_cast<uInt>(output.size());
+					m_impl->m_stream.next_out = reinterpret_cast<Bytef*>(output.data());
+					m_impl->m_stream.avail_out = static_cast<uInt>(output.size());
 
-					const auto code = ::inflate(&m_impl->stream, Z_SYNC_FLUSH);
-					const auto produced = output.size() - m_impl->stream.avail_out;
+					const auto code = ::inflate(&m_impl->m_stream, Z_SYNC_FLUSH);
+					const auto produced = output.size() - m_impl->m_stream.avail_out;
 
 					if( code != Z_OK and code != Z_BUF_ERROR )
 						return make_error_code(protocol_errc::invalid_compressed_payload);
@@ -221,12 +221,12 @@ sys_expected<std::vector<std::byte>> permessage_inflater::inflate_chunk
 					result.insert(result.end(), output.begin(), output.begin() + produced);
 					if( code == Z_BUF_ERROR and produced == 0 )
 					{
-						if( m_impl->stream.avail_in != 0 )
+						if( m_impl->m_stream.avail_in != 0 )
 							return make_error_code(protocol_errc::invalid_compressed_payload);
 						break;
 					}
 				}
-				while( m_impl->stream.avail_in != 0 or m_impl->stream.avail_out == 0 );
+				while( m_impl->m_stream.avail_in != 0 or m_impl->m_stream.avail_out == 0 );
 				offset += size;
 			}
 			return {};
@@ -236,21 +236,21 @@ sys_expected<std::vector<std::byte>> permessage_inflater::inflate_chunk
 
 		if( final )
 		{
-			if( m_impl->message_input_size == 0 )
+			if( m_impl->m_message_input_size == 0 )
 				return sys_unexpected(make_error_code(protocol_errc::invalid_compressed_payload));
 
 			if( auto error = consume(trailer) )
 				return sys_unexpected(error);
 
-			if( (m_impl->stream.data_type & 128) == 0 )
+			if( (m_impl->m_stream.data_type & 128) == 0 )
 				return sys_unexpected(make_error_code(protocol_errc::invalid_compressed_payload));
 
-			m_impl->message_input_size = 0;
-			const auto zlib_window_bits = m_impl->window_bits == 8 ?
-				9 : m_impl->window_bits;
+			m_impl->m_message_input_size = 0;
+			const auto zlib_window_bits = m_impl->m_window_bits == 8 ?
+				9 : m_impl->m_window_bits;
 
-			if( m_impl->no_context_takeover and
-				inflateReset2(&m_impl->stream, -static_cast<int>(zlib_window_bits)) != Z_OK )
+			if( m_impl->m_no_context_takeover and
+				inflateReset2(&m_impl->m_stream, -static_cast<int>(zlib_window_bits)) != Z_OK )
 				return sys_unexpected(make_system_error_code(std::errc::io_error));
 		}
 		return result;

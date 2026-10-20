@@ -76,12 +76,12 @@ class basic_body_reader<Exec>::impl
 public:
 	impl(executor_type executor_value,
 		std::shared_ptr<detail::body_reader_state> state_value) :
-		executor(std::move(executor_value)), state(std::move(state_value))
+		m_executor(std::move(executor_value)), m_state(std::move(state_value))
 	{
 	}
 
-	executor_type executor;
-	std::shared_ptr<detail::body_reader_state> state;
+	executor_type m_executor;
+	std::shared_ptr<detail::body_reader_state> m_state;
 };
 
 template <core_concepts::exec Exec>
@@ -106,17 +106,17 @@ basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 basic_body_reader<Exec>::~basic_body_reader() {
-	if( m_impl->state and not m_impl->state->is_finished() ) m_impl->state->cancel();
+	if( m_impl->m_state and not m_impl->m_state->is_finished() ) m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
 auto basic_body_reader<Exec>::get_executor() const noexcept -> executor_type {
-	return m_impl->executor;
+	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>
 bool basic_body_reader<Exec>::is_finished() const noexcept {
-	return m_impl->state->is_finished();
+	return m_impl->m_state->is_finished();
 }
 
 template <core_concepts::exec Exec>
@@ -126,7 +126,7 @@ auto basic_body_reader<Exec>::read_some(mutable_buffer buffer, Token &&token)
 		Token,error_code,body_read_result>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return m_impl->state->read_some(buffer, token);
+		return m_impl->m_state->read_some(buffer, token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
@@ -137,8 +137,8 @@ auto basic_body_reader<Exec>::read_some(mutable_buffer buffer, Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->state;
-		return initiate_io<body_read_result>(m_impl->executor,
+		auto state = m_impl->m_state;
+		return initiate_io<body_read_result>(m_impl->m_executor,
 		[state = std::move(state), buffer](auto handler) mutable {
 			state->read_some(buffer,
 				typename detail::body_reader_state::read_handler(
@@ -153,7 +153,7 @@ auto basic_body_reader<Exec>::discard(Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		m_impl->state->discard(token);
+		m_impl->m_state->discard(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
@@ -164,8 +164,8 @@ auto basic_body_reader<Exec>::discard(Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->state;
-		return initiate_io_void(m_impl->executor,
+		auto state = m_impl->m_state;
+		return initiate_io_void(m_impl->m_executor,
 		[state = std::move(state)](auto handler) mutable {
 			state->discard(typename detail::body_reader_state::operation_handler(
 				std::move(handler)));
@@ -179,11 +179,11 @@ auto basic_body_reader<Exec>::trailers(Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,fields>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return m_impl->state->trailers(token);
+		return m_impl->m_state->trailers(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto value = m_impl->state->trailers(error);
+		auto value = m_impl->m_state->trailers(error);
 		return expected_value_or_throw(error ?
 			sys_expected<fields>(sys_unexpected(error)) :
 			sys_expected<fields>(std::move(value)));
@@ -206,7 +206,7 @@ void basic_body_reader<Exec>::cancel() noexcept {
 
 template <core_concepts::exec Exec>
 void basic_body_reader<Exec>::detach() noexcept {
-	m_impl->state = detail::make_body_reader_state();
+	m_impl->m_state = detail::make_body_reader_state();
 }
 
 } //namespace riwo::http_exp

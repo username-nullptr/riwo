@@ -38,16 +38,16 @@ class replay_connection final : public ::riwo::http_exp::connection,
 {
 public:
 	replay_connection(std::shared_ptr<::riwo::http_exp::connection> next,
-		std::string prefix) : next_(std::move(next)), prefix_(std::move(prefix)) {}
+		std::string prefix) : m_next(std::move(next)), m_prefix(std::move(prefix)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return next_->get_executor();
+		return m_next->get_executor();
 	}
 
 	void read_some(mutable_buffer buffer, io_handler handler) override
 	{
-		if( offset_ == prefix_.size() )
-			return next_->read_some(buffer, std::move(handler));
+		if( m_offset == m_prefix.size() )
+			return m_next->read_some(buffer, std::move(handler));
 		const auto count = copy_prefix(buffer);
 		asio::post(get_executor(),
 		[handler = std::move(handler), count]() mutable {
@@ -59,52 +59,52 @@ public:
 		error_code &error) noexcept override
 	{
 		error.clear();
-		if( offset_ != prefix_.size() ) return copy_prefix(buffer);
-		return next_->read_some_sync(buffer, error);
+		if( m_offset != m_prefix.size() ) return copy_prefix(buffer);
+		return m_next->read_some_sync(buffer, error);
 	}
 
 	void write(const_buffer buffer, io_handler handler) override {
-		next_->write(buffer, std::move(handler));
+		m_next->write(buffer, std::move(handler));
 	}
 	[[nodiscard]] size_t write_sync(const_buffer buffer,
 		error_code &error) noexcept override {
-		return next_->write_sync(buffer, error);
+		return m_next->write_sync(buffer, error);
 	}
 	void close(close_handler handler) override {
-		next_->close(std::move(handler));
+		m_next->close(std::move(handler));
 	}
-	void cancel() noexcept override { next_->cancel(); }
+	void cancel() noexcept override { m_next->cancel(); }
 	void set_read_timeout(optional<timeout_type> value) override {
-		next_->set_read_timeout(value);
+		m_next->set_read_timeout(value);
 	}
 	void set_write_timeout(optional<timeout_type> value) override {
-		next_->set_write_timeout(value);
+		m_next->set_write_timeout(value);
 	}
 	[[nodiscard]] bool is_open() const noexcept override {
-		return next_->is_open();
+		return m_next->is_open();
 	}
 	[[nodiscard]] endpoint_type remote_endpoint(
 		error_code &error) const noexcept override {
-		return next_->remote_endpoint(error);
+		return m_next->remote_endpoint(error);
 	}
 	[[nodiscard]] endpoint_type local_endpoint(
 		error_code &error) const noexcept override {
-		return next_->local_endpoint(error);
+		return m_next->local_endpoint(error);
 	}
 
 private:
 	[[nodiscard]] size_t copy_prefix(mutable_buffer buffer) noexcept
 	{
-		const auto count = std::min(buffer.size(), prefix_.size() - offset_);
+		const auto count = std::min(buffer.size(), m_prefix.size() - m_offset);
 		if( count != 0 )
-			std::memcpy(buffer.data(), prefix_.data() + offset_, count);
-		offset_ += count;
+			std::memcpy(buffer.data(), m_prefix.data() + m_offset, count);
+		m_offset += count;
 		return count;
 	}
 
-	std::shared_ptr<::riwo::http_exp::connection> next_;
-	std::string prefix_;
-	size_t offset_ = 0;
+	std::shared_ptr<::riwo::http_exp::connection> m_next;
+	std::string m_prefix;
+	size_t m_offset = 0;
 };
 
 class pending_server_connection final : public server_connection,
@@ -114,48 +114,48 @@ public:
 	pending_server_connection(
 		std::shared_ptr<::riwo::http_exp::connection> transport,
 		server_config config, server_accept_handler handler) :
-		transport_(std::move(transport)), config_(std::move(config)),
-		handler_(std::move(handler))
+		m_transport(std::move(transport)), m_config(std::move(config)),
+		m_handler(std::move(handler))
 	{
 	}
 
 	void start()
 	{
-		const auto h1 = permits_http1(config_.protocols);
+		const auto h1 = permits_http1(m_config.protocols);
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		const auto allow_h2 = permits_http2(config_.protocols);
+		const auto allow_h2 = permits_http2(m_config.protocols);
 		if( allow_h2 )
 		{
-			transport_->set_read_timeout(config_.timeout.header);
+			m_transport->set_read_timeout(m_config.timeout.header);
 			auto self = shared_from_this();
-			detector_.detect(transport_,
+			m_detector.detect(m_transport,
 			[self = std::move(self), h1]
 			(error_code error, preface_result result,
 				std::string prefix) mutable {
 				if( error ) return self->finish_error(error);
 				if( result == preface_result::http2 )
 				{
-					self->selected_ = h2::accept_h2(self->transport_,
-						self->config_, std::move(prefix),
-						std::move(self->handler_));
+					self->m_selected = h2::accept_h2(self->m_transport,
+						self->m_config, std::move(prefix),
+						std::move(self->m_handler));
 					return;
 				}
 				if( not h1 )
 					return self->finish_error(
 						make_error_code(errc::negotiation_failed));
 				auto replay = std::make_shared<replay_connection>(
-					self->transport_, std::move(prefix));
-				self->selected_ = accept_h1(std::move(replay),
-					self->config_.request_limits, self->config_.timeout,
-					std::move(self->handler_));
+					self->m_transport, std::move(prefix));
+				self->m_selected = accept_h1(std::move(replay),
+					self->m_config.request_limits, self->m_config.timeout,
+					std::move(self->m_handler));
 			});
 			return;
 		}
 #endif
 		if( h1 )
 		{
-			selected_ = accept_h1(transport_, config_.request_limits,
-				config_.timeout, std::move(handler_));
+			m_selected = accept_h1(m_transport, m_config.request_limits,
+				m_config.timeout, std::move(m_handler));
 			return;
 		}
 		finish_error(make_error_code(errc::negotiation_failed));
@@ -163,27 +163,27 @@ public:
 
 	void cancel() noexcept override
 	{
-		if( selected_ ) selected_->cancel();
-		else transport_->cancel();
+		if( m_selected ) m_selected->cancel();
+		else m_transport->cancel();
 	}
 
 	[[nodiscard]] bool closed() const noexcept override
 	{
-		return selected_ ? selected_->closed() : not transport_->is_open();
+		return m_selected ? m_selected->closed() : not m_transport->is_open();
 	}
 
 private:
 	void finish_error(error_code error)
 	{
-		transport_->cancel();
-		if( handler_ ) std::move(handler_)(error, {}, {});
+		m_transport->cancel();
+		if( m_handler ) std::move(m_handler)(error, {}, {});
 	}
 
-	std::shared_ptr<::riwo::http_exp::connection> transport_;
-	server_config config_;
-	server_accept_handler handler_;
-	http2_preface_detector detector_;
-	server_connection_ptr selected_;
+	std::shared_ptr<::riwo::http_exp::connection> m_transport;
+	server_config m_config;
+	server_accept_handler m_handler;
+	http2_preface_detector m_detector;
+	server_connection_ptr m_selected;
 };
 
 } //namespace

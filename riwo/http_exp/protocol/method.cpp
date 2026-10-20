@@ -50,57 +50,57 @@ constexpr std::array known_methods {
 } //namespace
 
 method::method(well_known value) noexcept :
-	token_(known_methods[static_cast<size_t>(value)].text),
-	properties_(known_methods[static_cast<size_t>(value)].properties),
-	known_(value)
+	m_token(known_methods[static_cast<size_t>(value)].text),
+	m_properties(known_methods[static_cast<size_t>(value)].properties),
+	m_known(value)
 {
 }
 
-method::method(std::string token) : token_(std::move(token)), known_(identify(token_))
+method::method(std::string token) : m_token(std::move(token)), m_known(identify(m_token))
 {
-	if( token_.empty() or not std::ranges::all_of(token_, [](unsigned char value) {
+	if( m_token.empty() or not std::ranges::all_of(m_token, [](unsigned char value) {
 		return token_character(value);
 	}))
 		throw std::invalid_argument("Invalid HTTP method token");
-	if( known_ )
-		properties_ = known_methods[static_cast<size_t>(*known_)].properties;
+	if( m_known )
+		m_properties = known_methods[static_cast<size_t>(*m_known)].properties;
 }
 
 method::method(std::string token, method_properties properties) :
-	token_(std::move(token)), properties_(normalized(properties)), known_(identify(token_))
+	m_token(std::move(token)), m_properties(normalized(properties)), m_known(identify(m_token))
 {
-	if( token_.empty() or not std::ranges::all_of(token_, [](unsigned char value) {
+	if( m_token.empty() or not std::ranges::all_of(m_token, [](unsigned char value) {
 		return token_character(value);
 	}))
 		throw std::invalid_argument("Invalid HTTP method token");
 
-	if( known_ )
+	if( m_known )
 	{
-		const auto expected = known_methods[static_cast<size_t>(*known_)].properties;
-		if( properties_ != expected )
+		const auto expected = known_methods[static_cast<size_t>(*m_known)].properties;
+		if( m_properties != expected )
 			throw std::invalid_argument("Conflicting properties for a standard HTTP method");
-		properties_ = expected;
+		m_properties = expected;
 	}
 }
 
 std::string_view method::text() const noexcept {
-	return token_;
+	return m_token;
 }
 
 optional<method::well_known> method::known() const noexcept {
-	return known_;
+	return m_known;
 }
 
 bool method::is_safe() const noexcept {
-	return properties_.safe;
+	return m_properties.safe;
 }
 
 bool method::is_idempotent() const noexcept {
-	return properties_.idempotent;
+	return m_properties.idempotent;
 }
 
 bool operator==(const method &lhs, const method &rhs) noexcept {
-	return lhs.token_ == rhs.token_;
+	return lhs.m_token == rhs.m_token;
 }
 
 } //namespace riwo::http_exp

@@ -13,18 +13,18 @@ class request::impl
 {
 public:
 	impl(http_exp::method request_method, riwo::url request_url) :
-		head {std::move(request_method), std::move(request_url)}
+		m_head {std::move(request_method), std::move(request_url)}
 	{
 	}
 
-	http_exp::request_head head;
-	http_exp::body_spec body_spec = http_exp::body_spec::empty();
-	optional<const_buffer> body;
-	std::shared_ptr<detail::body_source> source;
-	std::filesystem::path file;
-	http_exp::fields trailers;
-	size_t retry_attempt = 1;
-	size_t redirect_count = 0;
+	http_exp::request_head m_head;
+	http_exp::body_spec m_body_spec = http_exp::body_spec::empty();
+	optional<const_buffer> m_body;
+	std::shared_ptr<detail::body_source> m_source;
+	std::filesystem::path m_file;
+	http_exp::fields m_trailers;
+	size_t m_retry_attempt = 1;
+	size_t m_redirect_count = 0;
 };
 
 template <typename Source>
@@ -33,12 +33,12 @@ request &request::source(Source &&source_value)
 {
 	auto value = detail::make_body_source(std::forward<Source>(source_value));
 	const auto size = value->size();
-	m_impl->body.reset();
-	m_impl->source = std::move(value);
-	m_impl->file.clear();
-	m_impl->body_spec = size ? http_exp::body_spec::known(*size) :
+	m_impl->m_body.reset();
+	m_impl->m_source = std::move(value);
+	m_impl->m_file.clear();
+	m_impl->m_body_spec = size ? http_exp::body_spec::known(*size) :
 		http_exp::body_spec::streaming();
-	m_impl->trailers = {};
+	m_impl->m_trailers = {};
 	return *this;
 }
 

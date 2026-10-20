@@ -158,14 +158,14 @@ class basic_client<Exec>::impl
 {
 public:
 	impl(executor_type executor_value, config_t config_value) :
-		executor(std::move(executor_value)), config(std::move(config_value)),
-		use_extended_connect(detail::extended_connect(config.http)),
-		http(executor, detail::websocket_http_config(config.http)) {}
+		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
+		m_use_extended_connect(detail::extended_connect(m_config.http)),
+		m_http(m_executor, detail::websocket_http_config(m_config.http)) {}
 
-	executor_type executor;
-	config_t config;
-	bool use_extended_connect = false;
-	http_client_t http;
+	executor_type m_executor;
+	config_t m_config;
+	bool m_use_extended_connect = false;
+	http_client_t m_http;
 };
 
 namespace detail
@@ -212,16 +212,16 @@ asio::awaitable<optional<std::tuple<error_code,basic_stream<Exec>>>,Exec> co_ope
 	std::shared_ptr<typename basic_client<Exec>::impl> self,
 	connect_request request, basic_open_diagnostics<Exec> *diagnostics)
 {
-	basic_stream<Exec> result(self->executor,
-		request.stream_options.value_or(self->config.stream));
+	basic_stream<Exec> result(self->m_executor,
+		request.stream_options.value_or(self->m_config.stream));
 	try {
 		if( diagnostics ) diagnostics->endpoint = request.endpoint;
-		auto prepared = prepare_open(std::move(request), self->config,
-			self->use_extended_connect);
+		auto prepared = prepare_open(std::move(request), self->m_config,
+			self->m_use_extended_connect);
 		if( not prepared ) co_return std::tuple {
 			prepared.error(), std::move(result)};
-		result = basic_stream<Exec>(self->executor, prepared->stream);
-		auto [open_error, exchange] = co_await self->http.open(
+		result = basic_stream<Exec>(self->m_executor, prepared->stream);
+		auto [open_error, exchange] = co_await self->m_http.open(
 			std::move(prepared->request), std::move(prepared->spec),
 			asio::as_tuple(asio::use_awaitable_t<Exec>{}));
 		if( open_error ) co_return std::tuple {open_error, std::move(result)};
@@ -301,10 +301,10 @@ auto basic_client<Exec>::open_impl(connect_request_t request,
 	else
 	{
 		auto self = m_impl;
-		return initiate_io<stream_t>(m_impl->executor,
+		return initiate_io<stream_t>(m_impl->m_executor,
 		[self = std::move(self), request = std::move(request), diagnostics]
 		(auto handler) mutable {
-			auto executor = self->executor;
+			auto executor = self->m_executor;
 			asio::co_spawn(executor, detail::co_open(
 				std::move(self), std::move(request), diagnostics),
 			[handler = std::move(handler), executor]
@@ -368,12 +368,12 @@ auto basic_client<Exec>::http_client() const noexcept -> const http_client_t& {
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::http_client() noexcept -> http_client_t& {
-	return m_impl->http;
+	return m_impl->m_http;
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::get_executor() const noexcept -> executor_type {
-	return m_impl->executor;
+	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>

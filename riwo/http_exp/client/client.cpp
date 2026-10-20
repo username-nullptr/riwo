@@ -17,24 +17,24 @@ struct request_access
 {
 	[[nodiscard]] static std::shared_ptr<body_source>
 	source(const request &value) noexcept {
-		return value.m_impl->source;
+		return value.m_impl->m_source;
 	}
 
 	[[nodiscard]] static optional<const_buffer>
 	body(const request &value) noexcept {
-		return value.m_impl->body;
+		return value.m_impl->m_body;
 	}
 
 	[[nodiscard]] static fields trailers(const request &value) {
-		return value.m_impl->trailers;
+		return value.m_impl->m_trailers;
 	}
 
 	[[nodiscard]] static size_t retry_attempt(const request &value) noexcept {
-		return value.m_impl->retry_attempt;
+		return value.m_impl->m_retry_attempt;
 	}
 
 	[[nodiscard]] static size_t redirect_count(const request &value) noexcept {
-		return value.m_impl->redirect_count;
+		return value.m_impl->m_redirect_count;
 	}
 
 	[[nodiscard]] static request clone(const request &value,
@@ -43,48 +43,48 @@ struct request_access
 	{
 		request result(request_method ? *request_method : value.method(),
 			target ? std::move(*target) : value.url());
-		result.m_impl->head.headers = value.m_impl->head.headers;
-		result.m_impl->head.connect_protocol =
-			value.m_impl->head.connect_protocol;
-		result.m_impl->head.upgrade_protocol =
-			value.m_impl->head.upgrade_protocol;
+		result.m_impl->m_head.headers = value.m_impl->m_head.headers;
+		result.m_impl->m_head.connect_protocol =
+			value.m_impl->m_head.connect_protocol;
+		result.m_impl->m_head.upgrade_protocol =
+			value.m_impl->m_head.upgrade_protocol;
 		if( strip_credentials )
 		{
-			result.m_impl->head.headers.erase("Authorization");
-			result.m_impl->head.headers.erase("Proxy-Authorization");
-			result.m_impl->head.headers.erase("Cookie");
+			result.m_impl->m_head.headers.erase("Authorization");
+			result.m_impl->m_head.headers.erase("Proxy-Authorization");
+			result.m_impl->m_head.headers.erase("Cookie");
 		}
-		result.m_impl->retry_attempt = value.m_impl->retry_attempt;
-		result.m_impl->redirect_count = value.m_impl->redirect_count;
+		result.m_impl->m_retry_attempt = value.m_impl->m_retry_attempt;
+		result.m_impl->m_redirect_count = value.m_impl->m_redirect_count;
 		if( not drop_body )
 		{
-			result.m_impl->body_spec = value.m_impl->body_spec;
-			result.m_impl->body = value.m_impl->body;
-			result.m_impl->source = value.m_impl->source;
-			result.m_impl->trailers = value.m_impl->trailers;
+			result.m_impl->m_body_spec = value.m_impl->m_body_spec;
+			result.m_impl->m_body = value.m_impl->m_body;
+			result.m_impl->m_source = value.m_impl->m_source;
+			result.m_impl->m_trailers = value.m_impl->m_trailers;
 		}
 		return result;
 	}
 
 	static void increment_retry(request &value) noexcept {
-		++value.m_impl->retry_attempt;
+		++value.m_impl->m_retry_attempt;
 	}
 
 	static void increment_redirect(request &value) noexcept {
-		++value.m_impl->redirect_count;
+		++value.m_impl->m_redirect_count;
 	}
 
 	[[nodiscard]] static error_code prepare(request &value) noexcept
 	{
-		if( value.m_impl->file.empty() ) return {};
+		if( value.m_impl->m_file.empty() ) return {};
 		try {
-			file_body_source source(value.m_impl->file);
+			file_body_source source(value.m_impl->m_file);
 			const auto size = source.size();
-			value.m_impl->body.reset();
-			value.m_impl->source = make_body_source(std::move(source));
-			value.m_impl->body_spec = body_spec::known(
-				*size, value.m_impl->body_spec.trailers());
-			value.m_impl->file.clear();
+			value.m_impl->m_body.reset();
+			value.m_impl->m_source = make_body_source(std::move(source));
+			value.m_impl->m_body_spec = body_spec::known(
+				*size, value.m_impl->m_body_spec.trailers());
+			value.m_impl->m_file.clear();
 			return {};
 		}
 		catch(...) {
@@ -354,11 +354,11 @@ class client_state::impl
 public:
 	impl(asio::any_io_executor executor_value, client_config config_value,
 		std::shared_ptr<client_session> session_value) :
-		executor(std::move(executor_value)), config(std::move(config_value)),
-		injected_session(std::move(session_value))
+		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
+		m_injected_session(std::move(session_value))
 	{
-		if( not injected_session )
-			pool = std::make_shared<session_pool>(executor, config);
+		if( not m_injected_session )
+			m_pool = std::make_shared<session_pool>(m_executor, m_config);
 	}
 
 	[[nodiscard]] std::shared_ptr<stream> open_sync(const request_head &head,
@@ -366,9 +366,9 @@ public:
 	{
 		error.clear();
 		try {
-			if( injected_session )
-				return injected_session->open_sync(head, std::move(spec), error);
-			return pool->open_sync(make_session_key(head, config), head,
+			if( m_injected_session )
+				return m_injected_session->open_sync(head, std::move(spec), error);
+			return m_pool->open_sync(make_session_key(head, m_config), head,
 				std::move(spec), error);
 		}
 		catch(...) {
@@ -380,19 +380,19 @@ public:
 	void open(const request_head &head, body_spec spec,
 		client_session::open_handler handler)
 	{
-		if( injected_session )
+		if( m_injected_session )
 		{
-			injected_session->open(head, std::move(spec), std::move(handler));
+			m_injected_session->open(head, std::move(spec), std::move(handler));
 			return;
 		}
-		pool->open(make_session_key(head, config), head, std::move(spec),
+		m_pool->open(make_session_key(head, m_config), head, std::move(spec),
 			std::move(handler));
 	}
 
-	asio::any_io_executor executor;
-	client_config config;
-	std::shared_ptr<client_session> injected_session;
-	std::shared_ptr<session_pool> pool;
+	asio::any_io_executor m_executor;
+	client_config m_config;
+	std::shared_ptr<client_session> m_injected_session;
+	std::shared_ptr<session_pool> m_pool;
 };
 
 client_state::client_state(asio::any_io_executor executor, client_config config,
@@ -445,14 +445,14 @@ send_result client_state::send(request request_value,
 		error = head.error();
 		return {};
 	}
-	add_accept_encoding(*head, m_impl->config);
+	add_accept_encoding(*head, m_impl->m_config);
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
 	auto retry_request = [&](request_delivery delivery, bool rewind_body,
 		send_result &result) -> bool
 	{
-		if( not retry_allowed(request_value, m_impl->config.retries, delivery) )
+		if( not retry_allowed(request_value, m_impl->m_config.retries, delivery) )
 			return false;
 		try
 		{
@@ -565,7 +565,7 @@ send_result client_state::send(request request_value,
 	}
 	error_code redirect_error;
 	auto redirect = make_redirect_request(request_value, response,
-		m_impl->config.redirects, redirect_error);
+		m_impl->m_config.redirects, redirect_error);
 	if( redirect_error )
 	{
 		error = redirect_error;
@@ -591,14 +591,14 @@ send_result client_state::send(request request_value,
 	}
 	body->set_ready();
 	body = decoded_body(std::move(body), response,
-		m_impl->config.automatic_decompression);
+		m_impl->m_config.automatic_decompression);
 	return send_result {
 		.selected_protocol = active_stream->selected_protocol(),
 		.response_protocol = active_stream->response_protocol(),
 		.head = std::move(response),
 		.body = std::move(body),
 		.owner = std::move(active_stream),
-		.max_buffered_body = m_impl->config.response_limits.max_buffered_body
+		.max_buffered_body = m_impl->m_config.response_limits.max_buffered_body
 	};
 }
 
@@ -616,7 +616,7 @@ void client_state::send(request request_value, send_handler handler)
 		std::move(handler)(head.error(), send_result{});
 		return;
 	}
-	add_accept_encoding(*head, m_impl->config);
+	add_accept_encoding(*head, m_impl->m_config);
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
@@ -883,9 +883,9 @@ void client_state::send(request request_value, send_handler handler)
 	[owner, request_value = std::move(request_value), request_body,
 	 source = std::move(source), spec = std::move(operation_spec),
 	 trailers = std::move(trailers),
-	 max_buffered_body = m_impl->config.response_limits.max_buffered_body,
-	 automatic_decompression = m_impl->config.automatic_decompression,
-	 retries = m_impl->config.retries, redirects = m_impl->config.redirects,
+	 max_buffered_body = m_impl->m_config.response_limits.max_buffered_body,
+	 automatic_decompression = m_impl->m_config.automatic_decompression,
+	 retries = m_impl->m_config.retries, redirects = m_impl->m_config.redirects,
 	 handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{

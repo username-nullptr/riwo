@@ -42,7 +42,7 @@ public:
 	friend bool operator==(status, status) noexcept = default;
 
 private:
-	uint16_t code_;
+	uint16_t m_code;
 };
 
 } //namespace riwo::http_exp

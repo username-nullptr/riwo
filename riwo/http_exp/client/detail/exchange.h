@@ -49,19 +49,19 @@ class basic_client_exchange<Exec>::impl
 {
 public:
 	impl(executor_type executor_value, std::shared_ptr<detail::stream> stream) :
-		executor(std::move(executor_value)),
-		state(detail::make_client_exchange_state(std::move(stream))),
-		request_body(std::make_unique<body_writer_type>(
-			executor, state->request_body())),
-		response_body(std::make_unique<body_reader_type>(
-			executor, state->response_body()))
+		m_executor(std::move(executor_value)),
+		m_state(detail::make_client_exchange_state(std::move(stream))),
+		m_request_body(std::make_unique<body_writer_type>(
+			m_executor, m_state->request_body())),
+		m_response_body(std::make_unique<body_reader_type>(
+			m_executor, m_state->response_body()))
 	{
 	}
 
-	executor_type executor;
-	std::shared_ptr<detail::client_exchange_state> state;
-	std::unique_ptr<body_writer_type> request_body;
-	std::unique_ptr<body_reader_type> response_body;
+	executor_type m_executor;
+	std::shared_ptr<detail::client_exchange_state> m_state;
+	std::unique_ptr<body_writer_type> m_request_body;
+	std::unique_ptr<body_reader_type> m_response_body;
 };
 
 template <core_concepts::exec Exec>
@@ -81,7 +81,7 @@ basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 basic_client_exchange<Exec>::~basic_client_exchange() {
-	if( m_impl and m_impl->state ) m_impl->state->cancel();
+	if( m_impl and m_impl->m_state ) m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -96,17 +96,17 @@ basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::get_executor() const noexcept -> executor_type {
-	return m_impl->executor;
+	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>
 protocol basic_client_exchange<Exec>::selected_protocol() const noexcept {
-	return m_impl->state->selected_protocol();
+	return m_impl->m_state->selected_protocol();
 }
 
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::request_body() noexcept -> body_writer_type& {
-	return *m_impl->request_body;
+	return *m_impl->m_request_body;
 }
 
 template <core_concepts::exec Exec>
@@ -115,7 +115,7 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response_head>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return m_impl->state->wait_response(token);
+		return m_impl->m_state->wait_response(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
@@ -126,8 +126,8 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->state;
-		return initiate_io<response_head>(m_impl->executor,
+		auto state = m_impl->m_state;
+		return initiate_io<response_head>(m_impl->m_executor,
 		[state = std::move(state)](auto handler) mutable {
 			state->wait_response(
 				typename detail::client_exchange_state::response_handler(
@@ -138,7 +138,7 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::response_body() noexcept -> body_reader_type& {
-	return *m_impl->response_body;
+	return *m_impl->m_response_body;
 }
 
 template <core_concepts::exec Exec>
@@ -172,18 +172,18 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token)
 	else
 	{
 		auto owner = m_impl;
-		auto executor = m_impl->executor;
+		auto executor = m_impl->m_executor;
 		return initiate_io<channel_type>(executor,
 		[owner = std::move(owner), executor](auto handler) mutable {
-			owner->state->release_duplex(
+			owner->m_state->release_duplex(
 				[owner = std::move(owner), executor,
 				 handler = std::move(handler)]
 				(error_code error,
 				 std::shared_ptr<detail::duplex_state> channel) mutable {
 					if( not error )
 					{
-						owner->request_body->detach();
-						owner->response_body->detach();
+						owner->m_request_body->detach();
+						owner->m_response_body->detach();
 					}
 					std::move(handler)(error,
 						channel_type(executor, std::move(channel)));
@@ -194,7 +194,7 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token)
 
 template <core_concepts::exec Exec>
 void basic_client_exchange<Exec>::cancel() noexcept {
-	m_impl->state->cancel();
+	m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>

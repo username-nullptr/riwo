@@ -172,11 +172,11 @@ class session_pool::impl : public std::enable_shared_from_this<session_pool::imp
 public:
 	impl(executor_type executor_value, client_config config_value,
 		connector_ptr connector_value, session_factory_ptr factory_value) :
-		executor(std::move(executor_value)), config(std::move(config_value)),
-		connector(std::move(connector_value)), factory(std::move(factory_value))
+		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
+		m_connector(std::move(connector_value)), m_factory(std::move(factory_value))
 	{
-		if( not connector ) connector = make_default_connector(executor);
-		if( not factory ) factory = make_default_session_factory();
+		if( not m_connector ) m_connector = make_default_connector(m_executor);
+		if( not m_factory ) m_factory = make_default_session_factory();
 	}
 
 	~impl() {
@@ -192,38 +192,38 @@ public:
 			{
 				slot_ptr selected;
 				{
-					std::unique_lock lock(mutex);
-					if( stopped )
+					std::unique_lock lock(m_mutex);
+					if( m_stopped )
 					{
 						error = asio::error::make_error_code(
 							asio::error::operation_aborted);
 						return {};
 					}
-					if( config.pool.max_sessions_per_origin == 0 )
+					if( m_config.pool.max_sessions_per_origin == 0 )
 					{
 						error = make_error_code(errc::operation_not_permitted);
 						return {};
 					}
-					auto &value = buckets[key];
+					auto &value = m_buckets[key];
 					selected = take_slot_locked(value);
 					if( not selected )
 					{
 						if( value.sessions.size() + value.connecting <
-							config.pool.max_sessions_per_origin )
+							m_config.pool.max_sessions_per_origin )
 						{
 							++value.connecting;
 						}
 						else
 						{
-							if( not condition.wait_for(lock,
-								std::chrono::milliseconds(config.timeout.pool_wait),
+							if( not m_condition.wait_for(lock,
+								std::chrono::milliseconds(m_config.timeout.pool_wait),
 								[this, &key] {
-									auto iterator = buckets.find(key);
-									return stopped or iterator == buckets.end() or
+									auto iterator = m_buckets.find(key);
+									return m_stopped or iterator == m_buckets.end() or
 										has_capacity_locked(iterator->second) or
 										iterator->second.sessions.size() +
 											iterator->second.connecting <
-											config.pool.max_sessions_per_origin;
+											m_config.pool.max_sessions_per_origin;
 								}) )
 							{
 								error = asio::error::make_error_code(
@@ -251,12 +251,12 @@ public:
 					return wrap(key, selected, std::move(active));
 				}
 
-				auto transport = connector->connect(key, config);
+				auto transport = m_connector->connect(key, m_config);
 				std::shared_ptr<client_session> session;
 				if( transport )
 				{
-					auto created = factory->create(key, std::move(*transport),
-						config);
+					auto created = m_factory->create(key, std::move(*transport),
+						m_config);
 					if( created )
 						session = std::move(*created);
 					else
@@ -266,8 +266,8 @@ public:
 					error = transport.error();
 
 				{
-					std::lock_guard lock(mutex);
-					auto &value = buckets[key];
+					std::lock_guard lock(m_mutex);
+					auto &value = m_buckets[key];
 					if( value.connecting > 0 ) --value.connecting;
 				}
 				if( error or not session )
@@ -293,15 +293,15 @@ public:
 				std::move(spec), std::move(handler));
 			error_code immediate;
 			{
-				std::lock_guard lock(mutex);
-				if( stopped )
+				std::lock_guard lock(m_mutex);
+				if( m_stopped )
 					immediate = asio::error::make_error_code(
 						asio::error::operation_aborted);
 				else
 				{
-					auto &value = buckets[key];
+					auto &value = m_buckets[key];
 					if( value.waiters.size() >=
-						config.pool.max_waiters_per_origin )
+						m_config.pool.max_waiters_per_origin )
 						immediate = make_error_code(
 							errc::buffer_limit_exceeded);
 					else
@@ -330,9 +330,9 @@ public:
 		std::vector<waiter_ptr> failed;
 		std::vector<std::shared_ptr<client_session>> sessions;
 		{
-			std::lock_guard lock(mutex);
-			stopped = true;
-			for( auto &[key, value] : buckets )
+			std::lock_guard lock(m_mutex);
+			m_stopped = true;
+			for( auto &[key, value] : m_buckets )
 			{
 				ignore_unused(key);
 				for( auto &item : value.waiters )
@@ -347,7 +347,7 @@ public:
 						sessions.push_back(value_slot->session);
 				}
 			}
-			condition.notify_all();
+			m_condition.notify_all();
 		}
 		for( auto &item : failed )
 			complete(item, asio::error::make_error_code(
@@ -364,9 +364,9 @@ public:
 
 	[[nodiscard]] size_t session_count() const noexcept
 	{
-		std::lock_guard lock(mutex);
+		std::lock_guard lock(m_mutex);
 		size_t result = 0;
-		for( const auto &[key, value] : buckets )
+		for( const auto &[key, value] : m_buckets )
 		{
 			ignore_unused(key);
 			result += value.sessions.size();
@@ -376,9 +376,9 @@ public:
 
 	[[nodiscard]] size_t idle_session_count() const noexcept
 	{
-		std::lock_guard lock(mutex);
+		std::lock_guard lock(m_mutex);
 		size_t result = 0;
-		for( const auto &[key, value] : buckets )
+		for( const auto &[key, value] : m_buckets )
 		{
 			ignore_unused(key);
 			for( const auto &item : value.sessions )
@@ -391,9 +391,9 @@ public:
 
 	[[nodiscard]] size_t waiter_count() const noexcept
 	{
-		std::lock_guard lock(mutex);
+		std::lock_guard lock(m_mutex);
 		size_t result = 0;
-		for( const auto &[key, value] : buckets )
+		for( const auto &[key, value] : m_buckets )
 		{
 			ignore_unused(key);
 			result += value.waiters.size();
@@ -401,10 +401,10 @@ public:
 		return result;
 	}
 
-	executor_type executor;
-	client_config config;
-	connector_ptr connector;
-	session_factory_ptr factory;
+	executor_type m_executor;
+	client_config m_config;
+	connector_ptr m_connector;
+	session_factory_ptr m_factory;
 
 private:
 	[[nodiscard]] static bool usable(const slot_ptr &value)
@@ -456,10 +456,10 @@ private:
 		});
 
 		{
-			std::lock_guard lock(mutex);
-			auto &value = buckets[key];
+			std::lock_guard lock(m_mutex);
+			auto &value = m_buckets[key];
 			value.sessions.push_back(holder);
-			condition.notify_all();
+			m_condition.notify_all();
 		}
 		schedule_pump(key);
 	}
@@ -467,14 +467,14 @@ private:
 	void schedule_pump(const session_key &key)
 	{
 		{
-			std::lock_guard lock(mutex);
-			auto iterator = buckets.find(key);
-			if( iterator == buckets.end() or iterator->second.pump_scheduled )
+			std::lock_guard lock(m_mutex);
+			auto iterator = m_buckets.find(key);
+			if( iterator == m_buckets.end() or iterator->second.pump_scheduled )
 				return;
 			iterator->second.pump_scheduled = true;
 		}
 		auto weak = weak_from_this();
-		asio::post(executor,
+		asio::post(m_executor,
 		[weak, key] {
 			if( auto self = weak.lock() ) self->pump(key);
 		});
@@ -489,15 +489,15 @@ private:
 			slot_ptr selected;
 			bool connect = false;
 			{
-				std::lock_guard lock(mutex);
-				auto iterator = buckets.find(key);
-				if( iterator == buckets.end() )
+				std::lock_guard lock(m_mutex);
+				auto iterator = m_buckets.find(key);
+				if( iterator == m_buckets.end() )
 					return;
 				auto &value = iterator->second;
 				value.pump_scheduled = false;
-				if( stopped or value.waiters.empty() )
+				if( m_stopped or value.waiters.empty() )
 					return;
-				if( config.pool.max_sessions_per_origin == 0 )
+				if( m_config.pool.max_sessions_per_origin == 0 )
 				{
 					item = value.waiters.front();
 					value.waiters.pop_front();
@@ -515,7 +515,7 @@ private:
 						item->queued = false;
 					}
 					else if( value.sessions.size() + value.connecting <
-						config.pool.max_sessions_per_origin )
+						m_config.pool.max_sessions_per_origin )
 					{
 						++value.connecting;
 						connect = true;
@@ -572,7 +572,7 @@ private:
 	void start_connect(const session_key &key)
 	{
 		auto weak = weak_from_this();
-		connector->connect_async(key, config,
+		m_connector->connect_async(key, m_config,
 		[weak, key](error_code error, negotiated_transport transport) mutable {
 			auto self = weak.lock();
 			if( not self ) return;
@@ -582,8 +582,8 @@ private:
 			sys_expected<std::shared_ptr<client_session>> created =
 				sys_unexpected(make_error_code(errc::negotiation_failed));
 			try {
-				created = self->factory->create(key, std::move(transport),
-					self->config);
+				created = self->m_factory->create(key, std::move(transport),
+					self->m_config);
 			}
 			catch(...) {
 				created = sys_unexpected(
@@ -592,9 +592,9 @@ private:
 			if( not created )
 				return self->connect_failed(key, created.error());
 			{
-				std::lock_guard lock(self->mutex);
-				auto iterator = self->buckets.find(key);
-				if( iterator != self->buckets.end() and
+				std::lock_guard lock(self->m_mutex);
+				auto iterator = self->m_buckets.find(key);
+				if( iterator != self->m_buckets.end() and
 					iterator->second.connecting > 0 )
 					--iterator->second.connecting;
 			}
@@ -606,9 +606,9 @@ private:
 	{
 		waiter_ptr item;
 		{
-			std::lock_guard lock(mutex);
-			auto iterator = buckets.find(key);
-			if( iterator == buckets.end() ) return;
+			std::lock_guard lock(m_mutex);
+			auto iterator = m_buckets.find(key);
+			if( iterator == m_buckets.end() ) return;
 			auto &value = iterator->second;
 			if( value.connecting > 0 ) --value.connecting;
 			if( not value.waiters.empty() )
@@ -617,7 +617,7 @@ private:
 				value.waiters.pop_front();
 				item->queued = false;
 			}
-			condition.notify_all();
+			m_condition.notify_all();
 		}
 		if( item ) complete(item, error, {});
 		schedule_pump(key);
@@ -629,7 +629,7 @@ private:
 		std::shared_ptr<client_session> session;
 		bool remove = false;
 		{
-			std::lock_guard lock(mutex);
+			std::lock_guard lock(m_mutex);
 			if( not value or value->removed ) return;
 			const bool was_busy = value->busy;
 			ignore_unused(was_busy);
@@ -646,7 +646,7 @@ private:
 			#endif
 				schedule_idle_locked(key, value);
 			}
-			condition.notify_all();
+			m_condition.notify_all();
 		}
 		if( remove and session )
 			session->graceful_shutdown([](error_code) {});
@@ -657,9 +657,9 @@ private:
 	void remove_slot(const session_key &key, const slot_ptr &value)
 	{
 		{
-			std::lock_guard lock(mutex);
-			auto iterator = buckets.find(key);
-			if( iterator == buckets.end() ) return;
+			std::lock_guard lock(m_mutex);
+			auto iterator = m_buckets.find(key);
+			if( iterator == m_buckets.end() ) return;
 			auto &values = iterator->second.sessions;
 			std::erase_if(values, [&value](const slot_ptr &item) {
 				return item == value;
@@ -670,10 +670,10 @@ private:
 
 	void schedule_idle(const waiter_ptr &value)
 	{
-		if( config.timeout.pool_wait.count() <= 0 ) return;
+		if( m_config.timeout.pool_wait.count() <= 0 ) return;
 		auto weak = weak_from_this();
-		value->timer = std::make_shared<timer_type>(executor);
-		value->timer->expires_after(config.timeout.pool_wait);
+		value->timer = std::make_shared<timer_type>(m_executor);
+		value->timer->expires_after(m_config.timeout.pool_wait);
 		value->timer->async_wait(
 		[weak, value](error_code error) {
 			if( error or value->completed ) return;
@@ -683,9 +683,9 @@ private:
 
 	void schedule_idle_locked(const session_key &key, const slot_ptr &value)
 	{
-		if( config.pool.idle_timeout.count() <= 0 ) return;
-		value->idle_timer = std::make_shared<timer_type>(executor);
-		value->idle_timer->expires_after(config.pool.idle_timeout);
+		if( m_config.pool.idle_timeout.count() <= 0 ) return;
+		value->idle_timer = std::make_shared<timer_type>(m_executor);
+		value->idle_timer->expires_after(m_config.pool.idle_timeout);
 		auto weak = weak_from_this();
 		auto timer = value->idle_timer;
 		timer->async_wait(
@@ -698,10 +698,10 @@ private:
 	void wait_timed_out(const waiter_ptr &value)
 	{
 		{
-			std::lock_guard lock(mutex);
+			std::lock_guard lock(m_mutex);
 			if( value->completed or not value->queued ) return;
-			auto iterator = buckets.find(value->key);
-			if( iterator == buckets.end() ) return;
+			auto iterator = m_buckets.find(value->key);
+			if( iterator == m_buckets.end() ) return;
 			auto &items = iterator->second.waiters;
 			std::erase(items, value);
 			value->queued = false;
@@ -715,7 +715,7 @@ private:
 	{
 		std::shared_ptr<client_session> session;
 		{
-			std::lock_guard lock(mutex);
+			std::lock_guard lock(m_mutex);
 			if( not value or value->busy or value->removed ) return;
 			value->removed = true;
 			session = value->session;
@@ -746,7 +746,7 @@ private:
 	{
 		std::shared_ptr<client_session> session;
 		{
-			std::lock_guard lock(mutex);
+			std::lock_guard lock(m_mutex);
 			if( not value or not value->busy or value->generation != generation )
 				return;
 			session = value->session;
@@ -780,10 +780,10 @@ private:
 		}
 	}
 
-	mutable std::mutex mutex;
-	std::condition_variable condition;
-	std::unordered_map<session_key, bucket, session_key_hash> buckets;
-	bool stopped = false;
+	mutable std::mutex m_mutex;
+	std::condition_variable m_condition;
+	std::unordered_map<session_key, bucket, session_key_hash> m_buckets;
+	bool m_stopped = false;
 };
 
 session_pool::session_pool(executor_type executor, client_config config,
@@ -796,11 +796,11 @@ session_pool::session_pool(executor_type executor, client_config config,
 session_pool::~session_pool() = default;
 
 auto session_pool::get_executor() const noexcept -> executor_type {
-	return m_impl->executor;
+	return m_impl->m_executor;
 }
 
 auto session_pool::config() const noexcept -> const client_config & {
-	return m_impl->config;
+	return m_impl->m_config;
 }
 
 std::shared_ptr<stream> session_pool::open_sync(const session_key &key,
@@ -812,7 +812,7 @@ std::shared_ptr<stream> session_pool::open_sync(const session_key &key,
 std::shared_ptr<stream> session_pool::open_sync(const origin &target,
 	request_head head, body_spec spec, error_code &error) noexcept
 {
-	auto key = make_session_key(head, m_impl->config);
+	auto key = make_session_key(head, m_impl->m_config);
 	if( not target.scheme.empty() ) key.scheme = target.scheme;
 	if( not target.host.empty() ) key.host = target.host;
 	if( target.port != 0 ) key.port = target.port;
@@ -829,7 +829,7 @@ void session_pool::open(const session_key &key, request_head head,
 void session_pool::open(const origin &target, request_head head,
 	body_spec spec, open_handler handler)
 {
-	auto key = make_session_key(head, m_impl->config);
+	auto key = make_session_key(head, m_impl->m_config);
 	if( not target.scheme.empty() ) key.scheme = target.scheme;
 	if( not target.host.empty() ) key.host = target.host;
 	if( target.port != 0 ) key.port = target.port;

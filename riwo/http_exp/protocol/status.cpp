@@ -6,21 +6,21 @@
 namespace riwo::http_exp
 {
 
-status::status(well_known value) noexcept : code_(value) {}
+status::status(well_known value) noexcept : m_code(value) {}
 
-status::status(uint16_t code) : code_(code)
+status::status(uint16_t code) : m_code(code)
 {
 	if( code < 100 or code > 599 )
 		throw std::invalid_argument("HTTP status must be in the range 100..599");
 }
 
 uint16_t status::code() const noexcept {
-	return code_;
+	return m_code;
 }
 
 std::string_view status::text() const noexcept
 {
-	switch( code_ )
+	switch( m_code )
 	{
 	case 100: return "Continue";
 	case 101: return "Switching Protocols";
@@ -90,8 +90,8 @@ std::string_view status::text() const noexcept
 
 bool status::allows_body() const noexcept
 {
-	return code_ >= 200 and code_ != no_content and
-		code_ != reset_content and code_ != not_modified;
+	return m_code >= 200 and m_code != no_content and
+		m_code != reset_content and m_code != not_modified;
 }
 
 } //namespace riwo::http_exp

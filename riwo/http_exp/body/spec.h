@@ -31,9 +31,9 @@ public:
 
 private:
 	body_spec(mode type, optional<uint64_t> length, trailer_spec trailers);
-	mode type_;
-	optional<uint64_t> length_;
-	trailer_spec trailers_;
+	mode m_type;
+	optional<uint64_t> m_length;
+	trailer_spec m_trailers;
 };
 
 } //namespace riwo::http_exp

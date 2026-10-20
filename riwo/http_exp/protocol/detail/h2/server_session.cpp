@@ -140,7 +140,7 @@ class server_reader_adapter final : public body_reader_adapter
 {
 public:
 	explicit server_reader_adapter(std::weak_ptr<server_stream_impl> owner) :
-		owner_(std::move(owner)) {}
+		m_owner(std::move(owner)) {}
 
 	[[nodiscard]] body_read_result read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept override;
@@ -150,14 +150,14 @@ public:
 	void cancel() noexcept override;
 
 private:
-	std::weak_ptr<server_stream_impl> owner_;
+	std::weak_ptr<server_stream_impl> m_owner;
 };
 
 class server_writer_adapter final : public body_writer_adapter
 {
 public:
 	explicit server_writer_adapter(std::weak_ptr<server_stream_impl> owner) :
-		owner_(std::move(owner)) {}
+		m_owner(std::move(owner)) {}
 
 	[[nodiscard]] size_t write_sync(const_buffer buffer,
 		error_code &error) noexcept override;
@@ -167,7 +167,7 @@ public:
 	void cancel() noexcept override;
 
 private:
-	std::weak_ptr<server_stream_impl> owner_;
+	std::weak_ptr<server_stream_impl> m_owner;
 };
 
 class server_stream_impl final : public stream,
@@ -175,7 +175,7 @@ class server_stream_impl final : public stream,
 {
 public:
 	server_stream_impl(std::shared_ptr<server_session_impl> session,
-		int32_t id) : session_(std::move(session)), id_(id) {}
+		int32_t id) : m_session(std::move(session)), m_id(id) {}
 	~server_stream_impl() override;
 
 	void initialize();
@@ -184,14 +184,14 @@ public:
 	}
 	[[nodiscard]] stream_capabilities capabilities() const noexcept override {
 		return {.trailers = true, .full_duplex = true,
-			.tunnel = duplex_opened_,
-			.extended_connect = request_.connect_protocol.has_value()};
+			.tunnel = m_duplex_opened,
+			.extended_connect = m_request.connect_protocol.has_value()};
 	}
-	[[nodiscard]] request_head request() const override { return request_; }
+	[[nodiscard]] request_head request() const override { return m_request; }
 	[[nodiscard]] std::shared_ptr<body_reader_state>
-	inbound_body() const noexcept override { return inbound_; }
+	inbound_body() const noexcept override { return m_inbound; }
 	[[nodiscard]] std::shared_ptr<body_writer_state>
-	outbound_body() const noexcept override { return outbound_; }
+	outbound_body() const noexcept override { return m_outbound; }
 	[[nodiscard]] endpoint_type remote_endpoint(
 		error_code &error) const noexcept override;
 	[[nodiscard]] endpoint_type local_endpoint(
@@ -209,58 +209,58 @@ public:
 	[[nodiscard]] bool reusable() const noexcept override;
 	void cancel() noexcept override;
 
-	std::shared_ptr<server_session_impl> session_;
-	int32_t id_;
-	request_head request_;
-	std::string method_;
-	std::string scheme_;
-	std::string authority_;
-	std::string path_;
-	std::string protocol_;
-	bool have_method_ = false;
-	bool have_scheme_ = false;
-	bool have_authority_ = false;
-	bool have_path_ = false;
-	bool have_protocol_ = false;
-	bool collecting_trailers_ = false;
-	bool request_ready_ = false;
-	bool invalid_headers_ = false;
-	size_t header_bytes_ = 0;
-	size_t header_count_ = 0;
-	optional<uint64_t> content_length_;
+	std::shared_ptr<server_session_impl> m_session;
+	int32_t m_id;
+	request_head m_request;
+	std::string m_method;
+	std::string m_scheme;
+	std::string m_authority;
+	std::string m_path;
+	std::string m_protocol;
+	bool m_have_method = false;
+	bool m_have_scheme = false;
+	bool m_have_authority = false;
+	bool m_have_path = false;
+	bool m_have_protocol = false;
+	bool m_collecting_trailers = false;
+	bool m_request_ready = false;
+	bool m_invalid_headers = false;
+	size_t m_header_bytes = 0;
+	size_t m_header_count = 0;
+	optional<uint64_t> m_content_length;
 
-	std::shared_ptr<server_reader_adapter> reader_adapter_;
-	std::shared_ptr<server_writer_adapter> writer_adapter_;
-	std::shared_ptr<body_reader_state> inbound_;
-	std::shared_ptr<body_writer_state> outbound_;
+	std::shared_ptr<server_reader_adapter> m_reader_adapter;
+	std::shared_ptr<server_writer_adapter> m_writer_adapter;
+	std::shared_ptr<body_reader_state> m_inbound;
+	std::shared_ptr<body_writer_state> m_outbound;
 
-	std::deque<std::vector<std::byte>> inbound_chunks_;
-	size_t inbound_offset_ = 0;
-	size_t inbound_size_ = 0;
-	uint64_t inbound_total_ = 0;
-	bool remote_end_ = false;
-	fields inbound_trailers_;
-	optional<mutable_buffer> pending_read_buffer_;
-	body_reader_adapter::read_handler pending_read_handler_;
+	std::deque<std::vector<std::byte>> m_inbound_chunks;
+	size_t m_inbound_offset = 0;
+	size_t m_inbound_size = 0;
+	uint64_t m_inbound_total = 0;
+	bool m_remote_end = false;
+	fields m_inbound_trailers;
+	optional<mutable_buffer> m_pending_read_buffer;
+	body_reader_adapter::read_handler m_pending_read_handler;
 
-	std::deque<std::vector<std::byte>> outbound_chunks_;
-	size_t outbound_offset_ = 0;
-	size_t outbound_size_ = 0;
-	bool response_started_ = false;
-	bool outbound_finished_ = false;
-	bool trailers_submitted_ = false;
-	fields outbound_trailers_;
+	std::deque<std::vector<std::byte>> m_outbound_chunks;
+	size_t m_outbound_offset = 0;
+	size_t m_outbound_size = 0;
+	bool m_response_started = false;
+	bool m_outbound_finished = false;
+	bool m_trailers_submitted = false;
+	fields m_outbound_trailers;
 	struct pending_write
 	{
 		const_buffer buffer;
 		body_writer_adapter::write_handler handler;
 	};
-	optional<pending_write> pending_write_;
+	optional<pending_write> m_pending_write;
 
-	error_code terminal_error_;
-	bool closed_ = false;
-	bool cancelled_ = false;
-	bool duplex_opened_ = false;
+	error_code m_terminal_error;
+	bool m_closed = false;
+	bool m_cancelled = false;
+	bool m_duplex_opened = false;
 };
 
 class server_session_impl final : public server_session,
@@ -270,153 +270,153 @@ public:
 	server_session_impl(
 		std::shared_ptr<::riwo::http_exp::connection> transport,
 		server_config config, std::string initial_input) :
-		executor_(transport->get_executor()), strand_(asio::make_strand(executor_)),
-		transport_(std::move(transport)), config_(std::move(config)),
-		initial_input_(std::move(initial_input))
+		m_executor(transport->get_executor()), m_strand(asio::make_strand(m_executor)),
+		m_transport(std::move(transport)), m_config(std::move(config)),
+		m_initial_input(std::move(initial_input))
 	{
 		error_code error;
-		remote_ = transport_->remote_endpoint(error);
+		m_remote = m_transport->remote_endpoint(error);
 		error.clear();
-		local_ = transport_->local_endpoint(error);
+		m_local = m_transport->local_endpoint(error);
 	}
 
 	~server_session_impl() override
 	{
-		if( native_ ) nghttp2_session_del(native_);
-		if( callbacks_ ) nghttp2_session_callbacks_del(callbacks_);
-		if( option_ ) nghttp2_option_del(option_);
+		if( m_native ) nghttp2_session_del(m_native);
+		if( m_callbacks ) nghttp2_session_callbacks_del(m_callbacks);
+		if( m_option ) nghttp2_option_del(m_option);
 	}
 
 	[[nodiscard]] error_code initialize() noexcept
 	{
-		if( nghttp2_session_callbacks_new(&callbacks_) != 0 or
-			nghttp2_option_new(&option_) != 0 )
+		if( nghttp2_session_callbacks_new(&m_callbacks) != 0 or
+			nghttp2_option_new(&m_option) != 0 )
 			return make_error_code(errc::operation_not_supported);
-		nghttp2_session_callbacks_set_on_begin_headers_callback(callbacks_,
+		nghttp2_session_callbacks_set_on_begin_headers_callback(m_callbacks,
 			&server_session_impl::on_begin_headers);
-		nghttp2_session_callbacks_set_on_header_callback(callbacks_,
+		nghttp2_session_callbacks_set_on_header_callback(m_callbacks,
 			&server_session_impl::on_header);
-		nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks_,
+		nghttp2_session_callbacks_set_on_frame_recv_callback(m_callbacks,
 			&server_session_impl::on_frame_recv);
-		nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks_,
+		nghttp2_session_callbacks_set_on_data_chunk_recv_callback(m_callbacks,
 			&server_session_impl::on_data_chunk);
-		nghttp2_session_callbacks_set_on_stream_close_callback(callbacks_,
+		nghttp2_session_callbacks_set_on_stream_close_callback(m_callbacks,
 			&server_session_impl::on_stream_close);
-		nghttp2_option_set_no_auto_window_update(option_, 1);
-		nghttp2_option_set_max_deflate_dynamic_table_size(option_,
-			config_.h2.max_dynamic_table_size);
-		if( nghttp2_session_server_new2(&native_, callbacks_, this, option_) != 0 )
+		nghttp2_option_set_no_auto_window_update(m_option, 1);
+		nghttp2_option_set_max_deflate_dynamic_table_size(m_option,
+			m_config.h2.max_dynamic_table_size);
+		if( nghttp2_session_server_new2(&m_native, m_callbacks, this, m_option) != 0 )
 			return make_error_code(errc::operation_not_supported);
 
 		std::array<nghttp2_settings_entry,6> settings {{
 			{NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE,
-				config_.h2.initial_stream_window},
+				m_config.h2.initial_stream_window},
 			{NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS,
-				config_.h2.max_concurrent_streams},
-			{NGHTTP2_SETTINGS_MAX_FRAME_SIZE, config_.h2.max_frame_size},
+				m_config.h2.max_concurrent_streams},
+			{NGHTTP2_SETTINGS_MAX_FRAME_SIZE, m_config.h2.max_frame_size},
 			{NGHTTP2_SETTINGS_HEADER_TABLE_SIZE,
 				static_cast<uint32_t>(std::min<size_t>(
-					config_.h2.max_dynamic_table_size, UINT32_MAX))},
+					m_config.h2.max_dynamic_table_size, UINT32_MAX))},
 			{NGHTTP2_SETTINGS_MAX_HEADER_LIST_SIZE,
 				static_cast<uint32_t>(std::min(
-					config_.h2.max_header_list_size,
-					config_.request_limits.max_header_list_size))},
+					m_config.h2.max_header_list_size,
+					m_config.request_limits.max_header_list_size))},
 			{NGHTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL,
-				config_.h2.enable_extended_connect ? 1U : 0U}
+				m_config.h2.enable_extended_connect ? 1U : 0U}
 		}};
-		if( nghttp2_submit_settings(native_, NGHTTP2_FLAG_NONE,
+		if( nghttp2_submit_settings(m_native, NGHTTP2_FLAG_NONE,
 			settings.data(), settings.size()) != 0 ) return protocol_error();
-		if( config_.h2.initial_connection_window > 65'535 )
+		if( m_config.h2.initial_connection_window > 65'535 )
 		{
 			const auto increment = static_cast<int32_t>(
-				config_.h2.initial_connection_window - 65'535);
-			if( nghttp2_submit_window_update(native_, NGHTTP2_FLAG_NONE,
+				m_config.h2.initial_connection_window - 65'535);
+			if( nghttp2_submit_window_update(m_native, NGHTTP2_FLAG_NONE,
 				0, increment) != 0 ) return protocol_error();
 		}
-		if( not initial_input_.empty() )
+		if( not m_initial_input.empty() )
 		{
-			const auto consumed = nghttp2_api::session_mem_recv(native_,
-				reinterpret_cast<const uint8_t *>(initial_input_.data()),
-				initial_input_.size());
+			const auto consumed = nghttp2_api::session_mem_recv(m_native,
+				reinterpret_cast<const uint8_t *>(m_initial_input.data()),
+				m_initial_input.size());
 			if( consumed < 0 or static_cast<size_t>(consumed) !=
-				initial_input_.size() ) return protocol_error();
-			initial_input_.clear();
+				m_initial_input.size() ) return protocol_error();
+			m_initial_input.clear();
 		}
-		transport_->set_read_timeout(config_.timeout.body_idle);
-		transport_->set_write_timeout(config_.timeout.body_idle);
+		m_transport->set_read_timeout(m_config.timeout.body_idle);
+		m_transport->set_write_timeout(m_config.timeout.body_idle);
 		return {};
 	}
 
 	void start()
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self)] {
+		asio::post(m_strand, [self = std::move(self)] {
 			self->write_pump();
 			self->read_loop();
 		});
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return executor_;
+		return m_executor;
 	}
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return protocol::v2;
 	}
-	[[nodiscard]] bool draining() const noexcept override { return draining_; }
-	[[nodiscard]] bool closed() const noexcept override { return closed_; }
+	[[nodiscard]] bool draining() const noexcept override { return m_draining; }
+	[[nodiscard]] bool closed() const noexcept override { return m_closed; }
 
 	void accept(accept_handler handler) override
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self),
+		asio::post(m_strand, [self = std::move(self),
 			handler = std::move(handler)]() mutable {
-			if( self->accept_handler_ )
+			if( self->m_accept_handler )
 				return std::move(handler)(
 					make_error_code(errc::operation_in_progress),
 					std::shared_ptr<stream>{});
-			if( not self->ready_streams_.empty() )
+			if( not self->m_ready_streams.empty() )
 			{
-				auto value = std::move(self->ready_streams_.front());
-				self->ready_streams_.pop_front();
+				auto value = std::move(self->m_ready_streams.front());
+				self->m_ready_streams.pop_front();
 				return std::move(handler)(error_code{}, std::move(value));
 			}
-			if( self->closed_ or self->draining_ )
+			if( self->m_closed or self->m_draining )
 				return std::move(handler)(aborted(), std::shared_ptr<stream>{});
-			self->accept_handler_ = std::move(handler);
+			self->m_accept_handler = std::move(handler);
 		});
 	}
 
 	void graceful_shutdown(shutdown_handler handler) override
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self),
+		asio::post(m_strand, [self = std::move(self),
 			handler = std::move(handler)]() mutable {
-			if( self->closed_ )
+			if( self->m_closed )
 				return std::move(handler)(error_code{});
-			self->draining_ = true;
-			(void)nghttp2_submit_goaway(self->native_, NGHTTP2_FLAG_NONE,
-				self->last_processed_stream_, NGHTTP2_NO_ERROR, nullptr, 0);
-			self->shutdown_handlers_.push_back(std::move(handler));
-			if( self->accept_handler_ )
-				std::move(self->accept_handler_)(aborted(),
+			self->m_draining = true;
+			(void)nghttp2_submit_goaway(self->m_native, NGHTTP2_FLAG_NONE,
+				self->m_last_processed_stream, NGHTTP2_NO_ERROR, nullptr, 0);
+			self->m_shutdown_handlers.push_back(std::move(handler));
+			if( self->m_accept_handler )
+				std::move(self->m_accept_handler)(aborted(),
 					std::shared_ptr<stream>{});
 			self->write_pump();
 			self->finish_shutdown_if_idle();
 		});
 	}
 
-	[[nodiscard]] const server_config &config() const noexcept { return config_; }
+	[[nodiscard]] const server_config &config() const noexcept { return m_config; }
 	[[nodiscard]] asio::ip::tcp::endpoint remote_endpoint(
-		error_code &error) const noexcept { error.clear(); return remote_; }
+		error_code &error) const noexcept { error.clear(); return m_remote; }
 	[[nodiscard]] asio::ip::tcp::endpoint local_endpoint(
-		error_code &error) const noexcept { error.clear(); return local_; }
+		error_code &error) const noexcept { error.clear(); return m_local; }
 
 	[[nodiscard]] body_read_result read_sync(server_stream_impl &value,
 		mutable_buffer buffer, error_code &error) noexcept
 	{
 		error.clear();
-		if( value.terminal_error_ ) { error = value.terminal_error_; return {}; }
-		if( value.inbound_size_ == 0 and not value.remote_end_ )
+		if( value.m_terminal_error ) { error = value.m_terminal_error; return {}; }
+		if( value.m_inbound_size == 0 and not value.m_remote_end )
 		{
 			error = make_error_code(errc::operation_in_progress);
 			return {};
@@ -430,23 +430,23 @@ public:
 		mutable_buffer buffer, body_reader_adapter::read_handler handler)
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value, buffer,
+		asio::post(m_strand, [self = std::move(self), value, buffer,
 			handler = std::move(handler)]() mutable {
-			if( value->terminal_error_ )
-				return std::move(handler)(value->terminal_error_,
+			if( value->m_terminal_error )
+				return std::move(handler)(value->m_terminal_error,
 					body_read_result{});
-			if( value->pending_read_handler_ )
+			if( value->m_pending_read_handler )
 				return std::move(handler)(
 					make_error_code(errc::operation_in_progress),
 					body_read_result{});
-			if( value->inbound_size_ != 0 or value->remote_end_ )
+			if( value->m_inbound_size != 0 or value->m_remote_end )
 			{
 				auto result = self->take_body(*value, buffer);
 				if( result.bytes != 0 ) self->consume(*value, result.bytes);
 				return std::move(handler)(error_code{}, result);
 			}
-			value->pending_read_buffer_ = buffer;
-			value->pending_read_handler_ = std::move(handler);
+			value->m_pending_read_buffer = buffer;
+			value->m_pending_read_handler = std::move(handler);
 		});
 	}
 
@@ -454,22 +454,22 @@ public:
 		error_code &error) noexcept
 	{
 		error.clear();
-		if( not value.remote_end_ )
+		if( not value.m_remote_end )
 			error = make_error_code(errc::operation_not_permitted);
-		return error ? fields{} : value.inbound_trailers_;
+		return error ? fields{} : value.m_inbound_trailers;
 	}
 
 	void trailers(const std::shared_ptr<server_stream_impl> &value,
 		body_reader_adapter::trailers_handler handler)
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value,
+		asio::post(m_strand, [self = std::move(self), value,
 			handler = std::move(handler)]() mutable {
 			ignore_unused(self);
-			if( not value->remote_end_ )
+			if( not value->m_remote_end )
 				std::move(handler)(make_error_code(
 					errc::operation_not_permitted), fields{});
-			else std::move(handler)(error_code{}, value->inbound_trailers_);
+			else std::move(handler)(error_code{}, value->m_inbound_trailers);
 		});
 	}
 
@@ -477,13 +477,13 @@ public:
 		body_spec spec, error_code &error) noexcept
 	{
 		error.clear();
-		if( value.response_started_ or value.closed_ )
+		if( value.m_response_started or value.m_closed )
 		{
 			error = make_error_code(errc::operation_not_permitted);
 			return;
 		}
 		if( spec.type() == body_spec::mode::head and
-			value.request_.method.known() != method::head )
+			value.m_request.method.known() != method::head )
 		{
 			error = make_error_code(errc::operation_not_permitted);
 			return;
@@ -496,14 +496,14 @@ public:
 		response_head head, body_spec spec, stream::operation_handler handler)
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value,
+		asio::post(m_strand, [self = std::move(self), value,
 			head = std::move(head), spec = std::move(spec),
 			handler = std::move(handler)]() mutable {
-			if( value->response_started_ or value->closed_ )
+			if( value->m_response_started or value->m_closed )
 				return std::move(handler)(
 					make_error_code(errc::operation_not_permitted));
 			if( spec.type() == body_spec::mode::head and
-				value->request_.method.known() != method::head )
+				value->m_request.method.known() != method::head )
 				return std::move(handler)(
 					make_error_code(errc::operation_not_permitted));
 			error_code error;
@@ -518,9 +518,9 @@ public:
 	{
 		error.clear();
 		auto headers = response_headers(head, body_spec::empty(),
-			config_.h2.max_header_list_size);
+			m_config.h2.max_header_list_size);
 		if( not headers ) { error = headers.error(); return; }
-		if( nghttp2_submit_headers(native_, NGHTTP2_FLAG_NONE, value.id_, nullptr,
+		if( nghttp2_submit_headers(m_native, NGHTTP2_FLAG_NONE, value.m_id, nullptr,
 			headers->values.data(), headers->values.size(), nullptr) != 0 )
 			error = make_error_code(errc::stream_protocol_error);
 		if( not error ) write_pump();
@@ -530,7 +530,7 @@ public:
 		response_head head, stream::operation_handler handler)
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value,
+		asio::post(m_strand, [self = std::move(self), value,
 			head = std::move(head), handler = std::move(handler)]() mutable {
 			error_code error;
 			self->inform_sync(*value, std::move(head), error);
@@ -542,23 +542,23 @@ public:
 		const_buffer buffer, error_code &error) noexcept
 	{
 		error.clear();
-		if( value.terminal_error_ ) { error = value.terminal_error_; return 0; }
+		if( value.m_terminal_error ) { error = value.m_terminal_error; return 0; }
 		// A HEAD response carries the representation metadata but no body on
 		// the wire.  HTTP/1.x enforces this in its writer adapter; the h2
 		// session must discard the same writes before they reach nghttp2.
-		if( value.request_.method.known() == method::head )
+		if( value.m_request.method.known() == method::head )
 			return buffer.size();
-		if( buffer.size() > config_.h2.outbound_stream_buffer or
-			value.outbound_size_ + buffer.size() >
-				config_.h2.outbound_stream_buffer or
-			outbound_buffered_ + buffer.size() >
-				config_.h2.outbound_connection_buffer )
+		if( buffer.size() > m_config.h2.outbound_stream_buffer or
+			value.m_outbound_size + buffer.size() >
+				m_config.h2.outbound_stream_buffer or
+			m_outbound_buffered + buffer.size() >
+				m_config.h2.outbound_connection_buffer )
 		{
 			error = make_error_code(errc::buffer_limit_exceeded);
 			return 0;
 		}
 		enqueue(value, buffer);
-		(void)nghttp2_session_resume_data(native_, value.id_);
+		(void)nghttp2_session_resume_data(m_native, value.m_id);
 		write_pump();
 		return buffer.size();
 	}
@@ -567,31 +567,31 @@ public:
 		const_buffer buffer, body_writer_adapter::write_handler handler)
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value, buffer,
+		asio::post(m_strand, [self = std::move(self), value, buffer,
 			handler = std::move(handler)]() mutable {
-			if( value->terminal_error_ )
-				return std::move(handler)(value->terminal_error_, 0);
-			if( value->request_.method.known() == method::head )
+			if( value->m_terminal_error )
+				return std::move(handler)(value->m_terminal_error, 0);
+			if( value->m_request.method.known() == method::head )
 				return std::move(handler)(error_code{}, buffer.size());
-			if( value->pending_write_ )
+			if( value->m_pending_write )
 				return std::move(handler)(
 					make_error_code(errc::operation_in_progress), 0);
-			if( buffer.size() > self->config_.h2.outbound_stream_buffer )
+			if( buffer.size() > self->m_config.h2.outbound_stream_buffer )
 				return std::move(handler)(
 					make_error_code(errc::buffer_limit_exceeded), 0);
-			if( value->outbound_size_ + buffer.size() >
-					self->config_.h2.outbound_stream_buffer or
-				self->outbound_buffered_ + buffer.size() >
-					self->config_.h2.outbound_connection_buffer )
+			if( value->m_outbound_size + buffer.size() >
+					self->m_config.h2.outbound_stream_buffer or
+				self->m_outbound_buffered + buffer.size() >
+					self->m_config.h2.outbound_connection_buffer )
 			{
-				value->pending_write_.emplace(
+				value->m_pending_write.emplace(
 					server_stream_impl::pending_write{
 						buffer, std::move(handler)});
 				return;
 			}
 			const auto size = buffer.size();
 			self->enqueue(*value, buffer);
-			(void)nghttp2_session_resume_data(self->native_, value->id_);
+			(void)nghttp2_session_resume_data(self->m_native, value->m_id);
 			self->write_pump();
 			std::move(handler)(error_code{}, size);
 		});
@@ -601,15 +601,15 @@ public:
 		error_code &error) noexcept
 	{
 		error.clear();
-		if( value.terminal_error_ ) { error = value.terminal_error_; return; }
-		if( value.request_.method.known() == method::head )
+		if( value.m_terminal_error ) { error = value.m_terminal_error; return; }
+		if( value.m_request.method.known() == method::head )
 			return;
 		auto checked = trailer_headers(trailers,
-			config_.h2.max_header_list_size);
+			m_config.h2.max_header_list_size);
 		if( not checked ) { error = checked.error(); return; }
-		value.outbound_finished_ = true;
-		value.outbound_trailers_ = std::move(trailers);
-		(void)nghttp2_session_resume_data(native_, value.id_);
+		value.m_outbound_finished = true;
+		value.m_outbound_trailers = std::move(trailers);
+		(void)nghttp2_session_resume_data(m_native, value.m_id);
 		write_pump();
 	}
 
@@ -617,18 +617,18 @@ public:
 		fields trailers, body_writer_adapter::finish_handler handler)
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value,
+		asio::post(m_strand, [self = std::move(self), value,
 			trailers = std::move(trailers), handler = std::move(handler)]() mutable {
-			if( value->terminal_error_ )
-				return std::move(handler)(value->terminal_error_);
-			if( value->request_.method.known() == method::head )
+			if( value->m_terminal_error )
+				return std::move(handler)(value->m_terminal_error);
+			if( value->m_request.method.known() == method::head )
 				return std::move(handler)(error_code{});
 			auto checked = trailer_headers(trailers,
-				self->config_.h2.max_header_list_size);
+				self->m_config.h2.max_header_list_size);
 			if( not checked ) return std::move(handler)(checked.error());
-			value->outbound_finished_ = true;
-			value->outbound_trailers_ = std::move(trailers);
-			(void)nghttp2_session_resume_data(self->native_, value->id_);
+			value->m_outbound_finished = true;
+			value->m_outbound_trailers = std::move(trailers);
+			(void)nghttp2_session_resume_data(self->m_native, value->m_id);
 			self->write_pump();
 			std::move(handler)(error_code{});
 		});
@@ -637,7 +637,7 @@ public:
 	void cancel(const std::shared_ptr<server_stream_impl> &value) noexcept
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), value] {
+		asio::post(m_strand, [self = std::move(self), value] {
 			self->cancel_stream(*value);
 			self->write_pump();
 		});
@@ -646,11 +646,11 @@ public:
 	void release_buffer_budget(size_t inbound, size_t outbound) noexcept
 	{
 		auto self = shared_from_this();
-		asio::post(strand_, [self = std::move(self), inbound, outbound] {
-			self->inbound_buffered_ -= std::min(
-				self->inbound_buffered_, inbound);
-			self->outbound_buffered_ -= std::min(
-				self->outbound_buffered_, outbound);
+		asio::post(m_strand, [self = std::move(self), inbound, outbound] {
+			self->m_inbound_buffered -= std::min(
+				self->m_inbound_buffered, inbound);
+			self->m_outbound_buffered -= std::min(
+				self->m_outbound_buffered, outbound);
 		});
 	}
 
@@ -659,13 +659,13 @@ private:
 		body_spec spec, error_code &error) noexcept
 	{
 		auto headers = response_headers(head, spec,
-			config_.h2.max_header_list_size);
+			m_config.h2.max_header_list_size);
 		if( not headers ) { error = headers.error(); return; }
 		nghttp2_api::data_provider provider {};
 		nghttp2_api::data_provider *provider_ptr = nullptr;
 		const auto mode = spec.type();
 		const bool head_request =
-			value.request_.method.known() == method::head;
+			value.m_request.method.known() == method::head;
 		if( mode != body_spec::mode::empty and mode != body_spec::mode::head and
 			not head_request )
 		{
@@ -673,32 +673,32 @@ private:
 			provider.read_callback = &server_session_impl::data_read;
 			provider_ptr = &provider;
 		}
-		if( nghttp2_api::submit_response(native_, value.id_,
+		if( nghttp2_api::submit_response(m_native, value.m_id,
 			headers->values.data(), headers->values.size(), provider_ptr) != 0 )
 		{
 			error = make_error_code(errc::stream_protocol_error);
 			return;
 		}
-		value.response_started_ = true;
-		value.outbound_finished_ =
+		value.m_response_started = true;
+		value.m_outbound_finished =
 			mode == body_spec::mode::empty or mode == body_spec::mode::head or
 			head_request;
 	}
 
 	void read_loop()
 	{
-		if( reading_ or closed_ ) return;
-		reading_ = true;
+		if( m_reading or m_closed ) return;
+		m_reading = true;
 		auto self = shared_from_this();
-		transport_->read_some(riwo::buffer(read_buffer_),
-			asio::bind_executor(strand_,
+		m_transport->read_some(riwo::buffer(m_read_buffer),
+			asio::bind_executor(m_strand,
 			[self = std::move(self)](error_code error, size_t size) mutable {
-				self->reading_ = false;
+				self->m_reading = false;
 				if( error or size == 0 )
 					return self->fail(error ? error : protocol_error());
 				const auto consumed = nghttp2_api::session_mem_recv(
-					self->native_, reinterpret_cast<const uint8_t *>(
-						self->read_buffer_.data()), size);
+					self->m_native, reinterpret_cast<const uint8_t *>(
+						self->m_read_buffer.data()), size);
 				if( consumed < 0 or static_cast<size_t>(consumed) != size )
 					return self->fail(protocol_error());
 				self->write_pump();
@@ -708,23 +708,23 @@ private:
 
 	void write_pump()
 	{
-		if( writing_ or closed_ ) return;
+		if( m_writing or m_closed ) return;
 		const uint8_t *data = nullptr;
-		const auto size = nghttp2_api::session_mem_send(native_, &data);
+		const auto size = nghttp2_api::session_mem_send(m_native, &data);
 		if( size < 0 ) return fail(protocol_error());
 		if( size == 0 ) return;
 		if( static_cast<size_t>(size) >
-			config_.h2.outbound_connection_buffer )
+			m_config.h2.outbound_connection_buffer )
 			return fail(make_error_code(errc::buffer_limit_exceeded));
-		writing_ = true;
+		m_writing = true;
 		auto wire = std::make_shared<std::vector<std::byte>>(
 			static_cast<size_t>(size));
 		std::memcpy(wire->data(), data, wire->size());
 		auto self = shared_from_this();
-		transport_->write(riwo::buffer(*wire), asio::bind_executor(strand_,
+		m_transport->write(riwo::buffer(*wire), asio::bind_executor(m_strand,
 			[self = std::move(self), wire]
 			(error_code error, size_t written) mutable {
-				self->writing_ = false;
+				self->m_writing = false;
 				if( error or written != wire->size() )
 					return self->fail(error ? error : protocol_error());
 				self->write_pump();
@@ -733,49 +733,49 @@ private:
 
 	void fail(error_code error)
 	{
-		if( closed_.exchange(true) ) return;
-		draining_ = true;
-		for( auto &[id, value] : streams_ )
+		if( m_closed.exchange(true) ) return;
+		m_draining = true;
+		for( auto &[id, value] : m_streams )
 		{
 			ignore_unused(id);
 			complete_error(*value, error);
 		}
-		streams_.clear();
-		ready_streams_.clear();
-		if( accept_handler_ )
-			std::move(accept_handler_)(error, std::shared_ptr<stream>{});
-		transport_->cancel();
+		m_streams.clear();
+		m_ready_streams.clear();
+		if( m_accept_handler )
+			std::move(m_accept_handler)(error, std::shared_ptr<stream>{});
+		m_transport->cancel();
 		complete_shutdown(error);
 	}
 
 	void complete_error(server_stream_impl &value, error_code error)
 	{
-		if( not value.terminal_error_ ) value.terminal_error_ = error;
-		if( value.pending_read_handler_ )
+		if( not value.m_terminal_error ) value.m_terminal_error = error;
+		if( value.m_pending_read_handler )
 		{
-			value.pending_read_buffer_.reset();
-			std::move(value.pending_read_handler_)(value.terminal_error_,
+			value.m_pending_read_buffer.reset();
+			std::move(value.m_pending_read_handler)(value.m_terminal_error,
 				body_read_result{});
 		}
-		if( value.pending_write_ )
+		if( value.m_pending_write )
 		{
-			auto pending = std::move(*value.pending_write_);
-			value.pending_write_.reset();
-			std::move(pending.handler)(value.terminal_error_, 0);
+			auto pending = std::move(*value.m_pending_write);
+			value.m_pending_write.reset();
+			std::move(pending.handler)(value.m_terminal_error, 0);
 		}
 	}
 
 	void complete_shutdown(error_code error)
 	{
-		auto handlers = std::move(shutdown_handlers_);
+		auto handlers = std::move(m_shutdown_handlers);
 		for( auto &handler : handlers ) std::move(handler)(error);
 	}
 
 	void finish_shutdown_if_idle()
 	{
-		if( not draining_ or not streams_.empty() or closed_ ) return;
-		closed_ = true;
-		transport_->close(
+		if( not m_draining or not m_streams.empty() or m_closed ) return;
+		m_closed = true;
+		m_transport->close(
 			[self = shared_from_this()](error_code error) mutable {
 				self->complete_shutdown(error);
 			});
@@ -785,30 +785,30 @@ private:
 		mutable_buffer buffer)
 	{
 		size_t copied = 0;
-		while( copied < buffer.size() and not value.inbound_chunks_.empty() )
+		while( copied < buffer.size() and not value.m_inbound_chunks.empty() )
 		{
-			auto &chunk = value.inbound_chunks_.front();
-			const auto available = chunk.size() - value.inbound_offset_;
+			auto &chunk = value.m_inbound_chunks.front();
+			const auto available = chunk.size() - value.m_inbound_offset;
 			const auto count = std::min(available, buffer.size() - copied);
 			std::memcpy(static_cast<std::byte *>(buffer.data()) + copied,
-				chunk.data() + value.inbound_offset_, count);
+				chunk.data() + value.m_inbound_offset, count);
 			copied += count;
-			value.inbound_offset_ += count;
-			value.inbound_size_ -= count;
-			inbound_buffered_ -= count;
-			if( value.inbound_offset_ == chunk.size() )
+			value.m_inbound_offset += count;
+			value.m_inbound_size -= count;
+			m_inbound_buffered -= count;
+			if( value.m_inbound_offset == chunk.size() )
 			{
-				value.inbound_chunks_.pop_front();
-				value.inbound_offset_ = 0;
+				value.m_inbound_chunks.pop_front();
+				value.m_inbound_offset = 0;
 			}
 		}
-		return {copied, value.remote_end_ and value.inbound_size_ == 0};
+		return {copied, value.m_remote_end and value.m_inbound_size == 0};
 	}
 
 	void consume(server_stream_impl &value, size_t size)
 	{
-		if( size == 0 or value.id_ <= 0 ) return;
-		if( nghttp2_session_consume(native_, value.id_, size) != 0 )
+		if( size == 0 or value.m_id <= 0 ) return;
+		if( nghttp2_session_consume(m_native, value.m_id, size) != 0 )
 			return fail(protocol_error());
 		write_pump();
 	}
@@ -818,21 +818,21 @@ private:
 		std::vector<std::byte> bytes(buffer.size());
 		if( buffer.size() != 0 )
 			std::memcpy(bytes.data(), buffer.data(), buffer.size());
-		value.outbound_size_ += bytes.size();
-		outbound_buffered_ += bytes.size();
-		value.outbound_chunks_.push_back(std::move(bytes));
+		value.m_outbound_size += bytes.size();
+		m_outbound_buffered += bytes.size();
+		value.m_outbound_chunks.push_back(std::move(bytes));
 	}
 
 	void drain_pending(server_stream_impl &value)
 	{
-		if( not value.pending_write_ ) return;
-		auto &pending = *value.pending_write_;
-		if( value.outbound_size_ + pending.buffer.size() >
-				config_.h2.outbound_stream_buffer or
-			outbound_buffered_ + pending.buffer.size() >
-				config_.h2.outbound_connection_buffer ) return;
+		if( not value.m_pending_write ) return;
+		auto &pending = *value.m_pending_write;
+		if( value.m_outbound_size + pending.buffer.size() >
+				m_config.h2.outbound_stream_buffer or
+			m_outbound_buffered + pending.buffer.size() >
+				m_config.h2.outbound_connection_buffer ) return;
 		auto item = std::move(pending);
-		value.pending_write_.reset();
+		value.m_pending_write.reset();
 		const auto size = item.buffer.size();
 		enqueue(value, item.buffer);
 		std::move(item.handler)(error_code{}, size);
@@ -840,14 +840,14 @@ private:
 
 	void deliver_pending_read(server_stream_impl &value)
 	{
-		if( not value.pending_read_handler_ or
-			(value.inbound_size_ == 0 and not value.remote_end_ and
-				not value.terminal_error_) ) return;
-		auto handler = std::move(value.pending_read_handler_);
-		auto buffer = *value.pending_read_buffer_;
-		value.pending_read_buffer_.reset();
-		if( value.terminal_error_ )
-			return std::move(handler)(value.terminal_error_,
+		if( not value.m_pending_read_handler or
+			(value.m_inbound_size == 0 and not value.m_remote_end and
+				not value.m_terminal_error) ) return;
+		auto handler = std::move(value.m_pending_read_handler);
+		auto buffer = *value.m_pending_read_buffer;
+		value.m_pending_read_buffer.reset();
+		if( value.m_terminal_error )
+			return std::move(handler)(value.m_terminal_error,
 				body_read_result{});
 		auto result = take_body(value, buffer);
 		if( result.bytes != 0 ) consume(value, result.bytes);
@@ -856,72 +856,72 @@ private:
 
 	void remote_end(server_stream_impl &value)
 	{
-		value.remote_end_ = true;
-		if( value.content_length_ and
-			*value.content_length_ != value.inbound_total_ )
+		value.m_remote_end = true;
+		if( value.m_content_length and
+			*value.m_content_length != value.m_inbound_total )
 		{
 			complete_error(value,
 				make_error_code(errc::body_length_mismatch));
-			(void)nghttp2_submit_rst_stream(native_, NGHTTP2_FLAG_NONE,
-				value.id_, NGHTTP2_PROTOCOL_ERROR);
+			(void)nghttp2_submit_rst_stream(m_native, NGHTTP2_FLAG_NONE,
+				value.m_id, NGHTTP2_PROTOCOL_ERROR);
 		}
 		// A header-only request has no read operation through which
 		// body_reader_state could observe EOF. Mark it complete here so the
 		// public reader destructor does not cancel an otherwise successful
 		// response stream.
-		if( value.inbound_size_ == 0 and value.inbound_ )
-			value.inbound_->set_finished();
+		if( value.m_inbound_size == 0 and value.m_inbound )
+			value.m_inbound->set_finished();
 		deliver_pending_read(value);
 	}
 
 	void cancel_stream(server_stream_impl &value)
 	{
-		if( value.cancelled_ or value.closed_ ) return;
-		value.cancelled_ = true;
+		if( value.m_cancelled or value.m_closed ) return;
+		value.m_cancelled = true;
 		complete_error(value, aborted());
-		(void)nghttp2_submit_rst_stream(native_, NGHTTP2_FLAG_NONE,
-			value.id_, NGHTTP2_CANCEL);
+		(void)nghttp2_submit_rst_stream(m_native, NGHTTP2_FLAG_NONE,
+			value.m_id, NGHTTP2_CANCEL);
 	}
 
 	void deliver_stream(std::shared_ptr<server_stream_impl> value)
 	{
-		last_processed_stream_ = std::max(last_processed_stream_, value->id_);
-		if( accept_handler_ )
-			std::move(accept_handler_)(error_code{}, std::move(value));
-		else ready_streams_.push_back(std::move(value));
+		m_last_processed_stream = std::max(m_last_processed_stream, value->m_id);
+		if( m_accept_handler )
+			std::move(m_accept_handler)(error_code{}, std::move(value));
+		else m_ready_streams.push_back(std::move(value));
 	}
 
 	[[nodiscard]] bool finish_request(server_stream_impl &value)
 	{
-		if( not value.have_method_ or not value.have_scheme_ or
-			not value.have_authority_ or not value.have_path_ or
-			value.method_.empty() or value.authority_.empty() or
-			(value.path_ != "*" and not value.path_.starts_with('/')) )
+		if( not value.m_have_method or not value.m_have_scheme or
+			not value.m_have_authority or not value.m_have_path or
+			value.m_method.empty() or value.m_authority.empty() or
+			(value.m_path != "*" and not value.m_path.starts_with('/')) )
 			return false;
-		if( (value.scheme_ != "http" and value.scheme_ != "https") or
-			std::ranges::any_of(value.authority_, [](unsigned char byte) {
+		if( (value.m_scheme != "http" and value.m_scheme != "https") or
+			std::ranges::any_of(value.m_authority, [](unsigned char byte) {
 				return byte <= 0x20U or byte == 0x7fU or byte == '/' or
 					byte == '?' or byte == '#' or byte == '@';
-			}) or std::ranges::any_of(value.path_, [](unsigned char byte) {
+			}) or std::ranges::any_of(value.m_path, [](unsigned char byte) {
 				return byte <= 0x20U or byte == 0x7fU or byte == '#';
 			}) ) return false;
 		try {
-			value.request_.method = http_exp::method(value.method_);
-			value.request_.scheme = value.scheme_;
-			value.request_.authority = value.authority_;
-			value.request_.target = value.path_;
-			if( value.have_protocol_ )
+			value.m_request.method = http_exp::method(value.m_method);
+			value.m_request.scheme = value.m_scheme;
+			value.m_request.authority = value.m_authority;
+			value.m_request.target = value.m_path;
+			if( value.m_have_protocol )
 			{
-				if( not config_.h2.enable_extended_connect or
-					value.method_ != "CONNECT" or value.protocol_.empty() )
+				if( not m_config.h2.enable_extended_connect or
+					value.m_method != "CONNECT" or value.m_protocol.empty() )
 					return false;
-				value.request_.connect_protocol = value.protocol_;
+				value.m_request.connect_protocol = value.m_protocol;
 			}
-			if( value.path_ != "*" )
-				value.request_.url = riwo::url(value.scheme_ + "://" +
-					value.authority_ + value.path_);
+			if( value.m_path != "*" )
+				value.m_request.url = riwo::url(value.m_scheme + "://" +
+					value.m_authority + value.m_path);
 			optional<uint64_t> content_length_value;
-			for( const auto &field : value.request_.headers )
+			for( const auto &field : value.m_request.headers )
 			{
 				if( lower(field.name) != "content-length" ) continue;
 				const std::string_view content_length = field.value;
@@ -934,12 +934,12 @@ private:
 						*content_length_value != length) ) return false;
 				content_length_value = length;
 			}
-			value.content_length_ = content_length_value;
-			if( value.content_length_ and
-				config_.request_limits.max_body_size and
-				*value.content_length_ >
-					*config_.request_limits.max_body_size ) return false;
-			value.request_ready_ = true;
+			value.m_content_length = content_length_value;
+			if( value.m_content_length and
+				m_config.request_limits.max_body_size and
+				*value.m_content_length >
+					*m_config.request_limits.max_body_size ) return false;
+			value.m_request_ready = true;
 			return true;
 		}
 		catch(...) { return false; }
@@ -952,10 +952,10 @@ private:
 		if( frame->hd.type != NGHTTP2_HEADERS ) return 0;
 		if( frame->headers.cat == NGHTTP2_HCAT_REQUEST )
 		{
-			if( self.draining_ or self.streams_.size() >=
-				self.config_.h2.max_concurrent_streams )
+			if( self.m_draining or self.m_streams.size() >=
+				self.m_config.h2.max_concurrent_streams )
 			{
-				(void)nghttp2_submit_rst_stream(self.native_, NGHTTP2_FLAG_NONE,
+				(void)nghttp2_submit_rst_stream(self.m_native, NGHTTP2_FLAG_NONE,
 					frame->hd.stream_id, NGHTTP2_REFUSED_STREAM);
 				return 0;
 			}
@@ -963,19 +963,19 @@ private:
 				auto value = std::make_shared<server_stream_impl>(
 					self.shared_from_this(), frame->hd.stream_id);
 				value->initialize();
-				self.streams_.emplace(frame->hd.stream_id, value);
-				(void)nghttp2_session_set_stream_user_data(self.native_,
+				self.m_streams.emplace(frame->hd.stream_id, value);
+				(void)nghttp2_session_set_stream_user_data(self.m_native,
 					frame->hd.stream_id, value.get());
 			}
 			catch(...) { return NGHTTP2_ERR_CALLBACK_FAILURE; }
 			return 0;
 		}
-		auto found = self.streams_.find(frame->hd.stream_id);
-		if( found != self.streams_.end() )
+		auto found = self.m_streams.find(frame->hd.stream_id);
+		if( found != self.m_streams.end() )
 		{
-			found->second->collecting_trailers_ = true;
-			found->second->header_bytes_ = 0;
-			found->second->header_count_ = 0;
+			found->second->m_collecting_trailers = true;
+			found->second->m_header_bytes = 0;
+			found->second->m_header_count = 0;
 		}
 		return 0;
 	}
@@ -985,21 +985,21 @@ private:
 		size_t value_size, uint8_t, void *user_data)
 	{
 		auto &self = *static_cast<server_session_impl *>(user_data);
-		auto found = self.streams_.find(frame->hd.stream_id);
-		if( found == self.streams_.end() ) return 0;
+		auto found = self.m_streams.find(frame->hd.stream_id);
+		if( found == self.m_streams.end() ) return 0;
 		auto &value = *found->second;
-		const auto header_limit = std::min(self.config_.h2.max_header_list_size,
-			self.config_.request_limits.max_header_list_size);
-		value.header_bytes_ += name_size + value_size + 32;
-		++value.header_count_;
-		if( value.header_bytes_ > header_limit or
-			value.header_count_ > self.config_.request_limits.max_field_count or
-			name_size > self.config_.request_limits.max_field_name_size or
-			value_size > self.config_.request_limits.max_field_value_size )
+		const auto header_limit = std::min(self.m_config.h2.max_header_list_size,
+			self.m_config.request_limits.max_header_list_size);
+		value.m_header_bytes += name_size + value_size + 32;
+		++value.m_header_count;
+		if( value.m_header_bytes > header_limit or
+			value.m_header_count > self.m_config.request_limits.max_field_count or
+			name_size > self.m_config.request_limits.max_field_name_size or
+			value_size > self.m_config.request_limits.max_field_value_size )
 		{
-			value.invalid_headers_ = true;
-			(void)nghttp2_submit_rst_stream(self.native_, NGHTTP2_FLAG_NONE,
-				value.id_, NGHTTP2_ENHANCE_YOUR_CALM);
+			value.m_invalid_headers = true;
+			(void)nghttp2_submit_rst_stream(self.m_native, NGHTTP2_FLAG_NONE,
+				value.m_id, NGHTTP2_ENHANCE_YOUR_CALM);
 			return 0;
 		}
 		const std::string_view header_name(
@@ -1008,7 +1008,7 @@ private:
 			reinterpret_cast<const char *>(field_value), value_size);
 		if( header_name.starts_with(':') )
 		{
-			if( value.collecting_trailers_ ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+			if( value.m_collecting_trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			auto set_once = [&](std::string &target, bool &present) {
 				if( present ) return false;
 				target.assign(header_value);
@@ -1016,33 +1016,33 @@ private:
 				return true;
 			};
 			if( header_name == ":method" )
-				return set_once(value.method_, value.have_method_) ? 0 :
+				return set_once(value.m_method, value.m_have_method) ? 0 :
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			if( header_name == ":scheme" )
-				return set_once(value.scheme_, value.have_scheme_) ? 0 :
+				return set_once(value.m_scheme, value.m_have_scheme) ? 0 :
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			if( header_name == ":authority" )
-				return set_once(value.authority_, value.have_authority_) ? 0 :
+				return set_once(value.m_authority, value.m_have_authority) ? 0 :
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			if( header_name == ":path" )
-				return set_once(value.path_, value.have_path_) ? 0 :
+				return set_once(value.m_path, value.m_have_path) ? 0 :
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			if( header_name == ":protocol" )
-				return set_once(value.protocol_, value.have_protocol_) ? 0 :
+				return set_once(value.m_protocol, value.m_have_protocol) ? 0 :
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 		}
 		if( forbidden_header(header_name) or
 			(header_name == "te" and lower(header_value) != "trailers") or
-			(value.collecting_trailers_ and
+			(value.m_collecting_trailers and
 				(header_name == "content-length" or header_name == "host" or
 					header_name == "trailer" or header_name == "te")) )
 			return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 		try {
-			if( value.collecting_trailers_ )
-				value.inbound_trailers_.add(std::string(header_name),
+			if( value.m_collecting_trailers )
+				value.m_inbound_trailers.add(std::string(header_name),
 					std::string(header_value));
-			else value.request_.headers.add(std::string(header_name),
+			else value.m_request.headers.add(std::string(header_name),
 				std::string(header_value));
 		}
 		catch(...) { return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE; }
@@ -1055,24 +1055,24 @@ private:
 		auto &self = *static_cast<server_session_impl *>(user_data);
 		if( frame->hd.type == NGHTTP2_GOAWAY )
 		{
-			self.draining_ = true;
+			self.m_draining = true;
 			return 0;
 		}
 		if( frame->hd.type != NGHTTP2_HEADERS and
 			frame->hd.type != NGHTTP2_DATA and
 			frame->hd.type != NGHTTP2_RST_STREAM ) return 0;
-		auto found = self.streams_.find(frame->hd.stream_id);
-		if( found == self.streams_.end() ) return 0;
+		auto found = self.m_streams.find(frame->hd.stream_id);
+		if( found == self.m_streams.end() ) return 0;
 		auto value = found->second;
 		const bool end_stream =
 			(frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0;
-		if( frame->hd.type == NGHTTP2_HEADERS and not value->request_ready_ and
+		if( frame->hd.type == NGHTTP2_HEADERS and not value->m_request_ready and
 			frame->headers.cat == NGHTTP2_HCAT_REQUEST )
 		{
-			if( value->invalid_headers_ or not self.finish_request(*value) )
+			if( value->m_invalid_headers or not self.finish_request(*value) )
 			{
-				(void)nghttp2_submit_rst_stream(self.native_, NGHTTP2_FLAG_NONE,
-					value->id_, NGHTTP2_PROTOCOL_ERROR);
+				(void)nghttp2_submit_rst_stream(self.m_native, NGHTTP2_FLAG_NONE,
+					value->m_id, NGHTTP2_PROTOCOL_ERROR);
 				self.complete_error(*value,
 					make_error_code(errc::stream_protocol_error));
 			}
@@ -1087,7 +1087,7 @@ private:
 		if( frame->hd.type == NGHTTP2_RST_STREAM )
 			self.complete_error(*value,
 				make_error_code(errc::stream_protocol_error));
-		if( end_stream and not value->remote_end_ ) self.remote_end(*value);
+		if( end_stream and not value->m_remote_end ) self.remote_end(*value);
 		return 0;
 	}
 
@@ -1095,18 +1095,18 @@ private:
 		const uint8_t *data, size_t size, void *user_data)
 	{
 		auto &self = *static_cast<server_session_impl *>(user_data);
-		auto found = self.streams_.find(stream_id);
-		if( found == self.streams_.end() ) return 0;
+		auto found = self.m_streams.find(stream_id);
+		if( found == self.m_streams.end() ) return 0;
 		auto &value = *found->second;
-		if( value.inbound_size_ + size >
-				self.config_.h2.inbound_stream_buffer or
-			self.inbound_buffered_ + size >
-				self.config_.h2.inbound_connection_buffer or
-			(self.config_.request_limits.max_body_size and
-				value.inbound_total_ + size >
-					*self.config_.request_limits.max_body_size) )
+		if( value.m_inbound_size + size >
+				self.m_config.h2.inbound_stream_buffer or
+			self.m_inbound_buffered + size >
+				self.m_config.h2.inbound_connection_buffer or
+			(self.m_config.request_limits.max_body_size and
+				value.m_inbound_total + size >
+					*self.m_config.request_limits.max_body_size) )
 		{
-			(void)nghttp2_submit_rst_stream(self.native_, NGHTTP2_FLAG_NONE,
+			(void)nghttp2_submit_rst_stream(self.m_native, NGHTTP2_FLAG_NONE,
 				stream_id, NGHTTP2_ENHANCE_YOUR_CALM);
 			self.complete_error(value,
 				make_error_code(errc::buffer_limit_exceeded));
@@ -1115,10 +1115,10 @@ private:
 		try {
 			std::vector<std::byte> bytes(size);
 			if( size != 0 ) std::memcpy(bytes.data(), data, size);
-			value.inbound_chunks_.push_back(std::move(bytes));
-			value.inbound_size_ += size;
-			value.inbound_total_ += size;
-			self.inbound_buffered_ += size;
+			value.m_inbound_chunks.push_back(std::move(bytes));
+			value.m_inbound_size += size;
+			value.m_inbound_total += size;
+			self.m_inbound_buffered += size;
 			self.deliver_pending_read(value);
 		}
 		catch(...) { return NGHTTP2_ERR_CALLBACK_FAILURE; }
@@ -1129,16 +1129,16 @@ private:
 		uint32_t error_value, void *user_data)
 	{
 		auto &self = *static_cast<server_session_impl *>(user_data);
-		auto found = self.streams_.find(stream_id);
-		if( found == self.streams_.end() ) return 0;
+		auto found = self.m_streams.find(stream_id);
+		if( found == self.m_streams.end() ) return 0;
 		auto value = found->second;
-		value->closed_ = true;
-		if( error_value != NGHTTP2_NO_ERROR and not value->terminal_error_ )
+		value->m_closed = true;
+		if( error_value != NGHTTP2_NO_ERROR and not value->m_terminal_error )
 			self.complete_error(*value,
 				make_error_code(errc::stream_protocol_error));
-		if( error_value == NGHTTP2_NO_ERROR and not value->remote_end_ )
+		if( error_value == NGHTTP2_NO_ERROR and not value->m_remote_end )
 			self.remote_end(*value);
-		self.streams_.erase(found);
+		self.m_streams.erase(found);
 		self.finish_shutdown_if_idle();
 		return 0;
 	}
@@ -1149,134 +1149,134 @@ private:
 	{
 		auto &self = *static_cast<server_session_impl *>(user_data);
 		auto &value = *static_cast<server_stream_impl *>(source->ptr);
-		if( value.terminal_error_ ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
-		if( value.outbound_size_ == 0 )
+		if( value.m_terminal_error ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+		if( value.m_outbound_size == 0 )
 		{
-			if( not value.outbound_finished_ ) return NGHTTP2_ERR_DEFERRED;
+			if( not value.m_outbound_finished ) return NGHTTP2_ERR_DEFERRED;
 			*flags |= NGHTTP2_DATA_FLAG_EOF;
-			if( not value.outbound_trailers_.empty() and
-				not value.trailers_submitted_ )
+			if( not value.m_outbound_trailers.empty() and
+				not value.m_trailers_submitted )
 			{
-				auto trailers = trailer_headers(value.outbound_trailers_,
-					self.config_.h2.max_header_list_size);
+				auto trailers = trailer_headers(value.m_outbound_trailers,
+					self.m_config.h2.max_header_list_size);
 				if( not trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 				*flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
-				if( nghttp2_submit_trailer(session, value.id_,
+				if( nghttp2_submit_trailer(session, value.m_id,
 					trailers->values.data(), trailers->values.size()) != 0 )
 					return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
-				value.trailers_submitted_ = true;
+				value.m_trailers_submitted = true;
 			}
 			return 0;
 		}
 		size_t copied = 0;
-		while( copied < length and not value.outbound_chunks_.empty() )
+		while( copied < length and not value.m_outbound_chunks.empty() )
 		{
-			auto &chunk = value.outbound_chunks_.front();
-			const auto available = chunk.size() - value.outbound_offset_;
+			auto &chunk = value.m_outbound_chunks.front();
+			const auto available = chunk.size() - value.m_outbound_offset;
 			const auto count = std::min(available, length - copied);
 			std::memcpy(buffer + copied,
-				chunk.data() + value.outbound_offset_, count);
+				chunk.data() + value.m_outbound_offset, count);
 			copied += count;
-			value.outbound_offset_ += count;
-			value.outbound_size_ -= count;
-			self.outbound_buffered_ -= count;
-			if( value.outbound_offset_ == chunk.size() )
+			value.m_outbound_offset += count;
+			value.m_outbound_size -= count;
+			self.m_outbound_buffered -= count;
+			if( value.m_outbound_offset == chunk.size() )
 			{
-				value.outbound_chunks_.pop_front();
-				value.outbound_offset_ = 0;
+				value.m_outbound_chunks.pop_front();
+				value.m_outbound_offset = 0;
 			}
 		}
 		self.drain_pending(value);
-		if( value.outbound_size_ == 0 and value.outbound_finished_ )
+		if( value.m_outbound_size == 0 and value.m_outbound_finished )
 		{
 			*flags |= NGHTTP2_DATA_FLAG_EOF;
-			if( not value.outbound_trailers_.empty() and
-				not value.trailers_submitted_ )
+			if( not value.m_outbound_trailers.empty() and
+				not value.m_trailers_submitted )
 			{
-				auto trailers = trailer_headers(value.outbound_trailers_,
-					self.config_.h2.max_header_list_size);
+				auto trailers = trailer_headers(value.m_outbound_trailers,
+					self.m_config.h2.max_header_list_size);
 				if( not trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 				*flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
-				if( nghttp2_submit_trailer(session, value.id_,
+				if( nghttp2_submit_trailer(session, value.m_id,
 					trailers->values.data(), trailers->values.size()) != 0 )
 					return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
-				value.trailers_submitted_ = true;
+				value.m_trailers_submitted = true;
 			}
 		}
 		return static_cast<nghttp2_api::ssize_type>(copied);
 	}
 
-	executor_type executor_;
-	asio::strand<asio::any_io_executor> strand_;
-	std::shared_ptr<::riwo::http_exp::connection> transport_;
-	server_config config_;
-	std::string initial_input_;
-	asio::ip::tcp::endpoint remote_;
-	asio::ip::tcp::endpoint local_;
-	nghttp2_session_callbacks *callbacks_ = nullptr;
-	nghttp2_option *option_ = nullptr;
-	nghttp2_session *native_ = nullptr;
-	std::unordered_map<int32_t,std::shared_ptr<server_stream_impl>> streams_;
-	std::deque<std::shared_ptr<server_stream_impl>> ready_streams_;
-	accept_handler accept_handler_;
-	std::vector<shutdown_handler> shutdown_handlers_;
-	std::array<std::byte,16 * 1024> read_buffer_ {};
-	size_t inbound_buffered_ = 0;
-	size_t outbound_buffered_ = 0;
-	int32_t last_processed_stream_ = 0;
-	std::atomic<bool> draining_ {false};
-	std::atomic<bool> closed_ {false};
-	bool reading_ = false;
-	bool writing_ = false;
+	executor_type m_executor;
+	asio::strand<asio::any_io_executor> m_strand;
+	std::shared_ptr<::riwo::http_exp::connection> m_transport;
+	server_config m_config;
+	std::string m_initial_input;
+	asio::ip::tcp::endpoint m_remote;
+	asio::ip::tcp::endpoint m_local;
+	nghttp2_session_callbacks *m_callbacks = nullptr;
+	nghttp2_option *m_option = nullptr;
+	nghttp2_session *m_native = nullptr;
+	std::unordered_map<int32_t,std::shared_ptr<server_stream_impl>> m_streams;
+	std::deque<std::shared_ptr<server_stream_impl>> m_ready_streams;
+	accept_handler m_accept_handler;
+	std::vector<shutdown_handler> m_shutdown_handlers;
+	std::array<std::byte,16 * 1024> m_read_buffer {};
+	size_t m_inbound_buffered = 0;
+	size_t m_outbound_buffered = 0;
+	int32_t m_last_processed_stream = 0;
+	std::atomic<bool> m_draining {false};
+	std::atomic<bool> m_closed {false};
+	bool m_reading = false;
+	bool m_writing = false;
 };
 
 server_stream_impl::~server_stream_impl()
 {
-	if( session_ )
-		session_->release_buffer_budget(inbound_size_, outbound_size_);
+	if( m_session )
+		m_session->release_buffer_budget(m_inbound_size, m_outbound_size);
 }
 
 void server_stream_impl::initialize()
 {
-	reader_adapter_ = std::make_shared<server_reader_adapter>(weak_from_this());
-	writer_adapter_ = std::make_shared<server_writer_adapter>(weak_from_this());
-	inbound_ = make_body_reader_state(reader_adapter_, true,
-		session_->config().request_limits.max_discard_body);
-	outbound_ = make_body_writer_state(writer_adapter_);
+	m_reader_adapter = std::make_shared<server_reader_adapter>(weak_from_this());
+	m_writer_adapter = std::make_shared<server_writer_adapter>(weak_from_this());
+	m_inbound = make_body_reader_state(m_reader_adapter, true,
+		m_session->config().request_limits.max_discard_body);
+	m_outbound = make_body_writer_state(m_writer_adapter);
 }
 
 auto server_stream_impl::remote_endpoint(error_code &error) const noexcept
-	-> endpoint_type { return session_->remote_endpoint(error); }
+	-> endpoint_type { return m_session->remote_endpoint(error); }
 
 auto server_stream_impl::local_endpoint(error_code &error) const noexcept
-	-> endpoint_type { return session_->local_endpoint(error); }
+	-> endpoint_type { return m_session->local_endpoint(error); }
 
 void server_stream_impl::respond_sync(response_head head, body_spec spec,
 	error_code &error) noexcept {
-	session_->respond_sync(*this, std::move(head), std::move(spec), error);
+	m_session->respond_sync(*this, std::move(head), std::move(spec), error);
 }
 
 void server_stream_impl::respond(response_head head, body_spec spec,
 	operation_handler handler) {
-	session_->respond(shared_from_this(), std::move(head), std::move(spec),
+	m_session->respond(shared_from_this(), std::move(head), std::move(spec),
 		std::move(handler));
 }
 
 void server_stream_impl::inform_sync(response_head head,
 	error_code &error) noexcept {
-	session_->inform_sync(*this, std::move(head), error);
+	m_session->inform_sync(*this, std::move(head), error);
 }
 
 void server_stream_impl::inform(response_head head,
 	operation_handler handler) {
-	session_->inform(shared_from_this(), std::move(head), std::move(handler));
+	m_session->inform(shared_from_this(), std::move(head), std::move(handler));
 }
 
 std::shared_ptr<duplex_state> server_stream_impl::open_duplex_sync(
 	optional<response_head> response, error_code &error) noexcept
 {
 	error.clear();
-	if( duplex_opened_ or not request_.connect_protocol or not response or
+	if( m_duplex_opened or not m_request.connect_protocol or not response or
 		response->status.code() < 200 or response->status.code() >= 300 )
 	{
 		error = make_error_code(errc::operation_not_permitted);
@@ -1284,24 +1284,24 @@ std::shared_ptr<duplex_state> server_stream_impl::open_duplex_sync(
 	}
 	respond_sync(std::move(*response), body_spec::streaming(), error);
 	if( error ) return {};
-	duplex_opened_ = true;
+	m_duplex_opened = true;
 	error_code endpoint_error;
-	auto remote = session_->remote_endpoint(endpoint_error);
+	auto remote = m_session->remote_endpoint(endpoint_error);
 	endpoint_error.clear();
-	auto local = session_->local_endpoint(endpoint_error);
+	auto local = m_session->local_endpoint(endpoint_error);
 	auto self = shared_from_this();
-	return make_body_duplex_state(session_->get_executor(), protocol::v2,
-		inbound_, outbound_, remote, local, self,
+	return make_body_duplex_state(m_session->get_executor(), protocol::v2,
+		m_inbound, m_outbound, remote, local, self,
 		[weak = weak_from_this()] {
 			if( auto value = weak.lock() )
-				value->session_->cancel(value);
+				value->m_session->cancel(value);
 		});
 }
 
 void server_stream_impl::open_duplex(optional<response_head> response,
 	duplex_handler handler)
 {
-	if( duplex_opened_ or not request_.connect_protocol or not response or
+	if( m_duplex_opened or not m_request.connect_protocol or not response or
 		response->status.code() < 200 or response->status.code() >= 300 )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
@@ -1317,17 +1317,17 @@ void server_stream_impl::open_duplex(optional<response_head> response,
 			std::move(handler)(error, std::shared_ptr<duplex_state>{});
 			return;
 		}
-		self->duplex_opened_ = true;
+		self->m_duplex_opened = true;
 		error_code endpoint_error;
-		auto remote = self->session_->remote_endpoint(endpoint_error);
+		auto remote = self->m_session->remote_endpoint(endpoint_error);
 		endpoint_error.clear();
-		auto local = self->session_->local_endpoint(endpoint_error);
+		auto local = self->m_session->local_endpoint(endpoint_error);
 		auto state = make_body_duplex_state(
-			self->session_->get_executor(), protocol::v2,
-			self->inbound_, self->outbound_, remote, local, self,
+			self->m_session->get_executor(), protocol::v2,
+			self->m_inbound, self->m_outbound, remote, local, self,
 			[weak = self->weak_from_this()] {
 				if( auto value = weak.lock() )
-					value->session_->cancel(value);
+					value->m_session->cancel(value);
 			});
 		std::move(handler)(error_code{}, std::move(state));
 	});
@@ -1339,81 +1339,81 @@ bool server_stream_impl::reusable() const noexcept {
 	// application directions are complete, keep the stream alive so the Session
 	// write pump can finish it instead of turning every successful response into
 	// RST_STREAM(CANCEL).
-	return not terminal_error_ and not cancelled_ and remote_end_ and
-		response_started_ and outbound_finished_;
+	return not m_terminal_error and not m_cancelled and m_remote_end and
+		m_response_started and m_outbound_finished;
 }
 
 void server_stream_impl::cancel() noexcept {
-	if( duplex_opened_ ) return;
-	if( session_ ) session_->cancel(shared_from_this());
+	if( m_duplex_opened ) return;
+	if( m_session ) m_session->cancel(shared_from_this());
 }
 
 body_read_result server_reader_adapter::read_some_sync(mutable_buffer buffer,
 	error_code &error) noexcept
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) { error = aborted(); return {}; }
-	return owner->session_->read_sync(*owner, buffer, error);
+	return owner->m_session->read_sync(*owner, buffer, error);
 }
 
 void server_reader_adapter::read_some(mutable_buffer buffer,
 	read_handler handler)
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted(), body_read_result{});
-	owner->session_->read(owner, buffer, std::move(handler));
+	owner->m_session->read(owner, buffer, std::move(handler));
 }
 
 fields server_reader_adapter::trailers_sync(error_code &error) noexcept
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) { error = aborted(); return {}; }
-	return owner->session_->trailers_sync(*owner, error);
+	return owner->m_session->trailers_sync(*owner, error);
 }
 
 void server_reader_adapter::trailers(trailers_handler handler)
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted(), fields{});
-	owner->session_->trailers(owner, std::move(handler));
+	owner->m_session->trailers(owner, std::move(handler));
 }
 
 void server_reader_adapter::cancel() noexcept {
-	if( auto owner = owner_.lock() ) owner->cancel();
+	if( auto owner = m_owner.lock() ) owner->cancel();
 }
 
 size_t server_writer_adapter::write_sync(const_buffer buffer,
 	error_code &error) noexcept
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) { error = aborted(); return 0; }
-	return owner->session_->write_sync(*owner, buffer, error);
+	return owner->m_session->write_sync(*owner, buffer, error);
 }
 
 void server_writer_adapter::write(const_buffer buffer, write_handler handler)
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted(), 0);
-	owner->session_->write(owner, buffer, std::move(handler));
+	owner->m_session->write(owner, buffer, std::move(handler));
 }
 
 void server_writer_adapter::finish_sync(fields trailers,
 	error_code &error) noexcept
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) { error = aborted(); return; }
-	owner->session_->finish_sync(*owner, std::move(trailers), error);
+	owner->m_session->finish_sync(*owner, std::move(trailers), error);
 }
 
 void server_writer_adapter::finish(fields trailers, finish_handler handler)
 {
-	auto owner = owner_.lock();
+	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted());
-	owner->session_->finish(owner, std::move(trailers), std::move(handler));
+	owner->m_session->finish(owner, std::move(trailers), std::move(handler));
 }
 
 void server_writer_adapter::cancel() noexcept {
-	if( auto owner = owner_.lock() ) owner->cancel();
+	if( auto owner = m_owner.lock() ) owner->cancel();
 }
 
 class h2_server_loop final : public std::enable_shared_from_this<h2_server_loop>
@@ -1454,15 +1454,15 @@ class h2_server_connection final : public server_connection
 {
 public:
 	explicit h2_server_connection(std::shared_ptr<h2_server_loop> loop) :
-		loop_(std::move(loop)) {}
+		m_loop(std::move(loop)) {}
 	void cancel() noexcept override {
-		loop_->session->graceful_shutdown([](error_code) {});
+		m_loop->session->graceful_shutdown([](error_code) {});
 	}
 	[[nodiscard]] bool closed() const noexcept override {
-		return loop_->session->closed();
+		return m_loop->session->closed();
 	}
 private:
-	std::shared_ptr<h2_server_loop> loop_;
+	std::shared_ptr<h2_server_loop> m_loop;
 };
 
 } //namespace

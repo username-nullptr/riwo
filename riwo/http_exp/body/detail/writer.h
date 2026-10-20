@@ -72,12 +72,12 @@ class basic_body_writer<Exec>::impl
 public:
 	impl(executor_type executor_value,
 		std::shared_ptr<detail::body_writer_state> state_value) :
-		executor(std::move(executor_value)), state(std::move(state_value))
+		m_executor(std::move(executor_value)), m_state(std::move(state_value))
 	{
 	}
 
-	executor_type executor;
-	std::shared_ptr<detail::body_writer_state> state;
+	executor_type m_executor;
+	std::shared_ptr<detail::body_writer_state> m_state;
 };
 
 template <core_concepts::exec Exec>
@@ -102,12 +102,12 @@ basic_body_writer<Exec>::basic_body_writer(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 basic_body_writer<Exec>::~basic_body_writer() {
-	if( m_impl->state and not m_impl->state->ended() ) m_impl->state->cancel();
+	if( m_impl->m_state and not m_impl->m_state->ended() ) m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
 auto basic_body_writer<Exec>::get_executor() const noexcept -> executor_type {
-	return m_impl->executor;
+	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>
@@ -116,7 +116,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code,size_t>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return m_impl->state->write(buffer, token);
+		return m_impl->m_state->write(buffer, token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
@@ -126,14 +126,14 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->state;
+		auto state = m_impl->m_state;
 		using token_t = std::remove_cvref_t<Token>;
 		if constexpr( is_detached_v<token_unbound_t<token_t>> )
 		{
 			auto owned = std::make_shared<std::vector<std::byte>>(buffer.size());
 			if( buffer.size() != 0 )
 				std::memcpy(owned->data(), buffer.data(), buffer.size());
-			return initiate_io<size_t>(m_impl->executor,
+			return initiate_io<size_t>(m_impl->m_executor,
 			[state = std::move(state), owned](auto handler) mutable {
 				state->write(riwo::buffer(*owned),
 					typename detail::body_writer_state::write_handler(
@@ -145,7 +145,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 		}
 		else
 		{
-			return initiate_io<size_t>(m_impl->executor,
+			return initiate_io<size_t>(m_impl->m_executor,
 			[state = std::move(state), buffer](auto handler) mutable {
 				state->write(buffer,
 					typename detail::body_writer_state::write_handler(
@@ -161,7 +161,7 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		m_impl->state->finish(std::move(trailers), token);
+		m_impl->m_state->finish(std::move(trailers), token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
@@ -172,8 +172,8 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->state;
-		return initiate_io_void(m_impl->executor,
+		auto state = m_impl->m_state;
+		return initiate_io_void(m_impl->m_executor,
 		[state = std::move(state), trailers = std::move(trailers)]
 		(auto handler) mutable {
 			state->finish(std::move(trailers),
@@ -190,7 +190,7 @@ void basic_body_writer<Exec>::cancel() noexcept {
 
 template <core_concepts::exec Exec>
 void basic_body_writer<Exec>::detach() noexcept {
-	m_impl->state = detail::make_body_writer_state();
+	m_impl->m_state = detail::make_body_writer_state();
 }
 
 } //namespace riwo::http_exp

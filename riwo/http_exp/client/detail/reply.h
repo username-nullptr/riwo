@@ -18,24 +18,24 @@ public:
 		std::shared_ptr<detail::body_reader_state> state,
 		std::vector<std::byte> buffered_body_value,
 		std::shared_ptr<void> owner_value, uint64_t max_buffered_body_value) :
-		executor(std::move(executor_value)), protocol_value(protocol_value),
-		response_protocol_value(response_protocol_value),
-		head(std::move(head_value)),
-		body(std::make_unique<body_reader_type>(executor, std::move(state))),
-		buffered_body(std::move(buffered_body_value)),
-		owner(std::move(owner_value)),
-		max_buffered_body(max_buffered_body_value)
+		m_executor(std::move(executor_value)), m_protocol_value(protocol_value),
+		m_response_protocol_value(response_protocol_value),
+		m_head(std::move(head_value)),
+		m_body(std::make_unique<body_reader_type>(m_executor, std::move(state))),
+		m_buffered_body(std::move(buffered_body_value)),
+		m_owner(std::move(owner_value)),
+		m_max_buffered_body(max_buffered_body_value)
 	{
 	}
 
-	executor_type executor;
-	protocol protocol_value;
-	protocol response_protocol_value;
-	response_head head;
-	std::unique_ptr<body_reader_type> body;
-	std::vector<std::byte> buffered_body;
-	std::shared_ptr<void> owner;
-	uint64_t max_buffered_body;
+	executor_type m_executor;
+	protocol m_protocol_value;
+	protocol m_response_protocol_value;
+	response_head m_head;
+	std::unique_ptr<body_reader_type> m_body;
+	std::vector<std::byte> m_buffered_body;
+	std::shared_ptr<void> m_owner;
+	uint64_t m_max_buffered_body;
 };
 
 template <core_concepts::exec Exec>
@@ -74,32 +74,32 @@ basic_reply<Exec>::~basic_reply() = default;
 
 template <core_concepts::exec Exec>
 auto basic_reply<Exec>::get_executor() const noexcept -> executor_type {
-	return m_impl->executor;
+	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>
 protocol basic_reply<Exec>::selected_protocol() const noexcept {
-	return m_impl->protocol_value;
+	return m_impl->m_protocol_value;
 }
 
 template <core_concepts::exec Exec>
 protocol basic_reply<Exec>::http_version() const noexcept {
-	return m_impl->response_protocol_value;
+	return m_impl->m_response_protocol_value;
 }
 
 template <core_concepts::exec Exec>
 http_exp::status basic_reply<Exec>::status() const noexcept {
-	return m_impl->head.status;
+	return m_impl->m_head.status;
 }
 
 template <core_concepts::exec Exec>
 const fields &basic_reply<Exec>::headers() const noexcept {
-	return m_impl->head.headers;
+	return m_impl->m_head.headers;
 }
 
 template <core_concepts::exec Exec>
 auto basic_reply<Exec>::body() noexcept -> body_reader_type& {
-	return *m_impl->body;
+	return *m_impl->m_body;
 }
 
 template <core_concepts::exec Exec>
@@ -108,7 +108,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<
 		Token,error_code,std::vector<std::byte>>
 {
-	const auto limit = m_impl->max_buffered_body;
+	const auto limit = m_impl->m_max_buffered_body;
 	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> )
 	{
 		std::vector<std::byte> result;
@@ -182,11 +182,11 @@ auto basic_reply<Exec>::read_all(Token &&token)
 				});
 			}
 		};
-		return initiate_io<std::vector<std::byte>>(m_impl->executor,
+		return initiate_io<std::vector<std::byte>>(m_impl->m_executor,
 		[state = m_impl](auto handler) mutable {
 			auto value = std::make_shared<operation>();
-			value->reader = state->body.get();
-			value->limit = state->max_buffered_body;
+			value->reader = state->m_body.get();
+			value->limit = state->m_max_buffered_body;
 			value->handler = decltype(value->handler)(std::move(handler));
 			value->start();
 		}, std::forward<Token>(token));
@@ -292,7 +292,7 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 template <core_concepts::exec Exec>
 std::span<const std::byte>
 basic_reply<Exec>::buffered_body() const noexcept {
-	return m_impl->buffered_body;
+	return m_impl->m_buffered_body;
 }
 
 template <core_concepts::exec Exec>

@@ -38,9 +38,9 @@ void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 } //namespace
 
 body_spec::body_spec(mode type, optional<uint64_t> length, trailer_spec trailers) :
-	type_(type), length_(length), trailers_(std::move(trailers))
+	m_type(type), m_length(length), m_trailers(std::move(trailers))
 {
-	validate(type_, trailers_);
+	validate(m_type, m_trailers);
 }
 
 body_spec body_spec::empty() {
@@ -60,15 +60,15 @@ body_spec body_spec::head(uint64_t content_length) {
 }
 
 body_spec::mode body_spec::type() const noexcept {
-	return type_;
+	return m_type;
 }
 
 optional<uint64_t> body_spec::length() const noexcept {
-	return length_;
+	return m_length;
 }
 
 const body_spec::trailer_spec &body_spec::trailers() const noexcept {
-	return trailers_;
+	return m_trailers;
 }
 
 } //namespace riwo::http_exp

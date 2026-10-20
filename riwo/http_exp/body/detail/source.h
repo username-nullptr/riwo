@@ -34,16 +34,16 @@ class body_source_holder final : public body_source
 public:
 	template <typename Source0>
 	explicit body_source_holder(Source0 &&source) :
-		source_(std::forward<Source0>(source))
+		m_source(std::forward<Source0>(source))
 	{
 	}
 
 	[[nodiscard]] optional<uint64_t> size() const noexcept override {
-		return source_.size();
+		return m_source.size();
 	}
 
 	[[nodiscard]] bool replayable() const noexcept override {
-		return source_.replayable();
+		return m_source.replayable();
 	}
 
 	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,
@@ -52,7 +52,7 @@ public:
 		if constexpr( requires(Source &source) {
 			{ source.read_some(buffer, error) } -> std::same_as<size_t>;
 		})
-			return source_.read_some(buffer, error);
+			return m_source.read_some(buffer, error);
 		else
 		{
 			error = make_error_code(errc::operation_not_supported);
@@ -61,19 +61,19 @@ public:
 	}
 
 	void read_some(mutable_buffer buffer, read_handler handler) override {
-		source_.read_some(buffer, std::move(handler));
+		m_source.read_some(buffer, std::move(handler));
 	}
 
 	void rewind(rewind_handler handler) override {
-		source_.rewind(std::move(handler));
+		m_source.rewind(std::move(handler));
 	}
 
 	void cancel() noexcept override {
-		source_.cancel();
+		m_source.cancel();
 	}
 
 private:
-	Source source_;
+	Source m_source;
 };
 
 template <typename Source>

@@ -11,8 +11,8 @@ template <core_concepts::exec Exec>
 class basic_acceptor_wrap<Exec>::impl
 {
 public:
-	explicit impl(acceptor_type &&value) : acceptor(std::move(value)) {}
-	acceptor_type acceptor;
+	explicit impl(acceptor_type &&value) : m_acceptor(std::move(value)) {}
+	acceptor_type m_acceptor;
 };
 
 template <core_concepts::exec Exec>
@@ -23,7 +23,7 @@ basic_acceptor_wrap<Exec>::basic_acceptor_wrap(acceptor_type &&acceptor) :
 
 template <core_concepts::exec Exec>
 auto basic_acceptor_wrap<Exec>::get_executor() noexcept -> executor_type {
-	return m_impl->acceptor.get_executor();
+	return m_impl->m_acceptor.get_executor();
 }
 
 template <core_concepts::exec Exec>
@@ -33,7 +33,7 @@ auto basic_acceptor_wrap<Exec>::acceptor() const noexcept -> const acceptor_type
 
 template <core_concepts::exec Exec>
 auto basic_acceptor_wrap<Exec>::acceptor() noexcept -> acceptor_type& {
-	return m_impl->acceptor;
+	return m_impl->m_acceptor;
 }
 
 } //namespace riwo::http_exp

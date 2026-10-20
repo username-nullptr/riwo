@@ -19,31 +19,31 @@ struct decoding_body_reader_adapter::impl
 {
 	impl(std::shared_ptr<body_reader_state> source_value,
 		std::string encoding_value) :
-		source(std::move(source_value)), encoding(std::move(encoding_value))
+		m_source(std::move(source_value)), m_encoding(std::move(encoding_value))
 	{
-		const auto window = encoding == "gzip" ? 16 + MAX_WBITS : MAX_WBITS;
-		stream.zalloc = Z_NULL;
-		stream.zfree = Z_NULL;
-		stream.opaque = Z_NULL;
-		if( inflateInit2(&stream, window) != Z_OK )
+		const auto window = m_encoding == "gzip" ? 16 + MAX_WBITS : MAX_WBITS;
+		m_stream.zalloc = Z_NULL;
+		m_stream.zfree = Z_NULL;
+		m_stream.opaque = Z_NULL;
+		if( inflateInit2(&m_stream, window) != Z_OK )
 			throw std::runtime_error("cannot initialize HTTP content decoder");
-		initialized = true;
+		m_initialized = true;
 	}
 
 	~impl()
 	{
-		if( initialized ) inflateEnd(&stream);
+		if( m_initialized ) inflateEnd(&m_stream);
 	}
 
-	std::shared_ptr<body_reader_state> source;
-	std::string encoding;
-	z_stream stream {};
-	std::array<std::byte,16384> input {};
-	std::size_t input_begin = 0;
-	std::size_t input_end = 0;
-	bool initialized = false;
-	bool source_eof = false;
-	bool ended = false;
+	std::shared_ptr<body_reader_state> m_source;
+	std::string m_encoding;
+	z_stream m_stream {};
+	std::array<std::byte,16384> m_input {};
+	std::size_t m_input_begin = 0;
+	std::size_t m_input_end = 0;
+	bool m_initialized = false;
+	bool m_source_eof = false;
+	bool m_ended = false;
 };
 
 namespace
@@ -67,27 +67,27 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	error_code &error)
 {
 	auto &state = *m_impl;
-	while( state.input_begin == state.input_end and not state.source_eof )
+	while( state.m_input_begin == state.m_input_end and not state.m_source_eof )
 	{
-		const auto read = state.source->read_some(riwo::buffer(state.input),
+		const auto read = state.m_source->read_some(riwo::buffer(state.m_input),
 			error);
 		if( error ) return false;
-		state.input_begin = 0;
-		state.input_end = read.bytes;
+		state.m_input_begin = 0;
+		state.m_input_end = read.bytes;
 		if( read.bytes == 0 )
 		{
 			if( read.eof )
 			{
-				state.source_eof = true;
+				state.m_source_eof = true;
 				error = make_error_code(errc::body_length_mismatch);
 				return false;
 			}
 			continue;
 		}
-		if( read.eof ) state.source_eof = true;
+		if( read.eof ) state.m_source_eof = true;
 		return true;
 	}
-	if( state.input_begin == state.input_end )
+	if( state.m_input_begin == state.m_input_end )
 	{
 		error = make_error_code(errc::body_length_mismatch);
 		return false;
@@ -99,22 +99,22 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	mutable_buffer buffer, std::size_t &produced, bool &ended, error_code &error)
 {
 	auto &state = *m_impl;
-	state.stream.next_in = reinterpret_cast<Bytef*>(
-		state.input.data() + state.input_begin);
-	state.stream.avail_in = static_cast<uInt>(
-		std::min<std::size_t>(state.input_end - state.input_begin,
+	state.m_stream.next_in = reinterpret_cast<Bytef*>(
+		state.m_input.data() + state.m_input_begin);
+	state.m_stream.avail_in = static_cast<uInt>(
+		std::min<std::size_t>(state.m_input_end - state.m_input_begin,
 			std::numeric_limits<uInt>::max()));
-	state.stream.next_out = reinterpret_cast<Bytef*>(
+	state.m_stream.next_out = reinterpret_cast<Bytef*>(
 		static_cast<std::byte*>(buffer.data()) + produced);
-	state.stream.avail_out = static_cast<uInt>(
+	state.m_stream.avail_out = static_cast<uInt>(
 		std::min<std::size_t>(buffer.size() - produced,
 			std::numeric_limits<uInt>::max()));
 
-	const auto input_before = state.stream.avail_in;
-	const auto output_before = state.stream.avail_out;
-	const auto result = inflate(&state.stream, Z_NO_FLUSH);
-	state.input_begin += input_before - state.stream.avail_in;
-	produced += output_before - state.stream.avail_out;
+	const auto input_before = state.m_stream.avail_in;
+	const auto output_before = state.m_stream.avail_out;
+	const auto result = inflate(&state.m_stream, Z_NO_FLUSH);
+	state.m_input_begin += input_before - state.m_stream.avail_in;
+	produced += output_before - state.m_stream.avail_out;
 	if( result == Z_STREAM_END )
 	{
 		ended = true;
@@ -133,11 +133,11 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 {
 	auto &state = *m_impl;
 	std::array<std::byte,4096> buffer {};
-	while( not state.source_eof )
+	while( not state.m_source_eof )
 	{
-		const auto read = state.source->read_some(riwo::buffer(buffer), error);
+		const auto read = state.m_source->read_some(riwo::buffer(buffer), error);
 		if( error ) return false;
-		if( read.eof ) state.source_eof = true;
+		if( read.eof ) state.m_source_eof = true;
 		if( read.bytes == 0 and not read.eof ) return false;
 	}
 	return true;
@@ -147,7 +147,7 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	mutable_buffer buffer, error_code &error)
 {
 	auto &state = *m_impl;
-	if( state.ended )
+	if( state.m_ended )
 	{
 		if( not drain_source_sync(error) ) return {};
 		return {0, true};
@@ -157,19 +157,19 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	std::size_t produced = 0;
 	for(;;)
 	{
-		if( state.input_begin == state.input_end and not fill_input_sync(error) )
+		if( state.m_input_begin == state.m_input_end and not fill_input_sync(error) )
 			return {};
 		bool ended = false;
 		if( not inflate_step(buffer, produced, ended, error) ) return {};
 		if( ended )
 		{
-			state.ended = true;
+			state.m_ended = true;
 			if( not drain_source_sync(error) ) return {};
 			return {produced, true};
 		}
 		if( produced == buffer.size() ) return {produced, false};
-		if( state.input_begin == state.input_end ) continue;
-		if( produced == 0 and state.stream.avail_in == 0 ) continue;
+		if( state.m_input_begin == state.m_input_end ) continue;
+		if( produced == 0 and state.m_stream.avail_in == 0 ) continue;
 	}
 }
 
@@ -192,8 +192,8 @@ class decoding_body_reader_adapter::async_operation final :
 public:
 	async_operation(std::shared_ptr<decoding_body_reader_adapter> owner_value,
 		mutable_buffer target, read_handler completion) :
-		owner(std::move(owner_value)), target(target),
-		handler(std::move(completion))
+		m_owner(std::move(owner_value)), m_target(target),
+		m_handler(std::move(completion))
 	{
 	}
 
@@ -205,36 +205,36 @@ public:
 private:
 	void step()
 	{
-		auto &state = *owner->m_impl;
-		if( state.ended )
+		auto &state = *m_owner->m_impl;
+		if( state.m_ended )
 		{
 			drain_source([self = shared_from_this()](error_code error)
 			{
-				self->finish(error, self->produced, true);
+				self->finish(error, self->m_produced, true);
 			});
 			return;
 		}
-		if( state.input_begin == state.input_end )
+		if( state.m_input_begin == state.m_input_end )
 		{
-			owner->m_impl->source->read_some(riwo::buffer(state.input),
+			m_owner->m_impl->m_source->read_some(riwo::buffer(state.m_input),
 			[self = shared_from_this()](error_code error,
 				body_read_result read)
 			{
-				auto &state = *self->owner->m_impl;
+				auto &state = *self->m_owner->m_impl;
 				if( error )
 				{
-					self->finish(error, self->produced, false);
+					self->finish(error, self->m_produced, false);
 					return;
 				}
-				state.input_begin = 0;
-				state.input_end = read.bytes;
+				state.m_input_begin = 0;
+				state.m_input_end = read.bytes;
 				if( read.bytes == 0 and read.eof )
 				{
 					self->finish(make_error_code(errc::body_length_mismatch),
-						self->produced, false);
+						self->m_produced, false);
 					return;
 				}
-				if( read.eof ) state.source_eof = true;
+				if( read.eof ) state.m_source_eof = true;
 				self->pump();
 			});
 			return;
@@ -244,26 +244,26 @@ private:
 
 	void pump()
 	{
-		auto &state = *owner->m_impl;
+		auto &state = *m_owner->m_impl;
 		bool ended = false;
 		error_code error;
-		if( not owner->inflate_step(target, produced, ended, error) )
+		if( not m_owner->inflate_step(m_target, m_produced, ended, error) )
 		{
-			finish(error, produced, false);
+			finish(error, m_produced, false);
 			return;
 		}
 		if( ended )
 		{
-			state.ended = true;
+			state.m_ended = true;
 			drain_source([self = shared_from_this()](error_code drain_error)
 			{
-				self->finish(drain_error, self->produced, true);
+				self->finish(drain_error, self->m_produced, true);
 			});
 			return;
 		}
-		if( produced == target.size() )
+		if( m_produced == m_target.size() )
 		{
-			finish(error_code{}, produced, false);
+			finish(error_code{}, m_produced, false);
 			return;
 		}
 		step();
@@ -271,8 +271,8 @@ private:
 
 	void drain_source(std::function<void(error_code)> completion)
 	{
-		auto &state = *owner->m_impl;
-		if( state.source_eof )
+		auto &state = *m_owner->m_impl;
+		if( state.m_source_eof )
 		{
 			completion(error_code{});
 			return;
@@ -287,7 +287,7 @@ private:
 
 			void step()
 			{
-				owner->owner->m_impl->source->read_some(riwo::buffer(*buffer),
+				owner->m_owner->m_impl->m_source->read_some(riwo::buffer(*buffer),
 				[self = shared_from_this()](error_code error,
 					body_read_result read)
 				{
@@ -296,8 +296,8 @@ private:
 						std::move(self->completion)(error);
 						return;
 					}
-					auto &state = *self->owner->owner->m_impl;
-					if( read.eof ) state.source_eof = true;
+					auto &state = *self->owner->m_owner->m_impl;
+					if( read.eof ) state.m_source_eof = true;
 					if( read.eof or read.bytes == 0 )
 					{
 						std::move(self->completion)(error_code{});
@@ -316,16 +316,16 @@ private:
 
 	void finish(error_code error, std::size_t size, bool eof)
 	{
-		if( finished ) return;
-		finished = true;
-		std::move(handler)(error, body_read_result {size, eof});
+		if( m_finished ) return;
+		m_finished = true;
+		std::move(m_handler)(error, body_read_result {size, eof});
 	}
 
-	std::shared_ptr<decoding_body_reader_adapter> owner;
-	mutable_buffer target;
-	read_handler handler;
-	std::size_t produced = 0;
-	bool finished = false;
+	std::shared_ptr<decoding_body_reader_adapter> m_owner;
+	mutable_buffer m_target;
+	read_handler m_handler;
+	std::size_t m_produced = 0;
+	bool m_finished = false;
 };
 
 void decoding_body_reader_adapter::read_some(mutable_buffer buffer,
@@ -339,27 +339,27 @@ void decoding_body_reader_adapter::read_some(mutable_buffer buffer,
 	error_code &error) noexcept
 {
 	error.clear();
-	if( not m_impl->ended )
+	if( not m_impl->m_ended )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return {};
 	}
-	return m_impl->source->trailers(error);
+	return m_impl->m_source->trailers(error);
 }
 
 void decoding_body_reader_adapter::trailers(trailers_handler handler)
 {
-	if( not m_impl->ended )
+	if( not m_impl->m_ended )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			fields{});
 		return;
 	}
-	m_impl->source->trailers(std::move(handler));
+	m_impl->m_source->trailers(std::move(handler));
 }
 
 void decoding_body_reader_adapter::cancel() noexcept {
-	m_impl->source->cancel();
+	m_impl->m_source->cancel();
 }
 
 std::shared_ptr<body_reader_state> make_decoding_body_reader(
