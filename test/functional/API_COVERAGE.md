@@ -49,25 +49,38 @@ behavior rather than by implementation source file.
 
 - `http_exp/public_api.cpp`: public types, completion signatures, configuration,
   client/server construction, and compile-time ownership contracts.
-- `http_exp/phase_a.cpp`: body sources/readers/writers, exchange state machines,
+- `http_exp/body.cpp`: body sources/readers/writers, exchange state machines,
   request metadata, informational responses, and reply convenience operations.
-- `http_exp/phase_b.cpp`: HTTP/1.0 and HTTP/1.1 loopback, buffered/file/streaming
+- `http_exp/http1.cpp`: HTTP/1.0 and HTTP/1.1 loopback, buffered/file/streaming
   bodies, trailers, slow reads, cancellation, and bodyless status responses.
-- `http_exp/phase_c.cpp`: protocol selection, session keys/factories, pool
+- `http_exp/session_pool.cpp`: protocol selection, session keys/factories, pool
   capacity/fairness/expiry, non-blocking asynchronous connector start,
   cleartext preface detection, and keep-alive reuse.
-- `http_exp/phase_d.cpp`: HTTP/2 prior knowledge, multiplexed streams,
+- `http_exp/http2_client.cpp`: HTTP/2 prior knowledge, multiplexed streams,
   request/response bodies and trailers, RST_STREAM/GOAWAY mapping, automatic
   retry, redirects, and replayable-source rewind behavior.
-- `http_exp/phase_f.cpp`: protocol-neutral duplex handoff, HTTP/1.1 WebSocket
-  Upgrade, HTTP/2 Extended CONNECT, subprotocol negotiation, echo traffic,
-  overlapped read/write, clean close behavior, and validator rejection response
-  preservation through the isolated `websocket_exp` module.
+- `http_exp/http2_server.cpp`: HTTP/2 prior-knowledge routing, multiplexed
+  exchanges, resource validation, HEAD/bodyless responses, trailers, and
+  graceful shutdown.
 - `http_exp/application.cpp`: public-API application workflow covering routing,
   query targets, authentication rejection and body draining, state mutation,
   case-insensitive headers, streaming events/trailers, and 404 responses.
+- `http_exp/regressions.cpp`: raw HTTP/1 wire regressions for target forms,
+  OPTIONS/Allow, method rejection, 100-continue, HEAD, and invalid fields.
 - `interop/http_interop.py`: independent HTTP_EXP client/server compatibility
   when a local backend is available.
+
+## Experimental WebSocket
+
+- `websocket_exp/public_api.cpp`: umbrella/value types, executor propagation,
+  HTTP_EXP duplex-channel ownership, retry policy, invalid open completion, and
+  unopened stream errors.
+- `websocket_exp/protocol.cpp`: errors, randomness, opcode/close helpers,
+  masking, frame generation/parsing, fragmentation, HTTP/1 Upgrade, and HTTP/2
+  Extended CONNECT handshakes.
+- `websocket_exp/client_server.cpp`: HTTP/1.1 Upgrade and HTTP/2 Extended CONNECT
+  round trips, subprotocol and compression negotiation, overlapped read/write,
+  clean close, and validator rejection response preservation.
 
 ## WebSocket
 

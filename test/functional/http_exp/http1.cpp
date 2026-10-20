@@ -106,7 +106,7 @@ void h1_client_server_round_trip()
 		RIWO_TEST_CHECK_EQ(co_await read_body(posted.body()), "post-body");
 
 		auto path = std::filesystem::temp_directory_path() /
-			"riwo-http-exp-phase-b-upload.bin";
+			"riwo-http-exp-http1-upload.bin";
 		{
 			std::ofstream output(path, std::ios::binary | std::ios::trunc);
 			output << "file-body";

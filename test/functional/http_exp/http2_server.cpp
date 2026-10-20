@@ -78,12 +78,12 @@ void prior_knowledge_server_and_multiplexing()
 				riwo::use_awaitable);
 		})
 		.on_server_error([](riwo::error_code error) {
-			std::cerr << "phase-e server error: " << error.message() << '\n';
+			std::cerr << "HTTP/2 server error: " << error.message() << '\n';
 			return false;
 		})
 		.on_service_error([](http::server_exchange &,
 			const std::exception &error) {
-			std::cerr << "phase-e service error: " << error.what() << '\n';
+			std::cerr << "HTTP/2 service error: " << error.what() << '\n';
 			return false;
 		})
 		.start();

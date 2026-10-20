@@ -315,7 +315,7 @@ void built_in_sources()
 	RIWO_TEST_CHECK(!error);
 
 	auto path = std::filesystem::temp_directory_path() /
-		"riwo-http-exp-phase-a-source.bin";
+		"riwo-http-exp-body-source.bin";
 	{
 		std::ofstream output(path, std::ios::binary | std::ios::trunc);
 		output << "file-data";
@@ -652,7 +652,7 @@ void reply_convenience_operations()
 		context, http::protocol::v1_1, {http::status::ok, {}},
 		http::detail::make_body_reader_state(save_adapter, true));
 	auto path = std::filesystem::temp_directory_path() /
-		"riwo-http-exp-phase-a-reply.bin";
+		"riwo-http-exp-body-reply.bin";
 	RIWO_TEST_CHECK_EQ(file_reply.save_file(path, error), 9U);
 	RIWO_TEST_CHECK(!error);
 	std::ifstream input(path, std::ios::binary);

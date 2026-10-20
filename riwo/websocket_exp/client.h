@@ -30,6 +30,9 @@ struct connect_request
 template <core_concepts::exec Exec = asio::any_io_executor>
 struct basic_open_diagnostics
 {
+	using executor_type = Exec;
+	using executor_t = executor_type;
+
 	url endpoint {};
 	optional<http_exp::response_head> response {};
 	optional<http_exp::protocol> selected_protocol {};

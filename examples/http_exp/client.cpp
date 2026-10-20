@@ -9,6 +9,35 @@ namespace
 
 namespace http = riwo::http_exp;
 
+[[nodiscard]] http::protocol_requirement protocol_requirement(
+	std::string_view value)
+{
+	if( value == "auto" ) return http::protocol_requirement::automatic;
+	if( value == "http1" ) return http::protocol_requirement::require_http1;
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	if( value == "http2" ) return http::protocol_requirement::require_http2;
+#endif
+	throw std::invalid_argument(
+		"protocol must be auto, http1"
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+		" or http2"
+#endif
+	);
+}
+
+[[nodiscard]] std::string_view protocol_name(http::protocol value) noexcept
+{
+	switch(value)
+	{
+	case http::protocol::v1_0: return "HTTP/1.0";
+	case http::protocol::v1_1: return "HTTP/1.1";
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	case http::protocol::v2: return "HTTP/2";
+#endif
+	}
+	return "unknown";
+}
+
 [[nodiscard]] std::string as_string(std::span<const std::byte> bytes)
 {
 	return {
@@ -24,27 +53,34 @@ try
 {
 	const std::string base = argc > 1 ?
 		argv[1] : "http://127.0.0.1:8084";
+	const auto requirement = protocol_requirement(
+		argc > 2 ? std::string_view(argv[2]) : std::string_view("auto"));
 
 	riwo::io_context_t context;
-	http::client client(context);
+	http::client_config config;
+	config.protocols.requirement = requirement;
+	http::client client(context, config);
 
 	auto health = client.get(base + "/health");
 	auto health_body = health.read_all();
-	std::cout << "GET /health -> " << health.status().code() << '\n'
+	std::cout << "GET /health [" << protocol_name(health.selected_protocol())
+		<< "] -> " << health.status().code() << '\n'
 		<< as_string(health_body);
 
 	http::request echo_request(http::method::post, base + "/echo");
 	echo_request.headers().add("Content-Type", "text/plain");
 	echo_request.body("hello from http_exp\n");
 	auto echoed = client.fetch(std::move(echo_request));
-	std::cout << "POST /echo -> " << echoed.status().code() << '\n'
+	std::cout << "POST /echo [" << protocol_name(echoed.selected_protocol())
+		<< "] -> " << echoed.status().code() << '\n'
 		<< as_string(echoed.buffered_body());
 
 	auto streamed = client.send(
 		http::request(http::method::get, base + "/stream"));
 	auto streamed_body = streamed.read_all();
 	auto trailers = streamed.body().trailers();
-	std::cout << "GET /stream -> " << streamed.status().code() << '\n'
+	std::cout << "GET /stream [" << protocol_name(streamed.selected_protocol())
+		<< "] -> " << streamed.status().code() << '\n'
 		<< as_string(streamed_body)
 		<< "Trailer X-Chunk-Count: "
 		<< trailers.find_first("X-Chunk-Count").value_or("missing") << '\n';

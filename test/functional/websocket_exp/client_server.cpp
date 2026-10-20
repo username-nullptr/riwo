@@ -44,7 +44,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 	{
 		RIWO_TEST_CHECK(ws::is_upgrade_request(exchange));
 		ws::upgrade_options options;
-		options.supported_subprotocols = {"phase-f.echo"};
+		options.supported_subprotocols = {"riwo.echo.v1"};
 		options.require_subprotocol = true;
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 		if( compression )
@@ -74,11 +74,11 @@ void websocket_round_trip(bool use_http2, bool compression)
 	else
 		service.on_request<http::method::get>("/echo", handler);
 	service.on_server_error([](riwo::error_code error) {
-		std::cerr << "phase-f server error: " << error.message() << '\n';
+		std::cerr << "WebSocket_EXP server error: " << error.message() << '\n';
 		return false;
 	}).on_service_error([](http::server_exchange &,
 		const std::exception &error) {
-		std::cerr << "phase-f service error: " << error.what() << '\n';
+		std::cerr << "WebSocket_EXP service error: " << error.what() << '\n';
 		return false;
 	}).start();
 
@@ -101,7 +101,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 	{
 		ws::connect_request request;
 		request.endpoint = endpoint;
-		request.subprotocols = {"phase-f.echo"};
+		request.subprotocols = {"riwo.echo.v1"};
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 	if( compression )
 		request.extensions.push_back(ws::permessage_deflate_extension());
@@ -109,12 +109,18 @@ void websocket_round_trip(bool use_http2, bool compression)
 		ws::open_diagnostics diagnostics;
 		auto stream = co_await client.open(std::move(request), diagnostics,
 			riwo::use_awaitable);
-		RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "phase-f.echo");
+		RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "riwo.echo.v1");
 		RIWO_TEST_CHECK_EQ(!stream.negotiated_extensions().empty(),
 			compression);
 		RIWO_TEST_CHECK(diagnostics.selected_protocol.has_value());
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		RIWO_TEST_CHECK_EQ(*diagnostics.selected_protocol,
 			use_http2 ? http::protocol::v2 : http::protocol::v1_1);
+#else
+		RIWO_TEST_CHECK(not use_http2);
+		RIWO_TEST_CHECK_EQ(*diagnostics.selected_protocol,
+			http::protocol::v1_1);
+#endif
 		struct overlap_state
 		{
 			std::string body {};
@@ -122,7 +128,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 			bool done = false;
 		};
 		auto overlap = std::make_shared<overlap_state>();
-		const std::string first = "phase-f-overlap";
+		const std::string first = "websocket-exp-overlap";
 		asio::co_spawn(context,
 		[&stream, overlap]() -> riwo::awaitable<void>
 		{
@@ -143,7 +149,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 		RIWO_TEST_CHECK_EQ(overlap->body, first);
 		for( int index = 0; index < 2; ++index )
 		{
-			const auto payload = std::format("phase-f-{}", index);
+			const auto payload = std::format("websocket-exp-{}", index);
 			co_await stream.write_text(payload, riwo::use_awaitable);
 			auto response = co_await stream.read<std::string>(
 				riwo::use_awaitable);
@@ -272,17 +278,17 @@ void upgrade_rejection_preserved()
 int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
-		{"phase F HTTP/1 WebSocket upgrade", http1_upgrade},
+		{"HTTP/1 WebSocket upgrade", http1_upgrade},
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
-		{"phase F HTTP/1 WebSocket compression", http1_upgrade_compression},
+		{"HTTP/1 WebSocket compression", http1_upgrade_compression},
 #endif
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		{"phase F HTTP/2 extended CONNECT", http2_extended_connect},
+		{"HTTP/2 extended CONNECT", http2_extended_connect},
 # if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
-		{"phase F HTTP/2 extended CONNECT compression",
+		{"HTTP/2 extended CONNECT compression",
 			http2_extended_connect_compression},
 # endif
 #endif
-		{"phase F validator rejection response", upgrade_rejection_preserved},
+		{"validator rejection response", upgrade_rejection_preserved},
 	});
 }

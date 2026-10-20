@@ -13,6 +13,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET_EXP=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DRIWO_BUILD_EXAMPLES=ON
 cmake --build build --parallel
@@ -105,24 +106,60 @@ application; `resource_root` is not a sandbox.
 
 ## Experimental HTTP
 
-Requires `RIWO_BUILD_HTTP_EXP=ON`. These examples intentionally exercise the
-HTTP/1.x path while the experimental module's higher protocol layers continue
-to evolve.
+Requires `RIWO_BUILD_HTTP_EXP=ON`. The same examples exercise HTTP/1.x and,
+when `RIWO_HTTP_EXP_HTTP2_SUPPORT=1`, cleartext HTTP/2 prior knowledge without
+changing their request, response, body, or routing code.
 
 | Program | Demonstrates | Arguments / default |
 | --- | --- | --- |
-| [`server`](http_exp/server.cpp) | Health, echo, streaming response, trailers, fallback route | `[port]`; 8084 |
-| [`client`](http_exp/client.cpp) | Buffered GET/POST and streamed response/trailers | `[base-url]`; local server on 8084 |
+| [`server`](http_exp/server.cpp) | Protocol-neutral routes, echo, streaming response, trailers | `[port] [auto\|http1\|http2]`; 8084, auto |
+| [`client`](http_exp/client.cpp) | Buffered GET/POST, streamed body/trailers, selected protocol | `[base-url] [auto\|http1\|http2]`; local server, auto |
 
 Run the pair in separate terminals:
 
 ```sh
-./build/output/examples/http_exp/server
-./build/output/examples/http_exp/client
+./build/output/examples/http_exp/server 8084 auto
+./build/output/examples/http_exp/client http://127.0.0.1:8084 auto
 ```
 
-The client explicitly requires HTTP/1.x so it remains a focused smoke test even
-when HTTP/2 support is compiled into `http_exp` later.
+For cleartext HTTP/2, select it explicitly on both sides:
+
+```sh
+./build/output/examples/http_exp/server 8084 http2
+./build/output/examples/http_exp/client http://127.0.0.1:8084 http2
+```
+
+`http2` is accepted only when nghttp2 was detected at configure time. `auto`
+uses normal scheme policy; for a plain `http://` client URL that means HTTP/1.1.
+
+## Experimental WebSocket
+
+Requires `RIWO_BUILD_WEBSOCKET_EXP=ON`, which also enables the separate
+`riwo.websocket_exp` module's dependency on `riwo.http_exp`. These examples do
+not use the stable `riwo.websocket` module.
+
+| Program | Demonstrates | Arguments / default |
+| --- | --- | --- |
+| [`server`](websocket_exp/server.cpp) | HTTP/1 Upgrade and HTTP/2 Extended CONNECT echo service | `[port] [auto\|http1\|http2]`; 8085, auto |
+| [`client`](websocket_exp/client.cpp) | Subprotocol, optional compression, text echo, clean close, selected handshake | `[endpoint] [http1\|http2]`; local server, http1 |
+
+Run the HTTP/1.1 pair:
+
+```sh
+./build/output/examples/websocket_exp/server 8085 auto
+./build/output/examples/websocket_exp/client ws://127.0.0.1:8085/echo http1
+```
+
+Or, when HTTP/2 support is compiled in, use Extended CONNECT:
+
+```sh
+./build/output/examples/websocket_exp/server 8085 http2
+./build/output/examples/websocket_exp/client ws://127.0.0.1:8085/echo http2
+```
+
+WebSocket_EXP and HTTP_EXP have distinct build switches, targets, headers,
+namespaces, examples, and functional test suites. WebSocket_EXP reuses only
+HTTP_EXP's protocol-neutral duplex channel and HTTP transport/session layer.
 
 ## WebSocket
 

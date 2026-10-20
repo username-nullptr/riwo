@@ -38,22 +38,27 @@ endif ()
 
 if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.public-api http_exp/public_api.cpp riwo.http_exp)
-	add_riwo_test(http_exp.phase-a http_exp/phase_a.cpp riwo.http_exp)
-	add_riwo_test(http_exp.phase-b http_exp/phase_b.cpp riwo.http_exp)
-	add_riwo_test(http_exp.phase-c http_exp/phase_c.cpp riwo.http_exp)
+	add_riwo_test(http_exp.body http_exp/body.cpp riwo.http_exp)
+	add_riwo_test(http_exp.http1 http_exp/http1.cpp riwo.http_exp)
+	add_riwo_test(http_exp.session-pool http_exp/session_pool.cpp riwo.http_exp)
 	if (TARGET Riwo::http_exp_nghttp2)
-		add_riwo_test(http_exp.phase-d http_exp/phase_d.cpp riwo.http_exp)
-		target_link_libraries(riwo.test.http_exp.phase-d PRIVATE
+		add_riwo_test(http_exp.http2-client http_exp/http2_client.cpp riwo.http_exp)
+		target_link_libraries(riwo.test.http_exp.http2-client PRIVATE
 			Riwo::http_exp_nghttp2
 		)
-		add_riwo_test(http_exp.phase-e http_exp/phase_e.cpp riwo.http_exp)
+		add_riwo_test(http_exp.http2-server http_exp/http2_server.cpp riwo.http_exp)
 	endif ()
 	add_riwo_test(http_exp.application http_exp/application.cpp riwo.http_exp)
 	add_riwo_test(http_exp.regressions http_exp/regressions.cpp riwo.http_exp)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET_EXP)
-	add_riwo_test(http_exp.phase-f http_exp/phase_f.cpp riwo.websocket_exp)
+	add_riwo_test(websocket_exp.public-api websocket_exp/public_api.cpp
+		riwo.websocket_exp)
+	add_riwo_test(websocket_exp.protocol websocket_exp/protocol.cpp
+		riwo.websocket_exp)
+	add_riwo_test(websocket_exp.client-server websocket_exp/client_server.cpp
+		riwo.websocket_exp)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)

@@ -58,6 +58,9 @@ struct upgrade_result
 template <core_concepts::exec Exec = asio::any_io_executor>
 struct RIWO_WEBSOCKET_EXP_TAPI basic_accept_result
 {
+	using executor_type = Exec;
+	using executor_t = executor_type;
+
 	template <typename Exec0>
 	explicit basic_accept_result(Exec0 &&executor) requires
 		core_concepts::match_sched<Exec0,Exec> :

@@ -10,6 +10,22 @@ namespace
 
 namespace http = riwo::http_exp;
 
+[[nodiscard]] http::protocol_requirement protocol_requirement(
+	std::string_view value)
+{
+	if( value == "auto" ) return http::protocol_requirement::automatic;
+	if( value == "http1" ) return http::protocol_requirement::require_http1;
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	if( value == "http2" ) return http::protocol_requirement::require_http2;
+#endif
+	throw std::invalid_argument(
+		"protocol must be auto, http1"
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+		" or http2"
+#endif
+	);
+}
+
 [[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader &reader)
 {
 	std::string result;
@@ -30,10 +46,14 @@ int main(int argc, const char *argv[])
 {
 	const auto port = static_cast<std::uint16_t>(
 		argc > 1 ? std::stoul(argv[1]) : 8084);
+	const auto requirement = protocol_requirement(
+		argc > 2 ? std::string_view(argv[2]) : std::string_view("auto"));
 
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor));
+	http::server_config config;
+	config.protocols.requirement = requirement;
+	http::server service(std::move(acceptor), config);
 	service
 		.bind({riwo::ip_type::v4, port})
 		.on_request<http::method::get>("/health",
@@ -84,7 +104,8 @@ int main(int argc, const char *argv[])
 		})
 		.start();
 
-	std::cout << "Listening on http://127.0.0.1:" << port << '\n'
+	std::cout << "Listening on http://127.0.0.1:" << port
+		<< " (protocol policy: " << (argc > 2 ? argv[2] : "auto") << ")\n"
 		<< "Routes: GET /health, POST /echo, GET /stream\n";
 	context.run();
 }
