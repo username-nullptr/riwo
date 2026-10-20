@@ -16,6 +16,12 @@
 
 #include <atomic>
 #include <array>
+#include <asio/as_tuple.hpp>
+#include <asio/connect.hpp>
+#include <asio/co_spawn.hpp>
+#include <asio/read_until.hpp>
+#include <asio/steady_timer.hpp>
+#include <asio/write.hpp>
 #include <cerrno>
 #include <charconv>
 #include <chrono>
@@ -344,6 +350,273 @@ void mix(size_t &seed, size_t value) noexcept
 }
 #endif
 
+template <typename Cancel>
+void arm_async_timeout(asio::steady_timer &timer,
+	std::chrono::milliseconds timeout, bool &expired, Cancel &&cancel)
+{
+	if( timeout.count() <= 0 )
+		return;
+	timer.expires_after(timeout);
+	timer.async_wait(
+	[&expired, cancel = std::forward<Cancel>(cancel)](error_code error) mutable
+	{
+		if( error ) return;
+		expired = true;
+		cancel();
+	});
+}
+
+[[nodiscard]] asio::awaitable<sys_expected<negotiated_transport>>
+connect_async_impl(asio::any_io_executor executor, session_key key,
+	client_config config)
+{
+	try
+	{
+		auto selected = negotiate_protocol(make_policy(key), key);
+		if( not selected )
+			co_return sys_unexpected(selected.error());
+
+		error_code error;
+		auto proxy = parse_proxy(key);
+		if( key.proxy.endpoint and not proxy )
+			co_return sys_unexpected(make_error_code(errc::invalid_target));
+
+		const auto connect_host = proxy ? proxy->host : key.host;
+		const auto connect_port = proxy ? proxy->port : key.port;
+		const auto connect_timeout = config.timeout.connect;
+		error_code ignored;
+
+		asio::ip::tcp::resolver resolver(executor);
+		asio::steady_timer resolve_timer(executor);
+		bool resolve_expired = false;
+		arm_async_timeout(resolve_timer, connect_timeout, resolve_expired,
+			[&resolver] { resolver.cancel(); });
+		auto [resolve_error, results] = co_await resolver.async_resolve(
+			connect_host, std::to_string(connect_port),
+			asio::as_tuple(asio::use_awaitable));
+		resolve_timer.cancel();
+		if( resolve_expired )
+			co_return sys_unexpected(asio::error::make_error_code(
+				asio::error::timed_out));
+		if( resolve_error )
+			co_return sys_unexpected(resolve_error);
+		if( results.empty() )
+			co_return sys_unexpected(asio::error::make_error_code(
+				asio::error::host_not_found));
+
+		auto tcp = std::make_shared<tcp_connection>(executor);
+		asio::steady_timer connect_timer(executor);
+		bool connect_expired = false;
+		arm_async_timeout(connect_timer, connect_timeout, connect_expired,
+			[&tcp]
+			{
+				error_code ignored_error;
+				tcp->socket().close(ignored_error);
+			});
+		auto [connect_error, endpoint] = co_await asio::async_connect(
+			tcp->socket(), results,
+			asio::as_tuple(asio::use_awaitable));
+		(void)endpoint;
+		connect_timer.cancel();
+		if( connect_expired )
+			co_return sys_unexpected(asio::error::make_error_code(
+				asio::error::timed_out));
+		if( connect_error )
+			co_return sys_unexpected(connect_error);
+
+		tcp->socket().set_option(asio::ip::tcp::no_delay(true), error);
+		if( error ) co_return sys_unexpected(error);
+
+		if( key.scheme != "https" )
+		{
+			auto remote = tcp->remote_endpoint(error);
+			if( error ) co_return sys_unexpected(error);
+			auto local = tcp->local_endpoint(error);
+			if( error ) co_return sys_unexpected(error);
+			co_return negotiated_transport {
+				.stream = std::move(tcp),
+				.selected_protocol = *selected,
+				.remote = remote,
+				.local = local,
+				.absolute_form = proxy.has_value()
+			};
+		}
+
+#if RIWO_OPENSSL_SUPPORT
+		if( proxy )
+		{
+			const auto authority = origin_authority(key);
+			const std::string request = "CONNECT " + authority +
+				" HTTP/1.1\r\nHost: " + authority + "\r\n\r\n";
+			asio::steady_timer proxy_timer(executor);
+			bool proxy_expired = false;
+			arm_async_timeout(proxy_timer, connect_timeout, proxy_expired,
+				[&tcp]
+				{
+					error_code ignored_error;
+					tcp->socket().close(ignored_error);
+				});
+			auto [write_error, written] = co_await asio::async_write(
+				tcp->socket(), asio::buffer(request),
+				asio::as_tuple(asio::use_awaitable));
+			(void)written;
+			std::string response;
+			size_t read_size = 0;
+			error_code read_error;
+			if( not write_error )
+			{
+				auto read = co_await asio::async_read_until(tcp->socket(),
+					asio::dynamic_buffer(response, 64U * 1024U),
+					"\r\n\r\n", asio::as_tuple(asio::use_awaitable));
+				read_error = std::get<0>(read);
+				read_size = std::get<1>(read);
+			}
+			proxy_timer.cancel();
+			if( proxy_expired )
+				co_return sys_unexpected(asio::error::make_error_code(
+					asio::error::timed_out));
+			if( write_error ) co_return sys_unexpected(write_error);
+			if( read_error ) co_return sys_unexpected(read_error);
+			(void)read_size;
+
+			const auto first = response.find(' ');
+			const auto second = first == std::string::npos ?
+				std::string::npos : response.find(' ', first + 1);
+			if( first == std::string::npos or
+				second == std::string::npos )
+				co_return sys_unexpected(make_error_code(
+					errc::connection_protocol_error));
+			const auto code_text = std::string_view(response).substr(
+				first + 1, second - first - 1);
+			uint16_t code = 0;
+			const auto parsed_code = std::from_chars(code_text.data(),
+				code_text.data() + code_text.size(), code);
+			if( parsed_code.ec != std::errc{} or
+				parsed_code.ptr != code_text.data() + code_text.size() or
+				code != 200 )
+				co_return sys_unexpected(make_error_code(
+					errc::negotiation_failed));
+		}
+
+		asio::ssl::context context(asio::ssl::context::tls_client);
+		if( auto context_error = configure_tls_context(
+			context, key.tls, error); context_error )
+			co_return sys_unexpected(context_error);
+
+		tls_socket socket(std::move(tcp->socket()), context);
+		error_code address_error;
+		ignore_unused(asio::ip::make_address(key.host, address_error));
+		if( address_error and ::SSL_set_tlsext_host_name(
+			socket.native_handle(), key.host.c_str()) != 1 )
+			co_return sys_unexpected(make_error_code(
+				errc::negotiation_failed));
+
+		if( key.tls.verify_peer )
+		{
+			socket.set_verify_callback(
+				asio::ssl::host_name_verification(key.host), error);
+			if( error ) co_return sys_unexpected(error);
+		}
+
+		auto offered = alpn_wire(alpn_preference(key));
+		if( not offered.empty() and ::SSL_set_alpn_protos(
+			socket.native_handle(), offered.data(),
+			static_cast<unsigned int>(offered.size())) != 0 )
+			co_return sys_unexpected(make_error_code(
+				errc::negotiation_failed));
+
+		asio::steady_timer handshake_timer(executor);
+		bool handshake_expired = false;
+		arm_async_timeout(handshake_timer, connect_timeout, handshake_expired,
+			[&socket]
+			{
+				error_code ignored_error;
+				socket.next_layer().close(ignored_error);
+			});
+		auto [handshake_error] = co_await socket.async_handshake(
+			asio::ssl::stream_base::client,
+			asio::as_tuple(asio::use_awaitable));
+		handshake_timer.cancel();
+		if( handshake_expired )
+			co_return sys_unexpected(asio::error::make_error_code(
+				asio::error::timed_out));
+		if( handshake_error )
+			co_return sys_unexpected(handshake_error);
+
+		const unsigned char *alpn_data = nullptr;
+		unsigned int alpn_size = 0;
+		::SSL_get0_alpn_selected(socket.native_handle(),
+			&alpn_data, &alpn_size);
+		optional<std::string> alpn;
+		if( alpn_data and alpn_size != 0 )
+		{
+			alpn = std::string(reinterpret_cast<const char *>(alpn_data),
+				alpn_size);
+			auto value = protocol_from_alpn(*alpn);
+			if( not value )
+				co_return sys_unexpected(make_error_code(
+					errc::negotiation_failed));
+			selected = *value;
+		}
+		else
+		{
+# if RIWO_HTTP_EXP_HTTP2_SUPPORT
+			if( key.protocols.requirement ==
+				protocol_requirement::require_http2 )
+				co_return sys_unexpected(make_error_code(
+					errc::negotiation_failed));
+# endif
+			protocol_policy fallback_policy = make_policy(key);
+			fallback_policy.requirement =
+				protocol_requirement::require_http1;
+			auto fallback = negotiate_protocol(fallback_policy, key);
+			if( not fallback )
+				co_return sys_unexpected(fallback.error());
+			selected = *fallback;
+		}
+
+		if( std::ranges::find(key.protocols.preference, *selected) ==
+			key.protocols.preference.end() )
+			co_return sys_unexpected(make_error_code(
+				errc::negotiation_failed));
+		if( key.protocols.requirement ==
+			protocol_requirement::require_http1 and not http1(*selected) )
+			co_return sys_unexpected(make_error_code(
+				errc::negotiation_failed));
+# if RIWO_HTTP_EXP_HTTP2_SUPPORT
+		if( key.protocols.requirement ==
+			protocol_requirement::require_http2 and
+			*selected != protocol::v2 )
+			co_return sys_unexpected(make_error_code(
+				errc::negotiation_failed));
+# endif
+
+		auto remote = socket.next_layer().remote_endpoint(error);
+		if( error ) co_return sys_unexpected(error);
+		auto local = socket.next_layer().local_endpoint(error);
+		if( error ) co_return sys_unexpected(error);
+		auto transport = std::make_shared<tls_connection>(std::move(socket));
+		co_return negotiated_transport {
+			.stream = std::move(transport),
+			.selected_protocol = *selected,
+			.remote = remote,
+			.local = local,
+			.alpn = std::move(alpn)
+		};
+#else
+		co_return sys_unexpected(make_error_code(
+			errc::operation_not_supported));
+#endif
+	}
+	catch(const std::bad_alloc &) {
+		co_return sys_unexpected(make_error_code(
+			errc::operation_not_supported));
+	}
+	catch(...) {
+		co_return sys_unexpected(exception_error(std::current_exception()));
+	}
+}
+
 class default_connector final : public connector
 {
 public:
@@ -545,6 +818,27 @@ public:
 		catch(...) {
 			return sys_unexpected(exception_error(std::current_exception()));
 		}
+	}
+
+	void connect_async(const session_key &key, const client_config &config,
+		connect_handler handler) override
+	{
+		auto executor = m_executor;
+		asio::co_spawn(executor, connect_async_impl(executor, key, config),
+		[handler = std::move(handler)](std::exception_ptr exception,
+			sys_expected<negotiated_transport> result) mutable
+		{
+			if( exception )
+			{
+				std::move(handler)(exception_error(exception),
+					negotiated_transport{});
+				return;
+			}
+			if( result )
+				std::move(handler)(error_code{}, std::move(*result));
+			else
+				std::move(handler)(result.error(), negotiated_transport{});
+		});
 	}
 };
 

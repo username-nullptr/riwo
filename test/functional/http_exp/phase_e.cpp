@@ -193,6 +193,16 @@ void head_response_has_no_data()
 			co_await exchange.response_body().finish(std::move(trailers),
 				riwo::use_awaitable);
 		})
+		.on_request<http::method::get>("/reset-content",
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		{
+			auto [rejected] = co_await exchange.respond(
+				{http::status::reset_content, {}}, std::string_view("forbidden"),
+				asio::as_tuple(riwo::use_awaitable));
+			RIWO_TEST_CHECK(rejected == http::errc::body_not_allowed);
+			co_await exchange.respond({http::status::reset_content, {}},
+				http::body_spec::empty(), riwo::use_awaitable);
+		})
 		.start();
 	const auto base = std::format("http://127.0.0.1:{}",
 		service.acceptor().local_endpoint().port());
@@ -215,6 +225,11 @@ void head_response_has_no_data()
 		RIWO_TEST_CHECK_EQ(streamed.headers().find_first("x-head-test"),
 			"stream");
 		RIWO_TEST_CHECK(streamed.buffered_body().empty());
+		auto reset = co_await client.fetch(
+			http::request(http::method::get, base + "/reset-content"),
+			riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(reset.status(), http::status::reset_content);
+		RIWO_TEST_CHECK(reset.buffered_body().empty());
 		service.stop();
 		context.stop();
 		co_return;

@@ -61,6 +61,7 @@ struct server_open_plan
 	request_info request {};
 	opening_response opening {};
 	http_exp::response_head response {};
+	optional<upgrade_rejection> rejection {};
 };
 
 template <core_concepts::exec Exec>
@@ -90,8 +91,11 @@ sys_expected<server_open_plan> prepare_server_open(
 		if( options.request_validator )
 		{
 			auto rejection = options.request_validator(plan.request);
-			if( rejection ) return sys_unexpected(
-				make_error_code(errc::handshake_rejected));
+			if( rejection )
+			{
+				plan.rejection = std::move(rejection);
+				return plan;
+			}
 		}
 
 		if( options.subprotocol_selector )
@@ -165,6 +169,17 @@ void reject_upgrade(http_exp::basic_server_exchange<Exec> &exchange,
 }
 
 template <core_concepts::exec Exec>
+void reject_upgrade(http_exp::basic_server_exchange<Exec> &exchange,
+	upgrade_rejection rejection, error_code &write_error) noexcept
+{
+	http_exp::response_head response;
+	response.status = rejection.status;
+	response.headers = std::move(rejection.headers);
+	exchange.respond(std::move(response), asio::buffer(rejection.body),
+		write_error);
+}
+
+template <core_concepts::exec Exec>
 void upgrade_sync(http_exp::basic_server_exchange<Exec> &exchange,
 	upgrade_options options, basic_accept_result<Exec> &result,
 	error_code &error) noexcept
@@ -177,6 +192,13 @@ void upgrade_sync(http_exp::basic_server_exchange<Exec> &exchange,
 			auto handshake_error = plan.error();
 			reject_upgrade(exchange, error);
 			if( not error ) error = handshake_error;
+			return;
+		}
+		if( plan->rejection )
+		{
+			reject_upgrade(exchange, std::move(*plan->rejection), error);
+			if( not error )
+				error = make_error_code(errc::handshake_rejected);
 			return;
 		}
 		result.request = plan->request;
@@ -215,6 +237,19 @@ co_upgrade(http_exp::basic_server_exchange<Exec> *exchange,
 				std::move(response), asio::buffer(body),
 				asio::as_tuple(asio::use_awaitable_t<Exec>{}));
 			co_return std::tuple {write_error ? write_error : handshake_error,
+				std::move(result)};
+		}
+		if( plan->rejection )
+		{
+			http_exp::response_head response;
+			response.status = plan->rejection->status;
+			response.headers = std::move(plan->rejection->headers);
+			auto [write_error] = co_await exchange->respond(
+				std::move(response), asio::buffer(plan->rejection->body),
+				asio::as_tuple(asio::use_awaitable_t<Exec>{}));
+			co_return std::tuple {
+				write_error ? write_error :
+					make_error_code(errc::handshake_rejected),
 				std::move(result)};
 		}
 		result.request = plan->request;

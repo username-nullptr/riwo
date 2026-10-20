@@ -599,6 +599,29 @@ void h1_server_keep_alive()
 	completed.get();
 }
 
+void async_connect_does_not_block()
+{
+	riwo::io_context_t context;
+	http::client_config config;
+	config.timeout.connect = std::chrono::milliseconds(500);
+	config.protocols.requirement = http::protocol_requirement::require_http1;
+	http::request_head head {
+		http::method::get, riwo::url("http://10.255.255.1:81/")
+	};
+	const auto key = detail::make_session_key(head, config);
+	auto connector = detail::make_default_connector(context.get_executor());
+	bool completed = false;
+	const auto start = std::chrono::steady_clock::now();
+	connector->connect_async(key, config,
+		[&completed](riwo::error_code, detail::negotiated_transport)
+		{
+			completed = true;
+		});
+	const auto elapsed = std::chrono::steady_clock::now() - start;
+	RIWO_TEST_CHECK(!completed);
+	RIWO_TEST_CHECK(elapsed < std::chrono::milliseconds(250));
+}
+
 } //namespace
 
 int main(int argc, const char *const argv[])
@@ -613,6 +636,7 @@ int main(int argc, const char *const argv[])
 		{"idle expiry", idle_expiry},
 		{"plaintext preface detector", plaintext_preface_detector},
 		{"HTTP/1 pool reuses connection", h1_pool_reuses_connection},
-		{"HTTP/1 server keep-alive", h1_server_keep_alive}
+		{"HTTP/1 server keep-alive", h1_server_keep_alive},
+		{"async connector does not block", async_connect_does_not_block}
 	});
 }

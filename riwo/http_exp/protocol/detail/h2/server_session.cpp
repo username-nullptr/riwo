@@ -65,7 +65,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 {
 	try {
 		const auto code = head.status.code();
-		const bool body_allowed = code >= 200 and code != 204 and code != 304;
+		const bool body_allowed = head.status.allows_body();
 		if( not body_allowed and spec.type() != body_spec::mode::empty )
 			return sys_unexpected(make_error_code(errc::body_not_allowed));
 		nv_block result;

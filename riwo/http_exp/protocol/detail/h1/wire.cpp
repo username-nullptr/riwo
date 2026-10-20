@@ -72,31 +72,6 @@ namespace riwo::http_exp::detail::h1 { namespace
 	return value == protocol::v1_0 ? "HTTP/1.0" : "HTTP/1.1";
 }
 
-[[nodiscard]] std::string_view reason(uint16_t code) noexcept
-{
-	switch(code)
-	{
-	case 100: return "Continue";
-	case 101: return "Switching Protocols";
-	case 200: return "OK";
-	case 201: return "Created";
-	case 202: return "Accepted";
-	case 204: return "No Content";
-	case 301: return "Moved Permanently";
-	case 302: return "Found";
-	case 304: return "Not Modified";
-	case 400: return "Bad Request";
-	case 401: return "Unauthorized";
-	case 403: return "Forbidden";
-	case 404: return "Not Found";
-	case 405: return "Method Not Allowed";
-	case 500: return "Internal Server Error";
-	case 502: return "Bad Gateway";
-	case 503: return "Service Unavailable";
-	default: return "Status";
-	}
-}
-
 [[nodiscard]] bool framing_header(std::string_view name) noexcept {
 	return equal_ci(name, "Content-Length") or
 		equal_ci(name, "Transfer-Encoding") or
@@ -261,7 +236,7 @@ sys_expected<std::string> serialize_response(const response_head &head,
 			spec.type() == body_spec::mode::streaming )
 			return sys_unexpected(make_error_code(errc::operation_not_supported));
 		const auto code = head.status.code();
-		const bool body_allowed = code >= 200 and code != 204 and code != 304;
+		const bool body_allowed = head.status.allows_body();
 		if( not body_allowed and spec.type() != body_spec::mode::empty )
 			return sys_unexpected(make_error_code(errc::body_not_allowed));
 		std::string result;
@@ -270,7 +245,7 @@ sys_expected<std::string> serialize_response(const response_head &head,
 		result += ' ';
 		result += std::to_string(code);
 		result += ' ';
-		result += reason(code);
+		result += head.status.text();
 		result += "\r\n";
 		append_fields(result, head.headers, true);
 		if( head.upgrade_protocol )
@@ -416,7 +391,7 @@ sys_expected<parsed_response> parse_response(std::string_view wire,
 		result.head.headers = std::move(parsed->values);
 		result.version = *parsed_version;
 		result.close = parsed->close or result.version == protocol::v1_0;
-		if( head_request or code < 200 or code == 204 or code == 304 )
+		if( head_request or not result.head.status.allows_body() )
 			result.framing = body_framing::none;
 		else if( parsed->chunked ) result.framing = body_framing::chunked;
 		else if( parsed->content_length )

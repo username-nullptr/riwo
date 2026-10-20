@@ -222,6 +222,13 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_THROWS(http::method("bad method"), std::invalid_argument);
 	RIWO_TEST_CHECK_THROWS(http::status(99), std::invalid_argument);
 	RIWO_TEST_CHECK_EQ(http::status(599).code(), 599);
+	RIWO_TEST_CHECK_EQ(http::status(http::status::reset_content).text(),
+		"Reset Content");
+	RIWO_TEST_CHECK_EQ(http::status(418).text(), "I'm a teapot");
+	RIWO_TEST_CHECK(http::status(http::status::ok).allows_body());
+	RIWO_TEST_CHECK(!http::status(http::status::no_content).allows_body());
+	RIWO_TEST_CHECK(!http::status(http::status::reset_content).allows_body());
+	RIWO_TEST_CHECK(!http::status(http::status::not_modified).allows_body());
 
 	http::fields fields;
 	fields.add("Set-Cookie", "one=1");

@@ -52,15 +52,17 @@ behavior rather than by implementation source file.
 - `http_exp/phase_a.cpp`: body sources/readers/writers, exchange state machines,
   request metadata, informational responses, and reply convenience operations.
 - `http_exp/phase_b.cpp`: HTTP/1.0 and HTTP/1.1 loopback, buffered/file/streaming
-  bodies, trailers, slow reads, and cancellation.
+  bodies, trailers, slow reads, cancellation, and bodyless status responses.
 - `http_exp/phase_c.cpp`: protocol selection, session keys/factories, pool
-  capacity/fairness/expiry, cleartext preface detection, and keep-alive reuse.
+  capacity/fairness/expiry, non-blocking asynchronous connector start,
+  cleartext preface detection, and keep-alive reuse.
 - `http_exp/phase_d.cpp`: HTTP/2 prior knowledge, multiplexed streams,
   request/response bodies and trailers, RST_STREAM/GOAWAY mapping, automatic
   retry, redirects, and replayable-source rewind behavior.
 - `http_exp/phase_f.cpp`: protocol-neutral duplex handoff, HTTP/1.1 WebSocket
-  Upgrade, HTTP/2 Extended CONNECT, subprotocol negotiation, echo traffic, and
-  clean close behavior through the isolated `websocket_exp` module.
+  Upgrade, HTTP/2 Extended CONNECT, subprotocol negotiation, echo traffic,
+  overlapped read/write, clean close behavior, and validator rejection response
+  preservation through the isolated `websocket_exp` module.
 - `http_exp/application.cpp`: public-API application workflow covering routing,
   query targets, authentication rejection and body draining, state mutation,
   case-insensitive headers, streaming events/trailers, and 404 responses.

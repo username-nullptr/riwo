@@ -19,6 +19,7 @@ public:
 		ok = 200,
 		created = 201,
 		no_content = 204,
+		reset_content = 205,
 		moved_permanently = 301,
 		found = 302,
 		not_modified = 304,
@@ -35,6 +36,8 @@ public:
 	explicit status(uint16_t code);
 
 	[[nodiscard]] uint16_t code() const noexcept;
+	[[nodiscard]] std::string_view text() const noexcept;
+	[[nodiscard]] bool allows_body() const noexcept;
 
 	friend bool operator==(status, status) noexcept = default;
 
