@@ -20,6 +20,8 @@ public:
 	using response_handler = asio::any_completion_handler<void(
 		error_code, response_head)>;
 	using operation_handler = asio::any_completion_handler<void(error_code)>;
+	using duplex_handler = asio::any_completion_handler<void(
+		error_code, std::shared_ptr<duplex_state>)>;
 
 	virtual ~stream() = default;
 	[[nodiscard]] virtual protocol selected_protocol() const noexcept = 0;
@@ -44,6 +46,10 @@ public:
 		operation_handler handler);
 	virtual void inform_sync(response_head head, error_code &error) noexcept;
 	virtual void inform(response_head head, operation_handler handler);
+	[[nodiscard]] virtual std::shared_ptr<duplex_state> open_duplex_sync(
+		optional<response_head> response, error_code &error) noexcept;
+	virtual void open_duplex(optional<response_head> response,
+		duplex_handler handler);
 	[[nodiscard]] virtual bool reusable() const noexcept { return false; }
 	[[nodiscard]] virtual request_delivery delivery() const noexcept {
 		return request_delivery::possibly_processed;
@@ -102,6 +108,13 @@ public:
 	virtual void accept(accept_handler handler) = 0;
 	virtual void graceful_shutdown(shutdown_handler handler) = 0;
 };
+
+[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<duplex_state>
+make_body_duplex_state(asio::any_io_executor executor, protocol version,
+	std::shared_ptr<body_reader_state> reader,
+	std::shared_ptr<body_writer_state> writer,
+	asio::ip::tcp::endpoint remote, asio::ip::tcp::endpoint local,
+	std::shared_ptr<void> owner, std::function<void()> cancel);
 
 } //namespace riwo::http_exp::detail
 

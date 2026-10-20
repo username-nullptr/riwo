@@ -14,6 +14,8 @@ class RIWO_HTTP_EXP_API client_exchange_state
 public:
 	using response_handler = asio::any_completion_handler<void(
 		error_code,response_head)>;
+	using duplex_handler = asio::any_completion_handler<void(
+		error_code,std::shared_ptr<duplex_state>)>;
 
 	explicit client_exchange_state(std::shared_ptr<stream> stream = {});
 	~client_exchange_state();
@@ -23,6 +25,9 @@ public:
 	[[nodiscard]] std::shared_ptr<body_reader_state> response_body() const noexcept;
 	[[nodiscard]] response_head wait_response(error_code &error) noexcept;
 	void wait_response(response_handler handler);
+	[[nodiscard]] std::shared_ptr<duplex_state> release_duplex(
+		error_code &error) noexcept;
+	void release_duplex(duplex_handler handler);
 	void cancel() noexcept;
 
 private:
@@ -134,6 +139,57 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::response_body() noexcept -> body_reader_type& {
 	return *m_impl->response_body;
+}
+
+template <core_concepts::exec Exec>
+template <typename Token>
+auto basic_client_exchange<Exec>::release_duplex(Token &&token)
+	requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,basic_duplex_channel<executor_type>>
+{
+	using channel_type = basic_duplex_channel<executor_type>;
+	if constexpr( is_error_code_token_v<Token> )
+	{
+		auto state = m_impl->state->release_duplex(token);
+		if( not token )
+		{
+			m_impl->request_body->detach();
+			m_impl->response_body->detach();
+		}
+		return channel_type(m_impl->executor, std::move(state));
+	}
+	else if constexpr( is_sync_opt_token_v<Token> )
+	{
+		error_code error;
+		auto state = m_impl->state->release_duplex(error);
+		if( error )
+			return expected_value_or_throw(sys_expected<channel_type>(
+				sys_unexpected(error)));
+		m_impl->request_body->detach();
+		m_impl->response_body->detach();
+		return channel_type(m_impl->executor, std::move(state));
+	}
+	else
+	{
+		auto owner = m_impl;
+		auto executor = m_impl->executor;
+		return initiate_io<channel_type>(executor,
+		[owner = std::move(owner), executor](auto handler) mutable {
+			owner->state->release_duplex(
+				[owner = std::move(owner), executor,
+				 handler = std::move(handler)]
+				(error_code error,
+				 std::shared_ptr<detail::duplex_state> channel) mutable {
+					if( not error )
+					{
+						owner->request_body->detach();
+						owner->response_body->detach();
+					}
+					std::move(handler)(error,
+						channel_type(executor, std::move(channel)));
+				});
+		}, std::forward<Token>(token));
+	}
 }
 
 template <core_concepts::exec Exec>

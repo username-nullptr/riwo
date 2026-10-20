@@ -55,6 +55,12 @@ public:
 		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response_head>;
 
 	[[nodiscard]] body_reader_type &response_body() noexcept;
+
+	template <typename Token = use_sync_t>
+	[[nodiscard]] auto release_duplex(Token &&token = {})
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,basic_duplex_channel<executor_type>>;
+
 	void cancel() noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 

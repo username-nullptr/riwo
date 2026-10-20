@@ -11,6 +11,8 @@ riwo.core
 └── riwo.coro
     ├── riwo.http
     │   └── riwo.websocket
+    ├── riwo.http_exp
+    │   └── riwo.websocket_exp
     └── riwo.utils
 ```
 
@@ -19,7 +21,9 @@ riwo.core
 | Core | always built | ON | `<riwo/core.h>` | `riwo.core` |
 | Coroutines | `RIWO_BUILD_CORO` | ON | `<riwo/coro.h>` | `riwo.coro` |
 | HTTP | `RIWO_BUILD_HTTP` | OFF | `<riwo/http.h>` | `riwo.http` |
+| HTTP (experimental) | `RIWO_BUILD_HTTP_EXP` | OFF | `<riwo/http_exp.h>` | `riwo.http_exp` |
 | WebSocket | `RIWO_BUILD_WEBSOCKET` | OFF | `<riwo/websocket.h>` | `riwo.websocket` |
+| WebSocket (experimental) | `RIWO_BUILD_WEBSOCKET_EXP` | OFF | `<riwo/websocket_exp.h>` | `riwo.websocket_exp` |
 | Utilities | `RIWO_BUILD_UTILITIES` | OFF | `<riwo/utils.h>` | `riwo.utils` |
 
 Link each module your application uses directly. CMake propagates that

@@ -102,7 +102,7 @@ if (TEST_EXPECT_SUCCESS)
 		message(FATAL_ERROR "The generated package does not expose core.")
 	endif ()
 
-	foreach(component coro http http_exp websocket utils)
+	foreach(component coro http http_exp websocket websocket_exp utils)
 		if (component IN_LIST expected_components)
 			set(expected_value ON)
 		else ()

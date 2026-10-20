@@ -204,6 +204,11 @@ void basic_body_reader<Exec>::cancel() noexcept {
 	m_impl->state->cancel();
 }
 
+template <core_concepts::exec Exec>
+void basic_body_reader<Exec>::detach() noexcept {
+	m_impl->state = detail::make_body_reader_state();
+}
+
 } //namespace riwo::http_exp
 
 #endif //RIWO_HTTP_EXP_BODY_DETAIL_READER_H

@@ -30,6 +30,10 @@ public:
 	[[nodiscard]] const riwo::url &url() const noexcept;
 	[[nodiscard]] http_exp::fields &headers() noexcept;
 	[[nodiscard]] const http_exp::fields &headers() const noexcept;
+	request &connect_protocol(std::string protocol);
+	[[nodiscard]] const optional<std::string> &connect_protocol() const noexcept;
+	request &upgrade_protocol(std::string protocol);
+	[[nodiscard]] const optional<std::string> &upgrade_protocol() const noexcept;
 
 	// The buffer is borrowed until the send/fetch completion.
 	request &body(const const_buffer &bytes);

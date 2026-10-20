@@ -219,8 +219,6 @@ error_code validate_server_config(const server_config &config) noexcept
 	{
 		const auto &value = config.h2;
 		constexpr uint32_t maximum_window = 0x7fffffffU;
-		if( value.enable_extended_connect )
-			return make_error_code(errc::operation_not_supported);
 		if( value.initial_stream_window == 0 or
 			value.initial_stream_window > maximum_window or
 			value.initial_connection_window < 65'535 or

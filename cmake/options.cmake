@@ -105,6 +105,22 @@ if (RIWO_BUILD_WEBSOCKET)
 	endif ()
 endif ()
 
+option(RIWO_BUILD_WEBSOCKET_EXP
+	"-- ${PRO_NAME}: Build module <WebSocket_EXP>." OFF
+)
+set(RIWO_WEBSOCKET_EXP_SUPPORT ${RIWO_BUILD_WEBSOCKET_EXP})
+
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	if (NOT RIWO_BUILD_HTTP_EXP)
+		message(FATAL_ERROR
+			"${PRO_NAME}: <WebSocket_EXP> module depends on <HTTP_EXP> module."
+		)
+		unset(RIWO_BUILD_WEBSOCKET_EXP)
+	else ()
+		message(STATUS "${PRO_NAME}: Build module <WebSocket_EXP>.")
+	endif ()
+endif ()
+
 option(RIWO_BUILD_UTILITIES
 	"-- ${PRO_NAME}: Build module <Utilities>." OFF
 )

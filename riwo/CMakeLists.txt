@@ -52,12 +52,23 @@ if (RIWO_BUILD_HTTP_EXP)
 		REGEX "/transport/tls_connection[.]h$" EXCLUDE
 		REGEX "/transport/preface[.]h$" EXCLUDE
 	)
+	# basic_duplex_channel is a public class template whose definitions live in
+	# this focused detail header; keep the rest of protocol/detail private.
+	install(FILES http_exp/protocol/detail/duplex_channel.h
+		DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp/protocol/detail
+	)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES websocket.h)
 	add_subdirectory(websocket)
 	riwo_install_module_headers(websocket)
+endif ()
+
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES websocket_exp.h)
+	add_subdirectory(websocket_exp)
+	riwo_install_module_headers(websocket_exp)
 endif ()
 
 if (RIWO_BUILD_UTILITIES)
@@ -67,7 +78,7 @@ if (RIWO_BUILD_UTILITIES)
 endif ()
 
 if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
-	foreach(target riwo.core riwo.coro riwo.http riwo.http_exp riwo.websocket riwo.utils)
+	foreach(target riwo.core riwo.coro riwo.http riwo.http_exp riwo.websocket riwo.websocket_exp riwo.utils)
 		if (TARGET ${target})
 			target_link_libraries(${target} PUBLIC riwo.test.sanitizer)
 		endif ()

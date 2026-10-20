@@ -225,6 +225,12 @@ sys_expected<std::string> serialize_request(const request_head &head,
 		result += head.authority;
 		result += "\r\n";
 		append_fields(result, head.headers, true);
+		if( head.upgrade_protocol )
+		{
+			result += "Connection: Upgrade\r\nUpgrade: ";
+			result += *head.upgrade_protocol;
+			result += "\r\n";
+		}
 		if( spec.type() == body_spec::mode::known_length )
 		{
 			result += "Content-Length: ";
@@ -267,6 +273,12 @@ sys_expected<std::string> serialize_response(const response_head &head,
 		result += reason(code);
 		result += "\r\n";
 		append_fields(result, head.headers, true);
+		if( head.upgrade_protocol )
+		{
+			result += "Connection: Upgrade\r\nUpgrade: ";
+			result += *head.upgrade_protocol;
+			result += "\r\n";
+		}
 		if( body_allowed and (spec.type() == body_spec::mode::known_length or
 			spec.type() == body_spec::mode::head) )
 		{

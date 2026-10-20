@@ -66,6 +66,11 @@ public:
 	auto inform(response_head, Token &&token = {})
 		requires core_concepts::tf_opt_token<Token,error_code>;
 
+	template <typename Token = use_sync_t>
+	[[nodiscard]] auto accept_duplex(response_head, Token &&token = {})
+		requires core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,basic_duplex_channel<executor_type>>;
+
 	void cancel() noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 

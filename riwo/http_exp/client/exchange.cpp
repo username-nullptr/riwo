@@ -25,6 +25,7 @@ public:
 	std::shared_ptr<body_reader_state> response_body_;
 	bool wait_pending = false;
 	bool response_ready = false;
+	bool duplex_taken = false;
 	response_head response {};
 };
 
@@ -119,8 +120,40 @@ void client_exchange_state::wait_response(response_handler handler)
 	});
 }
 
+std::shared_ptr<duplex_state> client_exchange_state::release_duplex(
+	error_code &error) noexcept
+{
+	auto state = m_impl;
+	if( not state->response_ready or state->duplex_taken or not state->stream_ )
+	{
+		error = make_error_code(errc::operation_not_permitted);
+		return {};
+	}
+	auto result = state->stream_->open_duplex_sync({}, error);
+	if( not error ) state->duplex_taken = true;
+	return result;
+}
+
+void client_exchange_state::release_duplex(duplex_handler handler)
+{
+	auto state = m_impl;
+	if( not state->response_ready or state->duplex_taken or not state->stream_ )
+	{
+		std::move(handler)(make_error_code(errc::operation_not_permitted),
+			std::shared_ptr<duplex_state>{});
+		return;
+	}
+	state->stream_->open_duplex({},
+	[state, handler = std::move(handler)]
+	(error_code error, std::shared_ptr<duplex_state> channel) mutable {
+		if( not error ) state->duplex_taken = true;
+		std::move(handler)(error, std::move(channel));
+	});
+}
+
 void client_exchange_state::cancel() noexcept
 {
+	if( m_impl->duplex_taken ) return;
 	m_impl->request_body_->cancel();
 	m_impl->response_body_->cancel();
 	if( m_impl->stream_ )

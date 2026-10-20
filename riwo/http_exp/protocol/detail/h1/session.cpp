@@ -71,7 +71,7 @@ struct connection final
 
 	void cancel() noexcept
 	{
-		if( closed ) return;
+		if( closed or detached ) return;
 		closed = true;
 		transport->cancel();
 	}
@@ -79,6 +79,122 @@ struct connection final
 	std::shared_ptr<::riwo::http_exp::connection> transport;
 	std::string pending;
 	bool closed = false;
+	bool detached = false;
+};
+
+class h1_duplex_state final : public duplex_state
+{
+public:
+	h1_duplex_state(std::shared_ptr<connection> value, protocol version) :
+		connection_(std::move(value)), version_(version)
+	{
+		connection_->detached = true;
+		connection_->transport->set_read_timeout({});
+		connection_->transport->set_write_timeout({});
+	}
+
+	[[nodiscard]] asio::any_io_executor get_executor() const noexcept override {
+		return connection_->transport->get_executor();
+	}
+	[[nodiscard]] protocol selected_protocol() const noexcept override {
+		return version_;
+	}
+	[[nodiscard]] bool is_open() const noexcept override {
+		return not connection_->closed and connection_->transport->is_open();
+	}
+	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,
+		error_code &error) noexcept override
+	{
+		error.clear();
+		if( not connection_->pending.empty() )
+		{
+			const auto size = std::min(buffer.size(), connection_->pending.size());
+			if( size != 0 )
+				std::memcpy(buffer.data(), connection_->pending.data(), size);
+			connection_->pending.erase(0, size);
+			return size;
+		}
+		return connection_->transport->read_some_sync(buffer, error);
+	}
+	void read_some(mutable_buffer buffer, io_handler handler) override
+	{
+		if( not connection_->pending.empty() )
+		{
+			const auto size = std::min(buffer.size(), connection_->pending.size());
+			if( size != 0 )
+				std::memcpy(buffer.data(), connection_->pending.data(), size);
+			connection_->pending.erase(0, size);
+			std::move(handler)(error_code{}, size);
+			return;
+		}
+		connection_->transport->read_some(buffer, std::move(handler));
+	}
+	[[nodiscard]] size_t write_sync(std::span<const const_buffer> buffers,
+		error_code &error) noexcept override
+	{
+		error.clear();
+		size_t total = 0;
+		for( const auto &buffer : buffers )
+		{
+			auto size = connection_->transport->write_sync(buffer, error);
+			total += size;
+			if( error or size != buffer.size() ) break;
+		}
+		return total;
+	}
+	void write(std::span<const const_buffer> buffers, io_handler handler) override
+	{
+		size_t total = 0;
+		for( const auto &buffer : buffers ) total += buffer.size();
+		auto bytes = std::make_shared<std::vector<std::byte>>(total);
+		size_t offset = 0;
+		for( const auto &buffer : buffers )
+		{
+			if( buffer.size() != 0 )
+				std::memcpy(bytes->data() + offset, buffer.data(), buffer.size());
+			offset += buffer.size();
+		}
+		connection_->transport->write(riwo::buffer(*bytes),
+		[bytes, handler = std::move(handler)]
+		(error_code error, size_t size) mutable {
+			std::move(handler)(error, size);
+		});
+	}
+	void close_sync(error_code &error) noexcept override
+	{
+		error.clear();
+		if( connection_->closed ) return;
+		connection_->closed = true;
+		connection_->transport->cancel();
+	}
+	void close(close_handler handler) override
+	{
+		if( connection_->closed )
+		{
+			std::move(handler)(error_code{});
+			return;
+		}
+		connection_->closed = true;
+		connection_->transport->close(std::move(handler));
+	}
+	void cancel() noexcept override
+	{
+		if( connection_->closed ) return;
+		connection_->closed = true;
+		connection_->transport->cancel();
+	}
+	[[nodiscard]] endpoint_type remote_endpoint(
+		error_code &error) const noexcept override {
+		return connection_->transport->remote_endpoint(error);
+	}
+	[[nodiscard]] endpoint_type local_endpoint(
+		error_code &error) const noexcept override {
+		return connection_->transport->local_endpoint(error);
+	}
+
+private:
+	std::shared_ptr<connection> connection_;
+	protocol version_;
 };
 
 [[nodiscard]] bool is_eof(const error_code &error) noexcept {
@@ -1093,7 +1209,9 @@ public:
 				error = parsed.error();
 				return {};
 			}
-			if( parsed->head.status.code() < 200 ) continue;
+			if( parsed->head.status.code() < 200 and
+				parsed->head.status.code() != status::switching_protocols )
+				continue;
 			response_ = parsed->head;
 			response_protocol_ = parsed->version;
 			connection_->transport->set_read_timeout(timeouts_.body_idle);
@@ -1103,7 +1221,11 @@ public:
 			if( parsed->framing == body_framing::none and client_ )
 			{
 				inbound_->set_finished();
-				body_finished({});
+				const auto code = response_.status.code();
+				if( code != status::switching_protocols and
+					(request_.method.known() != method::connect or
+					 code < 200 or code >= 300) )
+					body_finished({});
 			}
 			return response_;
 		}
@@ -1242,7 +1364,8 @@ private:
 				std::move(handler)(parsed.error(), response_head{});
 				return;
 			}
-			if( parsed->head.status.code() < 200 )
+			if( parsed->head.status.code() < 200 and
+				parsed->head.status.code() != status::switching_protocols )
 			{
 				self->read_response(std::move(handler));
 				return;
@@ -1258,9 +1381,120 @@ private:
 			if( parsed->framing == body_framing::none and self->client_ )
 			{
 				self->inbound_->set_finished();
-				self->body_finished({});
+				const auto code = self->response_.status.code();
+				if( code != status::switching_protocols and
+					(self->request_.method.known() != method::connect or
+					 code < 200 or code >= 300) )
+					self->body_finished({});
 			}
 			std::move(handler)(error_code{}, self->response_);
+		});
+	}
+
+	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
+		optional<response_head> response, error_code &error) noexcept override
+	{
+		error.clear();
+		if( duplex_opened_ or (client_ and not response_ready_) )
+		{
+			error = make_error_code(errc::operation_not_permitted);
+			return {};
+		}
+		if( client_ )
+		{
+			const auto code = response_.status.code();
+			if( code != status::switching_protocols and
+				(request_.method.known() != method::connect or
+				 code < 200 or code >= 300) )
+			{
+				error = make_error_code(errc::operation_not_permitted);
+				return {};
+			}
+		}
+		else
+		{
+			if( not response )
+			{
+				error = make_error_code(errc::operation_not_permitted);
+				return {};
+			}
+			const auto code = response->status.code();
+			if( code != status::switching_protocols and
+				(request_.method.known() != method::connect or
+				 code < 200 or code >= 300) )
+			{
+				error = make_error_code(errc::invalid_status);
+				return {};
+			}
+			auto wire = serialize_response(*response, body_spec::empty(),
+				version_, false);
+			if( not wire )
+			{
+				error = wire.error();
+				return {};
+			}
+			(void)connection_->write_sync(asio::buffer(*wire), error);
+			if( error ) return {};
+		}
+		duplex_opened_ = true;
+		keep_alive_ = false;
+		return std::make_shared<h1_duplex_state>(connection_, version_);
+	}
+
+	void open_duplex(optional<response_head> response,
+		duplex_handler handler) override
+	{
+		if( duplex_opened_ or (client_ and not response_ready_) )
+		{
+			std::move(handler)(make_error_code(errc::operation_not_permitted),
+				std::shared_ptr<duplex_state>{});
+			return;
+		}
+		if( client_ )
+		{
+			error_code error;
+			auto channel = open_duplex_sync({}, error);
+			std::move(handler)(error, std::move(channel));
+			return;
+		}
+		if( not response )
+		{
+			std::move(handler)(make_error_code(errc::operation_not_permitted),
+				std::shared_ptr<duplex_state>{});
+			return;
+		}
+		const auto code = response->status.code();
+		if( code != status::switching_protocols and
+			(request_.method.known() != method::connect or
+			 code < 200 or code >= 300) )
+		{
+			std::move(handler)(make_error_code(errc::invalid_status),
+				std::shared_ptr<duplex_state>{});
+			return;
+		}
+		auto wire_value = serialize_response(*response, body_spec::empty(),
+			version_, false);
+		if( not wire_value )
+		{
+			std::move(handler)(wire_value.error(),
+				std::shared_ptr<duplex_state>{});
+			return;
+		}
+		auto wire = std::make_shared<std::string>(std::move(*wire_value));
+		auto self = shared_from_this();
+		connection_->write(asio::buffer(*wire),
+		[self = std::move(self), wire, handler = std::move(handler)]
+		(error_code error, size_t) mutable {
+			if( error )
+			{
+				std::move(handler)(error, std::shared_ptr<duplex_state>{});
+				return;
+			}
+			self->duplex_opened_ = true;
+			self->keep_alive_ = false;
+			std::move(handler)(error_code{},
+				std::make_shared<h1_duplex_state>(
+					self->connection_, self->version_));
 		});
 	}
 
@@ -1307,6 +1541,7 @@ private:
 	bool keep_alive_ = true;
 	bool released_ = false;
 	bool reusable_ = false;
+	bool duplex_opened_ = false;
 	std::function<void(bool)> release_handler_;
 };
 

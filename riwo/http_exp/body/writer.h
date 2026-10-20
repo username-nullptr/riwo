@@ -48,6 +48,9 @@ public:
 		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	void cancel() noexcept;
+	// Releases this facade without cancelling the shared body state. Used when
+	// an exchange transfers ownership to a protocol-neutral duplex channel.
+	void detach() noexcept;
 
 private:
 	class impl;

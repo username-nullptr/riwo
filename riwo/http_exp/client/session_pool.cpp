@@ -12,7 +12,8 @@ namespace riwo::http_exp::detail { namespace
 using clock_type = std::chrono::steady_clock;
 using timer_type = asio::steady_timer;
 
-class pooled_stream final : public stream
+class pooled_stream final : public stream,
+	public std::enable_shared_from_this<pooled_stream>
 {
 	RIWO_DISABLE_COPY_MOVE(pooled_stream)
 
@@ -72,6 +73,32 @@ public:
 	}
 	void inform(response_head head, operation_handler handler) override {
 		m_inner->inform(std::move(head), std::move(handler));
+	}
+	[[nodiscard]] endpoint_type remote_endpoint(
+		error_code &error) const noexcept override {
+		return m_inner->remote_endpoint(error);
+	}
+	[[nodiscard]] endpoint_type local_endpoint(
+		error_code &error) const noexcept override {
+		return m_inner->local_endpoint(error);
+	}
+	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
+		optional<response_head> response, error_code &error) noexcept override
+	{
+		auto result = m_inner->open_duplex_sync(std::move(response), error);
+		if( not error ) abandon(false);
+		return result;
+	}
+	void open_duplex(optional<response_head> response,
+		duplex_handler handler) override
+	{
+		auto self = shared_from_this();
+		m_inner->open_duplex(std::move(response),
+		[self = std::move(self), handler = std::move(handler)]
+		(error_code error, std::shared_ptr<duplex_state> state) mutable {
+			if( not error ) self->abandon(false);
+			std::move(handler)(error, std::move(state));
+		});
 	}
 	void cancel() noexcept override {
 		m_inner->cancel();

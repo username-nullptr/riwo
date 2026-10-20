@@ -52,6 +52,10 @@ if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.regressions http_exp/regressions.cpp riwo.http_exp)
 endif ()
 
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	add_riwo_test(http_exp.phase-f http_exp/phase_f.cpp riwo.websocket_exp)
+endif ()
+
 if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_test(websocket.protocol websocket/protocol.cpp riwo.websocket)
 	add_riwo_test(websocket.public-api websocket/public_api.cpp riwo.websocket)

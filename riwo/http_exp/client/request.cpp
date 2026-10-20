@@ -32,6 +32,31 @@ const http_exp::fields &request::headers() const noexcept {
 	return m_impl->head.headers;
 }
 
+request &request::connect_protocol(std::string protocol)
+{
+	if( method().known() != http_exp::method::connect or protocol.empty() )
+		throw std::invalid_argument(
+			"Extended CONNECT requires CONNECT and a non-empty protocol");
+	m_impl->head.connect_protocol = std::move(protocol);
+	return *this;
+}
+
+const optional<std::string> &request::connect_protocol() const noexcept {
+	return m_impl->head.connect_protocol;
+}
+
+request &request::upgrade_protocol(std::string protocol)
+{
+	if( protocol.empty() )
+		throw std::invalid_argument("Upgrade protocol cannot be empty");
+	m_impl->head.upgrade_protocol = std::move(protocol);
+	return *this;
+}
+
+const optional<std::string> &request::upgrade_protocol() const noexcept {
+	return m_impl->head.upgrade_protocol;
+}
+
 request &request::body(const const_buffer &bytes)
 {
 	m_impl->body = bytes;

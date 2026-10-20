@@ -188,6 +188,11 @@ void basic_body_writer<Exec>::cancel() noexcept {
 	m_impl->state->cancel();
 }
 
+template <core_concepts::exec Exec>
+void basic_body_writer<Exec>::detach() noexcept {
+	m_impl->state = detail::make_body_writer_state();
+}
+
 } //namespace riwo::http_exp
 
 #endif //RIWO_HTTP_EXP_BODY_DETAIL_WRITER_H

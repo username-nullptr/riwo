@@ -183,7 +183,9 @@ public:
 		return protocol::v2;
 	}
 	[[nodiscard]] stream_capabilities capabilities() const noexcept override {
-		return {.trailers = true, .full_duplex = true};
+		return {.trailers = true, .full_duplex = true,
+			.tunnel = duplex_opened_,
+			.extended_connect = request_.connect_protocol.has_value()};
 	}
 	[[nodiscard]] request_head request() const override { return request_; }
 	[[nodiscard]] std::shared_ptr<body_reader_state>
@@ -200,6 +202,10 @@ public:
 		operation_handler handler) override;
 	void inform_sync(response_head head, error_code &error) noexcept override;
 	void inform(response_head head, operation_handler handler) override;
+	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
+		optional<response_head> response, error_code &error) noexcept override;
+	void open_duplex(optional<response_head> response,
+		duplex_handler handler) override;
 	[[nodiscard]] bool reusable() const noexcept override;
 	void cancel() noexcept override;
 
@@ -210,10 +216,12 @@ public:
 	std::string scheme_;
 	std::string authority_;
 	std::string path_;
+	std::string protocol_;
 	bool have_method_ = false;
 	bool have_scheme_ = false;
 	bool have_authority_ = false;
 	bool have_path_ = false;
+	bool have_protocol_ = false;
 	bool collecting_trailers_ = false;
 	bool request_ready_ = false;
 	bool invalid_headers_ = false;
@@ -252,6 +260,7 @@ public:
 	error_code terminal_error_;
 	bool closed_ = false;
 	bool cancelled_ = false;
+	bool duplex_opened_ = false;
 };
 
 class server_session_impl final : public server_session,
@@ -299,7 +308,7 @@ public:
 		if( nghttp2_session_server_new2(&native_, callbacks_, this, option_) != 0 )
 			return make_error_code(errc::operation_not_supported);
 
-		std::array<nghttp2_settings_entry,5> settings {{
+		std::array<nghttp2_settings_entry,6> settings {{
 			{NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE,
 				config_.h2.initial_stream_window},
 			{NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS,
@@ -311,7 +320,9 @@ public:
 			{NGHTTP2_SETTINGS_MAX_HEADER_LIST_SIZE,
 				static_cast<uint32_t>(std::min(
 					config_.h2.max_header_list_size,
-					config_.request_limits.max_header_list_size))}
+					config_.request_limits.max_header_list_size))},
+			{NGHTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL,
+				config_.h2.enable_extended_connect ? 1U : 0U}
 		}};
 		if( nghttp2_submit_settings(native_, NGHTTP2_FLAG_NONE,
 			settings.data(), settings.size()) != 0 ) return protocol_error();
@@ -899,6 +910,13 @@ private:
 			value.request_.scheme = value.scheme_;
 			value.request_.authority = value.authority_;
 			value.request_.target = value.path_;
+			if( value.have_protocol_ )
+			{
+				if( not config_.h2.enable_extended_connect or
+					value.method_ != "CONNECT" or value.protocol_.empty() )
+					return false;
+				value.request_.connect_protocol = value.protocol_;
+			}
 			if( value.path_ != "*" )
 				value.request_.url = riwo::url(value.scheme_ + "://" +
 					value.authority_ + value.path_);
@@ -1008,6 +1026,9 @@ private:
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			if( header_name == ":path" )
 				return set_once(value.path_, value.have_path_) ? 0 :
+					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+			if( header_name == ":protocol" )
+				return set_once(value.protocol_, value.have_protocol_) ? 0 :
 					NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 		}
@@ -1251,6 +1272,67 @@ void server_stream_impl::inform(response_head head,
 	session_->inform(shared_from_this(), std::move(head), std::move(handler));
 }
 
+std::shared_ptr<duplex_state> server_stream_impl::open_duplex_sync(
+	optional<response_head> response, error_code &error) noexcept
+{
+	error.clear();
+	if( duplex_opened_ or not request_.connect_protocol or not response or
+		response->status.code() < 200 or response->status.code() >= 300 )
+	{
+		error = make_error_code(errc::operation_not_permitted);
+		return {};
+	}
+	respond_sync(std::move(*response), body_spec::streaming(), error);
+	if( error ) return {};
+	duplex_opened_ = true;
+	error_code endpoint_error;
+	auto remote = session_->remote_endpoint(endpoint_error);
+	endpoint_error.clear();
+	auto local = session_->local_endpoint(endpoint_error);
+	auto self = shared_from_this();
+	return make_body_duplex_state(session_->get_executor(), protocol::v2,
+		inbound_, outbound_, remote, local, self,
+		[weak = weak_from_this()] {
+			if( auto value = weak.lock() )
+				value->session_->cancel(value);
+		});
+}
+
+void server_stream_impl::open_duplex(optional<response_head> response,
+	duplex_handler handler)
+{
+	if( duplex_opened_ or not request_.connect_protocol or not response or
+		response->status.code() < 200 or response->status.code() >= 300 )
+	{
+		std::move(handler)(make_error_code(errc::operation_not_permitted),
+			std::shared_ptr<duplex_state>{});
+		return;
+	}
+	auto self = shared_from_this();
+	respond(std::move(*response), body_spec::streaming(),
+	[self = std::move(self), handler = std::move(handler)]
+	(error_code error) mutable {
+		if( error )
+		{
+			std::move(handler)(error, std::shared_ptr<duplex_state>{});
+			return;
+		}
+		self->duplex_opened_ = true;
+		error_code endpoint_error;
+		auto remote = self->session_->remote_endpoint(endpoint_error);
+		endpoint_error.clear();
+		auto local = self->session_->local_endpoint(endpoint_error);
+		auto state = make_body_duplex_state(
+			self->session_->get_executor(), protocol::v2,
+			self->inbound_, self->outbound_, remote, local, self,
+			[weak = self->weak_from_this()] {
+				if( auto value = weak.lock() )
+					value->session_->cancel(value);
+			});
+		std::move(handler)(error_code{}, std::move(state));
+	});
+}
+
 bool server_stream_impl::reusable() const noexcept {
 	// server_exchange destruction means the application handler is done, not
 	// that nghttp2 has already emitted the final DATA/trailer frame.  Once both
@@ -1262,6 +1344,7 @@ bool server_stream_impl::reusable() const noexcept {
 }
 
 void server_stream_impl::cancel() noexcept {
+	if( duplex_opened_ ) return;
 	if( session_ ) session_->cancel(shared_from_this());
 }
 

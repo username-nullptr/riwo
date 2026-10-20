@@ -14,6 +14,7 @@ struct response_head
 {
 	http_exp::status status {http_exp::status::ok};
 	http_exp::fields headers {};
+	optional<std::string> upgrade_protocol {};
 };
 
 } //namespace riwo::http_exp

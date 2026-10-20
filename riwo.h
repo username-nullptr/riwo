@@ -14,8 +14,16 @@
 # include <riwo/http.h>
 #endif
 
+#if RIWO_HTTP_EXP_SUPPORT
+# include <riwo/http_exp.h>
+#endif
+
 #if RIWO_WEBSOCKET_SUPPORT
 # include <riwo/websocket.h>
+#endif
+
+#if RIWO_WEBSOCKET_EXP_SUPPORT
+# include <riwo/websocket_exp.h>
 #endif
 
 #if RIWO_UTILITIES_SUPPORT

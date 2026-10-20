@@ -44,6 +44,10 @@ struct request_access
 		request result(request_method ? *request_method : value.method(),
 			target ? std::move(*target) : value.url());
 		result.m_impl->head.headers = value.m_impl->head.headers;
+		result.m_impl->head.connect_protocol =
+			value.m_impl->head.connect_protocol;
+		result.m_impl->head.upgrade_protocol =
+			value.m_impl->head.upgrade_protocol;
 		if( strip_credentials )
 		{
 			result.m_impl->head.headers.erase("Authorization");
@@ -168,10 +172,12 @@ namespace
 		if( url.has_query() )
 			target += "?" + url.encoded_query();
 
-		return request_head {
+		auto result = request_head {
 			value.method(), url, scheme, std::move(authority),
-			std::move(target), value.headers()
+			std::move(target), value.headers(), value.connect_protocol()
 		};
+		result.upgrade_protocol = value.upgrade_protocol();
+		return result;
 	}
 	catch(...) {
 		return sys_unexpected(exception_error(std::current_exception()));

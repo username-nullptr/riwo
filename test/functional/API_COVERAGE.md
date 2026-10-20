@@ -58,6 +58,9 @@ behavior rather than by implementation source file.
 - `http_exp/phase_d.cpp`: HTTP/2 prior knowledge, multiplexed streams,
   request/response bodies and trailers, RST_STREAM/GOAWAY mapping, automatic
   retry, redirects, and replayable-source rewind behavior.
+- `http_exp/phase_f.cpp`: protocol-neutral duplex handoff, HTTP/1.1 WebSocket
+  Upgrade, HTTP/2 Extended CONNECT, subprotocol negotiation, echo traffic, and
+  clean close behavior through the isolated `websocket_exp` module.
 - `http_exp/application.cpp`: public-API application workflow covering routing,
   query targets, authentication rejection and body draining, state mutation,
   case-insensitive headers, streaming events/trailers, and 404 responses.

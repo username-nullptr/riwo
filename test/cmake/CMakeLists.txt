@@ -183,6 +183,23 @@ add_riwo_configure_case(http-exp-coexists-with-http SUCCESS
 		"RIWO_EXP_HTTP2_SUPPORT=OFF"
 	COMPONENTS core coro http http_exp
 )
+add_riwo_configure_case(websocket-exp-without-http-exp
+	ERROR "<WebSocket_EXP> module depends on <HTTP_EXP> module"
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP_EXP=OFF"
+		"RIWO_BUILD_WEBSOCKET_EXP=ON"
+)
+add_riwo_configure_case(websocket-exp-standalone SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_HTTP_EXP=ON"
+		"RIWO_BUILD_WEBSOCKET=OFF"
+		"RIWO_BUILD_WEBSOCKET_EXP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core coro http_exp websocket_exp
+)
 add_riwo_configure_case(http-exp-http2-auto-unavailable SUCCESS
 	HTTP2 0
 	OPTIONS
@@ -413,10 +430,14 @@ if (RIWO_BUILD_HTTP_EXP)
 	list(APPEND riwo_consumer_components http_exp)
 endif ()
 
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	list(APPEND riwo_consumer_components websocket_exp)
+endif ()
+
 string(JOIN "," riwo_consumer_components_arg ${riwo_consumer_components})
 set(riwo_missing_component unknown)
 
-foreach(component coro http http_exp websocket utils)
+foreach(component coro http http_exp websocket websocket_exp utils)
 	if (NOT component IN_LIST riwo_consumer_components)
 		set(riwo_missing_component ${component})
 		break()

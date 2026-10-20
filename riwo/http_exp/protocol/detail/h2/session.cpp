@@ -67,9 +67,17 @@ void add_nv(nv_block &block, std::string name, std::string value)
 {
 	try {
 		nv_block result;
-		result.storage.reserve((head.headers.size() + 4) * 2);
-		result.values.reserve(head.headers.size() + 4);
+		result.storage.reserve((head.headers.size() + 5) * 2);
+		result.values.reserve(head.headers.size() + 5);
 		add_nv(result, ":method", std::string(head.method.text()));
+		if( head.connect_protocol )
+		{
+			if( head.method.known() != method::connect or
+				head.connect_protocol->empty() )
+				return sys_unexpected(
+					make_error_code(errc::invalid_field_value));
+			add_nv(result, ":protocol", *head.connect_protocol);
+		}
 		add_nv(result, ":scheme", head.scheme);
 		add_nv(result, ":authority", head.authority);
 		add_nv(result, ":path", head.target.empty() ? "/" : head.target);
@@ -124,10 +132,8 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		value.inbound_stream_buffer < value.initial_stream_window or
 		value.outbound_stream_buffer == 0 or
 		value.inbound_connection_buffer < 65'535 or
-		value.outbound_connection_buffer == 0 or
-		value.enable_extended_connect )
-		return make_error_code(value.enable_extended_connect ?
-			errc::operation_not_supported : errc::operation_not_permitted);
+		value.outbound_connection_buffer == 0 )
+		return make_error_code(errc::operation_not_permitted);
 
 	const auto reserved = static_cast<uint64_t>(value.initial_stream_window) *
 		value.max_concurrent_streams;
@@ -183,7 +189,9 @@ public:
 		return protocol::v2;
 	}
 	[[nodiscard]] stream_capabilities capabilities() const noexcept override {
-		return {.trailers = true, .full_duplex = true};
+		return {.trailers = true, .full_duplex = true,
+			.tunnel = duplex_opened_,
+			.extended_connect = request_.connect_protocol.has_value()};
 	}
 	[[nodiscard]] request_head request() const override { return request_; }
 	[[nodiscard]] std::shared_ptr<body_reader_state>
@@ -201,6 +209,10 @@ public:
 	[[nodiscard]] request_delivery delivery() const noexcept override {
 		return delivery_;
 	}
+	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
+		optional<response_head> response, error_code &error) noexcept override;
+	void open_duplex(optional<response_head> response,
+		duplex_handler handler) override;
 	void cancel() noexcept override;
 
 	std::shared_ptr<h2_session> session_;
@@ -246,6 +258,7 @@ public:
 	uint32_t wire_error_ = NGHTTP2_NO_ERROR;
 	bool closed_ = false;
 	bool cancelled_ = false;
+	bool duplex_opened_ = false;
 	request_delivery delivery_ = request_delivery::not_started;
 };
 
@@ -374,6 +387,27 @@ public:
 			consume_reservation();
 			return {};
 		}
+		if( head.connect_protocol )
+		{
+			if( not config_.h2.enable_extended_connect )
+			{
+				consume_reservation();
+				error = make_error_code(errc::operation_not_supported);
+				return {};
+			}
+			while( not peer_settings_received_ )
+				if( not drive_read_sync(error) )
+				{
+					consume_reservation();
+					return {};
+				}
+			if( not peer_extended_connect_ )
+			{
+				consume_reservation();
+				error = make_error_code(errc::operation_not_supported);
+				return {};
+			}
+		}
 		return submit(std::move(head), std::move(spec), error);
 	}
 
@@ -391,6 +425,31 @@ public:
 		[self = std::move(self), head = std::move(head),
 		 spec = std::move(spec), handler = std::move(handler)]() mutable {
 			self->start_async();
+			if( head.connect_protocol )
+			{
+				if( not self->config_.h2.enable_extended_connect )
+				{
+					self->consume_reservation();
+					std::move(handler)(make_error_code(
+						errc::operation_not_supported),
+						std::shared_ptr<stream>{});
+					return;
+				}
+				if( not self->peer_settings_received_ )
+				{
+					self->pending_extended_opens_.push_back({
+						std::move(head), std::move(spec), std::move(handler)});
+					return;
+				}
+				if( not self->peer_extended_connect_ )
+				{
+					self->consume_reservation();
+					std::move(handler)(make_error_code(
+						errc::operation_not_supported),
+						std::shared_ptr<stream>{});
+					return;
+				}
+			}
 			error_code error;
 			auto value = self->submit(std::move(head), std::move(spec), error);
 			if( not error ) self->write_pump();
@@ -670,6 +729,11 @@ private:
 	{
 		error.clear();
 		consume_reservation();
+		if( head.connect_protocol and not config_.h2.enable_extended_connect )
+		{
+			error = make_error_code(errc::operation_not_supported);
+			return {};
+		}
 		if( draining_ or closed_ or available_stream_capacity() == 0 )
 		{
 			error = make_error_code(errc::operation_not_permitted);
@@ -834,6 +898,13 @@ private:
 			ignore_unused(id);
 			complete_error(*value, error);
 		}
+		while( not pending_extended_opens_.empty() )
+		{
+			auto pending = std::move(pending_extended_opens_.front());
+			pending_extended_opens_.pop_front();
+			consume_reservation();
+			std::move(pending.handler)(error, std::shared_ptr<stream>{});
+		}
 		transport_->cancel();
 		notify_release(false);
 	}
@@ -846,6 +917,13 @@ private:
 		{
 			ignore_unused(id);
 			complete_error(*value, error);
+		}
+		while( not pending_extended_opens_.empty() )
+		{
+			auto pending = std::move(pending_extended_opens_.front());
+			pending_extended_opens_.pop_front();
+			consume_reservation();
+			std::move(pending.handler)(error, std::shared_ptr<stream>{});
 		}
 		transport_->cancel();
 		notify_release(false);
@@ -1109,6 +1187,11 @@ private:
 				NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS);
 			self.peer_max_streams_ = static_cast<size_t>(std::min<uint64_t>(peer,
 				self.config_.h2.max_concurrent_streams));
+			self.peer_settings_received_ = true;
+			self.peer_extended_connect_ =
+				nghttp2_session_get_remote_settings(self.native_,
+					NGHTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL) != 0;
+			self.resume_extended_opens();
 			self.notify_release(true);
 			return 0;
 		}
@@ -1248,6 +1331,35 @@ private:
 		return static_cast<nghttp2_api::ssize_type>(copied);
 	}
 
+	struct pending_extended_open
+	{
+		request_head head;
+		body_spec spec;
+		open_handler handler;
+	};
+
+	void resume_extended_opens()
+	{
+		while( not pending_extended_opens_.empty() )
+		{
+			auto pending = std::move(pending_extended_opens_.front());
+			pending_extended_opens_.pop_front();
+			if( not peer_extended_connect_ )
+			{
+				consume_reservation();
+				std::move(pending.handler)(make_error_code(
+					errc::operation_not_supported),
+					std::shared_ptr<stream>{});
+				continue;
+			}
+			error_code error;
+			auto value = submit(std::move(pending.head),
+				std::move(pending.spec), error);
+			std::move(pending.handler)(error, std::move(value));
+		}
+		write_pump();
+	}
+
 	executor_type executor_;
 	asio::strand<asio::any_io_executor> strand_;
 	std::shared_ptr<::riwo::http_exp::connection> transport_;
@@ -1267,6 +1379,9 @@ private:
 	std::atomic<bool> draining_ {false};
 	std::atomic<bool> closed_ {false};
 	std::atomic<int> mode_ {0};
+	std::deque<pending_extended_open> pending_extended_opens_;
+	bool peer_settings_received_ = false;
+	bool peer_extended_connect_ = false;
 	bool async_started_ = false;
 	bool reading_ = false;
 	bool writing_ = false;
@@ -1315,7 +1430,41 @@ bool h2_stream::reusable() const noexcept {
 	return closed_ and not terminal_error_ and not session_->draining();
 }
 
+std::shared_ptr<duplex_state> h2_stream::open_duplex_sync(
+	optional<response_head> response, error_code &error) noexcept
+{
+	ignore_unused(response);
+	error.clear();
+	if( duplex_opened_ or not response_ready_ or not request_.connect_protocol or
+		response_.status.code() < 200 or response_.status.code() >= 300 )
+	{
+		error = make_error_code(errc::operation_not_permitted);
+		return {};
+	}
+	duplex_opened_ = true;
+	error_code endpoint_error;
+	auto remote = session_->remote_endpoint(endpoint_error);
+	endpoint_error.clear();
+	auto local = session_->local_endpoint(endpoint_error);
+	auto self = shared_from_this();
+	return make_body_duplex_state(session_->get_executor(), protocol::v2,
+		inbound_, outbound_, remote, local, self,
+		[weak = weak_from_this()] {
+			if( auto value = weak.lock() )
+				value->session_->cancel(value);
+		});
+}
+
+void h2_stream::open_duplex(optional<response_head> response,
+	duplex_handler handler)
+{
+	error_code error;
+	auto result = open_duplex_sync(std::move(response), error);
+	std::move(handler)(error, std::move(result));
+}
+
 void h2_stream::cancel() noexcept {
+	if( duplex_opened_ ) return;
 	if( session_ ) session_->cancel(shared_from_this());
 }
 

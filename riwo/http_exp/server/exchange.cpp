@@ -27,6 +27,7 @@ public:
 	std::shared_ptr<body_writer_state> response_body_;
 	bool response_pending = false;
 	bool response_started = false;
+	bool duplex_taken = false;
 };
 
 server_exchange_state::server_exchange_state(std::shared_ptr<stream> stream,
@@ -162,8 +163,60 @@ void server_exchange_state::inform(response_head head,
 	m_impl->stream_->inform(std::move(head), std::move(handler));
 }
 
+std::shared_ptr<duplex_state> server_exchange_state::accept_duplex(
+	response_head head, error_code &error) noexcept
+{
+	auto state = m_impl;
+	if( state->response_pending or state->response_started or
+		state->duplex_taken or not state->stream_ )
+	{
+		error = make_error_code(errc::operation_not_permitted);
+		return {};
+	}
+	state->response_pending = true;
+	state->response_body_->configure(body_spec::streaming());
+	auto result = state->stream_->open_duplex_sync(
+		optional<response_head>(std::move(head)), error);
+	state->response_pending = false;
+	if( not error )
+	{
+		state->response_started = true;
+		state->duplex_taken = true;
+		state->response_body_->set_ready();
+	}
+	return result;
+}
+
+void server_exchange_state::accept_duplex(response_head head,
+	duplex_handler handler)
+{
+	auto state = m_impl;
+	if( state->response_pending or state->response_started or
+		state->duplex_taken or not state->stream_ )
+	{
+		std::move(handler)(make_error_code(errc::operation_not_permitted),
+			std::shared_ptr<duplex_state>{});
+		return;
+	}
+	state->response_pending = true;
+	state->response_body_->configure(body_spec::streaming());
+	state->stream_->open_duplex(optional<response_head>(std::move(head)),
+	[state, handler = std::move(handler)]
+	(error_code error, std::shared_ptr<duplex_state> channel) mutable {
+		state->response_pending = false;
+		if( not error )
+		{
+			state->response_started = true;
+			state->duplex_taken = true;
+			state->response_body_->set_ready();
+		}
+		std::move(handler)(error, std::move(channel));
+	});
+}
+
 void server_exchange_state::cancel() noexcept
 {
+	if( m_impl->duplex_taken ) return;
 	if( m_impl->stream_ and m_impl->stream_->reusable() ) return;
 	m_impl->request_body_->cancel();
 	m_impl->response_body_->cancel();

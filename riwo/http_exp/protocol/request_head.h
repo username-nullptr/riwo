@@ -19,6 +19,8 @@ struct request_head
 	std::string authority {};
 	std::string target {"/"};
 	http_exp::fields headers {};
+	optional<std::string> connect_protocol {};
+	optional<std::string> upgrade_protocol {};
 };
 
 } //namespace riwo::http_exp
