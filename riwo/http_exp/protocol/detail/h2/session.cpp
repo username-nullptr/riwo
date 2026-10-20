@@ -76,8 +76,8 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		for( const auto &field : head.headers )
 		{
 			auto name = lower(field.name);
-			if( forbidden_header(name) ||
-				(name == "te" && lower(field.value) != "trailers") )
+			if( forbidden_header(name) or
+				(name == "te" and lower(field.value) != "trailers") )
 				return sys_unexpected(make_error_code(errc::invalid_field_name));
 			add_nv(result, std::move(name), field.value);
 		}
@@ -98,7 +98,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		for( const auto &field : trailers )
 		{
 			auto name = lower(field.name);
-			if( name.starts_with(':') || forbidden_header(name) || name == "te" )
+			if( name.starts_with(':') or forbidden_header(name) or name == "te" )
 				return sys_unexpected(make_error_code(errc::invalid_trailer));
 			add_nv(result, std::move(name), field.value);
 		}
@@ -113,18 +113,18 @@ void add_nv(nv_block &block, std::string name, std::string value)
 {
 	const auto &value = config.h2;
 	constexpr uint32_t max_window = 0x7fffffffU;
-	if( value.initial_stream_window == 0 ||
-		value.initial_stream_window > max_window ||
-		value.initial_connection_window < 65'535 ||
-		value.initial_connection_window > max_window ||
-		value.max_concurrent_streams == 0 ||
-		value.max_frame_size < 16U * 1024U ||
-		value.max_frame_size > 16'777'215U ||
-		value.max_header_list_size == 0 ||
-		value.inbound_stream_buffer < value.initial_stream_window ||
-		value.outbound_stream_buffer == 0 ||
-		value.inbound_connection_buffer < 65'535 ||
-		value.outbound_connection_buffer == 0 ||
+	if( value.initial_stream_window == 0 or
+		value.initial_stream_window > max_window or
+		value.initial_connection_window < 65'535 or
+		value.initial_connection_window > max_window or
+		value.max_concurrent_streams == 0 or
+		value.max_frame_size < 16U * 1024U or
+		value.max_frame_size > 16'777'215U or
+		value.max_header_list_size == 0 or
+		value.inbound_stream_buffer < value.initial_stream_window or
+		value.outbound_stream_buffer == 0 or
+		value.inbound_connection_buffer < 65'535 or
+		value.outbound_connection_buffer == 0 or
 		value.enable_extended_connect )
 		return make_error_code(value.enable_extended_connect ?
 			errc::operation_not_supported : errc::operation_not_permitted);
@@ -273,7 +273,7 @@ public:
 	[[nodiscard]] error_code initialize() noexcept
 	{
 		if( auto error = validate(config_) ) return error;
-		if( nghttp2_session_callbacks_new(&callbacks_) != 0 ||
+		if( nghttp2_session_callbacks_new(&callbacks_) != 0 or
 			nghttp2_option_new(&option_) != 0 )
 			return make_error_code(errc::operation_not_supported);
 
@@ -327,7 +327,7 @@ public:
 	}
 	[[nodiscard]] size_t available_stream_capacity() const noexcept override
 	{
-		if( draining_ || closed_ ) return 0;
+		if( draining_ or closed_ ) return 0;
 		const auto maximum = std::min<size_t>(peer_max_streams_,
 			config_.h2.max_concurrent_streams);
 		const auto used = active_streams_.load() + reservations_.load();
@@ -340,7 +340,7 @@ public:
 	{
 		for(;;)
 		{
-			if( draining_ || closed_ ) return false;
+			if( draining_ or closed_ ) return false;
 			const auto maximum = std::min<size_t>(peer_max_streams_,
 				config_.h2.max_concurrent_streams);
 			auto reserved = reservations_.load();
@@ -353,9 +353,9 @@ public:
 	void release_stream(bool reusable) noexcept override
 	{
 		auto reserved = reservations_.load();
-		while( reserved != 0 &&
-			!reservations_.compare_exchange_weak(reserved, reserved - 1) ) {}
-		if( !reusable && active_streams_ == 0 )
+		while( reserved != 0 and
+			not reservations_.compare_exchange_weak(reserved, reserved - 1) ) {}
+		if( not reusable and active_streams_ == 0 )
 			notify_release(false);
 	}
 
@@ -368,7 +368,7 @@ public:
 		body_spec spec, error_code &error) noexcept override
 	{
 		error.clear();
-		if( !select_mode(1) )
+		if( not select_mode(1) )
 		{
 			error = make_error_code(errc::operation_not_permitted);
 			consume_reservation();
@@ -379,7 +379,7 @@ public:
 
 	void open(request_head head, body_spec spec, open_handler handler) override
 	{
-		if( !select_mode(2) )
+		if( not select_mode(2) )
 		{
 			consume_reservation();
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
@@ -393,7 +393,7 @@ public:
 			self->start_async();
 			error_code error;
 			auto value = self->submit(std::move(head), std::move(spec), error);
-			if( !error ) self->write_pump();
+			if( not error ) self->write_pump();
 			std::move(handler)(error, std::move(value));
 		});
 	}
@@ -411,7 +411,7 @@ public:
 			std::move(handler)(error);
 			return;
 		}
-		if( !select_mode(2) && mode_ != 2 )
+		if( not select_mode(2) and mode_ != 2 )
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted));
 			return;
@@ -446,8 +446,8 @@ public:
 		error_code &error) noexcept
 	{
 		error.clear();
-		while( !value.response_ready_ && !value.terminal_error_ )
-			if( !drive_read_sync(error) ) return {};
+		while( not value.response_ready_ and not value.terminal_error_ )
+			if( not drive_read_sync(error) ) return {};
 		if( value.terminal_error_ ) error = value.terminal_error_;
 		return error ? response_head{} : value.response_;
 	}
@@ -474,9 +474,9 @@ public:
 		mutable_buffer buffer, error_code &error) noexcept
 	{
 		error.clear();
-		while( value.inbound_size_ == 0 && !value.remote_end_ &&
-			!value.terminal_error_ )
-			if( !drive_read_sync(error) ) return {};
+		while( value.inbound_size_ == 0 and not value.remote_end_ and
+			not value.terminal_error_ )
+			if( not drive_read_sync(error) ) return {};
 		if( value.terminal_error_ )
 		{
 			error = value.terminal_error_;
@@ -496,7 +496,7 @@ public:
 			if( value->terminal_error_ )
 				return std::move(handler)(value->terminal_error_,
 					body_read_result{});
-			if( value->inbound_size_ != 0 || value->remote_end_ )
+			if( value->inbound_size_ != 0 or value->remote_end_ )
 			{
 				auto result = self->take_body(*value, buffer);
 				if( result.bytes != 0 ) self->consume(*value, result.bytes);
@@ -517,18 +517,18 @@ public:
 			return 0;
 		}
 		while( value.outbound_size_ + buffer.size() >
-				config_.h2.outbound_stream_buffer ||
+				config_.h2.outbound_stream_buffer or
 			outbound_buffered_ + buffer.size() >
 				config_.h2.outbound_connection_buffer )
 		{
 			flush_sync(error);
 			if( error ) return 0;
 			if( value.outbound_size_ + buffer.size() <=
-					config_.h2.outbound_stream_buffer &&
+					config_.h2.outbound_stream_buffer and
 				outbound_buffered_ + buffer.size() <=
 					config_.h2.outbound_connection_buffer )
 				break;
-			if( !drive_read_sync(error) ) return 0;
+			if( not drive_read_sync(error) ) return 0;
 		}
 		enqueue(value, buffer);
 		(void)nghttp2_session_resume_data(native_, value.id_);
@@ -551,7 +551,7 @@ public:
 				return std::move(handler)(
 					make_error_code(errc::buffer_limit_exceeded), 0);
 			if( value->outbound_size_ + bytes.size() >
-					self->config_.h2.outbound_stream_buffer ||
+					self->config_.h2.outbound_stream_buffer or
 				self->outbound_buffered_ + bytes.size() >
 					self->config_.h2.outbound_connection_buffer )
 			{
@@ -630,7 +630,7 @@ public:
 		error_code &error) noexcept
 	{
 		error.clear();
-		if( !value.remote_end_ )
+		if( not value.remote_end_ )
 			error = make_error_code(errc::operation_not_permitted);
 		return error ? fields{} : value.inbound_trailers_;
 	}
@@ -642,7 +642,7 @@ public:
 		asio::post(strand_, [self = std::move(self), value,
 			handler = std::move(handler)]() mutable {
 			ignore_unused(self);
-			if( !value->remote_end_ )
+			if( not value->remote_end_ )
 				std::move(handler)(make_error_code(
 					errc::operation_not_permitted), fields{});
 			else
@@ -654,15 +654,15 @@ private:
 	[[nodiscard]] bool select_mode(int desired) noexcept
 	{
 		int expected = 0;
-		return mode_.compare_exchange_strong(expected, desired) ||
+		return mode_.compare_exchange_strong(expected, desired) or
 			expected == desired;
 	}
 
 	void consume_reservation() noexcept
 	{
 		auto reserved = reservations_.load();
-		while( reserved != 0 &&
-			!reservations_.compare_exchange_weak(reserved, reserved - 1) ) {}
+		while( reserved != 0 and
+			not reservations_.compare_exchange_weak(reserved, reserved - 1) ) {}
 	}
 
 	[[nodiscard]] std::shared_ptr<h2_stream> submit(request_head head,
@@ -670,13 +670,13 @@ private:
 	{
 		error.clear();
 		consume_reservation();
-		if( draining_ || closed_ || available_stream_capacity() == 0 )
+		if( draining_ or closed_ or available_stream_capacity() == 0 )
 		{
 			error = make_error_code(errc::operation_not_permitted);
 			return {};
 		}
 		auto headers = request_headers(head);
-		if( !headers )
+		if( not headers )
 		{
 			error = headers.error();
 			return {};
@@ -687,7 +687,7 @@ private:
 			value->initialize();
 			nghttp2_api::data_provider provider {};
 			nghttp2_api::data_provider *provider_ptr = nullptr;
-			if( spec.type() != body_spec::mode::empty &&
+			if( spec.type() != body_spec::mode::empty and
 				spec.type() != body_spec::mode::head )
 			{
 				provider.source.ptr = value.get();
@@ -724,14 +724,14 @@ private:
 
 	void read_loop()
 	{
-		if( reading_ || closed_ ) return;
+		if( reading_ or closed_ ) return;
 		reading_ = true;
 		auto self = shared_from_this();
 		transport_->read_some(riwo::buffer(read_buffer_),
 			asio::bind_executor(strand_,
 			[self = std::move(self)](error_code error, size_t size) mutable {
 				self->reading_ = false;
-				if( error || size == 0 )
+				if( error or size == 0 )
 				{
 					self->fail(error ? error : protocol_error());
 					return;
@@ -739,7 +739,7 @@ private:
 				const auto consumed = nghttp2_api::session_mem_recv(self->native_,
 					reinterpret_cast<const uint8_t *>(self->read_buffer_.data()),
 					size);
-				if( consumed < 0 || static_cast<size_t>(consumed) != size )
+				if( consumed < 0 or static_cast<size_t>(consumed) != size )
 				{
 					self->fail(protocol_error());
 					return;
@@ -751,7 +751,7 @@ private:
 
 	void write_pump()
 	{
-		if( writing_ || closed_ ) return;
+		if( writing_ or closed_ ) return;
 		const uint8_t *data = nullptr;
 		const auto size = nghttp2_api::session_mem_send(native_, &data);
 		if( size < 0 ) return fail(protocol_error());
@@ -768,7 +768,7 @@ private:
 			[self = std::move(self), wire]
 			(error_code error, size_t written) mutable {
 				self->writing_ = false;
-				if( error || written != wire->size() )
+				if( error or written != wire->size() )
 				{
 					self->fail(error ? error : protocol_error());
 					return;
@@ -792,9 +792,9 @@ private:
 			if( size == 0 ) return;
 			const auto written = transport_->write_sync(
 				const_buffer(data, static_cast<size_t>(size)), error);
-			if( error || written != static_cast<size_t>(size) )
+			if( error or written != static_cast<size_t>(size) )
 			{
-				if( !error ) error = protocol_error();
+				if( not error ) error = protocol_error();
 				return;
 			}
 		}
@@ -806,15 +806,15 @@ private:
 		if( error ) return false;
 		const auto size = transport_->read_some_sync(riwo::buffer(read_buffer_),
 			error);
-		if( error || size == 0 )
+		if( error or size == 0 )
 		{
-			if( !error ) error = protocol_error();
+			if( not error ) error = protocol_error();
 			fail_sync(error);
 			return false;
 		}
 		const auto consumed = nghttp2_api::session_mem_recv(native_,
 			reinterpret_cast<const uint8_t *>(read_buffer_.data()), size);
-		if( consumed < 0 || static_cast<size_t>(consumed) != size )
+		if( consumed < 0 or static_cast<size_t>(consumed) != size )
 		{
 			error = protocol_error();
 			fail_sync(error);
@@ -822,7 +822,7 @@ private:
 		}
 		flush_sync(error);
 		if( error ) fail_sync(error);
-		return !error;
+		return not error;
 	}
 
 	void fail(error_code error)
@@ -853,7 +853,7 @@ private:
 
 	void complete_error(h2_stream &value, error_code error)
 	{
-		if( !value.terminal_error_ ) value.terminal_error_ = error;
+		if( not value.terminal_error_ ) value.terminal_error_ = error;
 		if( value.response_handler_ )
 			std::move(value.response_handler_)(value.terminal_error_,
 				response_head{});
@@ -863,7 +863,7 @@ private:
 			std::move(value.pending_read_handler_)(value.terminal_error_,
 				body_read_result{});
 		}
-		while( !value.pending_writes_.empty() )
+		while( not value.pending_writes_.empty() )
 		{
 			auto pending = std::move(value.pending_writes_.front());
 			value.pending_writes_.pop_front();
@@ -888,7 +888,7 @@ private:
 		mutable_buffer buffer)
 	{
 		size_t copied = 0;
-		while( copied < buffer.size() && !value.inbound_chunks_.empty() )
+		while( copied < buffer.size() and not value.inbound_chunks_.empty() )
 		{
 			auto &chunk = value.inbound_chunks_.front();
 			const auto available = chunk.size() - value.inbound_offset_;
@@ -905,12 +905,12 @@ private:
 				value.inbound_offset_ = 0;
 			}
 		}
-		return {copied, value.remote_end_ && value.inbound_size_ == 0};
+		return {copied, value.remote_end_ and value.inbound_size_ == 0};
 	}
 
 	void consume(h2_stream &value, size_t size)
 	{
-		if( size == 0 || value.id_ <= 0 ) return;
+		if( size == 0 or value.id_ <= 0 ) return;
 		if( nghttp2_session_consume(native_, value.id_, size) != 0 )
 			return fail(protocol_error());
 		if( mode_ == 2 ) write_pump();
@@ -933,11 +933,11 @@ private:
 
 	void drain_pending(h2_stream &value)
 	{
-		while( !value.pending_writes_.empty() )
+		while( not value.pending_writes_.empty() )
 		{
 			auto &pending = value.pending_writes_.front();
 			if( value.outbound_size_ + pending.bytes.size() >
-					config_.h2.outbound_stream_buffer ||
+					config_.h2.outbound_stream_buffer or
 				outbound_buffered_ + pending.bytes.size() >
 					config_.h2.outbound_connection_buffer )
 				return;
@@ -951,9 +951,9 @@ private:
 
 	void deliver_pending_read(h2_stream &value)
 	{
-		if( !value.pending_read_handler_ ||
-			(value.inbound_size_ == 0 && !value.remote_end_ &&
-				!value.terminal_error_) ) return;
+		if( not value.pending_read_handler_ or
+			(value.inbound_size_ == 0 and not value.remote_end_ and
+				not value.terminal_error_) ) return;
 		auto handler = std::move(value.pending_read_handler_);
 		auto buffer = *value.pending_read_buffer_;
 		value.pending_read_buffer_.reset();
@@ -969,7 +969,7 @@ private:
 
 	void response_ready(h2_stream &value)
 	{
-		if( !value.header_status_ )
+		if( not value.header_status_ )
 		{
 			complete_error(value, make_error_code(errc::stream_protocol_error));
 			(void)nghttp2_submit_rst_stream(native_, NGHTTP2_FLAG_NONE,
@@ -1004,7 +1004,7 @@ private:
 
 	void cancel_stream(h2_stream &value)
 	{
-		if( value.cancelled_ || value.closed_ ) return;
+		if( value.cancelled_ or value.closed_ ) return;
 		value.cancelled_ = true;
 		complete_error(value, aborted());
 		if( value.id_ > 0 )
@@ -1040,9 +1040,9 @@ private:
 			self.config_.response_limits.max_header_list_size);
 		value.header_bytes_ += name_size + value_size + 32;
 		++value.header_count_;
-		if( value.header_bytes_ > header_limit ||
-			value.header_count_ > self.config_.response_limits.max_field_count ||
-			name_size > self.config_.response_limits.max_field_name_size ||
+		if( value.header_bytes_ > header_limit or
+			value.header_count_ > self.config_.response_limits.max_field_count or
+			name_size > self.config_.response_limits.max_field_name_size or
 			value_size > self.config_.response_limits.max_field_value_size )
 		{
 			(void)nghttp2_submit_rst_stream(self.native_, NGHTTP2_FLAG_NONE,
@@ -1060,16 +1060,16 @@ private:
 			uint16_t status = 0;
 			const auto parsed = std::from_chars(header_value.data(),
 				header_value.data() + header_value.size(), status);
-			if( value.collecting_trailers_ || value.header_status_ ||
-				parsed.ec != std::errc{} ||
-				parsed.ptr != header_value.data() + header_value.size() ||
-				status < 100 || status > 599 )
+			if( value.collecting_trailers_ or value.header_status_ or
+				parsed.ec != std::errc{} or
+				parsed.ptr != header_value.data() + header_value.size() or
+				status < 100 or status > 599 )
 				return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 			value.header_status_ = status;
 			return 0;
 		}
-		if( header_name.starts_with(':') || forbidden_header(header_name) ||
-			(header_name == "te" && lower(header_value) != "trailers") )
+		if( header_name.starts_with(':') or forbidden_header(header_name) or
+			(header_name == "te" and lower(header_value) != "trailers") )
 			return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 		try {
 			if( value.collecting_trailers_ )
@@ -1102,8 +1102,8 @@ private:
 			self.notify_release(false);
 			return 0;
 		}
-		if( frame->hd.type == NGHTTP2_SETTINGS &&
-			!(frame->hd.flags & NGHTTP2_FLAG_ACK) )
+		if( frame->hd.type == NGHTTP2_SETTINGS and
+			not (frame->hd.flags & NGHTTP2_FLAG_ACK) )
 		{
 			const auto peer = nghttp2_session_get_remote_settings(self.native_,
 				NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS);
@@ -1112,13 +1112,13 @@ private:
 			self.notify_release(true);
 			return 0;
 		}
-		if( frame->hd.type != NGHTTP2_HEADERS &&
-			frame->hd.type != NGHTTP2_DATA &&
+		if( frame->hd.type != NGHTTP2_HEADERS and
+			frame->hd.type != NGHTTP2_DATA and
 			frame->hd.type != NGHTTP2_RST_STREAM ) return 0;
 		auto found = self.streams_.find(frame->hd.stream_id);
 		if( found == self.streams_.end() ) return 0;
 		auto &value = *found->second;
-		if( frame->hd.type == NGHTTP2_HEADERS && !value.collecting_trailers_ )
+		if( frame->hd.type == NGHTTP2_HEADERS and not value.collecting_trailers_ )
 			self.response_ready(value);
 		if( frame->hd.type == NGHTTP2_RST_STREAM )
 		{
@@ -1141,10 +1141,10 @@ private:
 		if( found == self.streams_.end() ) return 0;
 		auto &value = *found->second;
 		if( value.inbound_size_ + size >
-				self.config_.h2.inbound_stream_buffer ||
+				self.config_.h2.inbound_stream_buffer or
 			self.inbound_buffered_ + size >
-				self.config_.h2.inbound_connection_buffer ||
-			(self.config_.response_limits.max_body_size &&
+				self.config_.h2.inbound_connection_buffer or
+			(self.config_.response_limits.max_body_size and
 				value.inbound_total_ + size >
 					*self.config_.response_limits.max_body_size) )
 		{
@@ -1176,14 +1176,14 @@ private:
 		auto value = found->second;
 		value->closed_ = true;
 		value->wire_error_ = error_code_value;
-		if( error_code_value != NGHTTP2_NO_ERROR && !value->terminal_error_ )
+		if( error_code_value != NGHTTP2_NO_ERROR and not value->terminal_error_ )
 			self.complete_error(*value,
 				make_error_code(errc::stream_protocol_error));
 		if( error_code_value == NGHTTP2_NO_ERROR ) self.remote_end(*value);
 		self.streams_.erase(found);
 		if( self.active_streams_ != 0 ) --self.active_streams_;
-		self.notify_release(!self.draining_ && !self.closed_);
-		if( self.draining_ && self.active_streams_ == 0 )
+		self.notify_release(not self.draining_ and not self.closed_);
+		if( self.draining_ and self.active_streams_ == 0 )
 			self.transport_->cancel();
 		return 0;
 	}
@@ -1197,12 +1197,12 @@ private:
 		if( value.terminal_error_ ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 		if( value.outbound_size_ == 0 )
 		{
-			if( !value.outbound_finished_ ) return NGHTTP2_ERR_DEFERRED;
+			if( not value.outbound_finished_ ) return NGHTTP2_ERR_DEFERRED;
 			*flags |= NGHTTP2_DATA_FLAG_EOF;
-			if( !value.outbound_trailers_.empty() && !value.trailers_submitted_ )
+			if( not value.outbound_trailers_.empty() and not value.trailers_submitted_ )
 			{
 				auto trailers = trailer_headers(value.outbound_trailers_);
-				if( !trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+				if( not trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 				*flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
 				if( nghttp2_submit_trailer(session, value.id_,
 					trailers->values.data(), trailers->values.size()) != 0 )
@@ -1213,7 +1213,7 @@ private:
 		}
 
 		size_t copied = 0;
-		while( copied < length && !value.outbound_chunks_.empty() )
+		while( copied < length and not value.outbound_chunks_.empty() )
 		{
 			auto &chunk = value.outbound_chunks_.front();
 			const auto available = chunk.size() - value.outbound_offset_;
@@ -1231,13 +1231,13 @@ private:
 			}
 		}
 		self.drain_pending(value);
-		if( value.outbound_size_ == 0 && value.outbound_finished_ )
+		if( value.outbound_size_ == 0 and value.outbound_finished_ )
 		{
 			*flags |= NGHTTP2_DATA_FLAG_EOF;
-			if( !value.outbound_trailers_.empty() && !value.trailers_submitted_ )
+			if( not value.outbound_trailers_.empty() and not value.trailers_submitted_ )
 			{
 				auto trailers = trailer_headers(value.outbound_trailers_);
-				if( !trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+				if( not trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 				*flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
 				if( nghttp2_submit_trailer(session, value.id_,
 					trailers->values.data(), trailers->values.size()) != 0 )
@@ -1312,7 +1312,7 @@ auto h2_stream::local_endpoint(error_code &error) const noexcept -> endpoint_typ
 }
 
 bool h2_stream::reusable() const noexcept {
-	return closed_ && !terminal_error_ && !session_->draining();
+	return closed_ and not terminal_error_ and not session_->draining();
 }
 
 void h2_stream::cancel() noexcept {
@@ -1323,7 +1323,7 @@ body_read_result h2_reader_adapter::read_some_sync(mutable_buffer buffer,
 	error_code &error) noexcept
 {
 	auto owner = owner_.lock();
-	if( !owner )
+	if( not owner )
 	{
 		error = aborted();
 		return {};
@@ -1334,14 +1334,14 @@ body_read_result h2_reader_adapter::read_some_sync(mutable_buffer buffer,
 void h2_reader_adapter::read_some(mutable_buffer buffer, read_handler handler)
 {
 	auto owner = owner_.lock();
-	if( !owner ) return std::move(handler)(aborted(), body_read_result{});
+	if( not owner ) return std::move(handler)(aborted(), body_read_result{});
 	owner->session_->read(owner, buffer, std::move(handler));
 }
 
 fields h2_reader_adapter::trailers_sync(error_code &error) noexcept
 {
 	auto owner = owner_.lock();
-	if( !owner )
+	if( not owner )
 	{
 		error = aborted();
 		return {};
@@ -1352,7 +1352,7 @@ fields h2_reader_adapter::trailers_sync(error_code &error) noexcept
 void h2_reader_adapter::trailers(trailers_handler handler)
 {
 	auto owner = owner_.lock();
-	if( !owner ) return std::move(handler)(aborted(), fields{});
+	if( not owner ) return std::move(handler)(aborted(), fields{});
 	owner->session_->trailers(owner, std::move(handler));
 }
 
@@ -1364,7 +1364,7 @@ size_t h2_writer_adapter::write_sync(const_buffer buffer,
 	error_code &error) noexcept
 {
 	auto owner = owner_.lock();
-	if( !owner )
+	if( not owner )
 	{
 		error = aborted();
 		return 0;
@@ -1375,14 +1375,14 @@ size_t h2_writer_adapter::write_sync(const_buffer buffer,
 void h2_writer_adapter::write(const_buffer buffer, write_handler handler)
 {
 	auto owner = owner_.lock();
-	if( !owner ) return std::move(handler)(aborted(), 0);
+	if( not owner ) return std::move(handler)(aborted(), 0);
 	owner->session_->write(owner, buffer, std::move(handler));
 }
 
 void h2_writer_adapter::finish_sync(fields trailers, error_code &error) noexcept
 {
 	auto owner = owner_.lock();
-	if( !owner )
+	if( not owner )
 	{
 		error = aborted();
 		return;
@@ -1393,7 +1393,7 @@ void h2_writer_adapter::finish_sync(fields trailers, error_code &error) noexcept
 void h2_writer_adapter::finish(fields trailers, finish_handler handler)
 {
 	auto owner = owner_.lock();
-	if( !owner ) return std::move(handler)(aborted());
+	if( not owner ) return std::move(handler)(aborted());
 	owner->session_->finish(owner, std::move(trailers), std::move(handler));
 }
 
@@ -1408,7 +1408,7 @@ sys_expected<std::shared_ptr<client_session>> make_client_session(
 	client_config config, asio::ip::tcp::endpoint remote,
 	asio::ip::tcp::endpoint local)
 {
-	if( !transport )
+	if( not transport )
 		return sys_unexpected(make_error_code(errc::negotiation_failed));
 	auto result = std::make_shared<h2_session>(std::move(transport),
 		std::move(config), remote, local);

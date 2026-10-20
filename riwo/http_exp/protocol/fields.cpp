@@ -8,13 +8,13 @@ namespace riwo::http_exp { namespace
 
 [[nodiscard]] bool token_character(unsigned char value) noexcept
 {
-	return std::isalnum(value) != 0 || std::string_view("!#$%&'*+-.^_`|~").find(
+	return std::isalnum(value) != 0 or std::string_view("!#$%&'*+-.^_`|~").find(
 		static_cast<char>(value)) != std::string_view::npos;
 }
 
 [[nodiscard]] bool equal_name(std::string_view lhs, std::string_view rhs) noexcept
 {
-	return lhs.size() == rhs.size() && std::ranges::equal(lhs, rhs, [](char left, char right) {
+	return lhs.size() == rhs.size() and std::ranges::equal(lhs, rhs, [](char left, char right) {
 		return std::tolower(static_cast<unsigned char>(left)) ==
 			std::tolower(static_cast<unsigned char>(right));
 	});
@@ -22,7 +22,7 @@ namespace riwo::http_exp { namespace
 
 void validate(std::string_view name, std::string_view value)
 {
-	if( name.empty() || !std::ranges::all_of(name, [](unsigned char byte) {
+	if( name.empty() or not std::ranges::all_of(name, [](unsigned char byte) {
 		return token_character(byte);
 	}))
 		throw std::invalid_argument("Invalid HTTP field name");
@@ -42,7 +42,7 @@ field_range::const_iterator::const_iterator(base_iterator current,
 
 void field_range::const_iterator::skip() noexcept
 {
-	while( current_ != end_ && !equal_name(current_->name, name_) )
+	while( current_ != end_ and not equal_name(current_->name, name_) )
 		++current_;
 }
 

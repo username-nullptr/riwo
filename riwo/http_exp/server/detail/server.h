@@ -71,7 +71,7 @@ public:
 		if( path.empty() )
 			throw std::invalid_argument(
 				"riwo::http_exp::server::on_request: path is empty");
-		if( !handler )
+		if( not handler )
 			throw std::invalid_argument(
 				"riwo::http_exp::server::on_request: handler is empty");
 		if( std::ranges::any_of(routes, [&path](const route &value) {
@@ -98,14 +98,14 @@ public:
 private:
 	void accept_next()
 	{
-		if( !running ) return;
+		if( not running ) return;
 		auto socket = std::make_shared<asio::ip::tcp::socket>(
 			asio::any_io_executor(acceptor_wrap.acceptor().get_executor()));
 		auto self = this->shared_from_this();
 		acceptor_wrap.acceptor().async_accept(*socket,
 		[self, socket]
 		(error_code error) mutable {
-			if( !self->running ) return;
+			if( not self->running ) return;
 			self->accept_next();
 			if( error )
 			{
@@ -126,7 +126,7 @@ private:
 			});
 			std::erase_if(self->connections,
 				[](const detail::server_connection_ptr &value) {
-					return !value || value->closed();
+					return not value or value->closed();
 				});
 			self->connections.push_back(std::move(connection));
 		});
@@ -152,7 +152,7 @@ private:
 					std::string result;
 					for( const auto &value : values )
 					{
-						if( !result.empty() ) result += ", ";
+						if( not result.empty() ) result += ", ";
 						result += value.text();
 					}
 					return result;
@@ -241,7 +241,7 @@ private:
 				}
 				catch(...) {
 				}
-				if( !handled )
+				if( not handled )
 				{
 						response_head head {
 							status::internal_server_error, {}
@@ -315,7 +315,7 @@ auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_type endpoint,
 	error_code &error) noexcept -> basic_server&
 {
 	auto &value = m_impl->acceptor_wrap.acceptor();
-	if( !value.is_open() )
+	if( not value.is_open() )
 	{
 		value.open(endpoint->protocol(), error);
 		if( error ) return *this;

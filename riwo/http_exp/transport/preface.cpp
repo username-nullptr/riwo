@@ -97,7 +97,7 @@ void http2_preface_detector::reset() noexcept
 void http2_preface_detector::detect(
 	const std::shared_ptr<connection> &stream, detect_handler handler)
 {
-	if( !stream || m_impl->result != preface_result::need_more )
+	if( not stream or m_impl->result != preface_result::need_more )
 	{
 		std::move(handler)(error_code{}, m_impl->result, take_buffer());
 		return;

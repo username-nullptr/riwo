@@ -26,7 +26,7 @@ constexpr std::array known_methods {
 
 [[nodiscard]] bool token_character(unsigned char value) noexcept
 {
-	return std::isalnum(value) != 0 || std::string_view("!#$%&'*+-.^_`|~").find(
+	return std::isalnum(value) != 0 or std::string_view("!#$%&'*+-.^_`|~").find(
 		static_cast<char>(value)) != std::string_view::npos;
 }
 
@@ -58,7 +58,7 @@ method::method(well_known value) noexcept :
 
 method::method(std::string token) : token_(std::move(token)), known_(identify(token_))
 {
-	if( token_.empty() || !std::ranges::all_of(token_, [](unsigned char value) {
+	if( token_.empty() or not std::ranges::all_of(token_, [](unsigned char value) {
 		return token_character(value);
 	}))
 		throw std::invalid_argument("Invalid HTTP method token");
@@ -69,7 +69,7 @@ method::method(std::string token) : token_(std::move(token)), known_(identify(to
 method::method(std::string token, method_properties properties) :
 	token_(std::move(token)), properties_(normalized(properties)), known_(identify(token_))
 {
-	if( token_.empty() || !std::ranges::all_of(token_, [](unsigned char value) {
+	if( token_.empty() or not std::ranges::all_of(token_, [](unsigned char value) {
 		return token_character(value);
 	}))
 		throw std::invalid_argument("Invalid HTTP method token");

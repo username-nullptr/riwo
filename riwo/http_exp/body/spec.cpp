@@ -8,7 +8,7 @@ namespace riwo::http_exp { namespace
 
 [[nodiscard]] bool equal_name(std::string_view lhs, std::string_view rhs) noexcept
 {
-	return lhs.size() == rhs.size() && std::ranges::equal(lhs, rhs, [](char left, char right) {
+	return lhs.size() == rhs.size() and std::ranges::equal(lhs, rhs, [](char left, char right) {
 		return std::tolower(static_cast<unsigned char>(left)) ==
 			std::tolower(static_cast<unsigned char>(right));
 	});
@@ -16,7 +16,7 @@ namespace riwo::http_exp { namespace
 
 void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 {
-	if( mode == body_spec::mode::empty && !trailers.names.empty() )
+	if( mode == body_spec::mode::empty and not trailers.names.empty() )
 		throw std::invalid_argument("An empty HTTP body cannot have trailers");
 
 	fields validator;
@@ -29,8 +29,8 @@ void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 				throw std::invalid_argument("Duplicate HTTP trailer name");
 		}
 		const auto &name = trailers.names[index];
-		if( equal_name(name, "content-length") || equal_name(name, "transfer-encoding") ||
-			equal_name(name, "host") || equal_name(name, "trailer") )
+		if( equal_name(name, "content-length") or equal_name(name, "transfer-encoding") or
+			equal_name(name, "host") or equal_name(name, "trailer") )
 			throw std::invalid_argument("Forbidden HTTP trailer name");
 	}
 }

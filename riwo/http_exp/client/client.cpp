@@ -52,7 +52,7 @@ struct request_access
 		}
 		result.m_impl->retry_attempt = value.m_impl->retry_attempt;
 		result.m_impl->redirect_count = value.m_impl->redirect_count;
-		if( !drop_body )
+		if( not drop_body )
 		{
 			result.m_impl->body_spec = value.m_impl->body_spec;
 			result.m_impl->body = value.m_impl->body;
@@ -114,7 +114,7 @@ namespace
 		"proxy-connection", "upgrade"
 	};
 	return std::ranges::any_of(names, [name](std::string_view value) {
-		return name.size() == value.size() &&
+		return name.size() == value.size() and
 			std::ranges::equal(name, value, [](char lhs, char rhs) {
 				return std::tolower(static_cast<unsigned char>(lhs)) ==
 					std::tolower(static_cast<unsigned char>(rhs));
@@ -126,13 +126,13 @@ namespace
 	const request &value, const body_spec &spec, bool require_unbound) noexcept
 {
 	try {
-		if( require_unbound && value.has_body_source() )
+		if( require_unbound and value.has_body_source() )
 			return sys_unexpected(make_error_code(errc::operation_not_permitted));
 
 		const auto &url = value.url();
 		const auto scheme = lower(url.protocol());
-		if( !url.is_valid() || (scheme != "http" && scheme != "https") ||
-			url.host().empty() || url.has_fragment() || !ascii(url.host()) )
+		if( not url.is_valid() or (scheme != "http" and scheme != "https") or
+			url.host().empty() or url.has_fragment() or not ascii(url.host()) )
 			return sys_unexpected(make_error_code(errc::invalid_target));
 
 		for( const auto &header : value.headers() )
@@ -142,12 +142,12 @@ namespace
 		}
 		if( auto length = value.headers().find_first("content-length") )
 		{
-			if( !spec.trailers().names.empty() || !spec.length() )
+			if( not spec.trailers().names.empty() or not spec.length() )
 				return sys_unexpected(make_error_code(errc::body_length_mismatch));
 			uint64_t parsed = 0;
 			auto result = std::from_chars(length->data(),
 				length->data() + length->size(), parsed);
-			if( result.ec != std::errc{} || result.ptr != length->data() + length->size() ||
+			if( result.ec != std::errc{} or result.ptr != length->data() + length->size() or
 				parsed != *spec.length() )
 				return sys_unexpected(make_error_code(errc::body_length_mismatch));
 		}
@@ -159,7 +159,7 @@ namespace
 		else
 			authority = host;
 		const auto default_port = scheme == "http" ? 80 : 443;
-		if( url.port() != 0 && url.port() != default_port )
+		if( url.port() != 0 and url.port() != default_port )
 			authority += ":" + std::to_string(url.port());
 
 		auto target = std::string(url.encoded_path());
@@ -180,22 +180,22 @@ namespace
 
 [[nodiscard]] std::string decodable_encoding(const response_head &head)
 {
-	if( !gzip_available_v ) return {};
+	if( not gzip_available_v ) return {};
 	std::string_view value;
 	auto values = head.headers.find_all("Content-Encoding");
 	for( auto iterator = values.begin(); iterator != values.end(); ++iterator )
 		value = iterator->value;
-	while( !value.empty() &&
-		(value.front() == ' ' || value.front() == '\t') )
+	while( not value.empty() and
+		(value.front() == ' ' or value.front() == '\t') )
 		value.remove_prefix(1);
-	while( !value.empty() &&
-		(value.back() == ' ' || value.back() == '\t') )
+	while( not value.empty() and
+		(value.back() == ' ' or value.back() == '\t') )
 		value.remove_suffix(1);
 	std::string lower(value);
 	std::ranges::transform(lower, lower.begin(), [](unsigned char byte) {
 		return static_cast<char>(std::tolower(byte));
 	});
-	if( lower == "gzip" || lower == "x-gzip" || lower == "deflate" )
+	if( lower == "gzip" or lower == "x-gzip" or lower == "deflate" )
 		return lower == "x-gzip" ? "gzip" : lower;
 	return {};
 }
@@ -204,7 +204,7 @@ namespace
 	std::shared_ptr<body_reader_state> body, response_head &head,
 	bool automatic_decompression)
 {
-	if( !automatic_decompression || !body || body->is_finished() )
+	if( not automatic_decompression or not body or body->is_finished() )
 		return body;
 	auto encoding = decodable_encoding(head);
 	if( encoding.empty() ) return body;
@@ -215,7 +215,7 @@ namespace
 
 void add_accept_encoding(request_head &head, const client_config &config)
 {
-	if( !config.automatic_decompression || !gzip_available_v ) return;
+	if( not config.automatic_decompression or not gzip_available_v ) return;
 	if( head.headers.find_first("Accept-Encoding") ) return;
 	head.headers.add("Accept-Encoding", "gzip, deflate");
 }
@@ -232,8 +232,8 @@ void add_accept_encoding(request_head &head, const client_config &config)
 	const riwo::url &rhs) noexcept
 {
 	try {
-		return lower(lhs.protocol()) == lower(rhs.protocol()) &&
-			lower(lhs.host()) == lower(rhs.host()) &&
+		return lower(lhs.protocol()) == lower(rhs.protocol()) and
+			lower(lhs.host()) == lower(rhs.host()) and
 			effective_port(lhs) == effective_port(rhs);
 	}
 	catch(...) {
@@ -244,22 +244,22 @@ void add_accept_encoding(request_head &head, const client_config &config)
 [[nodiscard]] bool retry_allowed(const request &value,
 	const retry_policy &policy, request_delivery delivery) noexcept
 {
-	if( delivery == request_delivery::possibly_processed ||
+	if( delivery == request_delivery::possibly_processed or
 		request_access::retry_attempt(value) >= policy.max_attempts )
 		return false;
 	if( value.method().is_idempotent() )
 	{
-		if( !policy.retry_idempotent ) return false;
+		if( not policy.retry_idempotent ) return false;
 	}
-	else if( !policy.retry_non_idempotent ) return false;
+	else if( not policy.retry_non_idempotent ) return false;
 	const auto source = request_access::source(value);
-	return !source || source->replayable();
+	return not source or source->replayable();
 }
 
 [[nodiscard]] error_code rewind_sync(
 	const std::shared_ptr<body_source> &source) noexcept
 {
-	if( !source ) return {};
+	if( not source ) return {};
 	try {
 		struct state
 		{
@@ -288,47 +288,47 @@ void add_accept_encoding(request_head &head, const client_config &config)
 {
 	error.clear();
 	const auto code = response.status.code();
-	if( code != 301 && code != 302 && code != 303 &&
-		code != 307 && code != 308 )
+	if( code != 301 and code != 302 and code != 303 and
+		code != 307 and code != 308 )
 		return {};
 	if( request_access::redirect_count(value) >= policy.max_redirects )
 		return {};
 	const auto location = response.headers.find_first("Location");
-	if( !location ) return {};
+	if( not location ) return {};
 	try {
 		auto target = riwo::url::resolve(value.url(), *location);
-		if( !target.is_valid() || target.host().empty() )
+		if( not target.is_valid() or target.host().empty() )
 		{
 			error = make_error_code(errc::invalid_target);
 			return {};
 		}
 		const auto from_scheme = lower(value.url().protocol());
 		const auto to_scheme = lower(target.protocol());
-		if( to_scheme != "http" && to_scheme != "https" )
+		if( to_scheme != "http" and to_scheme != "https" )
 		{
 			error = make_error_code(errc::invalid_target);
 			return {};
 		}
-		if( from_scheme == "https" && to_scheme == "http" &&
-			!policy.allow_https_to_http )
+		if( from_scheme == "https" and to_scheme == "http" and
+			not policy.allow_https_to_http )
 			return {};
 
 		auto next_method = value.method();
 		bool drop_body = false;
-		if( code == 303 && value.method().known() != method::head )
+		if( code == 303 and value.method().known() != method::head )
 		{
 			next_method = method::get;
 			drop_body = true;
 		}
-		else if( (code == 301 || code == 302) &&
+		else if( (code == 301 or code == 302) and
 			value.method().known() == method::post )
 		{
 			next_method = method::get;
 			drop_body = true;
 		}
 		const auto source = request_access::source(value);
-		if( !drop_body && source && !source->replayable() ) return {};
-		const auto strip_credentials = !same_origin(value.url(), target);
+		if( not drop_body and source and not source->replayable() ) return {};
+		const auto strip_credentials = not same_origin(value.url(), target);
 		auto next = std::make_unique<request>(request_access::clone(value,
 			std::move(target), std::move(next_method), drop_body,
 			strip_credentials));
@@ -351,7 +351,7 @@ public:
 		executor(std::move(executor_value)), config(std::move(config_value)),
 		injected_session(std::move(session_value))
 	{
-		if( !injected_session )
+		if( not injected_session )
 			pool = std::make_shared<session_pool>(executor, config);
 	}
 
@@ -403,7 +403,7 @@ std::shared_ptr<stream> client_state::open(request request_value,
 {
 	error.clear();
 	auto head = freeze_request(request_value, spec, true);
-	if( !head )
+	if( not head )
 	{
 		error = head.error();
 		return {};
@@ -415,7 +415,7 @@ void client_state::open(request request_value, body_spec spec,
 	open_handler handler)
 {
 	auto head = freeze_request(request_value, spec, true);
-	if( !head )
+	if( not head )
 	{
 		std::move(handler)(head.error(), std::shared_ptr<stream>{});
 		return;
@@ -434,7 +434,7 @@ send_result client_state::send(request request_value,
 	}
 	auto spec = request_value.body_description();
 	auto head = freeze_request(request_value, spec, false);
-	if( !head )
+	if( not head )
 	{
 		error = head.error();
 		return {};
@@ -446,7 +446,7 @@ send_result client_state::send(request request_value,
 	auto retry_request = [&](request_delivery delivery, bool rewind_body,
 		send_result &result) -> bool
 	{
-		if( !retry_allowed(request_value, m_impl->config.retries, delivery) )
+		if( not retry_allowed(request_value, m_impl->config.retries, delivery) )
 			return false;
 		try
 		{
@@ -465,16 +465,16 @@ send_result client_state::send(request request_value,
 		return true;
 	};
 	auto active_stream = m_impl->open_sync(*head, spec, error);
-	if( error || !active_stream )
+	if( error or not active_stream )
 	{
-		if( !error ) error = make_error_code(errc::operation_not_supported);
+		if( not error ) error = make_error_code(errc::operation_not_supported);
 		send_result retried;
 		if( retry_request(request_delivery::not_started, false, retried) )
 			return retried;
 		return {};
 	}
 	auto writer = active_stream->outbound_body();
-	if( !writer )
+	if( not writer )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		active_stream->cancel();
@@ -484,9 +484,9 @@ send_result client_state::send(request request_value,
 	if( request_body )
 	{
 		auto written = writer->write(*request_body, error);
-		if( !error && written != request_body->size() )
+		if( not error and written != request_body->size() )
 			error = make_error_code(errc::body_length_mismatch);
-		if( !error ) writer->finish(std::move(trailers), error);
+		if( not error ) writer->finish(std::move(trailers), error);
 		if( error )
 		{
 			const auto delivery = active_stream->delivery();
@@ -502,7 +502,7 @@ send_result client_state::send(request request_value,
 		uint64_t total = 0;
 		for(;;)
 		{
-			if( auto length = spec.length(); length && total == *length )
+			if( auto length = spec.length(); length and total == *length )
 				break;
 			auto target = riwo::buffer(buffer);
 			if( auto length = spec.length() )
@@ -527,7 +527,7 @@ send_result client_state::send(request request_value,
 			total += written;
 			if( error ) break;
 		}
-		if( !error ) writer->finish(std::move(trailers), error);
+		if( not error ) writer->finish(std::move(trailers), error);
 		if( error )
 		{
 			const auto delivery = active_stream->delivery();
@@ -551,7 +551,7 @@ send_result client_state::send(request request_value,
 		return {};
 	}
 	auto body = active_stream->inbound_body();
-	if( !body )
+	if( not body )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		active_stream->cancel();
@@ -605,7 +605,7 @@ void client_state::send(request request_value, send_handler handler)
 	}
 	auto spec = request_value.body_description();
 	auto head = freeze_request(request_value, spec, false);
-	if( !head )
+	if( not head )
 	{
 		std::move(handler)(head.error(), send_result{});
 		return;
@@ -655,7 +655,7 @@ void client_state::send(request request_value, send_handler handler)
 
 		void start()
 		{
-			if( !active_stream || !writer )
+			if( not active_stream or not writer )
 			{
 				fail(make_error_code(errc::operation_not_permitted));
 				return;
@@ -665,7 +665,7 @@ void client_state::send(request request_value, send_handler handler)
 				write_body();
 				return;
 			}
-			if( !source )
+			if( not source )
 			{
 				wait_response();
 				return;
@@ -687,7 +687,7 @@ void client_state::send(request request_value, send_handler handler)
 
 		void read_next()
 		{
-			if( auto length = spec.length(); length && total == *length )
+			if( auto length = spec.length(); length and total == *length )
 			{
 				finish_request();
 				return;
@@ -754,7 +754,7 @@ void client_state::send(request request_value, send_handler handler)
 					return;
 				}
 				auto body = self->active_stream->inbound_body();
-				if( !body )
+				if( not body )
 				{
 					self->fail(make_error_code(errc::operation_not_permitted));
 					return;
@@ -803,7 +803,7 @@ void client_state::send(request request_value, send_handler handler)
 					return;
 				}
 				auto redirect_source = request_access::source(next);
-				if( !redirect_source )
+				if( not redirect_source )
 				{
 					auto owner = self->owner;
 					auto completion = std::move(self->handler);
@@ -845,7 +845,7 @@ void client_state::send(request request_value, send_handler handler)
 					std::move(handler)(error, send_result{});
 					return;
 				}
-				if( !source )
+				if( not source )
 				{
 					auto completion = std::move(handler);
 					owner->send(std::move(*next), std::move(completion));

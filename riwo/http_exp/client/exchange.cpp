@@ -14,9 +14,9 @@ public:
 		request_body_(stream_ ? stream_->outbound_body() : make_body_writer_state()),
 		response_body_(stream_ ? stream_->inbound_body() : make_body_reader_state())
 	{
-		if( !request_body_ )
+		if( not request_body_ )
 			request_body_ = make_body_writer_state();
-		if( !response_body_ )
+		if( not response_body_ )
 			response_body_ = make_body_reader_state();
 	}
 
@@ -66,7 +66,7 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 		error.clear();
 		return state->response;
 	}
-	if( !state->stream_ )
+	if( not state->stream_ )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return {};
@@ -74,7 +74,7 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 	state->wait_pending = true;
 	auto result = state->stream_->wait_response_sync(error);
 	state->wait_pending = false;
-	if( !error )
+	if( not error )
 	{
 		state->response = result;
 		state->response_ready = true;
@@ -97,7 +97,7 @@ void client_exchange_state::wait_response(response_handler handler)
 		std::move(handler)(error_code{}, state->response);
 		return;
 	}
-	if( !state->stream_ )
+	if( not state->stream_ )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			response_head{});
@@ -109,7 +109,7 @@ void client_exchange_state::wait_response(response_handler handler)
 	(error_code error, response_head result) mutable
 	{
 		state->wait_pending = false;
-		if( !error )
+		if( not error )
 		{
 			state->response = result;
 			state->response_ready = true;

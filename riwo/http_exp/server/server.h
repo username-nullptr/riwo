@@ -16,10 +16,10 @@ namespace concepts
 {
 
 template <typename Func, typename Exec = asio::any_io_executor>
-concept request_handler = core_concepts::exec<Exec> &&
+concept request_handler = core_concepts::exec<Exec> and
 	requires(Func &&func, basic_server_exchange<Exec> &exchange) {
 	{ std::forward<Func>(func)(exchange) } -> core_concepts::awaitable;
-} && std::same_as <
+} and std::same_as <
 	awaitable_ret_t<decltype(std::declval<Func>()(
 		std::declval<basic_server_exchange<Exec>&>()))>, void
 >;

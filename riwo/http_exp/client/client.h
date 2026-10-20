@@ -39,7 +39,7 @@ public:
 	template <typename Exec0>
 	explicit basic_client(Exec0 &&executor, config_type config = {})
 		requires (
-			!std::same_as<std::remove_cvref_t<Exec0>,basic_client> &&
+			not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 			core_concepts::match_sched<Exec0,executor_type>);
 
 	template <typename Exec0>
@@ -47,7 +47,7 @@ public:
 		std::shared_ptr<detail::client_session> session,
 		config_type config = {})
 		requires (
-			!std::same_as<std::remove_cvref_t<Exec0>,basic_client> &&
+			not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 			core_concepts::match_sched<Exec0,executor_type>);
 
 	[[nodiscard]] executor_type get_executor() const noexcept;

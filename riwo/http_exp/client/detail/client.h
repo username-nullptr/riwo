@@ -78,7 +78,7 @@ template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_client<Exec>::basic_client(Exec0 &&executor, config_type config)
 	requires (
-		!std::same_as<std::remove_cvref_t<Exec0>,basic_client> &&
+		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_type>) :
 	basic_client(std::forward<Exec0>(executor), {}, std::move(config))
 {
@@ -89,7 +89,7 @@ template <typename Exec0>
 basic_client<Exec>::basic_client(Exec0 &&executor,
 	std::shared_ptr<detail::client_session> session, config_type config)
 	requires (
-		!std::same_as<std::remove_cvref_t<Exec0>,basic_client> &&
+		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_type>) :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)),

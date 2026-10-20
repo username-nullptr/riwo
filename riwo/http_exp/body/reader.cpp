@@ -53,7 +53,7 @@ body_read_result body_reader_state::read_some(mutable_buffer buffer,
 		error = operation_error(errc::operation_in_progress);
 		return {};
 	}
-	if( !state->ready || !state->adapter || state->cancelled )
+	if( not state->ready or not state->adapter or state->cancelled )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return {};
@@ -64,9 +64,9 @@ body_read_result body_reader_state::read_some(mutable_buffer buffer,
 	state->pending = true;
 	auto result = state->adapter->read_some_sync(buffer, error);
 	state->pending = false;
-	if( !error && result.bytes == 0 && !result.eof )
+	if( not error and result.bytes == 0 and not result.eof )
 		error = operation_error(errc::body_length_mismatch);
-	if( !error && result.eof ) state->finished = true;
+	if( not error and result.eof ) state->finished = true;
 	return result;
 }
 
@@ -79,7 +79,7 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
 			body_read_result{});
 		return;
 	}
-	if( !state->ready || !state->adapter || state->cancelled )
+	if( not state->ready or not state->adapter or state->cancelled )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted),
 			body_read_result{});
@@ -103,9 +103,9 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
 		(error_code error, body_read_result result) mutable
 		{
 			state->pending = false;
-			if( !error && result.bytes == 0 && !result.eof )
+			if( not error and result.bytes == 0 and not result.eof )
 				error = operation_error(errc::body_length_mismatch);
-			if( !error && result.eof ) state->finished = true;
+			if( not error and result.eof ) state->finished = true;
 			std::move(handler)(error, result);
 		});
 	}
@@ -125,7 +125,7 @@ void body_reader_state::discard(error_code &error) noexcept
 		error = operation_error(errc::operation_in_progress);
 		return;
 	}
-	if( !state->ready || !state->adapter || state->cancelled )
+	if( not state->ready or not state->adapter or state->cancelled )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return;
@@ -141,7 +141,7 @@ void body_reader_state::discard(error_code &error) noexcept
 		auto result = state->adapter->read_some_sync(riwo::buffer(buffer), error);
 		if( error )
 			break;
-		if( result.bytes == 0 && !result.eof )
+		if( result.bytes == 0 and not result.eof )
 		{
 			error = operation_error(errc::body_length_mismatch);
 			break;
@@ -171,7 +171,7 @@ void body_reader_state::discard(operation_handler handler)
 		std::move(handler)(operation_error(errc::operation_in_progress));
 		return;
 	}
-	if( !state->ready || !state->adapter || state->cancelled )
+	if( not state->ready or not state->adapter or state->cancelled )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted));
 		return;
@@ -217,7 +217,7 @@ void body_reader_state::discard(operation_handler handler)
 				finish(error);
 				return;
 			}
-			if( result.bytes == 0 && !result.eof )
+			if( result.bytes == 0 and not result.eof )
 			{
 				finish(operation_error(errc::body_length_mismatch));
 				return;
@@ -259,7 +259,7 @@ fields body_reader_state::trailers(error_code &error) noexcept
 		error = operation_error(errc::operation_in_progress);
 		return {};
 	}
-	if( !state->ready || !state->adapter || state->cancelled || !state->finished )
+	if( not state->ready or not state->adapter or state->cancelled or not state->finished )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return {};
@@ -270,7 +270,7 @@ fields body_reader_state::trailers(error_code &error) noexcept
 	state->pending = true;
 	auto result = state->adapter->trailers_sync(error);
 	state->pending = false;
-	if( !error )
+	if( not error )
 		state->trailer_cache = result;
 	return result;
 }
@@ -283,7 +283,7 @@ void body_reader_state::trailers(trailers_handler handler)
 		std::move(handler)(operation_error(errc::operation_in_progress), fields{});
 		return;
 	}
-	if( !state->ready || !state->adapter || state->cancelled || !state->finished )
+	if( not state->ready or not state->adapter or state->cancelled or not state->finished )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted), fields{});
 		return;
@@ -301,7 +301,7 @@ void body_reader_state::trailers(trailers_handler handler)
 		(error_code error, fields value) mutable
 		{
 			state->pending = false;
-			if( !error )
+			if( not error )
 				state->trailer_cache = value;
 			std::move(handler)(error, std::move(value));
 		});

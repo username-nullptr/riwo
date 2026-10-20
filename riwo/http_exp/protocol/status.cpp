@@ -10,7 +10,7 @@ status::status(well_known value) noexcept : code_(value) {}
 
 status::status(uint16_t code) : code_(code)
 {
-	if( code < 100 || code > 599 )
+	if( code < 100 or code > 599 )
 		throw std::invalid_argument("HTTP status must be in the range 100..599");
 }
 

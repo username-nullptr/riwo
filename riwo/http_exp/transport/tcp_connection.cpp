@@ -44,7 +44,7 @@ void apply_socket_timeout(asio::ip::tcp::socket &socket, int option,
 
 [[nodiscard]] bool timeout_error(const error_code &error) noexcept
 {
-	return error == asio::error::make_error_code(asio::error::would_block) ||
+	return error == asio::error::make_error_code(asio::error::would_block) or
 		error == asio::error::make_error_code(asio::error::try_again);
 }
 
@@ -87,7 +87,7 @@ auto tcp_connection::get_executor() const noexcept -> executor_type {
 
 void tcp_connection::read_some(mutable_buffer buffer, io_handler handler)
 {
-	if( !m_impl->read_timeout )
+	if( not m_impl->read_timeout )
 	{
 		m_impl->socket.async_read_some(buffer,
 		[handler = std::move(handler)](error_code error, size_t size) mutable {
@@ -111,14 +111,14 @@ void tcp_connection::read_some(mutable_buffer buffer, io_handler handler)
 	state->timer.expires_after(*m_impl->read_timeout);
 	state->timer.async_wait([self, state](error_code error)
 	{
-		if( error || state->expired.exchange(true) ) return;
+		if( error or state->expired.exchange(true) ) return;
 		self->cancel();
 	});
 	m_impl->socket.async_read_some(buffer,
 	[self, state, handler = std::move(handler)]
 	(error_code error, size_t size) mutable {
 		(void)state->timer.cancel();
-		if( state->expired &&
+		if( state->expired and
 			error == asio::error::make_error_code(
 				asio::error::operation_aborted) )
 			error = asio::error::make_error_code(asio::error::timed_out);
@@ -128,7 +128,7 @@ void tcp_connection::read_some(mutable_buffer buffer, io_handler handler)
 
 void tcp_connection::write(const_buffer buffer, io_handler handler)
 {
-	if( !m_impl->write_timeout )
+	if( not m_impl->write_timeout )
 	{
 		asio::async_write(m_impl->socket, buffer,
 		[handler = std::move(handler)](error_code error, size_t size) mutable {
@@ -152,14 +152,14 @@ void tcp_connection::write(const_buffer buffer, io_handler handler)
 	state->timer.expires_after(*m_impl->write_timeout);
 	state->timer.async_wait([self, state](error_code error)
 	{
-		if( error || state->expired.exchange(true) ) return;
+		if( error or state->expired.exchange(true) ) return;
 		self->cancel();
 	});
 	asio::async_write(m_impl->socket, buffer,
 	[self, state, handler = std::move(handler)]
 	(error_code error, size_t size) mutable {
 		(void)state->timer.cancel();
-		if( state->expired &&
+		if( state->expired and
 			error == asio::error::make_error_code(
 				asio::error::operation_aborted) )
 			error = asio::error::make_error_code(asio::error::timed_out);
@@ -224,7 +224,7 @@ size_t tcp_connection::read_some_sync(mutable_buffer buffer,
 			watchdog = std::jthread([&, timeout]
 			{
 				const auto deadline = std::chrono::steady_clock::now() + timeout;
-				while( !finished &&
+				while( not finished and
 					std::chrono::steady_clock::now() < deadline )
 					std::this_thread::sleep_for(std::chrono::milliseconds(5));
 				if( finished ) return;
@@ -262,7 +262,7 @@ size_t tcp_connection::write_sync(const_buffer buffer,
 			watchdog = std::jthread([&, timeout]
 			{
 				const auto deadline = std::chrono::steady_clock::now() + timeout;
-				while( !finished &&
+				while( not finished and
 					std::chrono::steady_clock::now() < deadline )
 					std::this_thread::sleep_for(std::chrono::milliseconds(5));
 				if( finished ) return;

@@ -67,7 +67,7 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	error_code &error)
 {
 	auto &state = *m_impl;
-	while( state.input_begin == state.input_end && !state.source_eof )
+	while( state.input_begin == state.input_end and not state.source_eof )
 	{
 		const auto read = state.source->read_some(riwo::buffer(state.input),
 			error);
@@ -120,7 +120,7 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 		ended = true;
 		return true;
 	}
-	if( result != Z_OK && result != Z_BUF_ERROR )
+	if( result != Z_OK and result != Z_BUF_ERROR )
 	{
 		error = protocol_error();
 		return false;
@@ -133,12 +133,12 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 {
 	auto &state = *m_impl;
 	std::array<std::byte,4096> buffer {};
-	while( !state.source_eof )
+	while( not state.source_eof )
 	{
 		const auto read = state.source->read_some(riwo::buffer(buffer), error);
 		if( error ) return false;
 		if( read.eof ) state.source_eof = true;
-		if( read.bytes == 0 && !read.eof ) return false;
+		if( read.bytes == 0 and not read.eof ) return false;
 	}
 	return true;
 }
@@ -149,7 +149,7 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	auto &state = *m_impl;
 	if( state.ended )
 	{
-		if( !drain_source_sync(error) ) return {};
+		if( not drain_source_sync(error) ) return {};
 		return {0, true};
 	}
 	if( buffer.size() == 0 ) return {0, false};
@@ -157,19 +157,19 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	std::size_t produced = 0;
 	for(;;)
 	{
-		if( state.input_begin == state.input_end && !fill_input_sync(error) )
+		if( state.input_begin == state.input_end and not fill_input_sync(error) )
 			return {};
 		bool ended = false;
-		if( !inflate_step(buffer, produced, ended, error) ) return {};
+		if( not inflate_step(buffer, produced, ended, error) ) return {};
 		if( ended )
 		{
 			state.ended = true;
-			if( !drain_source_sync(error) ) return {};
+			if( not drain_source_sync(error) ) return {};
 			return {produced, true};
 		}
 		if( produced == buffer.size() ) return {produced, false};
 		if( state.input_begin == state.input_end ) continue;
-		if( produced == 0 && state.stream.avail_in == 0 ) continue;
+		if( produced == 0 and state.stream.avail_in == 0 ) continue;
 	}
 }
 
@@ -228,7 +228,7 @@ private:
 				}
 				state.input_begin = 0;
 				state.input_end = read.bytes;
-				if( read.bytes == 0 && read.eof )
+				if( read.bytes == 0 and read.eof )
 				{
 					self->finish(make_error_code(errc::body_length_mismatch),
 						self->produced, false);
@@ -247,7 +247,7 @@ private:
 		auto &state = *owner->m_impl;
 		bool ended = false;
 		error_code error;
-		if( !owner->inflate_step(target, produced, ended, error) )
+		if( not owner->inflate_step(target, produced, ended, error) )
 		{
 			finish(error, produced, false);
 			return;
@@ -298,7 +298,7 @@ private:
 					}
 					auto &state = *self->owner->owner->m_impl;
 					if( read.eof ) state.source_eof = true;
-					if( read.eof || read.bytes == 0 )
+					if( read.eof or read.bytes == 0 )
 					{
 						std::move(self->completion)(error_code{});
 						return;
@@ -339,7 +339,7 @@ void decoding_body_reader_adapter::read_some(mutable_buffer buffer,
 	error_code &error) noexcept
 {
 	error.clear();
-	if( !m_impl->ended )
+	if( not m_impl->ended )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return {};
@@ -349,7 +349,7 @@ void decoding_body_reader_adapter::read_some(mutable_buffer buffer,
 
 void decoding_body_reader_adapter::trailers(trailers_handler handler)
 {
-	if( !m_impl->ended )
+	if( not m_impl->ended )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			fields{});
@@ -365,7 +365,7 @@ void decoding_body_reader_adapter::cancel() noexcept {
 std::shared_ptr<body_reader_state> make_decoding_body_reader(
 	std::shared_ptr<body_reader_state> source, std::string encoding)
 {
-	if( !source || encoding.empty() ) return source;
+	if( not source or encoding.empty() ) return source;
 	auto adapter = std::make_shared<decoding_body_reader_adapter>(
 		std::move(source), std::move(encoding));
 	return make_body_reader_state(adapter, true);

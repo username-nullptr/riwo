@@ -58,13 +58,13 @@ constexpr bool h2_client_session_available =
 		asio::ip::tcp::resolver::results_type results)
 	{
 		error = resolve_error;
-		if( !error )
+		if( not error )
 			for( const auto &value : results )
 				endpoints.push_back(value.endpoint());
 		completed = true;
 	});
 	context.run_for(timeout);
-	if( !completed )
+	if( not completed )
 	{
 		error = asio::error::make_error_code(asio::error::timed_out);
 		resolver.cancel();
@@ -101,7 +101,7 @@ void connect_with_timeout(Socket &socket,
 		if( error ) return;
 		const auto native_result = ::connect(socket.native_handle(),
 			endpoint.data(), static_cast<socklen_t>(endpoint.size()));
-		if( native_result != 0 && errno != EINPROGRESS && errno != EWOULDBLOCK )
+		if( native_result != 0 and errno != EINPROGRESS and errno != EWOULDBLOCK )
 		{
 			error = std::error_code(errno, std::system_category());
 			error_code ignored;
@@ -135,7 +135,7 @@ void connect_with_timeout(Socket &socket,
 			int value = 0;
 			socklen_t size = sizeof(value);
 			if( ::getsockopt(socket.native_handle(), SOL_SOCKET, SO_ERROR,
-				&value, &size) != 0 || value != 0 )
+				&value, &size) != 0 or value != 0 )
 			{
 				error = std::error_code(value != 0 ? value : errno,
 					std::system_category());
@@ -153,7 +153,7 @@ void connect_with_timeout(Socket &socket,
 		}
 		return;
 	}
-	if( !error )
+	if( not error )
 		error = asio::error::make_error_code(asio::error::host_unreachable);
 #else
 	std::atomic<bool> finished {false};
@@ -161,7 +161,7 @@ void connect_with_timeout(Socket &socket,
 	std::jthread watchdog([&]
 	{
 		const auto deadline = std::chrono::steady_clock::now() + timeout;
-		while( !finished && std::chrono::steady_clock::now() < deadline )
+		while( not finished and std::chrono::steady_clock::now() < deadline )
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		if( finished ) return;
 		timed_out = true;
@@ -191,7 +191,7 @@ void tls_handshake_with_timeout(tls_socket &socket,
 	std::jthread watchdog([&]
 	{
 		const auto deadline = std::chrono::steady_clock::now() + timeout;
-		while( !finished && std::chrono::steady_clock::now() < deadline )
+		while( not finished and std::chrono::steady_clock::now() < deadline )
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		if( finished ) return;
 		timed_out = true;
@@ -223,9 +223,9 @@ struct proxy_target
 
 [[nodiscard]] optional<proxy_target> parse_proxy(const session_key &key)
 {
-	if( !key.proxy.endpoint ) return std::nullopt;
+	if( not key.proxy.endpoint ) return std::nullopt;
 	riwo::url value(*key.proxy.endpoint);
-	if( !value.is_valid() || lower(value.protocol()) != "http" ||
+	if( not value.is_valid() or lower(value.protocol()) != "http" or
 		value.host().empty() )
 		return std::nullopt;
 	return proxy_target {
@@ -238,7 +238,7 @@ struct proxy_target
 	const session_key &key)
 {
 	auto host = key.host;
-	if( host.find(':') != std::string::npos && !host.starts_with('[') )
+	if( host.find(':') != std::string::npos and not host.starts_with('[') )
 		host = '[' + host + ']';
 	return host + ':' + std::to_string(key.port);
 }
@@ -255,7 +255,7 @@ struct proxy_target
 
 [[nodiscard]] bool http1(protocol value) noexcept
 {
-	return value == protocol::v1_0 || value == protocol::v1_1;
+	return value == protocol::v1_0 or value == protocol::v1_1;
 }
 
 [[nodiscard]] protocol_policy make_policy(const session_key &key)
@@ -297,13 +297,13 @@ void mix(size_t &seed, size_t value) noexcept
 	{
 		if( value == protocol::v1_0 ) continue;
 	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		if( value == protocol::v2 && !h2_client_session_available ) continue;
+		if( value == protocol::v2 and not h2_client_session_available ) continue;
 	#endif
-		if( key.protocols.requirement == protocol_requirement::require_http1 &&
+		if( key.protocols.requirement == protocol_requirement::require_http1 and
 			value != protocol::v1_1 )
 			continue;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		if( key.protocols.requirement == protocol_requirement::require_http2 &&
+		if( key.protocols.requirement == protocol_requirement::require_http2 and
 			value != protocol::v2 )
 			continue;
 #endif
@@ -334,7 +334,7 @@ void mix(size_t &seed, size_t value) noexcept
 	context.set_verify_mode(identity.verify_peer ?
 		asio::ssl::verify_peer : asio::ssl::verify_none, error);
 	if( error ) return error;
-	if( !identity.verify_peer ) return {};
+	if( not identity.verify_peer ) return {};
 
 	if( identity.certificate_authority_file.empty() )
 		context.set_default_verify_paths(error);
@@ -357,11 +357,11 @@ public:
 	{
 		try {
 			auto selected = negotiate_protocol(make_policy(key), key);
-			if( !selected ) return sys_unexpected(selected.error());
+			if( not selected ) return sys_unexpected(selected.error());
 
 			error_code error;
 			auto proxy = parse_proxy(key);
-			if( key.proxy.endpoint && !proxy )
+			if( key.proxy.endpoint and not proxy )
 				return sys_unexpected(make_error_code(errc::invalid_target));
 
 			const auto connect_host = proxy ? proxy->host : key.host;
@@ -425,7 +425,7 @@ public:
 				auto first = response.find(' ');
 				auto second = first == std::string::npos ? std::string::npos :
 					response.find(' ', first + 1);
-				if( first == std::string::npos || second == std::string::npos )
+				if( first == std::string::npos or second == std::string::npos )
 					return sys_unexpected(make_error_code(
 						errc::connection_protocol_error));
 				uint16_t code = 0;
@@ -433,8 +433,8 @@ public:
 					first + 1, second - first - 1);
 				const auto parsed_code = std::from_chars(code_text.data(),
 					code_text.data() + code_text.size(), code);
-				if( parsed_code.ec != std::errc{} ||
-					parsed_code.ptr != code_text.data() + code_text.size() ||
+				if( parsed_code.ec != std::errc{} or
+					parsed_code.ptr != code_text.data() + code_text.size() or
 					code != 200 )
 					return sys_unexpected(make_error_code(
 						errc::negotiation_failed));
@@ -451,7 +451,7 @@ public:
 			tls_socket socket(std::move(tcp->socket()), context);
 			error_code address_error;
 			ignore_unused(asio::ip::make_address(key.host, address_error));
-			if( address_error && ::SSL_set_tlsext_host_name(
+			if( address_error and ::SSL_set_tlsext_host_name(
 				socket.native_handle(), key.host.c_str()) != 1 )
 				return sys_unexpected(make_error_code(
 					errc::negotiation_failed));
@@ -464,7 +464,7 @@ public:
 			}
 
 			auto offered = alpn_wire(alpn_preference(key));
-			if( !offered.empty() && ::SSL_set_alpn_protos(
+			if( not offered.empty() and ::SSL_set_alpn_protos(
 				socket.native_handle(), offered.data(),
 				static_cast<unsigned int>(offered.size())) != 0 )
 				return sys_unexpected(make_error_code(
@@ -478,12 +478,12 @@ public:
 			::SSL_get0_alpn_selected(socket.native_handle(),
 				&alpn_data, &alpn_size);
 			optional<std::string> alpn;
-			if( alpn_data && alpn_size != 0 )
+			if( alpn_data and alpn_size != 0 )
 			{
 				alpn = std::string(reinterpret_cast<const char *>(alpn_data),
 					alpn_size);
 				auto value = protocol_from_alpn(*alpn);
-				if( !value )
+				if( not value )
 					return sys_unexpected(make_error_code(
 						errc::negotiation_failed));
 				selected = *value;
@@ -500,7 +500,7 @@ public:
 				fallback_policy.requirement =
 					protocol_requirement::require_http1;
 				auto fallback = negotiate_protocol(fallback_policy, key);
-				if( !fallback ) return sys_unexpected(fallback.error());
+				if( not fallback ) return sys_unexpected(fallback.error());
 				selected = *fallback;
 			}
 
@@ -509,12 +509,12 @@ public:
 				return sys_unexpected(make_error_code(
 					errc::negotiation_failed));
 			if( key.protocols.requirement ==
-				protocol_requirement::require_http1 && !http1(*selected) )
+				protocol_requirement::require_http1 and not http1(*selected) )
 				return sys_unexpected(make_error_code(
 					errc::negotiation_failed));
 # if RIWO_HTTP_EXP_HTTP2_SUPPORT
 			if( key.protocols.requirement ==
-				protocol_requirement::require_http2 &&
+				protocol_requirement::require_http2 and
 				*selected != protocol::v2 )
 				return sys_unexpected(make_error_code(
 					errc::negotiation_failed));
@@ -555,14 +555,14 @@ public:
 		const session_key &key, negotiated_transport transport,
 		const client_config &config) override
 	{
-		if( !transport.stream )
+		if( not transport.stream )
 			return sys_unexpected(make_error_code(errc::negotiation_failed));
 	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		if( transport.selected_protocol == protocol::v2 )
 			return h2::make_client_session(std::move(transport.stream), config,
 				transport.remote, transport.local);
 	#endif
-		if( !http1(transport.selected_protocol) )
+		if( not http1(transport.selected_protocol) )
 			return sys_unexpected(make_error_code(
 				errc::operation_not_supported));
 		ignore_unused(key);
@@ -671,12 +671,12 @@ sys_expected<protocol> negotiate_protocol(const protocol_policy &policy,
 		.preference = policy.preference,
 		.requirement = policy.requirement
 	};
-	if( !valid_policy(identity) )
+	if( not valid_policy(identity) )
 		return sys_unexpected(make_error_code(errc::negotiation_failed));
 
-	if( key.scheme == "https" && !tls_available )
+	if( key.scheme == "https" and not tls_available )
 		return sys_unexpected(make_error_code(errc::operation_not_supported));
-	if( key.scheme != "http" && key.scheme != "https" )
+	if( key.scheme != "http" and key.scheme != "https" )
 		return sys_unexpected(make_error_code(errc::invalid_target));
 
 	std::vector<protocol> eligible;
@@ -695,7 +695,7 @@ sys_expected<protocol> negotiate_protocol(const protocol_policy &policy,
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		if( value == protocol::v2 )
 		{
-			if( policy.requirement == protocol_requirement::require_http2 ||
+			if( policy.requirement == protocol_requirement::require_http2 or
 				key.scheme == "https" )
 				eligible.push_back(value);
 			continue;
@@ -705,7 +705,7 @@ sys_expected<protocol> negotiate_protocol(const protocol_policy &policy,
 
 	if( policy.requirement == protocol_requirement::require_http1 )
 	{
-		std::erase_if(eligible, [](protocol value) { return !http1(value); });
+		std::erase_if(eligible, [](protocol value) { return not http1(value); });
 	}
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	else if( policy.requirement == protocol_requirement::require_http2 )

@@ -64,19 +64,19 @@ request &request::trailers(fields values)
 	{
 		const auto duplicate = std::ranges::any_of(description.names,
 		[&](const std::string &name) {
-			return name.size() == value.name.size() &&
+			return name.size() == value.name.size() and
 				std::ranges::equal(name, value.name, [](char lhs, char rhs) {
 					return std::tolower(static_cast<unsigned char>(lhs)) ==
 						std::tolower(static_cast<unsigned char>(rhs));
 				});
 		});
-		if( !duplicate ) description.names.push_back(value.name);
+		if( not duplicate ) description.names.push_back(value.name);
 	}
 	if( auto length = m_impl->body_spec.length() )
 		m_impl->body_spec = body_spec::known(*length, std::move(description));
 	else if( m_impl->body_spec.type() == body_spec::mode::streaming )
 		m_impl->body_spec = body_spec::streaming(std::move(description));
-	else if( !values.empty() )
+	else if( not values.empty() )
 		throw std::invalid_argument("An empty HTTP body cannot have trailers");
 	m_impl->trailers = std::move(values);
 	return *this;
@@ -87,8 +87,8 @@ const body_spec &request::body_description() const noexcept {
 }
 
 bool request::has_body_source() const noexcept {
-	return m_impl->body.has_value() || static_cast<bool>(m_impl->source) ||
-		!m_impl->file.empty();
+	return m_impl->body.has_value() or static_cast<bool>(m_impl->source) or
+		not m_impl->file.empty();
 }
 
 } //namespace riwo::http_exp

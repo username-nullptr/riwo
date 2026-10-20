@@ -25,7 +25,7 @@ public:
 	}
 
 	~pooled_stream() override {
-		if( m_inner && !m_inner->reusable() ) m_inner->cancel();
+		if( m_inner and not m_inner->reusable() ) m_inner->cancel();
 		abandon(false);
 	}
 
@@ -148,8 +148,8 @@ public:
 		executor(std::move(executor_value)), config(std::move(config_value)),
 		connector(std::move(connector_value)), factory(std::move(factory_value))
 	{
-		if( !connector ) connector = make_default_connector(executor);
-		if( !factory ) factory = make_default_session_factory();
+		if( not connector ) connector = make_default_connector(executor);
+		if( not factory ) factory = make_default_session_factory();
 	}
 
 	~impl() {
@@ -179,7 +179,7 @@ public:
 					}
 					auto &value = buckets[key];
 					selected = take_slot_locked(value);
-					if( !selected )
+					if( not selected )
 					{
 						if( value.sessions.size() + value.connecting <
 							config.pool.max_sessions_per_origin )
@@ -188,12 +188,12 @@ public:
 						}
 						else
 						{
-							if( !condition.wait_for(lock,
+							if( not condition.wait_for(lock,
 								std::chrono::milliseconds(config.timeout.pool_wait),
 								[this, &key] {
 									auto iterator = buckets.find(key);
-									return stopped || iterator == buckets.end() ||
-										has_capacity_locked(iterator->second) ||
+									return stopped or iterator == buckets.end() or
+										has_capacity_locked(iterator->second) or
 										iterator->second.sessions.size() +
 											iterator->second.connecting <
 											config.pool.max_sessions_per_origin;
@@ -243,9 +243,9 @@ public:
 					auto &value = buckets[key];
 					if( value.connecting > 0 ) --value.connecting;
 				}
-				if( error || !session )
+				if( error or not session )
 				{
-					if( !error )
+					if( not error )
 						error = make_error_code(errc::negotiation_failed);
 					return {};
 				}
@@ -355,8 +355,8 @@ public:
 		{
 			ignore_unused(key);
 			for( const auto &item : value.sessions )
-				if( !item->busy && !item->session->closed() &&
-					!item->session->draining() )
+				if( not item->busy and not item->session->closed() and
+					not item->session->draining() )
 					++result;
 		}
 		return result;
@@ -382,9 +382,9 @@ public:
 private:
 	[[nodiscard]] static bool usable(const slot_ptr &value)
 	{
-		return value && value->session && !value->busy &&
-			!value->removed && !value->session->closed() &&
-			!value->session->draining() &&
+		return value and value->session and not value->busy and
+			not value->removed and not value->session->closed() and
+			not value->session->draining() and
 			value->session->available_stream_capacity() != 0;
 	}
 
@@ -398,10 +398,10 @@ private:
 	{
 		for( auto &item : value.sessions )
 		{
-			if( !usable(item) ) continue;
+			if( not usable(item) ) continue;
 		#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-			if( item->session->selected_protocol() == protocol::v2 &&
-				!item->session->try_reserve_stream() ) continue;
+			if( item->session->selected_protocol() == protocol::v2 and
+				not item->session->try_reserve_stream() ) continue;
 		#endif
 			item->busy = true;
 			++item->generation;
@@ -442,7 +442,7 @@ private:
 		{
 			std::lock_guard lock(mutex);
 			auto iterator = buckets.find(key);
-			if( iterator == buckets.end() || iterator->second.pump_scheduled )
+			if( iterator == buckets.end() or iterator->second.pump_scheduled )
 				return;
 			iterator->second.pump_scheduled = true;
 		}
@@ -468,7 +468,7 @@ private:
 					return;
 				auto &value = iterator->second;
 				value.pump_scheduled = false;
-				if( stopped || value.waiters.empty() )
+				if( stopped or value.waiters.empty() )
 					return;
 				if( config.pool.max_sessions_per_origin == 0 )
 				{
@@ -511,7 +511,7 @@ private:
 				start_connect(key);
 				return;
 			}
-			if( !item || !selected ) return;
+			if( not item or not selected ) return;
 
 			auto session = selected->session;
 			auto weak = weak_from_this();
@@ -548,7 +548,7 @@ private:
 		connector->connect_async(key, config,
 		[weak, key](error_code error, negotiated_transport transport) mutable {
 			auto self = weak.lock();
-			if( !self ) return;
+			if( not self ) return;
 			if( error )
 				return self->connect_failed(key, error);
 
@@ -562,12 +562,12 @@ private:
 				created = sys_unexpected(
 					exception_error(std::current_exception()));
 			}
-			if( !created )
+			if( not created )
 				return self->connect_failed(key, created.error());
 			{
 				std::lock_guard lock(self->mutex);
 				auto iterator = self->buckets.find(key);
-				if( iterator != self->buckets.end() &&
+				if( iterator != self->buckets.end() and
 					iterator->second.connecting > 0 )
 					--iterator->second.connecting;
 			}
@@ -584,7 +584,7 @@ private:
 			if( iterator == buckets.end() ) return;
 			auto &value = iterator->second;
 			if( value.connecting > 0 ) --value.connecting;
-			if( !value.waiters.empty() )
+			if( not value.waiters.empty() )
 			{
 				item = value.waiters.front();
 				value.waiters.pop_front();
@@ -603,25 +603,25 @@ private:
 		bool remove = false;
 		{
 			std::lock_guard lock(mutex);
-			if( !value || value->removed ) return;
+			if( not value or value->removed ) return;
 			const bool was_busy = value->busy;
 			ignore_unused(was_busy);
 			if( value->busy ) value->busy = false;
 			value->idle_since = clock_type::now();
 			session = value->session;
-			if( !reusable || !session || session->closed() ||
+			if( not reusable or not session or session->closed() or
 				session->draining() )
 				remove = value->removed = true;
 			else
 			{
 			#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-				if( session->selected_protocol() != protocol::v2 || !was_busy )
+				if( session->selected_protocol() != protocol::v2 or not was_busy )
 			#endif
 				schedule_idle_locked(key, value);
 			}
 			condition.notify_all();
 		}
-		if( remove && session )
+		if( remove and session )
 			session->graceful_shutdown([](error_code) {});
 		if( remove ) remove_slot(key, value);
 		schedule_pump(key);
@@ -649,7 +649,7 @@ private:
 		value->timer->expires_after(config.timeout.pool_wait);
 		value->timer->async_wait(
 		[weak, value](error_code error) {
-			if( error || value->completed ) return;
+			if( error or value->completed ) return;
 			if( auto self = weak.lock() ) self->wait_timed_out(value);
 		});
 	}
@@ -672,7 +672,7 @@ private:
 	{
 		{
 			std::lock_guard lock(mutex);
-			if( value->completed || !value->queued ) return;
+			if( value->completed or not value->queued ) return;
 			auto iterator = buckets.find(value->key);
 			if( iterator == buckets.end() ) return;
 			auto &items = iterator->second.waiters;
@@ -689,7 +689,7 @@ private:
 		std::shared_ptr<client_session> session;
 		{
 			std::lock_guard lock(mutex);
-			if( !value || value->busy || value->removed ) return;
+			if( not value or value->busy or value->removed ) return;
 			value->removed = true;
 			session = value->session;
 		}
@@ -700,7 +700,7 @@ private:
 	[[nodiscard]] std::shared_ptr<stream> wrap(const session_key &key,
 		const slot_ptr &value, std::shared_ptr<stream> active)
 	{
-		if( !active )
+		if( not active )
 		{
 			release_slot(key, value, false);
 			return {};
@@ -720,7 +720,7 @@ private:
 		std::shared_ptr<client_session> session;
 		{
 			std::lock_guard lock(mutex);
-			if( !value || !value->busy || value->generation != generation )
+			if( not value or not value->busy or value->generation != generation )
 				return;
 			session = value->session;
 		}
@@ -731,7 +731,7 @@ private:
 	void complete(const waiter_ptr &value, error_code error,
 		std::shared_ptr<stream> active)
 	{
-		if( !value || value->completed ) return;
+		if( not value or value->completed ) return;
 		value->completed = true;
 		if( value->timer )
 		{
@@ -746,7 +746,7 @@ private:
 
 	static void self_finish_unused(const waiter_ptr &item, error_code error)
 	{
-		if( item && !item->completed )
+		if( item and not item->completed )
 		{
 			item->completed = true;
 			std::move(item->handler)(error, std::shared_ptr<stream>{});
@@ -786,8 +786,8 @@ std::shared_ptr<stream> session_pool::open_sync(const origin &target,
 	request_head head, body_spec spec, error_code &error) noexcept
 {
 	auto key = make_session_key(head, m_impl->config);
-	if( !target.scheme.empty() ) key.scheme = target.scheme;
-	if( !target.host.empty() ) key.host = target.host;
+	if( not target.scheme.empty() ) key.scheme = target.scheme;
+	if( not target.host.empty() ) key.host = target.host;
 	if( target.port != 0 ) key.port = target.port;
 	key.tls.enabled = key.scheme == "https";
 	return m_impl->open_sync(key, std::move(head), std::move(spec), error);
@@ -803,8 +803,8 @@ void session_pool::open(const origin &target, request_head head,
 	body_spec spec, open_handler handler)
 {
 	auto key = make_session_key(head, m_impl->config);
-	if( !target.scheme.empty() ) key.scheme = target.scheme;
-	if( !target.host.empty() ) key.host = target.host;
+	if( not target.scheme.empty() ) key.scheme = target.scheme;
+	if( not target.host.empty() ) key.host = target.host;
 	if( target.port != 0 ) key.port = target.port;
 	key.tls.enabled = key.scheme == "https";
 	m_impl->open(key, std::move(head), std::move(spec), std::move(handler));

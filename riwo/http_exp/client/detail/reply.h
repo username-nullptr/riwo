@@ -109,7 +109,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 		Token,error_code,std::vector<std::byte>>
 {
 	const auto limit = m_impl->max_buffered_body;
-	if constexpr( is_error_code_token_v<Token> || is_sync_opt_token_v<Token> )
+	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> )
 	{
 		std::vector<std::byte> result;
 		std::array<std::byte,8192> buffer;
@@ -198,21 +198,21 @@ template <typename Token>
 auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,uint64_t>
 {
-	if constexpr( is_error_code_token_v<Token> || is_sync_opt_token_v<Token> )
+	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> )
 	{
 		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
 		error_code error;
 		uint64_t total = 0;
-		if( !stream )
+		if( not stream )
 			error = make_system_error_code(std::errc::io_error);
 		std::array<std::byte,8192> buffer;
-		while( !error )
+		while( not error )
 		{
 			auto read = body().read_some(riwo::buffer(buffer), error);
 			if( error ) break;
 			stream.write(reinterpret_cast<const char*>(buffer.data()),
 				static_cast<std::streamsize>(read.bytes));
-			if( !stream )
+			if( not stream )
 			{
 				error = make_system_error_code(std::errc::io_error);
 				break;
@@ -244,7 +244,7 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 
 			void start()
 			{
-				if( !stream )
+				if( not stream )
 				{
 					std::move(handler)(make_system_error_code(std::errc::io_error), 0);
 					return;
@@ -262,7 +262,7 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 					self->stream.write(
 						reinterpret_cast<const char*>(self->buffer.data()),
 						static_cast<std::streamsize>(read.bytes));
-					if( !self->stream )
+					if( not self->stream )
 					{
 						std::move(self->handler)(
 							make_system_error_code(std::errc::io_error), self->total);

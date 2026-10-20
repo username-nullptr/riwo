@@ -42,7 +42,7 @@ memory_body_source::memory_body_source(std::vector<std::byte> bytes) :
 memory_body_source::memory_body_source(const_buffer bytes) :
 	m_impl(std::make_unique<impl>(std::vector<std::byte>(bytes.size())))
 {
-	if( !m_impl->bytes.empty() )
+	if( not m_impl->bytes.empty() )
 		std::memcpy(m_impl->bytes.data(), bytes.data(), bytes.size());
 }
 
@@ -120,7 +120,7 @@ public:
 	explicit impl(std::filesystem::path source_path) :
 		stream(source_path, std::ios::binary)
 	{
-		if( !stream )
+		if( not stream )
 			throw std::system_error(std::make_error_code(
 				std::errc::no_such_file_or_directory));
 		stream.seekg(0, std::ios::end);
@@ -129,7 +129,7 @@ public:
 			throw std::system_error(std::make_error_code(std::errc::io_error));
 		length = static_cast<uint64_t>(end);
 		stream.seekg(0, std::ios::beg);
-		if( !stream )
+		if( not stream )
 			throw std::system_error(std::make_error_code(std::errc::io_error));
 	}
 
@@ -199,7 +199,7 @@ void file_body_source::rewind(
 {
 	m_impl->stream.clear();
 	m_impl->stream.seekg(0, std::ios::beg);
-	if( !m_impl->stream )
+	if( not m_impl->stream )
 	{
 		std::move(handler)(make_system_error_code(std::errc::io_error));
 		return;
