@@ -194,11 +194,10 @@ error_code validate_server_config(const server_config &config) noexcept
 		config.protocols.preference.empty() )
 		return make_error_code(config.h1.max_pipeline_depth != 1 ?
 			errc::operation_not_supported : errc::negotiation_failed);
-	for( size_t index = 0; index < config.protocols.preference.size(); ++index )
-		if( std::ranges::find(config.protocols.preference.begin(),
-			config.protocols.preference.begin() + index,
-			config.protocols.preference[index]) !=
-			config.protocols.preference.begin() + index )
+	for( auto current = config.protocols.preference.begin();
+		current != config.protocols.preference.end(); ++current )
+		if( std::ranges::find(config.protocols.preference.begin(), current,
+			*current) != current )
 			return make_error_code(errc::negotiation_failed);
 
 	if( not permits_http1(config.protocols)
