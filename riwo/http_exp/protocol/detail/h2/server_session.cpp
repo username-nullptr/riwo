@@ -532,6 +532,11 @@ public:
 	{
 		error.clear();
 		if( value.terminal_error_ ) { error = value.terminal_error_; return 0; }
+		// A HEAD response carries the representation metadata but no body on
+		// the wire.  HTTP/1.x enforces this in its writer adapter; the h2
+		// session must discard the same writes before they reach nghttp2.
+		if( value.request_.method.known() == method::head )
+			return buffer.size();
 		if( buffer.size() > config_.h2.outbound_stream_buffer or
 			value.outbound_size_ + buffer.size() >
 				config_.h2.outbound_stream_buffer or
@@ -555,6 +560,8 @@ public:
 			handler = std::move(handler)]() mutable {
 			if( value->terminal_error_ )
 				return std::move(handler)(value->terminal_error_, 0);
+			if( value->request_.method.known() == method::head )
+				return std::move(handler)(error_code{}, buffer.size());
 			if( value->pending_write_ )
 				return std::move(handler)(
 					make_error_code(errc::operation_in_progress), 0);
@@ -584,6 +591,8 @@ public:
 	{
 		error.clear();
 		if( value.terminal_error_ ) { error = value.terminal_error_; return; }
+		if( value.request_.method.known() == method::head )
+			return;
 		auto checked = trailer_headers(trailers,
 			config_.h2.max_header_list_size);
 		if( not checked ) { error = checked.error(); return; }
@@ -601,6 +610,8 @@ public:
 			trailers = std::move(trailers), handler = std::move(handler)]() mutable {
 			if( value->terminal_error_ )
 				return std::move(handler)(value->terminal_error_);
+			if( value->request_.method.known() == method::head )
+				return std::move(handler)(error_code{});
 			auto checked = trailer_headers(trailers,
 				self->config_.h2.max_header_list_size);
 			if( not checked ) return std::move(handler)(checked.error());
@@ -642,7 +653,10 @@ private:
 		nghttp2_api::data_provider provider {};
 		nghttp2_api::data_provider *provider_ptr = nullptr;
 		const auto mode = spec.type();
-		if( mode != body_spec::mode::empty and mode != body_spec::mode::head )
+		const bool head_request =
+			value.request_.method.known() == method::head;
+		if( mode != body_spec::mode::empty and mode != body_spec::mode::head and
+			not head_request )
 		{
 			provider.source.ptr = &value;
 			provider.read_callback = &server_session_impl::data_read;
@@ -656,7 +670,8 @@ private:
 		}
 		value.response_started_ = true;
 		value.outbound_finished_ =
-			mode == body_spec::mode::empty or mode == body_spec::mode::head;
+			mode == body_spec::mode::empty or mode == body_spec::mode::head or
+			head_request;
 	}
 
 	void read_loop()

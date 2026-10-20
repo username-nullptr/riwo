@@ -161,6 +161,70 @@ void invalid_resource_configuration()
 		http::make_error_code(http::errc::operation_not_permitted));
 }
 
+void head_response_has_no_data()
+{
+	riwo::io_context_t context;
+	asio::ip::tcp::acceptor acceptor(context);
+	http::server service(std::move(acceptor));
+	service.bind({riwo::ip_type::v4, 0})
+		.on_request<http::method::head>("/metadata",
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		{
+			RIWO_TEST_CHECK_EQ(exchange.selected_protocol(),
+				http::protocol::v2);
+			http::response_head head;
+			head.headers.add("x-head-test", "yes");
+			co_await exchange.respond(std::move(head),
+				std::string_view("this body must not reach the wire"),
+				riwo::use_awaitable);
+		})
+		.on_request<http::method::head>("/stream",
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		{
+			http::response_head head;
+			head.headers.add("x-head-test", "stream");
+			co_await exchange.respond(std::move(head),
+				http::body_spec::streaming({{"x-head-trailer"}}),
+				riwo::use_awaitable);
+			(void)co_await exchange.response_body().write(
+				riwo::buffer("discarded chunk"), riwo::use_awaitable);
+			http::fields trailers;
+			trailers.add("x-head-trailer", "discarded");
+			co_await exchange.response_body().finish(std::move(trailers),
+				riwo::use_awaitable);
+		})
+		.start();
+	const auto base = std::format("http://127.0.0.1:{}",
+		service.acceptor().local_endpoint().port());
+	http::client_config config;
+	config.protocols.requirement = http::protocol_requirement::require_http2;
+	http::client client(context, config);
+	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
+	{
+		auto reply = co_await client.fetch(
+			http::request(http::method::head, base + "/metadata"),
+			riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(reply.selected_protocol(), http::protocol::v2);
+		RIWO_TEST_CHECK_EQ(reply.status().code(), 200);
+		RIWO_TEST_CHECK_EQ(reply.headers().find_first("x-head-test"), "yes");
+		RIWO_TEST_CHECK(reply.buffered_body().empty());
+		auto streamed = co_await client.fetch(
+			http::request(http::method::head, base + "/stream"),
+			riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(streamed.status().code(), 200);
+		RIWO_TEST_CHECK_EQ(streamed.headers().find_first("x-head-test"),
+			"stream");
+		RIWO_TEST_CHECK(streamed.buffered_body().empty());
+		service.stop();
+		context.stop();
+		co_return;
+	}, asio::use_future);
+	riwo::ignore_unused(context.run_for(std::chrono::seconds(5)));
+	RIWO_TEST_CHECK(completed.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
+	completed.get();
+}
+
 void graceful_shutdown_keeps_active_stream()
 {
 	riwo::io_context_t context;
@@ -203,6 +267,7 @@ int main(int argc, const char *const argv[])
 		{"HTTP/2 server prior knowledge and multiplexing",
 			prior_knowledge_server_and_multiplexing},
 		{"HTTP/2 server resource validation", invalid_resource_configuration},
+		{"HTTP/2 HEAD response has no DATA", head_response_has_no_data},
 		{"HTTP/2 server graceful shutdown",
 			graceful_shutdown_keeps_active_stream}
 	});
