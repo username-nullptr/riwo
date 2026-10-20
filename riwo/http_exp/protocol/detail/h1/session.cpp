@@ -1802,8 +1802,17 @@ server_connection_ptr accept_h1(asio::ip::tcp::socket socket,
 {
 	error_code option_error;
 	(void)socket.set_option(asio::ip::tcp::no_delay(true), option_error);
+	return accept_h1(std::make_shared<tcp_connection>(std::move(socket)),
+		std::move(limits), timeouts, std::move(handler));
+}
+
+server_connection_ptr accept_h1(
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	message_limits limits, timeout_policy timeouts,
+	server_accept_handler handler)
+{
 	auto session = std::make_shared<h1::h1_server_session>(
-		std::move(socket), std::move(limits), timeouts);
+		std::move(transport), protocol::v1_1, std::move(limits), timeouts);
 	auto value = std::make_shared<h1_server_loop>();
 	value->session = session;
 	value->handler = std::move(handler);

@@ -42,11 +42,8 @@ public:
 	{
 		error.clear();
 		if( running ) return;
-		if( config.h1.max_pipeline_depth != 1 )
-		{
-			error = make_error_code(errc::operation_not_supported);
-			return;
-		}
+		error = detail::validate_server_config(config);
+		if( error ) return;
 		acceptor_wrap.acceptor().listen(static_cast<int>(std::min<size_t>(
 			maximum, static_cast<size_t>(std::numeric_limits<int>::max()))), error);
 		if( error ) return;
@@ -112,8 +109,8 @@ private:
 				self->report_server_error(error);
 				return;
 			}
-			auto connection = detail::accept_h1(std::move(*socket),
-				self->config.request_limits, self->config.timeout,
+			auto connection = detail::accept_server(std::move(*socket),
+				self->config,
 			[self]
 			(error_code accept_error, std::shared_ptr<detail::stream> stream,
 				request_head request) mutable {

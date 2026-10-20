@@ -7,6 +7,11 @@
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/server/config.h>
 
+namespace riwo::http_exp
+{
+class connection;
+}
+
 namespace riwo::http_exp::detail
 {
 
@@ -30,6 +35,21 @@ using server_connection_ptr = std::shared_ptr<server_connection>;
 	asio::ip::tcp::socket socket,
 	message_limits limits, timeout_policy timeouts,
 	server_accept_handler handler);
+
+[[nodiscard]] RIWO_HTTP_EXP_API server_connection_ptr accept_h1(
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	message_limits limits, timeout_policy timeouts,
+	server_accept_handler handler);
+
+// Selects a cleartext HTTP/1.x or HTTP/2 server Session according to the
+// frozen server policy.  The HTTP/2 client preface is inspected without
+// losing bytes: a mismatch is replayed to the HTTP/1 parser.
+[[nodiscard]] RIWO_HTTP_EXP_API server_connection_ptr accept_server(
+	asio::ip::tcp::socket socket, server_config config,
+	server_accept_handler handler);
+
+[[nodiscard]] RIWO_HTTP_EXP_API error_code validate_server_config(
+	const server_config &config) noexcept;
 
 } //namespace riwo::http_exp::detail
 

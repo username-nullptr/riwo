@@ -868,10 +868,14 @@ void client_state::send(request request_value, send_handler handler)
 		}
 	};
 
+	// Keep the operation's body contract separate from the value passed to
+	// Session::open. Function-argument evaluation order must not be allowed to
+	// move the trailer declaration out before open() copies it.
+	auto operation_spec = spec;
 	auto owner = shared_from_this();
-	m_impl->open(*head, spec,
+	m_impl->open(*head, std::move(spec),
 	[owner, request_value = std::move(request_value), request_body,
-	 source = std::move(source), spec = std::move(spec),
+	 source = std::move(source), spec = std::move(operation_spec),
 	 trailers = std::move(trailers),
 	 max_buffered_body = m_impl->config.response_limits.max_buffered_body,
 	 automatic_decompression = m_impl->config.automatic_decompression,
