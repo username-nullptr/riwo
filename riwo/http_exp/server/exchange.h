@@ -30,31 +30,35 @@ class RIWO_HTTP_EXP_TAPI basic_server_exchange
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
-	using body_reader_type = basic_body_reader<executor_type>;
-	using body_reader_t = body_reader_type;
-	using body_writer_type = basic_body_writer<executor_type>;
-	using body_writer_t = body_writer_type;
-	using request_type = request_head;
-	using request_t = request_type;
+	using body_reader_t = basic_body_reader<executor_t>;
+	using body_writer_t = basic_body_writer<executor_t>;
+	using request_t = request_head;
+
+	basic_server_exchange()
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_server_exchange(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
+
+	basic_server_exchange(std::shared_ptr<detail::stream> stream,
+		request_t request)
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_server_exchange(Exec0 &&executor,
-		std::shared_ptr<detail::stream> stream, request_type request)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		std::shared_ptr<detail::stream> stream, request_t request)
+		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_server_exchange();
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] std::string remote_address() const;
 	[[nodiscard]] uint16_t remote_port() const noexcept;
-	[[nodiscard]] const request_type &request() const noexcept;
-	[[nodiscard]] body_reader_type &request_body() noexcept;
-	[[nodiscard]] body_writer_type &response_body() noexcept;
+	[[nodiscard]] const request_t &request() const noexcept;
+	[[nodiscard]] body_reader_t &request_body() noexcept;
+	[[nodiscard]] body_writer_t &response_body() noexcept;
 
 	template <typename Token = use_sync_t>
 	auto respond(response_head, body_spec, Token &&token = {})
@@ -73,7 +77,7 @@ public:
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto accept_duplex(response_head, Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<
-			Token,error_code,basic_duplex_channel<executor_type>>;
+			Token,error_code,basic_duplex_channel<executor_t>>;
 
 	void cancel() noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
@@ -86,7 +90,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using server_exchange = basic_server_exchange<>;
+using server_exchange_t = basic_server_exchange<>;
 
 } //namespace riwo::http_exp
 

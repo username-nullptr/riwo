@@ -38,8 +38,8 @@ void websocket_round_trip(bool use_http2, bool compression)
 		server_config.protocols.requirement =
 			http::protocol_requirement::require_http1;
 
-	http::server service(std::move(acceptor), server_config);
-	auto handler = [compression](http::server_exchange &exchange)
+	http::server_t service(std::move(acceptor), server_config);
+	auto handler = [compression](http::server_exchange_t &exchange)
 		-> riwo::awaitable<void>
 	{
 		RIWO_TEST_CHECK(ws::is_upgrade_request(exchange));
@@ -76,7 +76,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 	service.on_server_error([](riwo::error_code error) {
 		std::cerr << "WebSocket_EXP server error: " << error.message() << '\n';
 		return false;
-	}).on_service_error([](http::server_exchange &,
+	}).on_service_error([](http::server_exchange_t &,
 		const std::exception &error) {
 		std::cerr << "WebSocket_EXP service error: " << error.what() << '\n';
 		return false;
@@ -235,10 +235,10 @@ void upgrade_rejection_preserved()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http1;
-	http::server service(std::move(acceptor), config);
+	http::server_t service(std::move(acceptor), config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/deny",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			ws::upgrade_options options;
 			options.request_validator = [](const ws::request_info &) {

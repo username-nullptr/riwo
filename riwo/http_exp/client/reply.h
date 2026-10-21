@@ -24,15 +24,22 @@ class RIWO_HTTP_EXP_TAPI basic_reply
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
-	using body_reader_type = basic_body_reader<executor_type>;
-	using body_reader_t = body_reader_type;
+	using body_reader_t = basic_body_reader<executor_t>;
 
 	basic_reply()
-		requires std::default_initializable<executor_type>;
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_reply(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
+
+	basic_reply(protocol selected_protocol, response_head head,
+		std::shared_ptr<detail::body_reader_state> body,
+		std::vector<std::byte> buffered_body = {},
+		std::shared_ptr<void> owner = {},
+		uint64_t max_buffered_body = 8U * 1024U * 1024U,
+		protocol response_protocol = protocol::v1_1)
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_reply(Exec0 &&executor, protocol selected_protocol,
@@ -41,18 +48,18 @@ public:
 		std::shared_ptr<void> owner = {},
 		uint64_t max_buffered_body = 8U * 1024U * 1024U,
 		protocol response_protocol = protocol::v1_1)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_reply();
 	basic_reply(basic_reply &&) noexcept = default;
 	basic_reply &operator=(basic_reply &&) noexcept = default;
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] protocol http_version() const noexcept;
 	[[nodiscard]] http_exp::status status() const noexcept;
 	[[nodiscard]] const fields &headers() const noexcept;
-	[[nodiscard]] body_reader_type &body() noexcept;
+	[[nodiscard]] body_reader_t &body() noexcept;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto read_all(Token &&token = {})
@@ -71,7 +78,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using reply = basic_reply<>;
+using reply_t = basic_reply<>;
 
 } //namespace riwo::http_exp
 

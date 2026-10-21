@@ -14,8 +14,8 @@ class RIWO_HTTP_EXP_API body_source
 	RIWO_DISABLE_COPY_MOVE(body_source)
 
 public:
-	using read_handler = asio::any_completion_handler<void(error_code,size_t)>;
-	using rewind_handler = asio::any_completion_handler<void(error_code)>;
+	using read_handler_t = asio::any_completion_handler<void(error_code,size_t)>;
+	using rewind_handler_t = asio::any_completion_handler<void(error_code)>;
 
 	body_source() = default;
 	virtual ~body_source();
@@ -23,8 +23,8 @@ public:
 	[[nodiscard]] virtual bool replayable() const noexcept = 0;
 	[[nodiscard]] virtual size_t read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept = 0;
-	virtual void read_some(mutable_buffer buffer, read_handler handler) = 0;
-	virtual void rewind(rewind_handler handler) = 0;
+	virtual void read_some(mutable_buffer buffer, read_handler_t handler) = 0;
+	virtual void rewind(rewind_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
 };
 
@@ -60,11 +60,11 @@ public:
 		}
 	}
 
-	void read_some(mutable_buffer buffer, read_handler handler) override {
+	void read_some(mutable_buffer buffer, read_handler_t handler) override {
 		m_source.read_some(buffer, std::move(handler));
 	}
 
-	void rewind(rewind_handler handler) override {
+	void rewind(rewind_handler_t handler) override {
 		m_source.rewind(std::move(handler));
 	}
 
@@ -80,8 +80,8 @@ template <typename Source>
 requires body_source_model<std::remove_cvref_t<Source>>
 [[nodiscard]] std::shared_ptr<body_source> make_body_source(Source &&source)
 {
-	using source_type = std::remove_cvref_t<Source>;
-	return std::make_shared<body_source_holder<source_type>>(
+	using source_t = std::remove_cvref_t<Source>;
+	return std::make_shared<body_source_holder<source_t>>(
 		std::forward<Source>(source));
 }
 

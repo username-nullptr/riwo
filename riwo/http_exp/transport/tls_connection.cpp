@@ -17,12 +17,12 @@ namespace
 {
 
 #if defined(_WIN32)
-using socket_timeout_type = DWORD;
+using socket_timeout_t = DWORD;
 #else
-using socket_timeout_type = timeval;
+using socket_timeout_t = timeval;
 #endif
 
-[[nodiscard]] socket_timeout_type socket_timeout(
+[[nodiscard]] socket_timeout_t socket_timeout(
 	const std::chrono::milliseconds &value)
 {
 #if defined(_WIN32)
@@ -35,10 +35,10 @@ using socket_timeout_type = timeval;
 #endif
 }
 
-void apply_socket_timeout(tls_socket &socket, int option,
+void apply_socket_timeout(tls_socket_t &socket, int option,
 	optional<std::chrono::milliseconds> value) noexcept
 {
-	const auto timeout = value ? socket_timeout(*value) : socket_timeout_type{};
+	const auto timeout = value ? socket_timeout(*value) : socket_timeout_t{};
 	(void)::setsockopt(socket.next_layer().native_handle(), SOL_SOCKET,
 		option, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
 }
@@ -54,19 +54,19 @@ void apply_socket_timeout(tls_socket &socket, int option,
 class RIWO_DECL_HIDDEN tls_connection::impl
 {
 public:
-	explicit impl(tls_socket value) :
+	explicit impl(tls_socket_t value) :
 		m_socket(std::move(value)), m_executor(m_socket.get_executor())
 	{
 	}
 
-	tls_socket m_socket;
+	tls_socket_t m_socket;
 	bool m_open = true;
-	executor_type m_executor;
+	executor_t m_executor;
 	optional<std::chrono::milliseconds> m_read_timeout;
 	optional<std::chrono::milliseconds> m_write_timeout;
 };
 
-tls_connection::tls_connection(tls_socket socket) :
+tls_connection::tls_connection(tls_socket_t socket) :
 	m_impl(std::make_unique<impl>(std::move(socket)))
 {
 }
@@ -76,11 +76,11 @@ tls_connection::~tls_connection()
 	cancel();
 }
 
-auto tls_connection::get_executor() const noexcept -> executor_type {
+auto tls_connection::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
 
-void tls_connection::read_some(mutable_buffer buffer, io_handler handler)
+void tls_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 {
 	if( not m_impl->m_read_timeout )
 	{
@@ -121,7 +121,7 @@ void tls_connection::read_some(mutable_buffer buffer, io_handler handler)
 	});
 }
 
-void tls_connection::write(const_buffer buffer, io_handler handler)
+void tls_connection::write(const_buffer buffer, io_handler_t handler)
 {
 	if( not m_impl->m_write_timeout )
 	{
@@ -162,7 +162,7 @@ void tls_connection::write(const_buffer buffer, io_handler handler)
 	});
 }
 
-void tls_connection::close(close_handler handler)
+void tls_connection::close(close_handler_t handler)
 {
 	auto self = shared_from_this();
 	asio::post(m_impl->m_socket.get_executor(),
@@ -195,13 +195,13 @@ bool tls_connection::is_open() const noexcept {
 	return m_impl->m_open and m_impl->m_socket.next_layer().is_open();
 }
 
-void tls_connection::set_read_timeout(optional<timeout_type> value)
+void tls_connection::set_read_timeout(optional<timeout_t> value)
 {
 	m_impl->m_read_timeout = value;
 	apply_socket_timeout(m_impl->m_socket, SO_RCVTIMEO, value);
 }
 
-void tls_connection::set_write_timeout(optional<timeout_type> value)
+void tls_connection::set_write_timeout(optional<timeout_t> value)
 {
 	m_impl->m_write_timeout = value;
 	apply_socket_timeout(m_impl->m_socket, SO_SNDTIMEO, value);
@@ -286,20 +286,20 @@ size_t tls_connection::write_sync(const_buffer buffer,
 }
 
 auto tls_connection::remote_endpoint(error_code &error) const noexcept
-	-> endpoint_type
+	-> endpoint_t
 {
 	error.clear();
 	return m_impl->m_socket.next_layer().remote_endpoint(error);
 }
 
 auto tls_connection::local_endpoint(error_code &error) const noexcept
-	-> endpoint_type
+	-> endpoint_t
 {
 	error.clear();
 	return m_impl->m_socket.next_layer().local_endpoint(error);
 }
 
-tls_socket &tls_connection::socket() noexcept {
+tls_socket_t &tls_connection::socket() noexcept {
 	return m_impl->m_socket;
 }
 

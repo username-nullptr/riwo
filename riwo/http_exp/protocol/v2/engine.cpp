@@ -148,7 +148,7 @@ public:
 	struct stream_state
 	{
 		impl *owner = nullptr;
-		stream_token token = 0;
+		stream_token_t token = 0;
 		int32_t wire_id = -1;
 		std::deque<std::vector<std::byte>> outbound;
 		size_t outbound_offset = 0;
@@ -173,7 +173,7 @@ public:
 
 	struct pending_event
 	{
-		protocol_event value;
+		protocol_event_t value;
 		std::shared_ptr<std::vector<std::byte>> body;
 	};
 
@@ -253,7 +253,7 @@ public:
 		return *result;
 	}
 
-	[[nodiscard]] event_flow emit(protocol_event event)
+	[[nodiscard]] event_flow emit(protocol_event_t event)
 	{
 		if( paused )
 		{
@@ -264,12 +264,12 @@ public:
 		return event_handler(event);
 	}
 
-	void defer_event(protocol_event event) {
+	void defer_event(protocol_event_t event) {
 		paused = true;
 		pending_events.push_back({std::move(event), {}});
 	}
 
-	void defer_body(stream_token token, const uint8_t *data, size_t size)
+	void defer_body(stream_token_t token, const uint8_t *data, size_t size)
 	{
 		auto body = std::make_shared<std::vector<std::byte>>(size);
 		if( size != 0 ) std::memcpy(body->data(), data, size);
@@ -406,6 +406,8 @@ public:
 				head.scheme = stream->scheme;
 				head.authority = stream->authority;
 				head.target = stream->path.empty() ? "/" : stream->path;
+				auto body = self.inbound_spec(*stream,
+					(frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0);
 				head.headers = std::move(stream->headers);
 				if( not stream->protocol_name.empty() )
 					head.connect_protocol = stream->protocol_name;
@@ -413,8 +415,7 @@ public:
 					head.url = riwo::url(head.scheme + "://" + head.authority +
 					(head.target.empty() ? "/" : head.target));
 				request_head_event event {stream->token, std::move(head),
-					self.inbound_spec(*stream,
-						(frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0),
+					std::move(body),
 					protocol::v2};
 				stream->head_delivered = true;
 				if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
@@ -423,11 +424,12 @@ public:
 			{
 				if( not stream->status_code )
 					return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+				auto body = self.inbound_spec(*stream,
+					(frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0);
 				response_head head {http_exp::status(*stream->status_code),
 					std::move(stream->headers)};
 				response_head_event event {stream->token, std::move(head),
-					self.inbound_spec(*stream,
-						(frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0),
+					std::move(body),
 					protocol::v2};
 				stream->head_delivered = true;
 				if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
@@ -503,7 +505,7 @@ public:
 		return 0;
 	}
 
-	static api::ssize_type data_read(nghttp2_session *session, int32_t,
+	static api::ssize_type_t data_read(nghttp2_session *session, int32_t,
 		uint8_t *buffer, size_t length, uint32_t *flags,
 		nghttp2_data_source *source, void *)
 	{
@@ -545,7 +547,7 @@ public:
 		}
 		if( value.outbound.empty() and value.outbound_finished )
 			*flags |= NGHTTP2_DATA_FLAG_EOF;
-		return static_cast<api::ssize_type>(copied);
+		return static_cast<api::ssize_type_t>(copied);
 	}
 
 	[[nodiscard]] settings_snapshot snapshot(bool remote) const noexcept
@@ -570,10 +572,10 @@ public:
 	nghttp2_session_callbacks *callbacks = nullptr;
 	nghttp2_option *option = nullptr;
 	nghttp2_session *session = nullptr;
-	std::unordered_map<stream_token,std::unique_ptr<stream_state>> streams;
-	std::unordered_map<int32_t,stream_token> wire_to_token;
-	stream_token next_stream = 1;
-	protocol_event_handler event_handler;
+	std::unordered_map<stream_token_t,std::unique_ptr<stream_state>> streams;
+	std::unordered_map<int32_t,stream_token_t> wire_to_token;
+	stream_token_t next_stream = 1;
+	protocol_event_handler_t event_handler;
 	std::deque<pending_event> pending_events;
 	size_t paused_replay_bytes = 0;
 	std::vector<std::byte> pending_output;
@@ -599,7 +601,7 @@ protocol connection_engine::selected_protocol() const noexcept {
 }
 
 sys_expected<ingest_result> connection_engine::ingest(
-	const_buffer input, protocol_event_handler events) noexcept
+	const_buffer input, protocol_event_handler_t events) noexcept
 {
 	if( m_impl->input_finished )
 		return sys_unexpected(make_error_code(errc::operation_not_permitted));
@@ -643,7 +645,7 @@ sys_expected<ingest_result> connection_engine::ingest(
 }
 
 sys_expected<ingest_result> connection_engine::finish_input(
-	protocol_event_handler events) noexcept
+	protocol_event_handler_t events) noexcept
 {
 	try
 	{
@@ -666,14 +668,14 @@ sys_expected<ingest_result> connection_engine::finish_input(
 	}
 }
 
-sys_expected<void> connection_engine::submit(protocol_action action) noexcept
+sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 {
 	try
 	{
 		return std::visit([this](auto &&value) -> sys_expected<void>
 		{
-			using action_type = std::remove_cvref_t<decltype(value)>;
-			if constexpr( std::same_as<action_type,open_request_action> )
+			using action_t = std::remove_cvref_t<decltype(value)>;
+			if constexpr( std::same_as<action_t,open_request_action> )
 			{
 				if( m_impl->config.role != protocol_role::client or value.stream == 0 or
 					m_impl->streams.contains(value.stream) or m_impl->draining or
@@ -689,8 +691,8 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 					(value.body.type() == body_spec::mode::known_length and
 					 value.body.length().value_or(0) == 0);
 				state->provider = not state->outbound_finished;
-				api::data_provider provider {};
-				api::data_provider *provider_ptr = nullptr;
+				api::data_provider_t provider {};
+				api::data_provider_t *provider_ptr = nullptr;
 				if( state->provider )
 				{
 					provider.source.ptr = state.get();
@@ -707,7 +709,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 				m_impl->streams.emplace(value.stream, std::move(state));
 				return {};
 			}
-			else if constexpr( std::same_as<action_type,send_response_action> )
+			else if constexpr( std::same_as<action_t,send_response_action> )
 			{
 				if( m_impl->config.role != protocol_role::server )
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
@@ -722,8 +724,8 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 					(value.body.type() == body_spec::mode::known_length and
 					 value.body.length().value_or(0) == 0);
 				state.provider = not state.outbound_finished;
-				api::data_provider provider {};
-				api::data_provider *provider_ptr = nullptr;
+				api::data_provider_t provider {};
+				api::data_provider_t *provider_ptr = nullptr;
 				if( state.provider )
 				{
 					provider.source.ptr = &state;
@@ -735,7 +737,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 					return sys_unexpected(make_error_code(errc::stream_protocol_error));
 				return {};
 			}
-			else if constexpr( std::same_as<action_type,send_data_action> )
+			else if constexpr( std::same_as<action_t,send_data_action> )
 			{
 				auto found = m_impl->streams.find(value.stream);
 				if( found == m_impl->streams.end() or not found->second->provider or
@@ -756,7 +758,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 				(void)nghttp2_session_resume_data(m_impl->session, state.wire_id);
 				return {};
 			}
-			else if constexpr( std::same_as<action_type,send_trailers_action> )
+			else if constexpr( std::same_as<action_t,send_trailers_action> )
 			{
 				auto found = m_impl->streams.find(value.stream);
 				if( found == m_impl->streams.end() or not found->second->provider or
@@ -768,7 +770,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 					found->second->wire_id);
 				return {};
 			}
-			else if constexpr( std::same_as<action_type,reset_stream_action> )
+			else if constexpr( std::same_as<action_t,reset_stream_action> )
 			{
 				auto found = m_impl->streams.find(value.stream);
 				if( found == m_impl->streams.end() )
@@ -843,14 +845,14 @@ bool connection_engine::wants_write() const noexcept {
 }
 
 optional<int32_t> connection_engine::wire_stream_id(
-	stream_token stream) const noexcept
+	stream_token_t stream) const noexcept
 {
 	auto found = m_impl->streams.find(stream);
 	if( found == m_impl->streams.end() ) return {};
 	return found->second->wire_id;
 }
 
-optional<stream_token> connection_engine::stream_from_wire_id(
+optional<stream_token_t> connection_engine::stream_from_wire_id(
 	int32_t stream_id) const noexcept
 {
 	auto found = m_impl->wire_to_token.find(stream_id);

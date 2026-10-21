@@ -101,20 +101,20 @@ public:
 	[[nodiscard]] executor_type get_executor() const noexcept override {
 		return executor_;
 	}
-	[[nodiscard]] riwo::sys_expected<result_type> connect_sync(
+	[[nodiscard]] riwo::sys_expected<result_t> connect_sync(
 		const http::connect_request &) noexcept override
 	{
-		return result_type {
+		return result_t {
 			http::make_byte_stream(memory_stream{executor_, state_}),
 			http::protocol::v1_1, {}, {}
 		};
 	}
-	void connect(http::connect_request request, connect_handler handler) override
+	void connect(http::connect_request request, connect_handler_t handler) override
 	{
 		(void)request;
 		asio::post(executor_, [executor = executor_, state = state_,
 			handler = std::move(handler)]() mutable {
-			std::move(handler)(riwo::error_code{}, result_type {
+			std::move(handler)(riwo::error_code{}, result_t {
 				http::make_byte_stream(memory_stream{executor, std::move(state)}),
 				http::protocol::v1_1, {}, {}
 			});
@@ -138,7 +138,7 @@ public:
 	[[nodiscard]] executor_type get_executor() const noexcept override {
 		return executor_;
 	}
-	void accept(accept_handler handler) override
+	void accept(accept_handler_t handler) override
 	{
 		if( not state_ or delivered_ )
 		{
@@ -148,7 +148,7 @@ public:
 		delivered_ = true;
 		asio::post(executor_, [executor = executor_, state = state_,
 			initial = std::move(initial_input_), handler = std::move(handler)]() mutable {
-			std::move(handler)(riwo::error_code{}, result_type {
+			std::move(handler)(riwo::error_code{}, result_t {
 				http::make_byte_stream(memory_stream{executor, std::move(state)}),
 				http::protocol::v1_1, {}, std::move(initial)
 			});
@@ -161,7 +161,7 @@ private:
 	std::shared_ptr<memory_state> state_;
 	std::vector<std::byte> initial_input_;
 	bool delivered_ = false;
-	std::optional<accept_handler> pending_;
+	std::optional<accept_handler_t> pending_;
 };
 
 [[nodiscard]] std::vector<std::byte> bytes(std::string_view value)

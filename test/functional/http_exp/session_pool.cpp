@@ -30,7 +30,7 @@ public:
 class fake_session final : public detail::client_session
 {
 public:
-	using open_handler = detail::client_session::open_handler;
+	using open_handler_t = detail::client_session::open_handler_t;
 
 	fake_session(executor_type executor, http::protocol version, size_t id) :
 		m_id(id), m_executor(std::move(executor)), m_version(version)
@@ -86,7 +86,7 @@ public:
 	}
 
 	void open(http::request_head head, http::body_spec spec,
-		open_handler handler) override
+		open_handler_t handler) override
 	{
 		riwo::error_code error;
 		auto result = open_sync(std::move(head), std::move(spec), error);
@@ -97,7 +97,7 @@ public:
 		});
 	}
 
-	void graceful_shutdown(shutdown_handler handler) override
+	void graceful_shutdown(shutdown_handler_t handler) override
 	{
 		draining_ = true;
 		closed_ = true;
@@ -533,7 +533,7 @@ void h1_pool_reuses_connection()
 	http::client_config config;
 	config.pool.max_sessions_per_origin = 1;
 	config.pool.idle_timeout = std::chrono::milliseconds(0);
-	http::client client(context, config);
+	http::client_t client(context, config);
 	auto completed = asio::co_spawn(context,
 	[&]() -> riwo::awaitable<void>
 	{
@@ -563,10 +563,10 @@ void h1_server_keep_alive()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor));
+	http::server_t service(std::move(acceptor));
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/value",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::ok, {}},
 				std::string("value"), riwo::use_awaitable);
@@ -577,7 +577,7 @@ void h1_server_keep_alive()
 	http::client_config config;
 	config.pool.max_sessions_per_origin = 1;
 	config.pool.idle_timeout = std::chrono::milliseconds(5);
-	http::client client(context, config);
+	http::client_t client(context, config);
 	auto completed = asio::co_spawn(context,
 	[&]() -> riwo::awaitable<void>
 	{

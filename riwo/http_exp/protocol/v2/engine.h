@@ -56,17 +56,17 @@ public:
 
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] sys_expected<ingest_result> ingest(
-		const_buffer input, protocol_event_handler events) noexcept;
+		const_buffer input, protocol_event_handler_t events) noexcept;
 	[[nodiscard]] sys_expected<ingest_result> finish_input(
-		protocol_event_handler events) noexcept;
-	[[nodiscard]] sys_expected<void> submit(protocol_action action) noexcept;
+		protocol_event_handler_t events) noexcept;
+	[[nodiscard]] sys_expected<void> submit(protocol_action_t action) noexcept;
 	[[nodiscard]] sys_expected<produce_result> produce(
 		mutable_buffer output) noexcept;
 	[[nodiscard]] bool wants_write() const noexcept;
 
 	[[nodiscard]] optional<int32_t> wire_stream_id(
-		stream_token stream) const noexcept;
-	[[nodiscard]] optional<stream_token> stream_from_wire_id(
+		stream_token_t stream) const noexcept;
+	[[nodiscard]] optional<stream_token_t> stream_from_wire_id(
 		int32_t stream_id) const noexcept;
 	[[nodiscard]] connection_diagnostics diagnostics() const noexcept;
 

@@ -27,8 +27,8 @@ struct produce_result
 
 template<class Engine>
 concept protocol_engine = requires(Engine &engine, const_buffer input,
-	mutable_buffer output, protocol_action action,
-	protocol_event_handler events)
+	mutable_buffer output, protocol_action_t action,
+	protocol_event_handler_t events)
 {
 	{ engine.selected_protocol() } -> std::same_as<http_exp::protocol>;
 	{ engine.ingest(input, events) } ->

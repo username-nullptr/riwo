@@ -183,7 +183,7 @@ void connect_with_timeout(Socket &socket,
 }
 
 #if RIWO_OPENSSL_SUPPORT
-void tls_handshake_with_timeout(tls_socket &socket,
+void tls_handshake_with_timeout(tls_socket_t &socket,
 	std::chrono::milliseconds timeout, error_code &error)
 {
 	error.clear();
@@ -503,7 +503,7 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 			context, key.tls, error); context_error )
 			co_return sys_unexpected(context_error);
 
-		tls_socket socket(std::move(tcp->socket()), context);
+		tls_socket_t socket(std::move(tcp->socket()), context);
 		error_code address_error;
 		ignore_unused(asio::ip::make_address(key.host, address_error));
 		if( address_error and ::SSL_set_tlsext_host_name(
@@ -721,7 +721,7 @@ public:
 				context, key.tls, error); context_error )
 				return sys_unexpected(context_error);
 
-			tls_socket socket(std::move(tcp->socket()), context);
+			tls_socket_t socket(std::move(tcp->socket()), context);
 			error_code address_error;
 			ignore_unused(asio::ip::make_address(key.host, address_error));
 			if( address_error and ::SSL_set_tlsext_host_name(
@@ -821,7 +821,7 @@ public:
 	}
 
 	void connect_async(const session_key &key, const client_config &config,
-		connect_handler handler) override
+		connect_handler_t handler) override
 	{
 		auto executor = m_executor;
 		asio::co_spawn(executor, connect_async_impl(executor, key, config),
@@ -927,19 +927,24 @@ session_key make_session_key(const request_head &head,
 	return result;
 }
 
-connector::connector(executor_type executor) :
+connector::connector() :
+	connector(executor_t(riwo::get_executor()))
+{
+}
+
+connector::connector(executor_t executor) :
 	m_executor(std::move(executor))
 {
 }
 
 connector::~connector() = default;
 
-auto connector::get_executor() const noexcept -> executor_type {
+auto connector::get_executor() const noexcept -> executor_t {
 	return m_executor;
 }
 
 void connector::connect_async(const session_key &key,
-	const client_config &config, connect_handler handler)
+	const client_config &config, connect_handler_t handler)
 {
 	auto result = connect(key, config);
 	auto executor = this->get_executor();
@@ -950,12 +955,12 @@ void connector::connect_async(const session_key &key,
 	});
 }
 
-connector_ptr make_default_connector(asio::any_io_executor executor)
+connector_ptr_t make_default_connector(asio::any_io_executor executor)
 {
 	return std::make_shared<default_connector>(std::move(executor));
 }
 
-session_factory_ptr make_default_session_factory()
+session_factory_ptr_t make_default_session_factory()
 {
 	return std::make_shared<default_session_factory>();
 }

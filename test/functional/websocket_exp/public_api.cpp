@@ -26,7 +26,7 @@ static_assert(riwo::test::canonical_executor_type<ws::client>);
 static_assert(riwo::test::canonical_executor_type<ws::open_diagnostics>);
 static_assert(riwo::test::canonical_executor_type<ws::accept_result>);
 static_assert(riwo::test::canonical_executor_type<ws::retry_open_result>);
-static_assert(std::same_as<ws::stream::connection_t,http::duplex_channel>);
+static_assert(std::same_as<ws::stream::connection_t,http::duplex_channel_t>);
 static_assert(std::same_as<native_stream::connection_t,
 	http::basic_duplex_channel<native_executor>>);
 static_assert(std::movable<ws::stream>);

@@ -29,18 +29,25 @@ public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
 
+	basic_body_reader()
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
+
 	template <typename Exec0>
 	explicit basic_body_reader(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
+
+	explicit basic_body_reader(
+		std::shared_ptr<detail::body_reader_state> state)
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_body_reader(Exec0 &&executor,
 		std::shared_ptr<detail::body_reader_state> state)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_reader();
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] bool is_finished() const noexcept;
 
 	template <typename Token = use_sync_t>
@@ -66,7 +73,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using body_reader = basic_body_reader<>;
+using body_reader_t = basic_body_reader<>;
 
 } //namespace riwo::http_exp
 

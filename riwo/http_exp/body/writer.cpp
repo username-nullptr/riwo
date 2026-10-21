@@ -123,7 +123,7 @@ size_t body_writer_state::write(const_buffer buffer, error_code &error) noexcept
 	return size;
 }
 
-void body_writer_state::write(const_buffer buffer, write_handler handler)
+void body_writer_state::write(const_buffer buffer, write_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_pending )
@@ -231,7 +231,7 @@ void body_writer_state::finish(fields trailers, error_code &error) noexcept
 		state->m_ended = true;
 }
 
-void body_writer_state::finish(fields trailers, finish_handler handler)
+void body_writer_state::finish(fields trailers, finish_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_pending )

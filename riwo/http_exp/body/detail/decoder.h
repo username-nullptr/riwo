@@ -22,9 +22,9 @@ public:
 
 	[[nodiscard]] body_read_result read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept override;
-	void read_some(mutable_buffer buffer, read_handler handler) override;
+	void read_some(mutable_buffer buffer, read_handler_t handler) override;
 	[[nodiscard]] fields trailers_sync(error_code &error) noexcept override;
-	void trailers(trailers_handler handler) override;
+	void trailers(trailers_handler_t handler) override;
 	void cancel() noexcept override;
 
 private:

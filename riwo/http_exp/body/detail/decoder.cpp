@@ -191,7 +191,7 @@ class decoding_body_reader_adapter::async_operation final :
 {
 public:
 	async_operation(std::shared_ptr<decoding_body_reader_adapter> owner_value,
-		mutable_buffer target, read_handler completion) :
+		mutable_buffer target, read_handler_t completion) :
 		m_owner(std::move(owner_value)), m_target(target),
 		m_handler(std::move(completion))
 	{
@@ -323,13 +323,13 @@ private:
 
 	std::shared_ptr<decoding_body_reader_adapter> m_owner;
 	mutable_buffer m_target;
-	read_handler m_handler;
+	read_handler_t m_handler;
 	std::size_t m_produced = 0;
 	bool m_finished = false;
 };
 
 void decoding_body_reader_adapter::read_some(mutable_buffer buffer,
-	read_handler handler)
+	read_handler_t handler)
 {
 	std::make_shared<async_operation>(shared_from_this(), buffer,
 		std::move(handler))->start();
@@ -347,7 +347,7 @@ void decoding_body_reader_adapter::read_some(mutable_buffer buffer,
 	return m_impl->m_source->trailers(error);
 }
 
-void decoding_body_reader_adapter::trailers(trailers_handler handler)
+void decoding_body_reader_adapter::trailers(trailers_handler_t handler)
 {
 	if( not m_impl->m_ended )
 	{

@@ -31,9 +31,8 @@ public:
 
 private:
 	body_spec(mode type, optional<uint64_t> length, trailer_spec trailers);
-	mode m_type;
-	optional<uint64_t> m_length;
-	trailer_spec m_trailers;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 } //namespace riwo::http_exp

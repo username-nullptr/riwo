@@ -36,9 +36,8 @@ public:
 		const method &lhs, const method &rhs) noexcept;
 
 private:
-	std::string m_token;
-	method_properties m_properties;
-	optional<well_known> m_known;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 } //namespace riwo::http_exp

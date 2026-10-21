@@ -24,18 +24,25 @@ public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
 
+	basic_body_writer()
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
+
 	template <typename Exec0>
 	explicit basic_body_writer(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
+
+	explicit basic_body_writer(
+		std::shared_ptr<detail::body_writer_state> state)
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_body_writer(Exec0 &&executor,
 		std::shared_ptr<detail::body_writer_state> state)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_writer();
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 
 	// Asynchronous writes borrow the buffer until completion. Detached writes
 	// make an owned copy because the caller has no completion lifetime barrier.
@@ -57,7 +64,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using body_writer = basic_body_writer<>;
+using body_writer_t = basic_body_writer<>;
 
 } //namespace riwo::http_exp
 

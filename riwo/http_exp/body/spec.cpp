@@ -37,10 +37,24 @@ void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 
 } //namespace
 
-body_spec::body_spec(mode type, optional<uint64_t> length, trailer_spec trailers) :
-	m_type(type), m_length(length), m_trailers(std::move(trailers))
+class body_spec::impl
 {
-	validate(m_type, m_trailers);
+public:
+	impl(mode type, optional<uint64_t> length, trailer_spec trailers) :
+		m_type(type), m_length(length), m_trailers(std::move(trailers))
+	{
+		validate(m_type, m_trailers);
+	}
+
+	mode m_type;
+	optional<uint64_t> m_length;
+	trailer_spec m_trailers;
+};
+
+body_spec::body_spec(mode type, optional<uint64_t> length,
+	trailer_spec trailers) :
+	m_impl(std::make_shared<impl>(type, length, std::move(trailers)))
+{
 }
 
 body_spec body_spec::empty() {
@@ -60,15 +74,15 @@ body_spec body_spec::head(uint64_t content_length) {
 }
 
 body_spec::mode body_spec::type() const noexcept {
-	return m_type;
+	return m_impl->m_type;
 }
 
 optional<uint64_t> body_spec::length() const noexcept {
-	return m_length;
+	return m_impl->m_length;
 }
 
 const body_spec::trailer_spec &body_spec::trailers() const noexcept {
-	return m_trailers;
+	return m_impl->m_trailers;
 }
 
 } //namespace riwo::http_exp

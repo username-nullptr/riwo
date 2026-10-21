@@ -14,17 +14,17 @@ class RIWO_HTTP_EXP_API body_writer_adapter
 	RIWO_DISABLE_COPY_MOVE(body_writer_adapter)
 
 public:
-	using write_handler = asio::any_completion_handler<void(error_code,size_t)>;
-	using finish_handler = asio::any_completion_handler<void(error_code)>;
+	using write_handler_t = asio::any_completion_handler<void(error_code,size_t)>;
+	using finish_handler_t = asio::any_completion_handler<void(error_code)>;
 
 	body_writer_adapter() = default;
 	virtual ~body_writer_adapter();
 
 	[[nodiscard]] virtual size_t write_sync(const_buffer buffer,
 		error_code &error) noexcept = 0;
-	virtual void write(const_buffer buffer, write_handler handler) = 0;
+	virtual void write(const_buffer buffer, write_handler_t handler) = 0;
 	virtual void finish_sync(fields trailers, error_code &error) noexcept = 0;
-	virtual void finish(fields trailers, finish_handler handler) = 0;
+	virtual void finish(fields trailers, finish_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
 };
 
@@ -34,17 +34,17 @@ class RIWO_HTTP_EXP_API body_writer_state final :
 	RIWO_DISABLE_COPY_MOVE(body_writer_state)
 
 public:
-	using write_handler = body_writer_adapter::write_handler;
-	using finish_handler = body_writer_adapter::finish_handler;
+	using write_handler_t = body_writer_adapter::write_handler_t;
+	using finish_handler_t = body_writer_adapter::finish_handler_t;
 
 	explicit body_writer_state(std::shared_ptr<body_writer_adapter> adapter = {},
 		body_spec spec = body_spec::empty(), bool ready = false);
 	~body_writer_state();
 
 	[[nodiscard]] size_t write(const_buffer buffer, error_code &error) noexcept;
-	void write(const_buffer buffer, write_handler handler);
+	void write(const_buffer buffer, write_handler_t handler);
 	void finish(fields trailers, error_code &error) noexcept;
-	void finish(fields trailers, finish_handler handler);
+	void finish(fields trailers, finish_handler_t handler);
 	void cancel() noexcept;
 	void configure(body_spec spec, bool ready = false) noexcept;
 	void set_ready(bool ready = true) noexcept;
@@ -70,20 +70,35 @@ template <core_concepts::exec Exec>
 class basic_body_writer<Exec>::impl
 {
 public:
-	impl(executor_type executor_value,
+	impl(executor_t executor_value,
 		std::shared_ptr<detail::body_writer_state> state_value) :
 		m_executor(std::move(executor_value)), m_state(std::move(state_value))
 	{
 	}
 
-	executor_type m_executor;
+	executor_t m_executor;
 	std::shared_ptr<detail::body_writer_state> m_state;
 };
 
 template <core_concepts::exec Exec>
+basic_body_writer<Exec>::basic_body_writer()
+	requires core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_body_writer(executor_t(riwo::get_executor()))
+{
+}
+
+template <core_concepts::exec Exec>
+basic_body_writer<Exec>::basic_body_writer(
+	std::shared_ptr<detail::body_writer_state> state)
+	requires core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_body_writer(executor_t(riwo::get_executor()), std::move(state))
+{
+}
+
+template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_body_writer<Exec>::basic_body_writer(Exec0 &&executor)
-	requires core_concepts::match_sched<Exec0,executor_type> :
+	requires core_concepts::match_sched<Exec0,executor_t> :
 	basic_body_writer(std::forward<Exec0>(executor),
 		detail::make_body_writer_state())
 {
@@ -93,7 +108,7 @@ template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_body_writer<Exec>::basic_body_writer(Exec0 &&executor,
 	std::shared_ptr<detail::body_writer_state> state)
-	requires core_concepts::match_sched<Exec0,executor_type> :
+	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)),
 		state ? std::move(state) : detail::make_body_writer_state()))
@@ -106,7 +121,7 @@ basic_body_writer<Exec>::~basic_body_writer() {
 }
 
 template <core_concepts::exec Exec>
-auto basic_body_writer<Exec>::get_executor() const noexcept -> executor_type {
+auto basic_body_writer<Exec>::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
 
@@ -136,7 +151,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 			return initiate_io<size_t>(m_impl->m_executor,
 			[state = std::move(state), owned](auto handler) mutable {
 				state->write(riwo::buffer(*owned),
-					typename detail::body_writer_state::write_handler(
+					typename detail::body_writer_state::write_handler_t(
 					[owned, handler = std::move(handler)]
 					(error_code error, size_t size) mutable {
 						std::move(handler)(error, size);
@@ -148,7 +163,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 			return initiate_io<size_t>(m_impl->m_executor,
 			[state = std::move(state), buffer](auto handler) mutable {
 				state->write(buffer,
-					typename detail::body_writer_state::write_handler(
+					typename detail::body_writer_state::write_handler_t(
 						std::move(handler)));
 			}, std::forward<Token>(token));
 		}
@@ -177,7 +192,7 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 		[state = std::move(state), trailers = std::move(trailers)]
 		(auto handler) mutable {
 			state->finish(std::move(trailers),
-				typename detail::body_writer_state::finish_handler(
+				typename detail::body_writer_state::finish_handler_t(
 					std::move(handler)));
 		}, std::forward<Token>(token));
 	}

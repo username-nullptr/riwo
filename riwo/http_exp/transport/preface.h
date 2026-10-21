@@ -25,7 +25,7 @@ class RIWO_HTTP_EXP_API http2_preface_detector
 	RIWO_DISABLE_COPY_MOVE(http2_preface_detector)
 
 public:
-	using detect_handler = asio::any_completion_handler<void(
+	using detect_handler_t = asio::any_completion_handler<void(
 		error_code, preface_result, std::string)>;
 
 	explicit http2_preface_detector(
@@ -40,7 +40,7 @@ public:
 	void reset() noexcept;
 
 	void detect(const std::shared_ptr<connection> &stream,
-		detect_handler handler);
+		detect_handler_t handler);
 
 	static constexpr std::string_view http2_preface {
 		"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"

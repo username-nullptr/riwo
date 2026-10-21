@@ -42,8 +42,8 @@ try
 	config.h2.enable_extended_connect = true;
 #endif
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor), config);
-	auto echo = [](http::server_exchange &exchange) -> riwo::awaitable<void>
+	http::server_t service(std::move(acceptor), config);
+	auto echo = [](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 	{
 		if( not ws::is_upgrade_request(exchange) )
 		{
@@ -83,7 +83,7 @@ try
 #endif
 	service
 		.on_default(
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::not_found, {}},
 				"not found\n", riwo::use_awaitable);

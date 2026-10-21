@@ -30,23 +30,24 @@ class RIWO_HTTP_EXP_TAPI basic_transport_connector
 
 public:
 	using executor_type = Exec;
-	using result_type = basic_negotiated_transport<executor_type>;
-	using connect_handler =
-		asio::any_completion_handler<void(error_code,result_type)>;
+	using executor_t = executor_type;
+	using result_t = basic_negotiated_transport<executor_t>;
+	using connect_handler_t =
+		asio::any_completion_handler<void(error_code,result_t)>;
 
 	basic_transport_connector() = default;
 	virtual ~basic_transport_connector() = default;
-	[[nodiscard]] virtual executor_type get_executor() const noexcept = 0;
-	[[nodiscard]] virtual sys_expected<result_type>
+	[[nodiscard]] virtual executor_t get_executor() const noexcept = 0;
+	[[nodiscard]] virtual sys_expected<result_t>
 	connect_sync(const connect_request &) noexcept
 	{
 		return sys_unexpected(make_error_code(errc::operation_not_supported));
 	}
-	virtual void connect(connect_request, connect_handler) = 0;
+	virtual void connect(connect_request, connect_handler_t) = 0;
 	virtual void cancel() noexcept = 0;
 };
 
-using transport_connector = basic_transport_connector<>;
+using transport_connector_t = basic_transport_connector<>;
 
 } //namespace riwo::http_exp
 

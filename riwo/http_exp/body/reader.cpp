@@ -70,7 +70,7 @@ body_read_result body_reader_state::read_some(mutable_buffer buffer,
 	return result;
 }
 
-void body_reader_state::read_some(mutable_buffer buffer, read_handler handler)
+void body_reader_state::read_some(mutable_buffer buffer, read_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_pending )
@@ -163,7 +163,7 @@ void body_reader_state::discard(error_code &error) noexcept
 	state->m_pending = false;
 }
 
-void body_reader_state::discard(operation_handler handler)
+void body_reader_state::discard(operation_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_pending )
@@ -185,13 +185,13 @@ void body_reader_state::discard(operation_handler handler)
 	struct operation : std::enable_shared_from_this<operation>
 	{
 		operation(std::shared_ptr<impl> input_state,
-			operation_handler completion) :
+			operation_handler_t completion) :
 			state(std::move(input_state)), handler(std::move(completion))
 		{
 		}
 
 		std::shared_ptr<impl> state;
-		operation_handler handler;
+		operation_handler_t handler;
 		std::array<std::byte,8192> buffer;
 		uint64_t discarded = 0;
 
@@ -275,7 +275,7 @@ fields body_reader_state::trailers(error_code &error) noexcept
 	return result;
 }
 
-void body_reader_state::trailers(trailers_handler handler)
+void body_reader_state::trailers(trailers_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_pending )

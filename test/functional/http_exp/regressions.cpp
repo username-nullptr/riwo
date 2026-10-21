@@ -108,7 +108,7 @@ private:
 		std::string(lower.substr(begin, end - begin))));
 }
 
-[[nodiscard]] riwo::awaitable<void> discard(http::body_reader &reader)
+[[nodiscard]] riwo::awaitable<void> discard(http::body_reader_t &reader)
 {
 	std::array<std::byte,1024> buffer {};
 	for(;;)
@@ -123,24 +123,24 @@ void protocol_regressions()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor));
+	http::server_t service(std::move(acceptor));
 	service
 		.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get,http::method::head>("/health",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::ok, {}},
 				std::string_view("ok"), riwo::use_awaitable);
 		})
 		.on_request<http::method::post>("/echo",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await discard(exchange.request_body());
 			co_await exchange.respond({http::status::ok, {}},
 				std::string_view("echo"), riwo::use_awaitable);
 		})
 		.on_request<http::method::get,http::method::head>("/download",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::ok, {}},
 				http::body_spec::head(5), riwo::use_awaitable);

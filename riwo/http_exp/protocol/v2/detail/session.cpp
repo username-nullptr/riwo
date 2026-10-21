@@ -164,9 +164,9 @@ public:
 
 	[[nodiscard]] body_read_result read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept override;
-	void read_some(mutable_buffer buffer, read_handler handler) override;
+	void read_some(mutable_buffer buffer, read_handler_t handler) override;
 	[[nodiscard]] fields trailers_sync(error_code &error) noexcept override;
-	void trailers(trailers_handler handler) override;
+	void trailers(trailers_handler_t handler) override;
 	void cancel() noexcept override;
 
 private:
@@ -181,9 +181,9 @@ public:
 
 	[[nodiscard]] size_t write_sync(const_buffer buffer,
 		error_code &error) noexcept override;
-	void write(const_buffer buffer, write_handler handler) override;
+	void write(const_buffer buffer, write_handler_t handler) override;
 	void finish_sync(fields trailers, error_code &error) noexcept override;
-	void finish(fields trailers, finish_handler handler) override;
+	void finish(fields trailers, finish_handler_t handler) override;
 	void cancel() noexcept override;
 
 private:
@@ -214,10 +214,10 @@ public:
 	outbound_body() const noexcept override { return m_outbound; }
 	[[nodiscard]] response_head wait_response_sync(
 		error_code &error) noexcept override;
-	void wait_response(response_handler handler) override;
-	[[nodiscard]] endpoint_type remote_endpoint(
+	void wait_response(response_handler_t handler) override;
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override;
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override;
 	[[nodiscard]] bool reusable() const noexcept override;
 	[[nodiscard]] request_delivery delivery() const noexcept override {
@@ -226,7 +226,7 @@ public:
 	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
 		optional<response_head> response, error_code &error) noexcept override;
 	void open_duplex(optional<response_head> response,
-		duplex_handler handler) override;
+		duplex_handler_t handler) override;
 	void cancel() noexcept override;
 
 	std::shared_ptr<h2_session> m_session;
@@ -245,7 +245,7 @@ public:
 	bool m_remote_end = false;
 	fields m_inbound_trailers;
 	optional<mutable_buffer> m_pending_read_buffer;
-	body_reader_adapter::read_handler m_pending_read_handler;
+	body_reader_adapter::read_handler_t m_pending_read_handler;
 
 	std::deque<std::vector<std::byte>> m_outbound_chunks;
 	size_t m_outbound_offset = 0;
@@ -256,7 +256,7 @@ public:
 	struct pending_write
 	{
 		std::vector<std::byte> bytes;
-		body_writer_adapter::write_handler handler;
+		body_writer_adapter::write_handler_t handler;
 	};
 	std::deque<pending_write> m_pending_writes;
 
@@ -267,7 +267,7 @@ public:
 	size_t m_header_count = 0;
 	bool m_collecting_trailers = false;
 	bool m_response_ready = false;
-	stream::response_handler m_response_handler;
+	stream::response_handler_t m_response_handler;
 	error_code m_terminal_error;
 	uint32_t m_wire_error = NGHTTP2_NO_ERROR;
 	bool m_closed = false;
@@ -425,7 +425,7 @@ public:
 		return submit(std::move(head), std::move(spec), error);
 	}
 
-	void open(request_head head, body_spec spec, open_handler handler) override
+	void open(request_head head, body_spec spec, open_handler_t handler) override
 	{
 		if( not select_mode(2) )
 		{
@@ -471,7 +471,7 @@ public:
 		});
 	}
 
-	void graceful_shutdown(shutdown_handler handler) override
+	void graceful_shutdown(shutdown_handler_t handler) override
 	{
 		m_draining = true;
 		if( m_mode == 1 )
@@ -526,7 +526,7 @@ public:
 	}
 
 	void wait_response(const std::shared_ptr<h2_stream> &value,
-		stream::response_handler handler)
+		stream::response_handler_t handler)
 	{
 		auto self = shared_from_this();
 		asio::post(m_strand, [self = std::move(self), value,
@@ -561,7 +561,7 @@ public:
 	}
 
 	void read(const std::shared_ptr<h2_stream> &value, mutable_buffer buffer,
-		body_reader_adapter::read_handler handler)
+		body_reader_adapter::read_handler_t handler)
 	{
 		auto self = shared_from_this();
 		asio::post(m_strand, [self = std::move(self), value, buffer,
@@ -610,7 +610,7 @@ public:
 	}
 
 	void write(const std::shared_ptr<h2_stream> &value, const_buffer buffer,
-		body_writer_adapter::write_handler handler)
+		body_writer_adapter::write_handler_t handler)
 	{
 		auto bytes = std::vector<std::byte>(buffer.size());
 		if( buffer.size() != 0 )
@@ -651,7 +651,7 @@ public:
 	}
 
 	void finish(const std::shared_ptr<h2_stream> &value, fields trailers,
-		body_writer_adapter::finish_handler handler)
+		body_writer_adapter::finish_handler_t handler)
 	{
 		auto self = shared_from_this();
 		asio::post(m_strand, [self = std::move(self), value,
@@ -709,7 +709,7 @@ public:
 	}
 
 	void trailers(const std::shared_ptr<h2_stream> &value,
-		body_reader_adapter::trailers_handler handler)
+		body_reader_adapter::trailers_handler_t handler)
 	{
 		auto self = shared_from_this();
 		asio::post(m_strand, [self = std::move(self), value,
@@ -763,8 +763,8 @@ private:
 			auto value = std::make_shared<h2_stream>(shared_from_this(),
 				std::move(head), spec);
 			value->initialize();
-			nghttp2_api::data_provider provider {};
-			nghttp2_api::data_provider *provider_ptr = nullptr;
+			nghttp2_api::data_provider_t provider {};
+			nghttp2_api::data_provider_t *provider_ptr = nullptr;
 			if( spec.type() != body_spec::mode::empty and
 				spec.type() != body_spec::mode::head )
 			{
@@ -1285,7 +1285,7 @@ private:
 		return 0;
 	}
 
-	static nghttp2_api::ssize_type data_read(nghttp2_session *session, int32_t,
+	static nghttp2_api::ssize_type_t data_read(nghttp2_session *session, int32_t,
 		uint8_t *buffer, size_t length, uint32_t *flags,
 		nghttp2_data_source *source, void *user_data)
 	{
@@ -1342,14 +1342,14 @@ private:
 				value.m_trailers_submitted = true;
 			}
 		}
-		return static_cast<nghttp2_api::ssize_type>(copied);
+		return static_cast<nghttp2_api::ssize_type_t>(copied);
 	}
 
 	struct pending_extended_open
 	{
 		request_head head;
 		body_spec spec;
-		open_handler handler;
+		open_handler_t handler;
 	};
 
 	void resume_extended_opens()
@@ -1428,15 +1428,15 @@ response_head h2_stream::wait_response_sync(error_code &error) noexcept {
 	return m_session->wait_response_sync(*this, error);
 }
 
-void h2_stream::wait_response(response_handler handler) {
+void h2_stream::wait_response(response_handler_t handler) {
 	m_session->wait_response(shared_from_this(), std::move(handler));
 }
 
-auto h2_stream::remote_endpoint(error_code &error) const noexcept -> endpoint_type {
+auto h2_stream::remote_endpoint(error_code &error) const noexcept -> endpoint_t {
 	return m_session->remote_endpoint(error);
 }
 
-auto h2_stream::local_endpoint(error_code &error) const noexcept -> endpoint_type {
+auto h2_stream::local_endpoint(error_code &error) const noexcept -> endpoint_t {
 	return m_session->local_endpoint(error);
 }
 
@@ -1470,7 +1470,7 @@ std::shared_ptr<duplex_state> h2_stream::open_duplex_sync(
 }
 
 void h2_stream::open_duplex(optional<response_head> response,
-	duplex_handler handler)
+	duplex_handler_t handler)
 {
 	error_code error;
 	auto result = open_duplex_sync(std::move(response), error);
@@ -1494,7 +1494,7 @@ body_read_result h2_reader_adapter::read_some_sync(mutable_buffer buffer,
 	return owner->m_session->read_sync(*owner, buffer, error);
 }
 
-void h2_reader_adapter::read_some(mutable_buffer buffer, read_handler handler)
+void h2_reader_adapter::read_some(mutable_buffer buffer, read_handler_t handler)
 {
 	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted(), body_read_result{});
@@ -1512,7 +1512,7 @@ fields h2_reader_adapter::trailers_sync(error_code &error) noexcept
 	return owner->m_session->trailers_sync(*owner, error);
 }
 
-void h2_reader_adapter::trailers(trailers_handler handler)
+void h2_reader_adapter::trailers(trailers_handler_t handler)
 {
 	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted(), fields{});
@@ -1535,7 +1535,7 @@ size_t h2_writer_adapter::write_sync(const_buffer buffer,
 	return owner->m_session->write_sync(*owner, buffer, error);
 }
 
-void h2_writer_adapter::write(const_buffer buffer, write_handler handler)
+void h2_writer_adapter::write(const_buffer buffer, write_handler_t handler)
 {
 	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted(), 0);
@@ -1553,7 +1553,7 @@ void h2_writer_adapter::finish_sync(fields trailers, error_code &error) noexcept
 	owner->m_session->finish_sync(*owner, std::move(trailers), error);
 }
 
-void h2_writer_adapter::finish(fields trailers, finish_handler handler)
+void h2_writer_adapter::finish(fields trailers, finish_handler_t handler)
 {
 	auto owner = m_owner.lock();
 	if( not owner ) return std::move(handler)(aborted());

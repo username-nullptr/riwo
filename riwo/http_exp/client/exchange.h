@@ -30,42 +30,44 @@ class RIWO_HTTP_EXP_TAPI basic_client_exchange
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
-	using body_reader_type = basic_body_reader<executor_type>;
-	using body_reader_t = body_reader_type;
-	using body_writer_type = basic_body_writer<executor_type>;
-	using body_writer_t = body_writer_type;
+	using body_reader_t = basic_body_reader<executor_t>;
+	using body_writer_t = basic_body_writer<executor_t>;
 
 	basic_client_exchange()
-		requires std::default_initializable<executor_type>;
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_client_exchange(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
+
+	explicit basic_client_exchange(std::shared_ptr<detail::stream> stream,
+		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {})
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_client_exchange(Exec0 &&executor,
 		std::shared_ptr<detail::stream> stream,
 		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {})
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_client_exchange();
 	basic_client_exchange(basic_client_exchange &&) noexcept = default;
 	basic_client_exchange &operator=(basic_client_exchange &&) noexcept = default;
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;
-	[[nodiscard]] body_writer_type &request_body() noexcept;
+	[[nodiscard]] body_writer_t &request_body() noexcept;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto wait_response(Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response_head>;
 
-	[[nodiscard]] body_reader_type &response_body() noexcept;
+	[[nodiscard]] body_reader_t &response_body() noexcept;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto release_duplex(Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<
-			Token,error_code,basic_duplex_channel<executor_type>>;
+			Token,error_code,basic_duplex_channel<executor_t>>;
 
 	void cancel() noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
@@ -78,7 +80,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using client_exchange = basic_client_exchange<>;
+using client_exchange_t = basic_client_exchange<>;
 
 } //namespace riwo::http_exp
 

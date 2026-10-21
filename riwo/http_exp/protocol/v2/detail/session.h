@@ -26,10 +26,10 @@ make_client_session(std::shared_ptr<::riwo::http_exp::connection> transport,
 make_server_session(std::shared_ptr<::riwo::http_exp::connection> transport,
 	server_config config, std::string initial_input = {});
 
-[[nodiscard]] ::riwo::http_exp::detail::server_connection_ptr accept_h2(
+[[nodiscard]] ::riwo::http_exp::detail::server_connection_ptr_t accept_h2(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
 	server_config config, std::string initial_input,
-	::riwo::http_exp::detail::server_accept_handler handler);
+	::riwo::http_exp::detail::server_accept_handler_t handler);
 
 } //namespace riwo::http_exp::v2::detail
 

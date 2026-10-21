@@ -53,7 +53,7 @@ nghttp2_nv nv(std::string_view name, std::string_view value)
 	};
 }
 
-nghttp2_api::ssize_type response_data(nghttp2_session *session, int32_t,
+nghttp2_api::ssize_type_t response_data(nghttp2_session *session, int32_t,
 	uint8_t *buffer, size_t length, uint32_t *flags,
 	nghttp2_data_source *source, void *)
 {
@@ -77,7 +77,7 @@ nghttp2_api::ssize_type response_data(nghttp2_session *session, int32_t,
 			stream.response_trailer_submitted = true;
 		}
 	}
-	return static_cast<nghttp2_api::ssize_type>(size);
+	return static_cast<nghttp2_api::ssize_type_t>(size);
 }
 
 int on_begin_headers(nghttp2_session *, const nghttp2_frame *frame,
@@ -159,7 +159,7 @@ int on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
 			nv(":status", "307"),
 			nv("location", "/final")
 		};
-		nghttp2_api::data_provider provider {};
+		nghttp2_api::data_provider_t provider {};
 		provider.source.ptr = &stream;
 		provider.read_callback = response_data;
 		return nghttp2_api::submit_response(session, stream.id, headers.data(),
@@ -170,7 +170,7 @@ int on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
 		nv("content-type", "text/plain"),
 		nv("x-protocol", "h2")
 	};
-	nghttp2_api::data_provider provider {};
+	nghttp2_api::data_provider_t provider {};
 	provider.source.ptr = &stream;
 	provider.read_callback = response_data;
 	return nghttp2_api::submit_response(session, stream.id, headers.data(),
@@ -241,7 +241,7 @@ void run_peer(asio::ip::tcp::acceptor &acceptor, peer_state &state)
 		const auto consumed = nghttp2_api::session_mem_recv(state.session,
 			buffer.data(), size);
 		RIWO_TEST_CHECK_EQ(consumed,
-			static_cast<nghttp2_api::ssize_type>(size));
+			static_cast<nghttp2_api::ssize_type_t>(size));
 		flush_peer(socket, state);
 	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -270,7 +270,7 @@ void prior_knowledge_body_and_trailers()
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
 	config.pool.max_sessions_per_origin = 1;
-	http::client client(context, config);
+	http::client_t client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/upload",
 		acceptor.local_endpoint().port());
 	const std::string upload(128 * 1024, 'u');
@@ -308,7 +308,7 @@ void multiplexed_async_requests()
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
 	config.pool.max_sessions_per_origin = 1;
-	http::client client(context, config);
+	http::client_t client(context, config);
 	const auto base = std::format("http://127.0.0.1:{}",
 		acceptor.local_endpoint().port());
 	size_t completed = 0;
@@ -318,7 +318,7 @@ void multiplexed_async_requests()
 	{
 		client.fetch(http::request(http::method::get,
 			base + "/stream/" + std::to_string(index)),
-			[&, index](riwo::error_code error, http::reply reply) {
+			[&, index](riwo::error_code error, http::reply_t reply) {
 				errors[index] = error;
 				if( !error ) bodies[index] = text(reply.buffered_body());
 				++completed;
@@ -350,7 +350,7 @@ void reset_and_goaway_errors()
 		config.protocols.requirement =
 			http::protocol_requirement::require_http2;
 		config.retries.max_attempts = 1;
-		http::client client(context, config);
+		http::client_t client(context, config);
 		const auto target = std::format("http://127.0.0.1:{}/failure",
 			acceptor.local_endpoint().port());
 		riwo::error_code error;
@@ -373,14 +373,14 @@ void refused_stream_retries_async()
 	config.protocols.requirement =
 		http::protocol_requirement::require_http2;
 	config.retries.max_attempts = 2;
-	http::client client(context, config);
+	http::client_t client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/retry",
 		acceptor.local_endpoint().port());
 	riwo::error_code result_error;
 	std::string body;
 	size_t completions = 0;
 	client.fetch(http::request(http::method::get, target),
-	[&](riwo::error_code error, http::reply reply) {
+	[&](riwo::error_code error, http::reply_t reply) {
 		result_error = error;
 		if( !error ) body = text(reply.buffered_body());
 		++completions;
@@ -407,7 +407,7 @@ void redirect_rewinds_replayable_source()
 	http::client_config config;
 	config.protocols.requirement =
 		http::protocol_requirement::require_http2;
-	http::client client(context, config);
+	http::client_t client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/redirect",
 		acceptor.local_endpoint().port());
 	const std::string payload = "replayable-upload";

@@ -28,22 +28,28 @@ class RIWO_HTTP_EXP_TAPI basic_duplex_channel
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
-	using endpoint_type = asio::ip::tcp::endpoint;
+	using endpoint_t = asio::ip::tcp::endpoint;
+
+	basic_duplex_channel()
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_duplex_channel(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
+
+	explicit basic_duplex_channel(std::shared_ptr<detail::duplex_state> state)
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_duplex_channel(Exec0 &&executor,
 		std::shared_ptr<detail::duplex_state> state)
-		requires core_concepts::match_sched<Exec0,executor_type>;
+		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	basic_duplex_channel(basic_duplex_channel &&other) noexcept;
 	basic_duplex_channel &operator=(basic_duplex_channel &&other) noexcept;
 	~basic_duplex_channel();
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] bool is_open() const noexcept;
 
@@ -65,15 +71,15 @@ public:
 		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	void cancel() noexcept;
-	[[nodiscard]] endpoint_type remote_endpoint(error_code &error) const noexcept;
-	[[nodiscard]] endpoint_type local_endpoint(error_code &error) const noexcept;
+	[[nodiscard]] endpoint_t remote_endpoint(error_code &error) const noexcept;
+	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept;
 
 private:
-	executor_type m_executor;
-	std::shared_ptr<detail::duplex_state> m_state;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
-using duplex_channel = basic_duplex_channel<>;
+using duplex_channel_t = basic_duplex_channel<>;
 
 } //namespace riwo::http_exp
 

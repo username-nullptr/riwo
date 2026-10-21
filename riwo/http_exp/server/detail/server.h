@@ -21,43 +21,43 @@ public:
 	{
 		std::string path;
 		std::vector<http_exp::method> methods;
-		request_handler_type handler;
+		request_handler_t handler;
 	};
 
-	[[nodiscard]] static executor_type listener_executor(
-		const std::shared_ptr<basic_transport_listener<executor_type>> &listener)
+	[[nodiscard]] static executor_t listener_executor(
+		const std::shared_ptr<basic_transport_listener<executor_t>> &listener)
 	{
 		if( not listener ) throw std::invalid_argument(
 			"riwo::http_exp::basic_server: listener is null");
 		return listener->get_executor();
 	}
 
-	impl(acceptor_wrap_type &&acceptor_value,
-		service_executor_type service_executor_value, config_type config_value) :
+	impl(acceptor_wrap_t &&acceptor_value,
+		service_executor_t service_executor_value, config_t config_value) :
 		m_acceptor_wrap(std::move(acceptor_value)),
 		m_service_executor(std::move(service_executor_value)),
 		m_config(std::move(config_value))
 	{
 	}
 
-	impl(acceptor_wrap_type &&acceptor_value, config_type config_value) :
+	impl(acceptor_wrap_t &&acceptor_value, config_t config_value) :
 		m_acceptor_wrap(std::move(acceptor_value)),
 		m_service_executor(m_acceptor_wrap.get_executor()),
 		m_config(std::move(config_value))
 	{
 	}
 
-	impl(std::shared_ptr<basic_transport_listener<executor_type>> listener,
-		service_executor_type service_executor_value, config_type config_value) :
-		m_acceptor_wrap(acceptor_type(listener_executor(listener))),
+	impl(std::shared_ptr<basic_transport_listener<executor_t>> listener,
+		service_executor_t service_executor_value, config_t config_value) :
+		m_acceptor_wrap(acceptor_t(listener_executor(listener))),
 		m_service_executor(std::move(service_executor_value)),
 		m_config(std::move(config_value)), m_listener(std::move(listener))
 	{
 	}
 
-	impl(std::shared_ptr<basic_transport_listener<executor_type>> listener,
-		config_type config_value) :
-		m_acceptor_wrap(acceptor_type(listener_executor(listener))),
+	impl(std::shared_ptr<basic_transport_listener<executor_t>> listener,
+		config_t config_value) :
+		m_acceptor_wrap(acceptor_t(listener_executor(listener))),
 		m_service_executor(listener_executor(listener)),
 		m_config(std::move(config_value)), m_listener(std::move(listener))
 	{
@@ -95,19 +95,19 @@ public:
 	}
 
 	void register_route(std::string path,
-		std::vector<http_exp::method> methods, request_handler_type handler)
+		std::vector<http_exp::method> methods, request_handler_t handler)
 	{
 		if( path.empty() )
 			throw std::invalid_argument(
-				"riwo::http_exp::server::on_request: path is empty");
+				"riwo::http_exp::server_t::on_request: path is empty");
 		if( not handler )
 			throw std::invalid_argument(
-				"riwo::http_exp::server::on_request: handler is empty");
+				"riwo::http_exp::server_t::on_request: handler is empty");
 		if( std::ranges::any_of(m_routes, [&path](const route &value) {
 			return value.path == path;
 		}) )
 			throw std::invalid_argument(
-				"riwo::http_exp::server::on_request: path is already bound");
+				"riwo::http_exp::server_t::on_request: path is already bound");
 		m_routes.push_back(route{
 			std::move(path), std::move(methods), std::move(handler)
 		});
@@ -131,7 +131,7 @@ private:
 		auto self = this->shared_from_this();
 		m_listener->accept(
 		[self](error_code error,
-			basic_negotiated_transport<executor_type> transport) mutable
+			basic_negotiated_transport<executor_t> transport) mutable
 		{
 			if( not self->m_running ) return;
 			self->accept_next_transport();
@@ -175,7 +175,7 @@ private:
 				self->serve(std::move(stream), std::move(request));
 			});
 			std::erase_if(self->m_connections,
-				[](const detail::server_connection_ptr &value) {
+				[](const detail::server_connection_ptr_t &value) {
 					return not value or value->closed();
 				});
 			self->m_connections.push_back(std::move(connection));
@@ -183,7 +183,7 @@ private:
 	}
 
 public:
-	void serve_transport(basic_negotiated_transport<executor_type> transport,
+	void serve_transport(basic_negotiated_transport<executor_t> transport,
 		error_code &error) noexcept
 	{
 		error.clear();
@@ -206,7 +206,7 @@ public:
 				self->serve(std::move(stream), std::move(request));
 			});
 			std::erase_if(m_connections,
-				[](const detail::server_connection_ptr &value) {
+				[](const detail::server_connection_ptr_t &value) {
 					return not value or value->closed();
 				});
 			if( active ) m_connections.push_back(std::move(active));
@@ -224,7 +224,7 @@ private:
 		 request = std::move(request)]
 		() mutable -> awaitable<void>
 		{
-			context_type exchange(self->m_service_executor, stream,
+			context_t exchange(self->m_service_executor, stream,
 				std::move(request));
 			try
 			{
@@ -343,31 +343,40 @@ private:
 	}
 
 public:
-	acceptor_wrap_type m_acceptor_wrap;
-	service_executor_type m_service_executor;
-	config_type m_config;
+	acceptor_wrap_t m_acceptor_wrap;
+	service_executor_t m_service_executor;
+	config_t m_config;
 	std::vector<route> m_routes;
-	request_handler_type m_default_handler;
-	server_error_handler_type m_server_error_handler;
-	service_error_handler_type m_service_error_handler;
-	std::vector<detail::server_connection_ptr> m_connections;
-	std::shared_ptr<basic_transport_listener<executor_type>> m_listener;
+	request_handler_t m_default_handler;
+	server_error_handler_t m_server_error_handler;
+	service_error_handler_t m_service_error_handler;
+	std::vector<detail::server_connection_ptr_t> m_connections;
+	std::shared_ptr<basic_transport_listener<executor_t>> m_listener;
 	bool m_running = false;
 };
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_type &&acceptor,
-	config_type config)
-	requires core_concepts::match_sched<executor_type,service_executor_type> :
+basic_server<Exec,ServiceExec>::basic_server()
+	requires (
+		core_concepts::match_sched<io_executor_t,executor_t> and
+		core_concepts::match_sched<executor_t,service_executor_t>) :
+	basic_server(acceptor_wrap_t(acceptor_t(riwo::get_executor())))
+{
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_t &&acceptor,
+	config_t config)
+	requires core_concepts::match_sched<executor_t,service_executor_t> :
 	m_impl(std::make_shared<impl>(std::move(acceptor), std::move(config)))
 {
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 basic_server<Exec,ServiceExec>::basic_server(
-	std::shared_ptr<basic_transport_listener<executor_type>> listener,
-	config_type config)
-	requires core_concepts::match_sched<executor_type,service_executor_type> :
+	std::shared_ptr<basic_transport_listener<executor_t>> listener,
+	config_t config)
+	requires core_concepts::match_sched<executor_t,service_executor_t> :
 	m_impl(std::make_shared<impl>(std::move(listener), std::move(config)))
 {
 }
@@ -375,9 +384,9 @@ basic_server<Exec,ServiceExec>::basic_server(
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename ServiceExec0>
 basic_server<Exec,ServiceExec>::basic_server(
-	std::shared_ptr<basic_transport_listener<executor_type>> listener,
-	ServiceExec0 &&service_executor, config_type config)
-	requires core_concepts::match_sched<ServiceExec0,service_executor_type> :
+	std::shared_ptr<basic_transport_listener<executor_t>> listener,
+	ServiceExec0 &&service_executor, config_t config)
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t> :
 	m_impl(std::make_shared<impl>(std::move(listener),
 		get_executor_helper(std::forward<ServiceExec0>(service_executor)),
 		std::move(config)))
@@ -386,9 +395,9 @@ basic_server<Exec,ServiceExec>::basic_server(
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename ServiceExec0>
-basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_type &&acceptor,
-	ServiceExec0 &&service_executor, config_type config)
-	requires core_concepts::match_sched<ServiceExec0,service_executor_type> :
+basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_t &&acceptor,
+	ServiceExec0 &&service_executor, config_t config)
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t> :
 	m_impl(std::make_shared<impl>(std::move(acceptor),
 		get_executor_helper(std::forward<ServiceExec0>(service_executor)),
 		std::move(config)))
@@ -396,18 +405,18 @@ basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_type &&acceptor,
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::get_executor() noexcept -> executor_type {
+auto basic_server<Exec,ServiceExec>::get_executor() noexcept -> executor_t {
 	return m_impl->m_acceptor_wrap.get_executor();
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::get_service_executor() const noexcept
-	-> service_executor_type {
+	-> service_executor_t {
 	return m_impl->m_service_executor;
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_type endpoint)
+auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint)
 	-> basic_server&
 {
 	error_code error;
@@ -417,7 +426,7 @@ auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_type endpoint)
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_type endpoint,
+auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint,
 	error_code &error) noexcept -> basic_server&
 {
 	if( m_impl->m_listener )
@@ -441,11 +450,11 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <method::well_known... Methods, typename Func>
 auto basic_server<Exec,ServiceExec>::on_request(std::string path, Func &&func)
 	-> basic_server&
-	requires concepts::request_handler<Func,service_executor_type>
+	requires concepts::request_handler<Func,service_executor_t>
 {
 	m_impl->register_route(std::move(path),
 		std::vector<http_exp::method>{http_exp::method(Methods)...},
-		request_handler_type(std::forward<Func>(func)));
+		request_handler_t(std::forward<Func>(func)));
 	return *this;
 }
 
@@ -453,26 +462,26 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Func>
 auto basic_server<Exec,ServiceExec>::on_request(http_exp::method request_method,
 	std::string path, Func &&func) -> basic_server&
-	requires concepts::request_handler<Func,service_executor_type>
+	requires concepts::request_handler<Func,service_executor_t>
 {
 	m_impl->register_route(std::move(path),
 		std::vector<http_exp::method>{std::move(request_method)},
-		request_handler_type(std::forward<Func>(func)));
+		request_handler_t(std::forward<Func>(func)));
 	return *this;
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Func>
 auto basic_server<Exec,ServiceExec>::on_default(Func &&func) -> basic_server&
-	requires concepts::request_handler<Func,service_executor_type>
+	requires concepts::request_handler<Func,service_executor_t>
 {
-	m_impl->m_default_handler = request_handler_type(std::forward<Func>(func));
+	m_impl->m_default_handler = request_handler_t(std::forward<Func>(func));
 	return *this;
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::on_server_error(
-	server_error_handler_type handler) -> basic_server&
+	server_error_handler_t handler) -> basic_server&
 {
 	m_impl->m_server_error_handler = std::move(handler);
 	return *this;
@@ -480,7 +489,7 @@ auto basic_server<Exec,ServiceExec>::on_server_error(
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::on_service_error(
-	service_error_handler_type handler) -> basic_server&
+	service_error_handler_t handler) -> basic_server&
 {
 	m_impl->m_service_error_handler = std::move(handler);
 	return *this;
@@ -509,7 +518,7 @@ auto basic_server<Exec,ServiceExec>::unbound_service_error() -> basic_server& {
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::set_config(config_type config)
+auto basic_server<Exec,ServiceExec>::set_config(config_t config)
 	-> basic_server&
 {
 	m_impl->m_config = std::move(config);
@@ -517,7 +526,7 @@ auto basic_server<Exec,ServiceExec>::set_config(config_type config)
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::config() const noexcept -> config_type {
+auto basic_server<Exec,ServiceExec>::config() const noexcept -> config_t {
 	return m_impl->m_config;
 }
 
@@ -547,7 +556,7 @@ auto basic_server<Exec,ServiceExec>::start(error_code &error) noexcept
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::serve(
-	basic_negotiated_transport<executor_type> transport) -> basic_server&
+	basic_negotiated_transport<executor_t> transport) -> basic_server&
 {
 	error_code error;
 	serve(std::move(transport), error);
@@ -557,7 +566,7 @@ auto basic_server<Exec,ServiceExec>::serve(
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::serve(
-	basic_negotiated_transport<executor_type> transport,
+	basic_negotiated_transport<executor_t> transport,
 	error_code &error) noexcept -> basic_server&
 {
 	m_impl->serve_transport(std::move(transport), error);
@@ -568,7 +577,7 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename ServiceExec0>
 auto basic_server<Exec,ServiceExec>::start(ServiceExec0 &&service_executor,
 	size_t maximum) -> basic_server&
-	requires core_concepts::match_sched<ServiceExec0,service_executor_type>
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t>
 {
 	m_impl->m_service_executor = get_executor_helper(
 		std::forward<ServiceExec0>(service_executor));
@@ -579,7 +588,7 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename ServiceExec0>
 auto basic_server<Exec,ServiceExec>::start(ServiceExec0 &&service_executor,
 	size_t maximum, error_code &error) noexcept -> basic_server&
-	requires core_concepts::match_sched<ServiceExec0,service_executor_type>
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t>
 {
 	m_impl->m_service_executor = get_executor_helper(
 		std::forward<ServiceExec0>(service_executor));
@@ -590,7 +599,7 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename ServiceExec0>
 auto basic_server<Exec,ServiceExec>::start(ServiceExec0 &&service_executor,
 	error_code &error) noexcept -> basic_server&
-	requires core_concepts::match_sched<ServiceExec0,service_executor_type>
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t>
 {
 	return start(std::forward<ServiceExec0>(service_executor),
 		asio::socket_base::max_listen_connections, error);
@@ -610,24 +619,24 @@ auto basic_server<Exec,ServiceExec>::stop() noexcept -> basic_server& {
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::acceptor() const noexcept
-	-> const acceptor_type& {
+	-> const acceptor_t& {
 	return m_impl->m_acceptor_wrap.acceptor();
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::acceptor() noexcept -> acceptor_type& {
+auto basic_server<Exec,ServiceExec>::acceptor() noexcept -> acceptor_t& {
 	return m_impl->m_acceptor_wrap.acceptor();
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::acceptor_wrap() const noexcept
-	-> const acceptor_wrap_type& {
+	-> const acceptor_wrap_t& {
 	return m_impl->m_acceptor_wrap;
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::acceptor_wrap() noexcept
-	-> acceptor_wrap_type& {
+	-> acceptor_wrap_t& {
 	return m_impl->m_acceptor_wrap;
 }
 

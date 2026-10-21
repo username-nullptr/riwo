@@ -102,7 +102,7 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 	return result;
 }
 
-void client_exchange_state::wait_response(response_handler handler)
+void client_exchange_state::wait_response(response_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_wait_pending )
@@ -153,7 +153,7 @@ std::shared_ptr<duplex_state> client_exchange_state::release_duplex(
 	return result;
 }
 
-void client_exchange_state::release_duplex(duplex_handler handler)
+void client_exchange_state::release_duplex(duplex_handler_t handler)
 {
 	auto state = m_impl;
 	if( not state->m_response_ready or state->m_duplex_taken or not state->m_stream )

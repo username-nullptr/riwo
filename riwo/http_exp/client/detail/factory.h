@@ -23,9 +23,9 @@ public:
 		const client_config &config) = 0;
 };
 
-using session_factory_ptr = std::shared_ptr<session_factory>;
+using session_factory_ptr_t = std::shared_ptr<session_factory>;
 
-[[nodiscard]] RIWO_HTTP_EXP_API session_factory_ptr make_default_session_factory();
+[[nodiscard]] RIWO_HTTP_EXP_API session_factory_ptr_t make_default_session_factory();
 
 } //namespace riwo::http_exp::detail
 

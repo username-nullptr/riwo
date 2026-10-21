@@ -15,6 +15,13 @@ template<core_concepts::exec Exec>
 class connector_adapter final : public connector
 {
 public:
+	explicit connector_adapter(
+		std::shared_ptr<basic_transport_connector<Exec>> value) :
+		connector_adapter(asio::any_io_executor(riwo::get_executor()),
+			std::move(value))
+	{
+	}
+
 	connector_adapter(asio::any_io_executor executor,
 		std::shared_ptr<basic_transport_connector<Exec>> value) :
 		connector(std::move(executor)), m_value(std::move(value))
@@ -32,7 +39,7 @@ public:
 	}
 
 	void connect_async(const session_key &key, const client_config &config,
-		connect_handler handler) override
+		connect_handler_t handler) override
 	{
 		if( not m_value )
 		{
@@ -99,7 +106,14 @@ private:
 };
 
 template<core_concepts::exec Exec>
-[[nodiscard]] connector_ptr make_connector_adapter(
+[[nodiscard]] connector_ptr_t make_connector_adapter(
+	std::shared_ptr<basic_transport_connector<Exec>> connector)
+{
+	return std::make_shared<connector_adapter<Exec>>(std::move(connector));
+}
+
+template<core_concepts::exec Exec>
+[[nodiscard]] connector_ptr_t make_connector_adapter(
 	asio::any_io_executor executor,
 	std::shared_ptr<basic_transport_connector<Exec>> connector)
 {

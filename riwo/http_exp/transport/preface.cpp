@@ -95,7 +95,7 @@ void http2_preface_detector::reset() noexcept
 }
 
 void http2_preface_detector::detect(
-	const std::shared_ptr<connection> &stream, detect_handler handler)
+	const std::shared_ptr<connection> &stream, detect_handler_t handler)
 {
 	if( not stream or m_impl->m_result != preface_result::need_more )
 	{
@@ -107,12 +107,12 @@ void http2_preface_detector::detect(
 	{
 		http2_preface_detector *detector;
 		std::shared_ptr<connection> stream;
-		detect_handler handler;
+		detect_handler_t handler;
 		std::array<char,http2_preface.size()> buffer {};
 
 		operation(http2_preface_detector *detector_value,
 			std::shared_ptr<connection> stream_value,
-			detect_handler completion) : detector(detector_value),
+			detect_handler_t completion) : detector(detector_value),
 			stream(std::move(stream_value)), handler(std::move(completion))
 		{
 		}

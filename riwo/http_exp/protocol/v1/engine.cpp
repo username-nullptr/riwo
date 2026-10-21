@@ -30,11 +30,11 @@ namespace riwo::http_exp::v1 { namespace
 }
 
 template<class Event>
-[[nodiscard]] event_flow deliver(const protocol_event_handler &handler,
+[[nodiscard]] event_flow deliver(const protocol_event_handler_t &handler,
 	Event &&event)
 {
 	if( not handler ) return event_flow::continue_;
-	return handler(protocol_event(std::forward<Event>(event)));
+	return handler(protocol_event_t(std::forward<Event>(event)));
 }
 
 } //namespace
@@ -69,7 +69,7 @@ public:
 		}
 	}
 
-	[[nodiscard]] event_flow emit_end(const protocol_event_handler &events)
+	[[nodiscard]] event_flow emit_end(const protocol_event_handler_t &events)
 	{
 		if( incoming_end_delivered ) return event_flow::continue_;
 		const auto flow = deliver(events, stream_end_event{incoming_stream});
@@ -105,10 +105,10 @@ public:
 	chunk_decoder chunks;
 	std::string output;
 	size_t output_offset = 0;
-	stream_token next_stream = 1;
-	stream_token incoming_stream = 0;
-	stream_token outgoing_stream = 0;
-	stream_token active_stream = 0;
+	stream_token_t next_stream = 1;
+	stream_token_t incoming_stream = 0;
+	stream_token_t outgoing_stream = 0;
+	stream_token_t active_stream = 0;
 	body_framing incoming_framing = body_framing::none;
 	body_framing outgoing_framing = body_framing::none;
 	uint64_t incoming_remaining = 0;
@@ -119,7 +119,7 @@ public:
 	bool shutdown = false;
 	bool next_head_request = false;
 	bool pending_head_input = false;
-	optional<protocol_event> paused_event;
+	optional<protocol_event_t> paused_event;
 	std::vector<std::byte> paused_body;
 	size_t paused_replay_bytes = 0;
 };
@@ -143,7 +143,7 @@ protocol connection_engine::selected_protocol() const noexcept {
 }
 
 sys_expected<ingest_result> connection_engine::ingest(
-	const_buffer input, protocol_event_handler events) noexcept
+	const_buffer input, protocol_event_handler_t events) noexcept
 {
 	try
 	{
@@ -346,7 +346,7 @@ sys_expected<ingest_result> connection_engine::ingest(
 }
 
 sys_expected<ingest_result> connection_engine::finish_input(
-	protocol_event_handler events) noexcept
+	protocol_event_handler_t events) noexcept
 {
 	try
 	{
@@ -386,7 +386,7 @@ sys_expected<ingest_result> connection_engine::finish_input(
 	}
 }
 
-sys_expected<void> connection_engine::submit(protocol_action action) noexcept
+sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 {
 	try
 	{
@@ -394,8 +394,8 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 			return sys_unexpected(make_error_code(errc::operation_not_permitted));
 		return std::visit([this](auto &&value) -> sys_expected<void>
 		{
-			using action_type = std::remove_cvref_t<decltype(value)>;
-			if constexpr( std::same_as<action_type,open_request_action> )
+			using action_t = std::remove_cvref_t<decltype(value)>;
+			if constexpr( std::same_as<action_t,open_request_action> )
 			{
 				if( m_impl->config.role != protocol_role::client or
 					value.stream == 0 or m_impl->outgoing_stream != 0 )
@@ -414,7 +414,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 				m_impl->response_parse.reset(m_impl->next_head_request);
 				return {};
 			}
-			else if constexpr( std::same_as<action_type,send_response_action> )
+			else if constexpr( std::same_as<action_t,send_response_action> )
 			{
 				if( m_impl->config.role != protocol_role::server or
 					value.stream == 0 or value.stream != m_impl->active_stream or
@@ -431,7 +431,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 				m_impl->outgoing_finished = ends_immediately(value.body);
 				return {};
 			}
-			else if constexpr( std::same_as<action_type,send_data_action> )
+			else if constexpr( std::same_as<action_t,send_data_action> )
 			{
 				if( value.stream == 0 or value.stream != m_impl->outgoing_stream or
 					m_impl->outgoing_finished )
@@ -469,7 +469,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 				else return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				return m_impl->append_output(std::move(wire));
 			}
-			else if constexpr( std::same_as<action_type,send_trailers_action> )
+			else if constexpr( std::same_as<action_t,send_trailers_action> )
 			{
 				if( value.stream == 0 or value.stream != m_impl->outgoing_stream or
 					m_impl->outgoing_finished or
@@ -481,7 +481,7 @@ sys_expected<void> connection_engine::submit(protocol_action action) noexcept
 				m_impl->outgoing_finished = true;
 				return m_impl->append_output(std::move(*last));
 			}
-			else if constexpr( std::same_as<action_type,reset_stream_action> )
+			else if constexpr( std::same_as<action_t,reset_stream_action> )
 			{
 				if( value.stream == 0 or (value.stream != m_impl->incoming_stream and
 					value.stream != m_impl->outgoing_stream) )

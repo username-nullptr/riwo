@@ -59,7 +59,7 @@ try
 	riwo::io_context_t context;
 	http::client_config config;
 	config.protocols.requirement = requirement;
-	http::client client(context, config);
+	http::client_t client(context, config);
 
 	auto health = client.get(base + "/health");
 	auto health_body = health.read_all();

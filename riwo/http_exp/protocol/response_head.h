@@ -10,11 +10,36 @@
 namespace riwo::http_exp
 {
 
-struct response_head
+class RIWO_HTTP_EXP_API response_head
 {
+public:
 	http_exp::status status {http_exp::status::ok};
 	http_exp::fields headers {};
 	optional<std::string> upgrade_protocol {};
+
+public:
+	[[nodiscard]] optional<std::string_view>
+	header(std::string_view name) const noexcept;
+
+	[[nodiscard]] bool has_header(std::string_view name) const noexcept;
+	[[nodiscard]] bool contains_header(std::string_view name) const noexcept;
+
+	response_head &set_header(std::string name, riwo::value value);
+	response_head &add_header(std::string name, riwo::value value);
+	response_head &erase_header(std::string_view name) noexcept;
+	response_head &unset_header(std::string_view name) noexcept;
+
+	[[nodiscard]] optional<std::string_view> content_type() const noexcept;
+	[[nodiscard]] optional<uint64_t> content_length() const noexcept;
+	[[nodiscard]] optional<std::string_view> location() const noexcept;
+
+	[[nodiscard]] bool is_informational() const noexcept;
+	[[nodiscard]] bool is_success() const noexcept;
+	[[nodiscard]] bool is_redirection() const noexcept;
+	[[nodiscard]] bool is_client_error() const noexcept;
+	[[nodiscard]] bool is_server_error() const noexcept;
+	[[nodiscard]] bool is_error() const noexcept;
+	[[nodiscard]] bool allows_body() const noexcept;
 };
 
 } //namespace riwo::http_exp

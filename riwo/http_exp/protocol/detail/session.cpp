@@ -36,17 +36,17 @@ response_head stream::wait_response_sync(error_code &error) noexcept
 	return {};
 }
 
-void stream::wait_response(response_handler handler) {
+void stream::wait_response(response_handler_t handler) {
 	std::move(handler)(unsupported(), response_head{});
 }
 
-auto stream::remote_endpoint(error_code &error) const noexcept -> endpoint_type
+auto stream::remote_endpoint(error_code &error) const noexcept -> endpoint_t
 {
 	error = unsupported();
 	return {};
 }
 
-auto stream::local_endpoint(error_code &error) const noexcept -> endpoint_type
+auto stream::local_endpoint(error_code &error) const noexcept -> endpoint_t
 {
 	error = unsupported();
 	return {};
@@ -56,7 +56,7 @@ void stream::respond_sync(response_head, body_spec, error_code &error) noexcept 
 	error = unsupported();
 }
 
-void stream::respond(response_head, body_spec, operation_handler handler) {
+void stream::respond(response_head, body_spec, operation_handler_t handler) {
 	std::move(handler)(unsupported());
 }
 
@@ -64,7 +64,7 @@ void stream::inform_sync(response_head, error_code &error) noexcept {
 	error = unsupported();
 }
 
-void stream::inform(response_head, operation_handler handler) {
+void stream::inform(response_head, operation_handler_t handler) {
 	std::move(handler)(unsupported());
 }
 
@@ -75,7 +75,7 @@ std::shared_ptr<duplex_state> stream::open_duplex_sync(
 	return {};
 }
 
-void stream::open_duplex(optional<response_head>, duplex_handler handler) {
+void stream::open_duplex(optional<response_head>, duplex_handler_t handler) {
 	std::move(handler)(unsupported(), std::shared_ptr<duplex_state>{});
 }
 
@@ -89,7 +89,7 @@ public:
 	body_duplex_state(asio::any_io_executor executor, protocol version,
 		std::shared_ptr<body_reader_state> reader,
 		std::shared_ptr<body_writer_state> writer,
-		endpoint_type remote, endpoint_type local,
+		endpoint_t remote, endpoint_t local,
 		std::shared_ptr<void> owner, std::function<void()> cancel) :
 		m_executor(std::move(executor)), m_version(version),
 		m_reader(std::move(reader)), m_writer(std::move(writer)),
@@ -115,7 +115,7 @@ public:
 			error = asio::error::make_error_code(asio::error::eof);
 		return result.bytes;
 	}
-	void read_some(mutable_buffer buffer, io_handler handler) override
+	void read_some(mutable_buffer buffer, io_handler_t handler) override
 	{
 		m_reader->read_some(buffer,
 		[handler = std::move(handler)]
@@ -138,7 +138,7 @@ public:
 		}
 		return total;
 	}
-	void write(std::span<const const_buffer> buffers, io_handler handler) override
+	void write(std::span<const const_buffer> buffers, io_handler_t handler) override
 	{
 		size_t total = 0;
 		for( const auto &buffer : buffers ) total += buffer.size();
@@ -162,7 +162,7 @@ public:
 		m_writer->finish({}, error);
 		if( not error ) m_closed = true;
 	}
-	void close(close_handler handler) override
+	void close(close_handler_t handler) override
 	{
 		if( m_closed )
 		{
@@ -184,9 +184,9 @@ public:
 		m_cancelled = true;
 		if( m_cancel ) m_cancel();
 	}
-	[[nodiscard]] endpoint_type remote_endpoint(
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override { error.clear(); return m_remote; }
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override { error.clear(); return m_local; }
 
 private:
@@ -194,8 +194,8 @@ private:
 	protocol m_version;
 	std::shared_ptr<body_reader_state> m_reader;
 	std::shared_ptr<body_writer_state> m_writer;
-	endpoint_type m_remote;
-	endpoint_type m_local;
+	endpoint_t m_remote;
+	endpoint_t m_local;
 	std::shared_ptr<void> m_owner;
 	std::function<void()> m_cancel;
 	bool m_cancelled = false;
@@ -203,6 +203,17 @@ private:
 };
 
 } //namespace
+
+std::shared_ptr<duplex_state> make_body_duplex_state(protocol version,
+	std::shared_ptr<body_reader_state> reader,
+	std::shared_ptr<body_writer_state> writer,
+	asio::ip::tcp::endpoint remote, asio::ip::tcp::endpoint local,
+	std::shared_ptr<void> owner, std::function<void()> cancel)
+{
+	return make_body_duplex_state(asio::any_io_executor(riwo::get_executor()),
+		version, std::move(reader), std::move(writer), remote, local,
+		std::move(owner), std::move(cancel));
+}
 
 std::shared_ptr<duplex_state> make_body_duplex_state(
 	asio::any_io_executor executor, protocol version,

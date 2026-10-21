@@ -19,15 +19,19 @@ class RIWO_HTTP_EXP_API session_pool :
 
 public:
 	using executor_type = asio::any_io_executor;
-	using open_handler = asio::any_completion_handler<void(
+	using executor_t = executor_type;
+	using open_handler_t = asio::any_completion_handler<void(
 		error_code, std::shared_ptr<stream>)>;
 
-	session_pool(executor_type executor, client_config config,
-		connector_ptr connector = {},
-		session_factory_ptr factory = {});
+	explicit session_pool(client_config config,
+		connector_ptr_t connector = {},
+		session_factory_ptr_t factory = {});
+	session_pool(executor_t executor, client_config config,
+		connector_ptr_t connector = {},
+		session_factory_ptr_t factory = {});
 	~session_pool();
 
-	[[nodiscard]] executor_type get_executor() const noexcept;
+	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] const client_config &config() const noexcept;
 
 	[[nodiscard]] std::shared_ptr<stream> open_sync(const session_key &key,
@@ -36,9 +40,9 @@ public:
 		request_head head, body_spec spec, error_code &error) noexcept;
 
 	void open(const session_key &key, request_head head, body_spec spec,
-		open_handler handler);
+		open_handler_t handler);
 	void open(const origin &target, request_head head, body_spec spec,
-		open_handler handler);
+		open_handler_t handler);
 
 	void cancel() noexcept;
 	void shutdown() noexcept;
@@ -55,7 +59,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using session_pool_ptr = std::shared_ptr<session_pool>;
+using session_pool_ptr_t = std::shared_ptr<session_pool>;
 
 } //namespace riwo::http_exp::detail
 

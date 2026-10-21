@@ -372,7 +372,7 @@ class client_state::impl
 public:
 	impl(asio::any_io_executor executor_value, client_config config_value,
 		std::shared_ptr<client_session> session_value,
-		connector_ptr connector_value) :
+		connector_ptr_t connector_value) :
 		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
 		m_injected_session(std::move(session_value))
 	{
@@ -398,7 +398,7 @@ public:
 	}
 
 	void open(const request_head &head, body_spec spec,
-		client_session::open_handler handler)
+		client_session::open_handler_t handler)
 	{
 		if( m_injected_session )
 		{
@@ -416,9 +416,16 @@ public:
 };
 
 client_state::client_state(asio::any_io_executor executor, client_config config,
-	std::shared_ptr<client_session> session, connector_ptr connector) :
+	std::shared_ptr<client_session> session, connector_ptr_t connector) :
 	m_impl(std::make_shared<impl>(std::move(executor), std::move(config),
 		std::move(session), std::move(connector)))
+{
+}
+
+client_state::client_state(client_config config,
+	std::shared_ptr<client_session> session, connector_ptr_t connector) :
+	client_state(asio::any_io_executor(riwo::get_executor()),
+		std::move(config), std::move(session), std::move(connector))
 {
 }
 
@@ -443,7 +450,7 @@ std::shared_ptr<stream> client_state::open(request request_value,
 }
 
 void client_state::open(request request_value, body_spec spec,
-	open_handler handler)
+	open_handler_t handler)
 {
 	auto head = freeze_request(request_value, spec, true);
 	if( not head )
@@ -654,7 +661,7 @@ send_result client_state::send(request request_value,
 	};
 }
 
-void client_state::send(request request_value, send_handler handler)
+void client_state::send(request request_value, send_handler_t handler)
 {
 	if( auto prepare_error = request_access::prepare(request_value) )
 	{
@@ -687,7 +694,7 @@ void client_state::send(request request_value, send_handler handler)
 		std::shared_ptr<body_writer_state> writer;
 		body_spec spec;
 		fields trailers;
-		send_handler handler;
+		send_handler_t handler;
 		std::array<std::byte,8192> buffer;
 		uint64_t total = 0;
 		uint64_t max_buffered_body = 8U * 1024U * 1024U;
@@ -701,7 +708,7 @@ void client_state::send(request request_value, send_handler handler)
 			std::shared_ptr<body_source> source_value, body_spec description,
 			fields trailer_values, uint64_t max_buffered_body_value,
 			bool automatic_decompression_value, retry_policy retry_values,
-			redirect_policy redirect_values, send_handler completion) :
+			redirect_policy redirect_values, send_handler_t completion) :
 			owner(std::move(owner_value)),
 			request_value(std::move(original_request)),
 			active_stream(std::move(stream_value)), body(body_value),
@@ -977,10 +984,18 @@ void client_state::send(request request_value, send_handler handler)
 
 std::shared_ptr<client_state> make_client_state(
 	asio::any_io_executor executor, client_config config,
-	std::shared_ptr<client_session> session, connector_ptr connector)
+	std::shared_ptr<client_session> session, connector_ptr_t connector)
 {
 	return std::make_shared<client_state>(std::move(executor),
 		std::move(config), std::move(session), std::move(connector));
+}
+
+std::shared_ptr<client_state> make_client_state(
+	client_config config, std::shared_ptr<client_session> session,
+	connector_ptr_t connector)
+{
+	return std::make_shared<client_state>(std::move(config),
+		std::move(session), std::move(connector));
 }
 
 } //namespace riwo::http_exp::detail

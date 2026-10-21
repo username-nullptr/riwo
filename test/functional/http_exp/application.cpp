@@ -17,7 +17,7 @@ struct note_store
 	size_t reads = 0;
 };
 
-[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader &reader)
+[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader_t &reader)
 {
 	std::string result;
 	std::array<char,128> buffer {};
@@ -31,7 +31,7 @@ struct note_store
 	co_return result;
 }
 
-[[nodiscard]] std::string buffered_body(const http::reply &reply)
+[[nodiscard]] std::string buffered_body(const http::reply_t &reply)
 {
 	const auto bytes = reply.buffered_body();
 	return {
@@ -46,7 +46,7 @@ void note_service_workflow()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.request_limits.max_body_size = 1024;
-	http::server service(std::move(acceptor), server_config);
+	http::server_t service(std::move(acceptor), server_config);
 	note_store store;
 	bool redirect_cookie_received = false;
 	bool explicit_cookie_authoritative = false;
@@ -54,7 +54,7 @@ void note_service_workflow()
 	service
 		.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/health",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			RIWO_TEST_CHECK_EQ(exchange.request().target, "/health?verbose=1");
 			http::response_head head;
@@ -63,7 +63,7 @@ void note_service_workflow()
 				std::string_view(R"({"status":"ok"})"), riwo::use_awaitable);
 		})
 		.on_request<http::method::post>("/notes",
-		[&store](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[&store](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			const auto authorization =
 				exchange.request().headers.find_first("authorization");
@@ -87,7 +87,7 @@ void note_service_workflow()
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/notes/1",
-		[&store](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[&store](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			++store.reads;
 			if( store.note.empty() )
@@ -102,7 +102,7 @@ void note_service_workflow()
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/events",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
 			head.headers.add("Content-Type", "text/event-stream");
@@ -121,7 +121,7 @@ void note_service_workflow()
 				std::move(trailers), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/cookies/start",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head {http::status::found, {}};
 			head.headers.add("Set-Cookie", "bad name=ignored");
@@ -133,7 +133,7 @@ void note_service_workflow()
 				std::string_view("redirecting"), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/cookies/target",
-		[&redirect_cookie_received](http::server_exchange &exchange)
+		[&redirect_cookie_received](http::server_exchange_t &exchange)
 			-> riwo::awaitable<void>
 		{
 			auto parsed = http::parse_cookie_fields(exchange.request().headers);
@@ -145,7 +145,7 @@ void note_service_workflow()
 				std::string_view("cookie redirect complete"), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/cookies/explicit",
-		[&explicit_cookie_authoritative](http::server_exchange &exchange)
+		[&explicit_cookie_authoritative](http::server_exchange_t &exchange)
 			-> riwo::awaitable<void>
 		{
 			auto parsed = http::parse_cookie_fields(exchange.request().headers);
@@ -156,7 +156,7 @@ void note_service_workflow()
 				std::string_view("explicit"), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/cookies/open-set",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
 			http::add_set_cookie(head.headers, {
@@ -166,7 +166,7 @@ void note_service_workflow()
 				std::string_view("open"), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/cookies/disabled-set",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
 			http::add_set_cookie(head.headers, {
@@ -176,7 +176,7 @@ void note_service_workflow()
 				std::string_view("set"), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/cookies/disabled-show",
-		[&disabled_cookie_received](http::server_exchange &exchange)
+		[&disabled_cookie_received](http::server_exchange_t &exchange)
 			-> riwo::awaitable<void>
 		{
 			disabled_cookie_received =
@@ -185,7 +185,7 @@ void note_service_workflow()
 				std::string_view("disabled"), riwo::use_awaitable);
 		})
 		.on_default(
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::not_found, {}},
 				std::string_view("route not found"), riwo::use_awaitable);
@@ -198,7 +198,7 @@ void note_service_workflow()
 	client_config.protocols.requirement =
 		http::protocol_requirement::require_http1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(1);
-	http::client client(context, client_config);
+	http::client_t client(context, client_config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		auto health = co_await client.fetch(http::request(http::method::get,
@@ -267,7 +267,7 @@ void note_service_workflow()
 
 		auto disabled_config = client_config;
 		disabled_config.cookies.enabled = false;
-		http::client disabled_client(context, disabled_config);
+		http::client_t disabled_client(context, disabled_config);
 		RIWO_TEST_CHECK(!disabled_client.cookie_store());
 		(void)co_await disabled_client.fetch(http::request(http::method::get,
 			base + "/cookies/disabled-set"), riwo::use_awaitable);

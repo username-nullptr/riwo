@@ -4,8 +4,11 @@
 #include "test.h"
 
 #include <riwo/http_exp.h>
+#include <riwo/http_exp/client/detail/session_pool.h>
 #include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/protocol/v1/detail/session.h>
 #include <riwo/http_exp/transport/connection.h>
+#include <riwo/http_exp/transport/tcp_connection.h>
 
 namespace
 {
@@ -18,6 +21,7 @@ using native_body_writer = http::basic_body_writer<native_executor>;
 using native_client_exchange = http::basic_client_exchange<native_executor>;
 using native_reply = http::basic_reply<native_executor>;
 using native_server_exchange = http::basic_server_exchange<native_executor>;
+using native_duplex_channel = http::basic_duplex_channel<native_executor>;
 using native_client = http::basic_client<native_executor>;
 using native_server = http::basic_server<native_executor>;
 using native_acceptor_wrap = http::basic_acceptor_wrap<native_executor>;
@@ -68,6 +72,10 @@ static_assert(std::same_as<decltype(http::field::value),riwo::value>);
 static_assert(std::copyable<http::fields>);
 static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
+static_assert(std::is_aggregate_v<http::request_head>);
+static_assert(std::is_aggregate_v<http::response_head>);
+static_assert(std::same_as<decltype(http::request_head::headers), http::fields>);
+static_assert(std::same_as<decltype(http::response_head::headers), http::fields>);
 static_assert(std::copyable<http::cookie_pair>);
 static_assert(std::copyable<http::response_cookie>);
 static_assert(std::copyable<http::cookie_jar_config>);
@@ -80,22 +88,62 @@ static_assert(std::copyable<http::server_config>);
 static_assert(!std::copy_constructible<http::request>);
 static_assert(!std::copy_constructible<http::cookie_jar>);
 static_assert(std::is_nothrow_move_constructible_v<http::request>);
-static_assert(!std::copy_constructible<http::client>);
-static_assert(std::is_nothrow_move_constructible_v<http::client>);
-static_assert(!std::copy_constructible<http::client_exchange>);
-static_assert(std::is_nothrow_move_constructible_v<http::client_exchange>);
-static_assert(!std::copy_constructible<http::reply>);
-static_assert(std::is_nothrow_move_constructible_v<http::reply>);
-static_assert(!std::copy_constructible<http::server_exchange>);
-static_assert(!std::move_constructible<http::server_exchange>);
-static_assert(!std::copy_constructible<http::server>);
-static_assert(std::is_nothrow_move_constructible_v<http::server>);
-static_assert(!std::copy_constructible<http::acceptor_wrap>);
-static_assert(std::is_nothrow_move_constructible_v<http::acceptor_wrap>);
-static_assert(!std::copy_constructible<http::body_reader>);
-static_assert(!std::move_constructible<http::body_reader>);
-static_assert(!std::copy_constructible<http::body_writer>);
-static_assert(!std::move_constructible<http::body_writer>);
+static_assert(!std::copy_constructible<http::client_t>);
+static_assert(std::is_nothrow_move_constructible_v<http::client_t>);
+static_assert(std::constructible_from<http::client_t>);
+static_assert(std::constructible_from<http::client_t,http::client_config>);
+static_assert(std::constructible_from<native_client>);
+static_assert(std::constructible_from<http::body_reader_t>);
+static_assert(std::constructible_from<http::body_writer_t>);
+static_assert(std::constructible_from<http::client_exchange_t>);
+static_assert(std::constructible_from<http::reply_t>);
+static_assert(std::constructible_from<http::server_exchange_t>);
+static_assert(std::constructible_from<http::duplex_channel_t>);
+static_assert(std::constructible_from<http::acceptor_wrap_t>);
+static_assert(std::constructible_from<http::server_t>);
+static_assert(std::constructible_from<http::tcp_connection>);
+static_assert(std::constructible_from<native_body_reader>);
+static_assert(std::constructible_from<native_body_writer>);
+static_assert(std::constructible_from<native_client_exchange>);
+static_assert(std::constructible_from<native_reply>);
+static_assert(std::constructible_from<native_server_exchange>);
+static_assert(std::constructible_from<native_duplex_channel>);
+static_assert(std::constructible_from<native_acceptor_wrap>);
+static_assert(std::constructible_from<native_server>);
+static_assert(std::constructible_from<http::body_reader_t,
+	std::shared_ptr<http::detail::body_reader_state>>);
+static_assert(std::constructible_from<http::body_writer_t,
+	std::shared_ptr<http::detail::body_writer_state>>);
+static_assert(std::constructible_from<http::client_exchange_t,
+	std::shared_ptr<http::detail::stream>>);
+static_assert(std::constructible_from<http::reply_t,http::protocol,
+	http::response_head,std::shared_ptr<http::detail::body_reader_state>>);
+static_assert(std::constructible_from<http::server_exchange_t,
+	std::shared_ptr<http::detail::stream>,http::request_head>);
+static_assert(std::constructible_from<http::duplex_channel_t,
+	std::shared_ptr<http::detail::duplex_state>>);
+static_assert(std::constructible_from<http::client_t,
+	std::shared_ptr<http::detail::client_session>>);
+static_assert(std::constructible_from<http::client_t,
+	std::shared_ptr<http::transport_connector_t>>);
+static_assert(std::constructible_from<http::client_t,
+	std::shared_ptr<http::detail::client_session>,http::client_config>);
+static_assert(std::constructible_from<http::client_t,
+	std::shared_ptr<http::transport_connector_t>,http::client_config>);
+static_assert(!std::copy_constructible<http::client_exchange_t>);
+static_assert(std::is_nothrow_move_constructible_v<http::client_exchange_t>);
+static_assert(!std::copy_constructible<http::reply_t>);
+static_assert(std::is_nothrow_move_constructible_v<http::reply_t>);
+static_assert(!std::copy_constructible<http::server_exchange_t>);
+static_assert(!std::move_constructible<http::server_exchange_t>);
+static_assert(!std::copy_constructible<http::server_t>);
+static_assert(std::is_nothrow_move_constructible_v<http::server_t>);
+static_assert(!std::copy_constructible<http::acceptor_wrap_t>);
+static_assert(std::is_nothrow_move_constructible_v<http::acceptor_wrap_t>);
+static_assert(!std::copy_constructible<http::body_reader_t>);
+static_assert(!std::move_constructible<http::body_reader_t>);
+static_assert(!std::copy_constructible<http::body_writer_t>);
+static_assert(!std::move_constructible<http::body_writer_t>);
 
 static_assert(std::constructible_from<native_body_reader,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_body_writer,riwo::io_context_t&>);
@@ -103,47 +151,107 @@ static_assert(std::constructible_from<native_client_exchange,riwo::io_context_t&
 static_assert(std::constructible_from<native_reply,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_server_exchange,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_acceptor_wrap,
-	native_acceptor_wrap::acceptor_type&&>);
+	native_acceptor_wrap::acceptor_t&&>);
 static_assert(std::constructible_from<native_server,native_acceptor_wrap&&>);
 
-static_assert(std::same_as<http::client::executor_type, asio::any_io_executor>);
-static_assert(std::same_as<http::client_exchange::executor_type,
+static_assert(std::same_as<http::client_t::executor_type, asio::any_io_executor>);
+static_assert(std::same_as<http::client_t::executor_t, asio::any_io_executor>);
+static_assert(std::same_as<http::client_t::config_t, http::client_config>);
+static_assert(std::same_as<http::client_t::reply_t, http::reply_t>);
+static_assert(std::same_as<http::client_t::exchange_t, http::client_exchange_t>);
+static_assert(std::same_as<http::client_exchange_t::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::reply::executor_type, asio::any_io_executor>);
-static_assert(std::same_as<http::body_reader::executor_type,
+static_assert(std::same_as<http::client_exchange_t::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::body_writer::executor_type,
+static_assert(std::same_as<http::client_exchange_t::body_reader_t,
+	http::body_reader_t>);
+static_assert(std::same_as<http::client_exchange_t::body_writer_t,
+	http::body_writer_t>);
+static_assert(std::same_as<http::reply_t::executor_type, asio::any_io_executor>);
+static_assert(std::same_as<http::reply_t::executor_t, asio::any_io_executor>);
+static_assert(std::same_as<http::reply_t::body_reader_t, http::body_reader_t>);
+static_assert(std::same_as<http::body_reader_t::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::server::executor_type,
+static_assert(std::same_as<http::body_reader_t::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::acceptor_wrap::executor_type,
+static_assert(std::same_as<http::body_writer_t::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::server::context_t,
-	http::server_exchange>);
-static_assert(std::same_as<http::server_exchange::request_type,
+static_assert(std::same_as<http::body_writer_t::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::server_t::executor_type,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::server_t::executor_t, asio::any_io_executor>);
+static_assert(std::same_as<http::server_t::service_executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::server_t::config_t, http::server_config>);
+static_assert(std::same_as<http::acceptor_wrap_t::executor_type,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::acceptor_wrap_t::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::acceptor_wrap_t::protocol_t, asio::ip::tcp>);
+static_assert(std::same_as<http::acceptor_wrap_t::acceptor_t,
+	asio::ip::tcp::acceptor>);
+static_assert(std::same_as<http::server_t::context_t,
+	http::server_exchange_t>);
+static_assert(std::same_as<http::server_exchange_t::request_t,
 	http::request_head>);
+static_assert(std::same_as<http::server_exchange_t::body_reader_t,
+	http::body_reader_t>);
+static_assert(std::same_as<http::server_exchange_t::body_writer_t,
+	http::body_writer_t>);
+static_assert(std::same_as<http::duplex_channel_t::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::duplex_channel_t::endpoint_t,
+	asio::ip::tcp::endpoint>);
+static_assert(std::same_as<http::connection::endpoint_t,
+	asio::ip::tcp::endpoint>);
+static_assert(std::same_as<http::connection::timeout_t,
+	std::chrono::milliseconds>);
+static_assert(std::same_as<http::transport_connector_t::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::transport_connector_t::result_t,
+	http::negotiated_transport_t>);
+static_assert(std::same_as<http::transport_listener_t::result_t,
+	http::negotiated_transport_t>);
+static_assert(std::same_as<http::byte_stream_t::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::detail::connector::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::detail::session_pool::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::detail::client_session::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::detail::server_session::executor_t,
+	asio::any_io_executor>);
+static_assert(std::same_as<http::fields::container_t,
+	std::vector<http::field>>);
+static_assert(std::same_as<http::field_range::const_iterator::value_type,
+	http::field>);
+static_assert(std::same_as<http::field_range::const_iterator::difference_type,
+	std::ptrdiff_t>);
 static_assert(std::same_as<native_body_reader::executor_type,native_executor>);
+static_assert(std::same_as<native_body_reader::executor_t,native_executor>);
 static_assert(std::same_as<native_body_writer::executor_type,native_executor>);
 static_assert(std::same_as<native_client_exchange::executor_type,native_executor>);
 static_assert(std::same_as<native_reply::executor_type,native_executor>);
 static_assert(std::same_as<native_server_exchange::executor_type,native_executor>);
-static_assert(std::same_as<native_client::reply_type,native_reply>);
-static_assert(std::same_as<native_client::exchange_type,native_client_exchange>);
+static_assert(std::same_as<native_client::reply_t,native_reply>);
+static_assert(std::same_as<native_client::exchange_t,native_client_exchange>);
 static_assert(std::same_as<native_server::context_t,native_server_exchange>);
-static_assert(std::same_as<native_server::service_executor_type,native_executor>);
+static_assert(std::same_as<native_server::service_executor_t,native_executor>);
 static_assert(std::same_as<split_server::context_t,
 	http::basic_server_exchange<native_strand>>);
-static_assert(noexcept(std::declval<const http::client &>().get_executor()));
-static_assert(noexcept(std::declval<const http::reply &>().get_executor()));
-static_assert(noexcept(std::declval<http::client_exchange &>().cancel()));
-static_assert(noexcept(std::declval<const http::body_reader &>().is_finished()));
-static_assert(noexcept(std::declval<http::body_writer &>().cancel()));
+static_assert(noexcept(std::declval<const http::client_t &>().get_executor()));
+static_assert(noexcept(std::declval<const http::reply_t &>().get_executor()));
+static_assert(noexcept(std::declval<http::client_exchange_t &>().cancel()));
+static_assert(noexcept(std::declval<const http::body_reader_t &>().is_finished()));
+static_assert(noexcept(std::declval<http::body_writer_t &>().cancel()));
 
-riwo::awaitable<void> server_handler(http::server_exchange&) {
+riwo::awaitable<void> server_handler(http::server_exchange_t&) {
 	co_return;
 }
 
-riwo::awaitable<void> streaming_server_handler(http::server_exchange &exchange)
+riwo::awaitable<void> streaming_server_handler(http::server_exchange_t &exchange)
 {
 	http::response_head head{http::status::ok};
 	head.headers.set("content-type", "application/x-ndjson");
@@ -170,13 +278,13 @@ struct fake_connection final : http::connection
 {
 	explicit fake_connection(executor_type executor) : executor_(std::move(executor)) {}
 	executor_type get_executor() const noexcept override { return executor_; }
-	void read_some(riwo::mutable_buffer, io_handler handler) override {
+	void read_some(riwo::mutable_buffer, io_handler_t handler) override {
 		std::move(handler)(asio::error::make_error_code(asio::error::eof), 0);
 	}
-	void write(riwo::const_buffer buffer, io_handler handler) override {
+	void write(riwo::const_buffer buffer, io_handler_t handler) override {
 		std::move(handler)(riwo::error_code{}, buffer.size());
 	}
-	void close(close_handler handler) override {
+	void close(close_handler_t handler) override {
 		std::move(handler)(riwo::error_code{});
 	}
 	void cancel() noexcept override {}
@@ -202,13 +310,33 @@ struct fake_session final : http::detail::client_session
 	bool draining() const noexcept override { return false; }
 	bool closed() const noexcept override { return false; }
 	void open(http::request_head, http::body_spec,
-		open_handler handler) override
+		open_handler_t handler) override
 	{
 		std::move(handler)(riwo::error_code{}, std::make_shared<fake_stream>());
 	}
-	void graceful_shutdown(shutdown_handler handler) override {
+	void graceful_shutdown(shutdown_handler_t handler) override {
 		std::move(handler)(riwo::error_code{});
 	}
+	executor_type executor_;
+};
+
+struct fake_transport_connector final : http::transport_connector_t
+{
+	explicit fake_transport_connector(executor_type executor) :
+		executor_(std::move(executor)) {}
+
+	[[nodiscard]] executor_type get_executor() const noexcept override {
+		return executor_;
+	}
+
+	void connect(http::connect_request, connect_handler_t handler) override {
+		std::move(handler)(
+			http::make_error_code(http::errc::operation_not_supported),
+			result_t{});
+	}
+
+	void cancel() noexcept override {}
+
 	executor_type executor_;
 };
 
@@ -252,6 +380,19 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_THROWS(fields.add("bad name", "value"), std::invalid_argument);
 	RIWO_TEST_CHECK_THROWS(fields.add("name", "bad\rvalue"), std::invalid_argument);
 
+	http::fields copied_fields = fields;
+	copied_fields.add("X-Copy", "copied");
+	copied_fields.add("Set-Cookie", "four=4");
+	RIWO_TEST_CHECK(!fields.find_first("x-copy"));
+	RIWO_TEST_CHECK_EQ(copied_fields.find_first("x-copy").value(), "copied");
+
+	auto cookie_range = copied_fields.find_all("set-cookie");
+	auto cookie_cursor = cookie_range.begin();
+	auto next_cookie_cursor = cookie_cursor;
+	++next_cookie_cursor;
+	RIWO_TEST_CHECK_EQ(cookie_cursor->value.to_string(), "three=3");
+	RIWO_TEST_CHECK_EQ(next_cookie_cursor->value.to_string(), "four=4");
+
 	http::fields typed_fields;
 	typed_fields.add("Content-Length", 42U);
 	typed_fields.set("X-Enabled", true);
@@ -276,6 +417,83 @@ void semantic_value_contracts()
 	http::request custom_source(http::method::put, "http://example.test/resource");
 	custom_source.source(source_model{});
 	RIWO_TEST_CHECK_EQ(custom_source.body_description().length().value(), 3U);
+}
+
+void head_convenience_contracts()
+{
+	http::request_head request {
+		.method = http::method::post,
+		.url = riwo::url("https://example.test/upload?q=1"),
+		.scheme = "https",
+		.authority = "example.test:8443",
+		.target = "/upload?q=1"
+	};
+	request.set_header("Content-Type", "text/plain");
+
+	RIWO_TEST_CHECK_EQ(request.header("content-type").value(), "text/plain");
+	RIWO_TEST_CHECK(request.has_header("CONTENT-TYPE"));
+	RIWO_TEST_CHECK(request.contains_header("Content-Type"));
+	RIWO_TEST_CHECK_EQ(request.content_type().value(), "text/plain");
+	RIWO_TEST_CHECK(!request.content_length());
+	RIWO_TEST_CHECK_EQ(request.host(), "example.test:8443");
+	RIWO_TEST_CHECK_EQ(request.path(), "/upload?q=1");
+	RIWO_TEST_CHECK(request.is_https());
+	RIWO_TEST_CHECK(!request.is_http());
+	RIWO_TEST_CHECK(!request.is_upgrade());
+
+	request
+		.set_header("Content-Length", 12U)
+		.add_header("X-Trace", "one")
+		.add_header("X-Trace", "two");
+	RIWO_TEST_CHECK_EQ(request.content_length().value(), 12U);
+	RIWO_TEST_CHECK_EQ(std::ranges::distance(
+		request.headers.find_all("x-trace")), 2);
+
+	request.upgrade_protocol = "websocket";
+	RIWO_TEST_CHECK(request.is_upgrade());
+	request.unset_header("X-Trace").erase_header("content-length");
+	RIWO_TEST_CHECK(!request.has_header("X-Trace"));
+	RIWO_TEST_CHECK(!request.content_length());
+
+	http::request_head submitted {
+		.url = riwo::url("http://fallback.test/resource")
+	};
+	RIWO_TEST_CHECK(submitted.is_http());
+	RIWO_TEST_CHECK_EQ(submitted.host(), "fallback.test");
+	RIWO_TEST_CHECK_EQ(submitted.path(), "/");
+
+	http::response_head response {http::status::created};
+	response
+		.set_header("Content-Type", "application/json")
+		.set_header("Content-Length", 2U)
+		.set_header("Location", "/resource/1");
+	RIWO_TEST_CHECK_EQ(response.header("content-type").value(),
+		"application/json");
+	RIWO_TEST_CHECK_EQ(response.content_type().value(), "application/json");
+	RIWO_TEST_CHECK_EQ(response.content_length().value(), 2U);
+	RIWO_TEST_CHECK_EQ(response.location().value(), "/resource/1");
+	RIWO_TEST_CHECK(response.is_success());
+	RIWO_TEST_CHECK(!response.is_redirection());
+	RIWO_TEST_CHECK(!response.is_error());
+	RIWO_TEST_CHECK(response.allows_body());
+
+	response.status = http::status::found;
+	RIWO_TEST_CHECK(response.is_redirection());
+	RIWO_TEST_CHECK(!response.is_error());
+	response.status = http::status::not_found;
+	RIWO_TEST_CHECK(response.is_client_error());
+	RIWO_TEST_CHECK(response.is_error());
+	response.status = http::status::service_unavailable;
+	RIWO_TEST_CHECK(response.is_server_error());
+	RIWO_TEST_CHECK(response.is_error());
+	response.status = http::status::continue_upload;
+	RIWO_TEST_CHECK(response.is_informational());
+	RIWO_TEST_CHECK(!response.allows_body());
+
+	response.set_header("Content-Length", "invalid");
+	RIWO_TEST_CHECK(!response.content_length());
+	response.unset_header("Content-Length");
+	RIWO_TEST_CHECK(!response.contains_header("Content-Length"));
 }
 
 void cookie_value_contracts()
@@ -397,13 +615,53 @@ void fake_boundaries_and_unsupported_entry_points()
 	native_server_exchange server_exchange(context);
 	http::client_config config;
 	config.pool.max_sessions_per_origin = 0;
+	http::client_t default_client;
+	http::client_t configured_client(config);
+	http::body_reader_t default_reader;
+	http::body_writer_t default_writer;
+	http::client_exchange_t default_client_exchange;
+	http::reply_t default_reply;
+	http::server_exchange_t default_server_exchange;
+	http::duplex_channel_t default_channel;
+	http::acceptor_wrap_t default_acceptor_wrap;
+	http::server_t default_service;
+	http::tcp_connection default_transport;
+	auto global_executor = asio::any_io_executor(riwo::get_executor());
+	auto reader_state = http::detail::make_body_reader_state();
+	auto writer_state = http::detail::make_body_writer_state();
+	auto stream = std::make_shared<fake_stream>();
+	http::body_reader_t reader_with_state(reader_state);
+	http::body_writer_t writer_with_state(writer_state);
+	http::client_exchange_t exchange_with_stream(stream);
+	http::reply_t reply_with_body(http::protocol::v1_1,
+		http::response_head{http::status::ok}, reader_state);
+	http::server_exchange_t server_exchange_with_stream(stream,
+		http::request_head{});
+	std::shared_ptr<http::detail::duplex_state> duplex_state;
+	http::duplex_channel_t channel_with_state(duplex_state);
+	auto client_session = std::make_shared<fake_session>(global_executor);
+	http::client_t session_client(client_session, config);
+	auto connector = std::make_shared<fake_transport_connector>(global_executor);
+	http::client_t connector_client(connector, config);
+	auto default_connector = http::detail::make_default_connector();
+	auto connector_adapter = http::detail::make_connector_adapter(
+		std::static_pointer_cast<http::transport_connector_t>(connector));
+	http::detail::session_pool pool_with_default_executor(config);
+	auto client_state_with_default_executor =
+		http::detail::make_client_state(config);
+	auto h1_session_with_default_executor =
+		http::v1::detail::make_client_session(http::protocol::v1_1);
+	auto body_duplex_with_default_executor =
+		http::detail::make_body_duplex_state(http::protocol::v1_1,
+			reader_state, writer_state, {}, {}, {}, [] {});
+	native_client native_default_client;
 	native_client native(context, config);
 	native_acceptor_wrap acceptor_wrap{
-		native_acceptor_wrap::acceptor_type(context)};
+		native_acceptor_wrap::acceptor_t(context)};
 	native_server native_service(std::move(acceptor_wrap));
 	native_service.on_default(native_server_handler);
 	native_acceptor_wrap split_acceptor_wrap{
-		native_acceptor_wrap::acceptor_type(context)};
+		native_acceptor_wrap::acceptor_t(context)};
 	auto strand = asio::make_strand(context);
 	split_server split_service(std::move(split_acceptor_wrap), strand);
 	RIWO_TEST_CHECK(reader.get_executor() == context.get_executor());
@@ -411,6 +669,48 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(exchange.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(standalone_reply.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(server_exchange.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK(default_client.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(configured_client.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_reader.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_writer.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_client_exchange.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_reply.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_server_exchange.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_channel.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_acceptor_wrap.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_service.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_service.get_service_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(default_transport.get_executor() ==
+		asio::any_io_executor(riwo::get_executor()));
+	RIWO_TEST_CHECK(reader_with_state.get_executor() == global_executor);
+	RIWO_TEST_CHECK(writer_with_state.get_executor() == global_executor);
+	RIWO_TEST_CHECK(exchange_with_stream.get_executor() == global_executor);
+	RIWO_TEST_CHECK(reply_with_body.get_executor() == global_executor);
+	RIWO_TEST_CHECK(server_exchange_with_stream.get_executor() == global_executor);
+	RIWO_TEST_CHECK(channel_with_state.get_executor() == global_executor);
+	RIWO_TEST_CHECK(session_client.get_executor() == global_executor);
+	RIWO_TEST_CHECK(connector_client.get_executor() == global_executor);
+	RIWO_TEST_CHECK(default_connector->get_executor() == global_executor);
+	RIWO_TEST_CHECK(connector_adapter->get_executor() == global_executor);
+	RIWO_TEST_CHECK(pool_with_default_executor.get_executor() == global_executor);
+	RIWO_TEST_CHECK(client_state_with_default_executor);
+	RIWO_TEST_CHECK(h1_session_with_default_executor->get_executor() ==
+		global_executor);
+	RIWO_TEST_CHECK(body_duplex_with_default_executor->get_executor() ==
+		global_executor);
+	RIWO_TEST_CHECK(native_default_client.get_executor() ==
+		riwo::get_executor());
 	RIWO_TEST_CHECK(native.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(native_service.get_executor() == context.get_executor());
 	RIWO_TEST_CHECK(native_service.get_service_executor() == context.get_executor());
@@ -421,11 +721,11 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(transport.get_executor() == executor);
 	RIWO_TEST_CHECK_EQ(session.available_stream_capacity(), 1U);
 
-	http::client client(executor, config);
+	http::client_t client(executor, config);
 	RIWO_TEST_CHECK(client.get_executor() == executor);
 	bool completed = false;
 	client.send(http::request(http::method::get, "https://example.test/"),
-		[&](riwo::error_code error, http::reply reply) {
+		[&](riwo::error_code error, http::reply_t reply) {
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_permitted));
 			RIWO_TEST_CHECK(reply.get_executor() == executor);
@@ -449,7 +749,7 @@ void server_facade_contract()
 	riwo::io_context_t context;
 	auto executor = asio::any_io_executor(context.get_executor());
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor));
+	http::server_t service(std::move(acceptor));
 
 	RIWO_TEST_CHECK(service.get_executor() == executor);
 	RIWO_TEST_CHECK(service.get_service_executor() == executor);
@@ -459,7 +759,7 @@ void server_facade_contract()
 		.on_request(http::method("SUBSCRIBE"), "/custom-events", server_handler)
 		.on_default(server_handler)
 		.on_server_error([](riwo::error_code) { return true; })
-		.on_service_error([](http::server_exchange&,
+		.on_service_error([](http::server_exchange_t&,
 			const std::exception&) { return true; });
 
 	riwo::error_code error;
@@ -485,6 +785,7 @@ int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
 		{"semantic value contracts", semantic_value_contracts},
+		{"head convenience contracts", head_convenience_contracts},
 		{"cookie value contracts", cookie_value_contracts},
 		{"fake boundaries and unsupported entry points",
 			fake_boundaries_and_unsupported_entry_points},

@@ -109,10 +109,10 @@ void h1_manual_engine_loop()
 		.stream = 9, .head = request, .body = http::body_spec::empty()
 	}).has_value());
 	const auto request_wire = drain(client, 1);
-	http::stream_token server_stream = 0;
+	http::stream_token_t server_stream = 0;
 	bool request_end = false;
 	auto server_result = server.ingest(riwo::buffer(request_wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( auto head = std::get_if<http::request_head_event>(&event) )
 			server_stream = head->stream;
 		if( std::holds_alternative<http::stream_end_event>(event) )
@@ -134,7 +134,7 @@ void h1_manual_engine_loop()
 	bool response_head = false;
 	bool response_end = false;
 	auto client_result = client.ingest(riwo::buffer(response_wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( auto head = std::get_if<http::response_head_event>(&event) )
 		{
 			response_head = true;
@@ -171,7 +171,7 @@ void h1_pause_resume_and_eof()
 	});
 	size_t heads = 0;
 	auto paused = server.ingest(riwo::buffer(wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::request_head_event>(event) ) ++heads;
 		return http::event_flow::pause;
 	});
@@ -180,7 +180,7 @@ void h1_pause_resume_and_eof()
 	RIWO_TEST_CHECK_EQ(paused->consumed, 0U);
 	bool ended = false;
 	auto resumed = server.ingest(riwo::buffer(wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::request_head_event>(event) ) ++heads;
 		if( std::holds_alternative<http::stream_end_event>(event) ) ended = true;
 		return http::event_flow::continue_;
@@ -195,11 +195,11 @@ void h1_pause_resume_and_eof()
 		.version = http::protocol::v1_1
 	});
 	auto partial = truncated.ingest(riwo::buffer(std::string_view("GET / HTTP/1.1\r\n")),
-		[](const http::protocol_event &) { return http::event_flow::continue_; });
+		[](const http::protocol_event_t &) { return http::event_flow::continue_; });
 	RIWO_TEST_CHECK(partial.has_value());
 	RIWO_TEST_CHECK(partial->needs_input);
 	auto eof = truncated.finish_input(
-		[](const http::protocol_event &) { return http::event_flow::continue_; });
+		[](const http::protocol_event_t &) { return http::event_flow::continue_; });
 	RIWO_TEST_CHECK(!eof.has_value());
 	RIWO_TEST_CHECK_EQ(eof.error(),
 		http::make_error_code(http::errc::unexpected_eof));
@@ -251,7 +251,7 @@ void h1_pause_resume_and_eof()
 	{
 		auto result = chunk_server.ingest(riwo::buffer(
 			std::string_view(chunk_wire).substr(consumed)),
-		[&](const http::protocol_event &event) {
+		[&](const http::protocol_event_t &event) {
 			if( std::holds_alternative<http::trailers_event>(event) )
 			{
 				++trailer_events;
@@ -267,7 +267,7 @@ void h1_pause_resume_and_eof()
 	RIWO_TEST_CHECK_EQ(trailer_events, 1U);
 	auto trailer_resume = chunk_server.ingest(riwo::buffer(
 		std::string_view(chunk_wire).substr(consumed)),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::trailers_event>(event) ) ++trailer_events;
 		if( std::holds_alternative<http::stream_end_event>(event) ) chunk_end = true;
 		return http::event_flow::continue_;
@@ -291,9 +291,9 @@ void h2_manual_engine_loop()
 		.stream = 77, .head = request, .body = http::body_spec::empty()
 	}).has_value());
 
-	http::stream_token server_stream = 0;
+	http::stream_token_t server_stream = 0;
 	bool response_received = false;
-	auto server_events = [&](const http::protocol_event &event) {
+	auto server_events = [&](const http::protocol_event_t &event) {
 		if( auto head = std::get_if<http::request_head_event>(&event) )
 		{
 			server_stream = head->stream;
@@ -301,7 +301,7 @@ void h2_manual_engine_loop()
 		}
 		return http::event_flow::continue_;
 	};
-	auto client_events = [&](const http::protocol_event &event) {
+	auto client_events = [&](const http::protocol_event_t &event) {
 		if( auto head = std::get_if<http::response_head_event>(&event) )
 		{
 			response_received = true;
@@ -370,7 +370,7 @@ void h2_pause_resume()
 	const auto wire = drain(client, 4096);
 	size_t heads = 0;
 	auto paused = server.ingest(riwo::buffer(wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::request_head_event>(event) )
 		{
 			++heads;
@@ -383,7 +383,7 @@ void h2_pause_resume()
 	RIWO_TEST_CHECK_EQ(paused->consumed, 0U);
 	bool ended = false;
 	auto resumed = server.ingest(riwo::buffer(wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::request_head_event>(event) ) ++heads;
 		if( std::holds_alternative<http::stream_end_event>(event) ) ended = true;
 		return http::event_flow::continue_;
@@ -410,7 +410,7 @@ void h2_pause_resume()
 	const auto body_wire = drain(body_client, 4096);
 	size_t body_events = 0;
 	auto body_pause = body_server.ingest(riwo::buffer(body_wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::body_data_event>(event) )
 		{
 			++body_events;
@@ -423,7 +423,7 @@ void h2_pause_resume()
 	RIWO_TEST_CHECK_EQ(body_pause->consumed, 0U);
 	bool body_end = false;
 	auto body_resume = body_server.ingest(riwo::buffer(body_wire),
-	[&](const http::protocol_event &event) {
+	[&](const http::protocol_event_t &event) {
 		if( std::holds_alternative<http::body_data_event>(event) ) ++body_events;
 		if( std::holds_alternative<http::stream_end_event>(event) ) body_end = true;
 		return http::event_flow::continue_;
@@ -436,14 +436,14 @@ void h2_pause_resume()
 	http::v2::connection_engine eof_engine({.role = http::protocol_role::server});
 	size_t eof_events = 0;
 	auto eof_pause = eof_engine.finish_input(
-	[&](const http::protocol_event &) {
+	[&](const http::protocol_event_t &) {
 		++eof_events;
 		return http::event_flow::pause;
 	});
 	RIWO_TEST_CHECK(eof_pause.has_value());
 	RIWO_TEST_CHECK(eof_pause->paused);
 	auto eof_resume = eof_engine.finish_input(
-	[&](const http::protocol_event &) {
+	[&](const http::protocol_event_t &) {
 		++eof_events;
 		return http::event_flow::continue_;
 	});

@@ -11,7 +11,7 @@
 namespace riwo::http_exp::detail
 {
 
-using endpoint = asio::ip::tcp::endpoint;
+using endpoint_t = asio::ip::tcp::endpoint;
 
 struct origin
 {
@@ -59,7 +59,7 @@ struct session_key
 	proxy_identity proxy {};
 	tls_identity tls {};
 	protocol_policy_identity protocols {};
-	optional<endpoint> local_bind {};
+	optional<endpoint_t> local_bind {};
 
 	[[nodiscard]] origin target_origin() const noexcept {
 		return {scheme, host, port};
@@ -80,8 +80,8 @@ struct negotiated_transport
 {
 	std::shared_ptr<::riwo::http_exp::connection> stream {};
 	protocol selected_protocol = protocol::v1_1;
-	endpoint remote {};
-	endpoint local {};
+	endpoint_t remote {};
+	endpoint_t local {};
 	optional<std::string> alpn {};
 	bool absolute_form = false;
 };
@@ -92,26 +92,28 @@ class RIWO_HTTP_EXP_API connector
 
 public:
 	using executor_type = asio::any_io_executor;
-	using connect_handler = asio::any_completion_handler<void(
+	using executor_t = executor_type;
+	using connect_handler_t = asio::any_completion_handler<void(
 		error_code, negotiated_transport)>;
 
-	explicit connector(executor_type executor);
+	connector();
+	explicit connector(executor_t executor);
 	virtual ~connector();
 
-	[[nodiscard]] virtual executor_type get_executor() const noexcept;
+	[[nodiscard]] virtual executor_t get_executor() const noexcept;
 	[[nodiscard]] virtual sys_expected<negotiated_transport> connect(
 		const session_key &key, const client_config &config) noexcept = 0;
 	virtual void connect_async(const session_key &key,
-		const client_config &config, connect_handler handler);
+		const client_config &config, connect_handler_t handler);
 
 protected:
-	executor_type m_executor;
+	executor_t m_executor;
 };
 
-using connector_ptr = std::shared_ptr<connector>;
+using connector_ptr_t = std::shared_ptr<connector>;
 
-[[nodiscard]] RIWO_HTTP_EXP_API connector_ptr make_default_connector(
-	asio::any_io_executor executor);
+[[nodiscard]] RIWO_HTTP_EXP_API connector_ptr_t make_default_connector(
+	asio::any_io_executor executor = riwo::get_executor());
 
 [[nodiscard]] RIWO_HTTP_EXP_API sys_expected<protocol> negotiate_protocol(
 	const protocol_policy &policy, const session_key &key,

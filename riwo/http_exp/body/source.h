@@ -13,13 +13,13 @@ template <typename Source>
 concept body_source_model = requires(
 	Source &source,
 	mutable_buffer buffer,
-	asio::any_completion_handler<void(error_code, size_t)> read_handler,
-	asio::any_completion_handler<void(error_code)> rewind_handler)
+	asio::any_completion_handler<void(error_code, size_t)> read_handler_t,
+	asio::any_completion_handler<void(error_code)> rewind_handler_t)
 {
 	{ source.size() } noexcept -> std::same_as<optional<uint64_t>>;
 	{ source.replayable() } noexcept -> std::same_as<bool>;
-	{ source.read_some(buffer, std::move(read_handler)) } -> std::same_as<void>;
-	{ source.rewind(std::move(rewind_handler)) } -> std::same_as<void>;
+	{ source.read_some(buffer, std::move(read_handler_t)) } -> std::same_as<void>;
+	{ source.rewind(std::move(rewind_handler_t)) } -> std::same_as<void>;
 	{ source.cancel() } noexcept -> std::same_as<void>;
 };
 

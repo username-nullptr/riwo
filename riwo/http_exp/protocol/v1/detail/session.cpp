@@ -57,13 +57,13 @@ struct connection final
 	}
 
 	void read_some(mutable_buffer buffer,
-		::riwo::http_exp::connection::io_handler handler)
+		::riwo::http_exp::connection::io_handler_t handler)
 	{
 		transport->read_some(buffer, std::move(handler));
 	}
 
 	void write(const_buffer buffer,
-		::riwo::http_exp::connection::io_handler handler)
+		::riwo::http_exp::connection::io_handler_t handler)
 	{
 		transport->write(buffer, std::move(handler));
 	}
@@ -75,7 +75,7 @@ struct connection final
 	}
 
 	void connect_async(std::string_view host, uint16_t port,
-		::riwo::http_exp::connection::close_handler handler)
+		::riwo::http_exp::connection::close_handler_t handler)
 	{
 		transport->connect_async(host, port, std::move(handler));
 	}
@@ -131,7 +131,7 @@ public:
 		}
 		return m_connection->transport->read_some_sync(buffer, error);
 	}
-	void read_some(mutable_buffer buffer, io_handler handler) override
+	void read_some(mutable_buffer buffer, io_handler_t handler) override
 	{
 		if( not m_connection->pending.empty() )
 		{
@@ -157,7 +157,7 @@ public:
 		}
 		return total;
 	}
-	void write(std::span<const const_buffer> buffers, io_handler handler) override
+	void write(std::span<const const_buffer> buffers, io_handler_t handler) override
 	{
 		size_t total = 0;
 		for( const auto &buffer : buffers ) total += buffer.size();
@@ -182,7 +182,7 @@ public:
 		m_connection->closed = true;
 		m_connection->transport->cancel();
 	}
-	void close(close_handler handler) override
+	void close(close_handler_t handler) override
 	{
 		if( m_connection->closed )
 		{
@@ -198,11 +198,11 @@ public:
 		m_connection->closed = true;
 		m_connection->transport->cancel();
 	}
-	[[nodiscard]] endpoint_type remote_endpoint(
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override {
 		return m_connection->transport->remote_endpoint(error);
 	}
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override {
 		return m_connection->transport->local_endpoint(error);
 	}
@@ -356,10 +356,10 @@ class head_read_operation final :
 	public std::enable_shared_from_this<head_read_operation>
 {
 public:
-	using handler_type = asio::any_completion_handler<void(error_code,std::string)>;
+	using handler_t = asio::any_completion_handler<void(error_code,std::string)>;
 
 	head_read_operation(std::shared_ptr<connection> value, size_t maximum,
-		handler_type completion) : m_connection(std::move(value)), m_limit(maximum),
+		handler_t completion) : m_connection(std::move(value)), m_limit(maximum),
 		m_handler(std::move(completion))
 	{
 	}
@@ -393,12 +393,12 @@ public:
 private:
 	std::shared_ptr<connection> m_connection;
 	size_t m_limit;
-	handler_type m_handler;
+	handler_t m_handler;
 	std::array<char,4096> m_buffer {};
 };
 
 void read_head(std::shared_ptr<connection> value, size_t limit,
-	head_read_operation::handler_type handler)
+	head_read_operation::handler_t handler)
 {
 	std::make_shared<head_read_operation>(std::move(value), limit,
 		std::move(handler))->start();
@@ -447,7 +447,7 @@ public:
 		}
 	}
 
-	void read_some(mutable_buffer buffer, read_handler handler) override;
+	void read_some(mutable_buffer buffer, read_handler_t handler) override;
 
 	[[nodiscard]] bool apply_read_timeout(error_code &error) noexcept
 	{
@@ -477,7 +477,7 @@ public:
 		return m_trailers;
 	}
 
-	void trailers(trailers_handler handler) override
+	void trailers(trailers_handler_t handler) override
 	{
 		if( not m_ended )
 		{
@@ -721,7 +721,7 @@ class reader_adapter::async_read_operation final :
 {
 public:
 	async_read_operation(std::shared_ptr<reader_adapter> owner,
-		mutable_buffer target, read_handler completion) : m_owner(std::move(owner)),
+		mutable_buffer target, read_handler_t completion) : m_owner(std::move(owner)),
 		m_target(target), m_handler(std::move(completion))
 	{
 	}
@@ -951,11 +951,11 @@ private:
 
 	std::shared_ptr<reader_adapter> m_owner;
 	mutable_buffer m_target;
-	read_handler m_handler;
+	read_handler_t m_handler;
 	std::array<char,8192> m_buffer {};
 };
 
-void reader_adapter::read_some(mutable_buffer buffer, read_handler handler)
+void reader_adapter::read_some(mutable_buffer buffer, read_handler_t handler)
 {
 	std::make_shared<async_read_operation>(shared_from_this(), buffer,
 		std::move(handler))->start();
@@ -1005,7 +1005,7 @@ public:
 		}
 	}
 
-	void write(const_buffer buffer, write_handler handler) override
+	void write(const_buffer buffer, write_handler_t handler) override
 	{
 		error_code timeout;
 		if( not apply_write_timeout(timeout) )
@@ -1070,7 +1070,7 @@ public:
 		if( m_finish_handler ) m_finish_handler(error);
 	}
 
-	void finish(fields trailers, finish_handler handler) override
+	void finish(fields trailers, finish_handler_t handler) override
 	{
 		if( not m_chunked or m_suppress_body )
 		{
@@ -1183,11 +1183,11 @@ public:
 	[[nodiscard]] protocol response_protocol() const noexcept override {
 		return m_response_protocol;
 	}
-	[[nodiscard]] endpoint_type remote_endpoint(
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override {
 		return m_connection->transport->remote_endpoint(error);
 	}
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override {
 		return m_connection->transport->local_endpoint(error);
 	}
@@ -1246,7 +1246,7 @@ public:
 		}
 	}
 
-	void wait_response(response_handler handler) override
+	void wait_response(response_handler_t handler) override
 	{
 		if( not m_client )
 		{
@@ -1290,7 +1290,7 @@ public:
 	}
 
 	void respond(response_head head, body_spec spec,
-		operation_handler handler) override
+		operation_handler_t handler) override
 	{
 		if( m_client )
 		{
@@ -1336,7 +1336,7 @@ public:
 		(void)m_connection->write_sync(asio::buffer(*wire), error);
 	}
 
-	void inform(response_head head, operation_handler handler) override
+	void inform(response_head head, operation_handler_t handler) override
 	{
 		auto wire_value = serialize_response(
 			head, body_spec::empty(), m_version, false);
@@ -1361,7 +1361,7 @@ public:
 	}
 
 private:
-	void read_response(response_handler handler)
+	void read_response(response_handler_t handler)
 	{
 		auto self = shared_from_this();
 		read_head(m_connection,
@@ -1457,7 +1457,7 @@ private:
 	}
 
 	void open_duplex(optional<response_head> response,
-		duplex_handler handler) override
+		duplex_handler_t handler) override
 	{
 		if( m_duplex_opened or (m_client and not m_response_ready) )
 		{
@@ -1673,7 +1673,7 @@ public:
 		}
 	}
 
-	void open(request_head head, body_spec spec, open_handler handler) override
+	void open(request_head head, body_spec spec, open_handler_t handler) override
 	{
 		error_code begin_error;
 		if( not begin_open(begin_error) )
@@ -1694,7 +1694,7 @@ public:
 			request_head head;
 			body_spec spec = body_spec::empty();
 			std::shared_ptr<std::string> wire;
-			open_handler handler;
+			open_handler_t handler;
 
 			void start()
 			{
@@ -1744,7 +1744,7 @@ public:
 		value->start();
 	}
 
-	void graceful_shutdown(shutdown_handler handler) override
+	void graceful_shutdown(shutdown_handler_t handler) override
 	{
 		m_draining = true;
 		if( not m_in_use ) m_connection->cancel();
@@ -1852,7 +1852,7 @@ public:
 		m_release_handler = std::move(handler);
 	}
 
-	void accept(accept_handler handler) override
+	void accept(accept_handler_t handler) override
 	{
 		if( m_in_use )
 		{
@@ -1938,7 +1938,7 @@ public:
 		});
 	}
 
-	void graceful_shutdown(shutdown_handler handler) override
+	void graceful_shutdown(shutdown_handler_t handler) override
 	{
 		m_draining = true;
 		m_connection->cancel();
@@ -1958,12 +1958,29 @@ private:
 
 } //namespace
 
+std::shared_ptr<client_session> make_client_session(protocol version,
+	message_limits limits, timeout_policy timeouts, bool absolute_form)
+{
+	return make_client_session(asio::any_io_executor(riwo::get_executor()),
+		version, std::move(limits), timeouts, absolute_form);
+}
+
 std::shared_ptr<client_session> make_client_session(
 	asio::any_io_executor executor, protocol version, message_limits limits,
 	timeout_policy timeouts, bool absolute_form)
 {
 	return std::make_shared<h1_client_session>(
 		std::move(executor), version, std::move(limits), timeouts,
+		absolute_form);
+}
+
+std::shared_ptr<client_session> make_client_session(protocol version,
+	message_limits limits,
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	timeout_policy timeouts, bool absolute_form)
+{
+	return make_client_session(asio::any_io_executor(riwo::get_executor()),
+		version, std::move(limits), std::move(transport), timeouts,
 		absolute_form);
 }
 
@@ -2004,7 +2021,7 @@ class h1_server_loop final :
 {
 public:
 	std::shared_ptr<::riwo::http_exp::v1::detail::h1_server_session> session;
-	server_accept_handler handler;
+	server_accept_handler_t handler;
 	bool served = false;
 
 	void start()
@@ -2046,9 +2063,9 @@ public:
 	std::shared_ptr<h1_server_loop> loop;
 };
 
-server_connection_ptr accept_h1(asio::ip::tcp::socket socket,
+server_connection_ptr_t accept_h1(asio::ip::tcp::socket socket,
 	message_limits limits, timeout_policy timeouts,
-	server_accept_handler handler)
+	server_accept_handler_t handler)
 {
 	error_code option_error;
 	(void)socket.set_option(asio::ip::tcp::no_delay(true), option_error);
@@ -2056,10 +2073,10 @@ server_connection_ptr accept_h1(asio::ip::tcp::socket socket,
 		std::move(limits), timeouts, std::move(handler));
 }
 
-server_connection_ptr accept_h1(
+server_connection_ptr_t accept_h1(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
 	message_limits limits, timeout_policy timeouts,
-	server_accept_handler handler)
+	server_accept_handler_t handler)
 {
 	auto session = std::make_shared<
 		::riwo::http_exp::v1::detail::h1_server_session>(

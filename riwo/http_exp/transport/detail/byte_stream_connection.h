@@ -24,11 +24,11 @@ public:
 	{
 	}
 
-	[[nodiscard]] executor_type get_executor() const noexcept override {
+	[[nodiscard]] executor_t get_executor() const noexcept override {
 		return asio::any_io_executor(m_stream.get_executor());
 	}
 
-	void read_some(mutable_buffer buffer, io_handler handler) override
+	void read_some(mutable_buffer buffer, io_handler_t handler) override
 	{
 		if( m_initial_offset == m_initial.size() )
 			return m_stream.read_some(buffer, std::move(handler));
@@ -39,10 +39,10 @@ public:
 			});
 	}
 
-	void write(const_buffer buffer, io_handler handler) override {
+	void write(const_buffer buffer, io_handler_t handler) override {
 		m_stream.write(buffer, std::move(handler));
 	}
-	void close(close_handler handler) override {
+	void close(close_handler_t handler) override {
 		m_stream.close(std::move(handler));
 	}
 	void cancel() noexcept override { m_stream.cancel(); }
@@ -61,11 +61,11 @@ public:
 		return m_stream.write_sync(buffer, error);
 	}
 
-	[[nodiscard]] endpoint_type remote_endpoint(
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override {
 		return parse_endpoint(m_metadata.remote_endpoint, error);
 	}
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override {
 		return parse_endpoint(m_metadata.local_endpoint, error);
 	}
@@ -81,7 +81,7 @@ private:
 		return count;
 	}
 
-	[[nodiscard]] static endpoint_type parse_endpoint(
+	[[nodiscard]] static endpoint_t parse_endpoint(
 		const optional<std::string> &text, error_code &error) noexcept
 	{
 		error.clear();

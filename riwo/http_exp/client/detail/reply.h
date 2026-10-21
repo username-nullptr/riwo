@@ -13,7 +13,7 @@ template <core_concepts::exec Exec>
 class basic_reply<Exec>::impl
 {
 public:
-	impl(executor_type executor_value, protocol protocol_value,
+	impl(executor_t executor_value, protocol protocol_value,
 		protocol response_protocol_value, response_head head_value,
 		std::shared_ptr<detail::body_reader_state> state,
 		std::vector<std::byte> buffered_body_value,
@@ -21,18 +21,18 @@ public:
 		m_executor(std::move(executor_value)), m_protocol_value(protocol_value),
 		m_response_protocol_value(response_protocol_value),
 		m_head(std::move(head_value)),
-		m_body(std::make_unique<body_reader_type>(m_executor, std::move(state))),
+		m_body(std::make_unique<body_reader_t>(m_executor, std::move(state))),
 		m_buffered_body(std::move(buffered_body_value)),
 		m_owner(std::move(owner_value)),
 		m_max_buffered_body(max_buffered_body_value)
 	{
 	}
 
-	executor_type m_executor;
+	executor_t m_executor;
 	protocol m_protocol_value;
 	protocol m_response_protocol_value;
 	response_head m_head;
-	std::unique_ptr<body_reader_type> m_body;
+	std::unique_ptr<body_reader_t> m_body;
 	std::vector<std::byte> m_buffered_body;
 	std::shared_ptr<void> m_owner;
 	uint64_t m_max_buffered_body;
@@ -40,15 +40,27 @@ public:
 
 template <core_concepts::exec Exec>
 basic_reply<Exec>::basic_reply()
-	requires std::default_initializable<executor_type> :
-	basic_reply(executor_type{})
+	requires core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_reply(executor_t(riwo::get_executor()))
+{
+}
+
+template <core_concepts::exec Exec>
+basic_reply<Exec>::basic_reply(protocol selected_protocol, response_head head,
+	std::shared_ptr<detail::body_reader_state> body,
+	std::vector<std::byte> buffered_body, std::shared_ptr<void> owner,
+	uint64_t max_buffered_body, protocol response_protocol)
+	requires core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_reply(executor_t(riwo::get_executor()), selected_protocol,
+		std::move(head), std::move(body), std::move(buffered_body),
+		std::move(owner), max_buffered_body, response_protocol)
 {
 }
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_reply<Exec>::basic_reply(Exec0 &&executor)
-	requires core_concepts::match_sched<Exec0,executor_type> :
+	requires core_concepts::match_sched<Exec0,executor_t> :
 	basic_reply(std::forward<Exec0>(executor), protocol::v1_1, {},
 		detail::make_body_reader_state())
 {
@@ -61,7 +73,7 @@ basic_reply<Exec>::basic_reply(Exec0 &&executor,
 	std::shared_ptr<detail::body_reader_state> body,
 		std::vector<std::byte> buffered_body, std::shared_ptr<void> owner,
 		uint64_t max_buffered_body, protocol response_protocol)
-	requires core_concepts::match_sched<Exec0,executor_type> :
+	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)), selected_protocol,
 		response_protocol, std::move(head), std::move(body),
@@ -73,7 +85,7 @@ template <core_concepts::exec Exec>
 basic_reply<Exec>::~basic_reply() = default;
 
 template <core_concepts::exec Exec>
-auto basic_reply<Exec>::get_executor() const noexcept -> executor_type {
+auto basic_reply<Exec>::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
 
@@ -98,7 +110,7 @@ const fields &basic_reply<Exec>::headers() const noexcept {
 }
 
 template <core_concepts::exec Exec>
-auto basic_reply<Exec>::body() noexcept -> body_reader_type& {
+auto basic_reply<Exec>::body() noexcept -> body_reader_t& {
 	return *m_impl->m_body;
 }
 
@@ -143,7 +155,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 	{
 		struct operation : std::enable_shared_from_this<operation>
 		{
-			body_reader_type *reader;
+			body_reader_t *reader;
 			std::vector<std::byte> result;
 			std::array<std::byte,8192> buffer;
 			uint64_t limit;
@@ -236,7 +248,7 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 	{
 		struct operation : std::enable_shared_from_this<operation>
 		{
-			body_reader_type *reader;
+			body_reader_t *reader;
 			std::ofstream stream;
 			std::array<std::byte,8192> buffer;
 			uint64_t total = 0;

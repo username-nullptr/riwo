@@ -16,22 +16,23 @@ class RIWO_HTTP_EXP_API connection
 
 public:
 	using executor_type = asio::any_io_executor;
-	using io_handler = asio::any_completion_handler<void(error_code, size_t)>;
-	using close_handler = asio::any_completion_handler<void(error_code)>;
-	using endpoint_type = asio::ip::tcp::endpoint;
-	using timeout_type = std::chrono::milliseconds;
+	using executor_t = executor_type;
+	using io_handler_t = asio::any_completion_handler<void(error_code, size_t)>;
+	using close_handler_t = asio::any_completion_handler<void(error_code)>;
+	using endpoint_t = asio::ip::tcp::endpoint;
+	using timeout_t = std::chrono::milliseconds;
 
 	connection() = default;
 	virtual ~connection() = default;
-	[[nodiscard]] virtual executor_type get_executor() const noexcept = 0;
-	virtual void read_some(mutable_buffer buffer, io_handler handler) = 0;
-	virtual void write(const_buffer buffer, io_handler handler) = 0;
-	virtual void close(close_handler handler) = 0;
+	[[nodiscard]] virtual executor_t get_executor() const noexcept = 0;
+	virtual void read_some(mutable_buffer buffer, io_handler_t handler) = 0;
+	virtual void write(const_buffer buffer, io_handler_t handler) = 0;
+	virtual void close(close_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
-	virtual void set_read_timeout(optional<timeout_type> value) {
+	virtual void set_read_timeout(optional<timeout_t> value) {
 		ignore_unused(value);
 	}
-	virtual void set_write_timeout(optional<timeout_type> value) {
+	virtual void set_write_timeout(optional<timeout_t> value) {
 		ignore_unused(value);
 	}
 
@@ -65,21 +66,21 @@ public:
 	}
 
 	virtual void connect_async(std::string_view host, uint16_t port,
-		close_handler handler)
+		close_handler_t handler)
 	{
 		ignore_unused(host);
 		ignore_unused(port);
 		std::move(handler)(make_error_code(errc::operation_not_supported));
 	}
 
-	[[nodiscard]] virtual endpoint_type remote_endpoint(
+	[[nodiscard]] virtual endpoint_t remote_endpoint(
 		error_code &error) const noexcept
 	{
 		error = make_error_code(errc::operation_not_supported);
 		return {};
 	}
 
-	[[nodiscard]] virtual endpoint_type local_endpoint(
+	[[nodiscard]] virtual endpoint_t local_endpoint(
 		error_code &error) const noexcept
 	{
 		error = make_error_code(errc::operation_not_supported);

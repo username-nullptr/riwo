@@ -49,58 +49,88 @@ constexpr std::array known_methods {
 
 } //namespace
 
+class method::impl
+{
+public:
+	explicit impl(well_known value) :
+		m_token(known_methods[static_cast<size_t>(value)].text),
+		m_properties(known_methods[static_cast<size_t>(value)].properties),
+		m_known(value)
+	{
+	}
+
+	explicit impl(std::string token) :
+		m_token(std::move(token)), m_known(identify(m_token))
+	{
+		validate_token(m_token);
+		if( m_known )
+			m_properties = known_methods[static_cast<size_t>(*m_known)].properties;
+	}
+
+	impl(std::string token, method_properties properties) :
+		m_token(std::move(token)), m_properties(normalized(properties)),
+		m_known(identify(m_token))
+	{
+		validate_token(m_token);
+		if( m_known )
+		{
+			const auto expected =
+				known_methods[static_cast<size_t>(*m_known)].properties;
+			if( m_properties != expected )
+				throw std::invalid_argument(
+					"Conflicting properties for a standard HTTP method");
+			m_properties = expected;
+		}
+	}
+
+	std::string m_token;
+	method_properties m_properties;
+	optional<well_known> m_known;
+
+private:
+	static void validate_token(const std::string &token)
+	{
+		if( token.empty() or not std::ranges::all_of(
+			token, [](unsigned char value) {
+				return token_character(value);
+			}) )
+			throw std::invalid_argument("Invalid HTTP method token");
+	}
+};
+
 method::method(well_known value) noexcept :
-	m_token(known_methods[static_cast<size_t>(value)].text),
-	m_properties(known_methods[static_cast<size_t>(value)].properties),
-	m_known(value)
+	m_impl(std::make_shared<impl>(value))
 {
 }
 
-method::method(std::string token) : m_token(std::move(token)), m_known(identify(m_token))
+method::method(std::string token) :
+	m_impl(std::make_shared<impl>(std::move(token)))
 {
-	if( m_token.empty() or not std::ranges::all_of(m_token, [](unsigned char value) {
-		return token_character(value);
-	}))
-		throw std::invalid_argument("Invalid HTTP method token");
-	if( m_known )
-		m_properties = known_methods[static_cast<size_t>(*m_known)].properties;
 }
 
 method::method(std::string token, method_properties properties) :
-	m_token(std::move(token)), m_properties(normalized(properties)), m_known(identify(m_token))
+	m_impl(std::make_shared<impl>(std::move(token), properties))
 {
-	if( m_token.empty() or not std::ranges::all_of(m_token, [](unsigned char value) {
-		return token_character(value);
-	}))
-		throw std::invalid_argument("Invalid HTTP method token");
-
-	if( m_known )
-	{
-		const auto expected = known_methods[static_cast<size_t>(*m_known)].properties;
-		if( m_properties != expected )
-			throw std::invalid_argument("Conflicting properties for a standard HTTP method");
-		m_properties = expected;
-	}
 }
 
 std::string_view method::text() const noexcept {
-	return m_token;
+	return m_impl->m_token;
 }
 
 optional<method::well_known> method::known() const noexcept {
-	return m_known;
+	return m_impl->m_known;
 }
 
 bool method::is_safe() const noexcept {
-	return m_properties.safe;
+	return m_impl->m_properties.safe;
 }
 
 bool method::is_idempotent() const noexcept {
-	return m_properties.idempotent;
+	return m_impl->m_properties.idempotent;
 }
 
 bool operator==(const method &lhs, const method &rhs) noexcept {
-	return lhs.m_token == rhs.m_token;
+	return lhs.text() == rhs.text();
 }
 
 } //namespace riwo::http_exp

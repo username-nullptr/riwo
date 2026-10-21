@@ -14,18 +14,18 @@ class RIWO_HTTP_EXP_API body_reader_adapter
 	RIWO_DISABLE_COPY_MOVE(body_reader_adapter)
 
 public:
-	using read_handler = asio::any_completion_handler<
+	using read_handler_t = asio::any_completion_handler<
 		void(error_code,body_read_result)>;
-	using trailers_handler = asio::any_completion_handler<void(error_code,fields)>;
+	using trailers_handler_t = asio::any_completion_handler<void(error_code,fields)>;
 
 	body_reader_adapter() = default;
 	virtual ~body_reader_adapter();
 
 	[[nodiscard]] virtual body_read_result read_some_sync(mutable_buffer buffer,
 		error_code &error) noexcept = 0;
-	virtual void read_some(mutable_buffer buffer, read_handler handler) = 0;
+	virtual void read_some(mutable_buffer buffer, read_handler_t handler) = 0;
 	[[nodiscard]] virtual fields trailers_sync(error_code &error) noexcept = 0;
-	virtual void trailers(trailers_handler handler) = 0;
+	virtual void trailers(trailers_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
 };
 
@@ -35,9 +35,9 @@ class RIWO_HTTP_EXP_API body_reader_state final :
 	RIWO_DISABLE_COPY_MOVE(body_reader_state)
 
 public:
-	using read_handler = body_reader_adapter::read_handler;
-	using operation_handler = asio::any_completion_handler<void(error_code)>;
-	using trailers_handler = body_reader_adapter::trailers_handler;
+	using read_handler_t = body_reader_adapter::read_handler_t;
+	using operation_handler_t = asio::any_completion_handler<void(error_code)>;
+	using trailers_handler_t = body_reader_adapter::trailers_handler_t;
 
 	explicit body_reader_state(std::shared_ptr<body_reader_adapter> adapter = {},
 		bool ready = false, uint64_t max_discard = 1024 * 1024);
@@ -45,11 +45,11 @@ public:
 
 	[[nodiscard]] body_read_result read_some(mutable_buffer buffer,
 		error_code &error) noexcept;
-	void read_some(mutable_buffer buffer, read_handler handler);
+	void read_some(mutable_buffer buffer, read_handler_t handler);
 	void discard(error_code &error) noexcept;
-	void discard(operation_handler handler);
+	void discard(operation_handler_t handler);
 	[[nodiscard]] fields trailers(error_code &error) noexcept;
-	void trailers(trailers_handler handler);
+	void trailers(trailers_handler_t handler);
 	void cancel() noexcept;
 	void set_ready(bool ready = true) noexcept;
 	void set_finished(bool finished = true) noexcept;
@@ -74,20 +74,35 @@ template <core_concepts::exec Exec>
 class basic_body_reader<Exec>::impl
 {
 public:
-	impl(executor_type executor_value,
+	impl(executor_t executor_value,
 		std::shared_ptr<detail::body_reader_state> state_value) :
 		m_executor(std::move(executor_value)), m_state(std::move(state_value))
 	{
 	}
 
-	executor_type m_executor;
+	executor_t m_executor;
 	std::shared_ptr<detail::body_reader_state> m_state;
 };
 
 template <core_concepts::exec Exec>
+basic_body_reader<Exec>::basic_body_reader()
+	requires core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_body_reader(executor_t(riwo::get_executor()))
+{
+}
+
+template <core_concepts::exec Exec>
+basic_body_reader<Exec>::basic_body_reader(
+	std::shared_ptr<detail::body_reader_state> state)
+	requires core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_body_reader(executor_t(riwo::get_executor()), std::move(state))
+{
+}
+
+template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor)
-	requires core_concepts::match_sched<Exec0,executor_type> :
+	requires core_concepts::match_sched<Exec0,executor_t> :
 	basic_body_reader(std::forward<Exec0>(executor),
 		detail::make_body_reader_state())
 {
@@ -97,7 +112,7 @@ template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor,
 	std::shared_ptr<detail::body_reader_state> state)
-	requires core_concepts::match_sched<Exec0,executor_type> :
+	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)),
 		state ? std::move(state) : detail::make_body_reader_state()))
@@ -110,7 +125,7 @@ basic_body_reader<Exec>::~basic_body_reader() {
 }
 
 template <core_concepts::exec Exec>
-auto basic_body_reader<Exec>::get_executor() const noexcept -> executor_type {
+auto basic_body_reader<Exec>::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
 
@@ -141,7 +156,7 @@ auto basic_body_reader<Exec>::read_some(mutable_buffer buffer, Token &&token)
 		return initiate_io<body_read_result>(m_impl->m_executor,
 		[state = std::move(state), buffer](auto handler) mutable {
 			state->read_some(buffer,
-				typename detail::body_reader_state::read_handler(
+				typename detail::body_reader_state::read_handler_t(
 					std::move(handler)));
 		}, std::forward<Token>(token));
 	}
@@ -167,7 +182,7 @@ auto basic_body_reader<Exec>::discard(Token &&token)
 		auto state = m_impl->m_state;
 		return initiate_io_void(m_impl->m_executor,
 		[state = std::move(state)](auto handler) mutable {
-			state->discard(typename detail::body_reader_state::operation_handler(
+			state->discard(typename detail::body_reader_state::operation_handler_t(
 				std::move(handler)));
 		}, std::forward<Token>(token));
 	}
@@ -193,7 +208,7 @@ auto basic_body_reader<Exec>::trailers(Token &&token)
 		auto state = m_impl->m_state;
 		return initiate_io<fields>(m_impl->m_executor,
 		[state = std::move(state)](auto handler) mutable {
-			state->trailers(typename detail::body_reader_state::trailers_handler(
+			state->trailers(typename detail::body_reader_state::trailers_handler_t(
 				std::move(handler)));
 		}, std::forward<Token>(token));
 	}

@@ -9,8 +9,8 @@
 namespace riwo::http_exp::detail { namespace
 {
 
-using clock_type = std::chrono::steady_clock;
-using timer_type = asio::steady_timer;
+using clock_t = std::chrono::steady_clock;
+using timer_t = asio::steady_timer;
 
 class pooled_stream final : public stream,
 	public std::enable_shared_from_this<pooled_stream>
@@ -18,9 +18,9 @@ class pooled_stream final : public stream,
 	RIWO_DISABLE_COPY_MOVE(pooled_stream)
 
 public:
-	using abandon_handler = std::function<void(bool)>;
+	using abandon_handler_t = std::function<void(bool)>;
 
-	pooled_stream(std::shared_ptr<stream> inner, abandon_handler on_abandon) :
+	pooled_stream(std::shared_ptr<stream> inner, abandon_handler_t on_abandon) :
 		m_inner(std::move(inner)), m_on_abandon(std::move(on_abandon))
 	{
 	}
@@ -57,7 +57,7 @@ public:
 		error_code &error) noexcept override {
 		return m_inner->wait_response_sync(error);
 	}
-	void wait_response(response_handler handler) override {
+	void wait_response(response_handler_t handler) override {
 		m_inner->wait_response(std::move(handler));
 	}
 	void respond_sync(response_head head, body_spec spec,
@@ -65,20 +65,20 @@ public:
 		m_inner->respond_sync(std::move(head), std::move(spec), error);
 	}
 	void respond(response_head head, body_spec spec,
-		operation_handler handler) override {
+		operation_handler_t handler) override {
 		m_inner->respond(std::move(head), std::move(spec), std::move(handler));
 	}
 	void inform_sync(response_head head, error_code &error) noexcept override {
 		m_inner->inform_sync(std::move(head), error);
 	}
-	void inform(response_head head, operation_handler handler) override {
+	void inform(response_head head, operation_handler_t handler) override {
 		m_inner->inform(std::move(head), std::move(handler));
 	}
-	[[nodiscard]] endpoint_type remote_endpoint(
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override {
 		return m_inner->remote_endpoint(error);
 	}
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override {
 		return m_inner->local_endpoint(error);
 	}
@@ -90,7 +90,7 @@ public:
 		return result;
 	}
 	void open_duplex(optional<response_head> response,
-		duplex_handler handler) override
+		duplex_handler_t handler) override
 	{
 		auto self = shared_from_this();
 		m_inner->open_duplex(std::move(response),
@@ -118,7 +118,7 @@ private:
 	}
 
 	std::shared_ptr<stream> m_inner;
-	abandon_handler m_on_abandon;
+	abandon_handler_t m_on_abandon;
 	bool m_abandoned = false;
 };
 
@@ -129,24 +129,24 @@ class session_pool::impl : public std::enable_shared_from_this<session_pool::imp
 	RIWO_DISABLE_COPY_MOVE(impl)
 
 	struct waiter;
-	using waiter_ptr = std::shared_ptr<waiter>;
+	using waiter_ptr_t = std::shared_ptr<waiter>;
 
 	struct slot
 	{
 		std::shared_ptr<client_session> session {};
 		bool busy = false;
 		uint64_t generation = 0;
-		clock_type::time_point idle_since {};
-		std::shared_ptr<timer_type> idle_timer {};
+		clock_t::time_point idle_since {};
+		std::shared_ptr<timer_t> idle_timer {};
 		bool removed = false;
 	};
 
-	using slot_ptr = std::shared_ptr<slot>;
+	using slot_ptr_t = std::shared_ptr<slot>;
 
 	struct waiter
 	{
 		waiter(session_key session_key_value, request_head head_value,
-			body_spec spec_value, open_handler completion) :
+			body_spec spec_value, open_handler_t completion) :
 			key(std::move(session_key_value)), head(std::move(head_value)),
 			spec(std::move(spec_value)), handler(std::move(completion))
 		{
@@ -155,23 +155,23 @@ class session_pool::impl : public std::enable_shared_from_this<session_pool::imp
 		session_key key;
 		request_head head;
 		body_spec spec;
-		open_handler handler;
-		std::shared_ptr<timer_type> timer;
+		open_handler_t handler;
+		std::shared_ptr<timer_t> timer;
 		bool completed = false;
 		bool queued = false;
 	};
 
 	struct bucket
 	{
-		std::vector<slot_ptr> sessions {};
-		std::deque<waiter_ptr> waiters {};
+		std::vector<slot_ptr_t> sessions {};
+		std::deque<waiter_ptr_t> waiters {};
 		size_t connecting = 0;
 		bool pump_scheduled = false;
 	};
 
 public:
-	impl(executor_type executor_value, client_config config_value,
-		connector_ptr connector_value, session_factory_ptr factory_value) :
+	impl(executor_t executor_value, client_config config_value,
+		connector_ptr_t connector_value, session_factory_ptr_t factory_value) :
 		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
 		m_connector(std::move(connector_value)), m_factory(std::move(factory_value))
 	{
@@ -190,7 +190,7 @@ public:
 		try {
 			for(;;)
 			{
-				slot_ptr selected;
+				slot_ptr_t selected;
 				{
 					std::unique_lock lock(m_mutex);
 					if( m_stopped )
@@ -286,7 +286,7 @@ public:
 	}
 
 	void open(const session_key &key, request_head head, body_spec spec,
-		open_handler handler)
+		open_handler_t handler)
 	{
 		try {
 			auto item = std::make_shared<waiter>(key, std::move(head),
@@ -327,7 +327,7 @@ public:
 
 	void cancel() noexcept
 	{
-		std::vector<waiter_ptr> failed;
+		std::vector<waiter_ptr_t> failed;
 		std::vector<std::shared_ptr<client_session>> sessions;
 		{
 			std::lock_guard lock(m_mutex);
@@ -401,13 +401,13 @@ public:
 		return result;
 	}
 
-	executor_type m_executor;
+	executor_t m_executor;
 	client_config m_config;
-	connector_ptr m_connector;
-	session_factory_ptr m_factory;
+	connector_ptr_t m_connector;
+	session_factory_ptr_t m_factory;
 
 private:
-	[[nodiscard]] static bool usable(const slot_ptr &value)
+	[[nodiscard]] static bool usable(const slot_ptr_t &value)
 	{
 		return value and value->session and not value->busy and
 			not value->removed and not value->session->closed() and
@@ -418,10 +418,10 @@ private:
 	[[nodiscard]] static bool has_capacity_locked(const bucket &value)
 	{
 		return std::ranges::any_of(value.sessions,
-			[](const slot_ptr &item) { return usable(item); });
+			[](const slot_ptr_t &item) { return usable(item); });
 	}
 
-	[[nodiscard]] slot_ptr take_slot_locked(bucket &value)
+	[[nodiscard]] slot_ptr_t take_slot_locked(bucket &value)
 	{
 		for( auto &item : value.sessions )
 		{
@@ -484,9 +484,9 @@ private:
 	{
 		for(;;)
 		{
-			waiter_ptr item;
-			waiter_ptr rejected;
-			slot_ptr selected;
+			waiter_ptr_t item;
+			waiter_ptr_t rejected;
+			slot_ptr_t selected;
 			bool connect = false;
 			{
 				std::lock_guard lock(m_mutex);
@@ -604,7 +604,7 @@ private:
 
 	void connect_failed(const session_key &key, error_code error)
 	{
-		waiter_ptr item;
+		waiter_ptr_t item;
 		{
 			std::lock_guard lock(m_mutex);
 			auto iterator = m_buckets.find(key);
@@ -623,7 +623,7 @@ private:
 		schedule_pump(key);
 	}
 
-	void release_slot(const session_key &key, const slot_ptr &value,
+	void release_slot(const session_key &key, const slot_ptr_t &value,
 		bool reusable)
 	{
 		std::shared_ptr<client_session> session;
@@ -634,7 +634,7 @@ private:
 			const bool was_busy = value->busy;
 			ignore_unused(was_busy);
 			if( value->busy ) value->busy = false;
-			value->idle_since = clock_type::now();
+			value->idle_since = clock_t::now();
 			session = value->session;
 			if( not reusable or not session or session->closed() or
 				session->draining() )
@@ -654,25 +654,25 @@ private:
 		schedule_pump(key);
 	}
 
-	void remove_slot(const session_key &key, const slot_ptr &value)
+	void remove_slot(const session_key &key, const slot_ptr_t &value)
 	{
 		{
 			std::lock_guard lock(m_mutex);
 			auto iterator = m_buckets.find(key);
 			if( iterator == m_buckets.end() ) return;
 			auto &values = iterator->second.sessions;
-			std::erase_if(values, [&value](const slot_ptr &item) {
+			std::erase_if(values, [&value](const slot_ptr_t &item) {
 				return item == value;
 			});
 		}
 		schedule_pump(key);
 	}
 
-	void schedule_idle(const waiter_ptr &value)
+	void schedule_idle(const waiter_ptr_t &value)
 	{
 		if( m_config.timeout.pool_wait.count() <= 0 ) return;
 		auto weak = weak_from_this();
-		value->timer = std::make_shared<timer_type>(m_executor);
+		value->timer = std::make_shared<timer_t>(m_executor);
 		value->timer->expires_after(m_config.timeout.pool_wait);
 		value->timer->async_wait(
 		[weak, value](error_code error) {
@@ -681,10 +681,10 @@ private:
 		});
 	}
 
-	void schedule_idle_locked(const session_key &key, const slot_ptr &value)
+	void schedule_idle_locked(const session_key &key, const slot_ptr_t &value)
 	{
 		if( m_config.pool.idle_timeout.count() <= 0 ) return;
-		value->idle_timer = std::make_shared<timer_type>(m_executor);
+		value->idle_timer = std::make_shared<timer_t>(m_executor);
 		value->idle_timer->expires_after(m_config.pool.idle_timeout);
 		auto weak = weak_from_this();
 		auto timer = value->idle_timer;
@@ -695,7 +695,7 @@ private:
 		});
 	}
 
-	void wait_timed_out(const waiter_ptr &value)
+	void wait_timed_out(const waiter_ptr_t &value)
 	{
 		{
 			std::lock_guard lock(m_mutex);
@@ -711,7 +711,7 @@ private:
 		schedule_pump(value->key);
 	}
 
-	void expire_idle(const session_key &key, const slot_ptr &value)
+	void expire_idle(const session_key &key, const slot_ptr_t &value)
 	{
 		std::shared_ptr<client_session> session;
 		{
@@ -725,7 +725,7 @@ private:
 	}
 
 	[[nodiscard]] std::shared_ptr<stream> wrap(const session_key &key,
-		const slot_ptr &value, std::shared_ptr<stream> active)
+		const slot_ptr_t &value, std::shared_ptr<stream> active)
 	{
 		if( not active )
 		{
@@ -741,7 +741,7 @@ private:
 		});
 	}
 
-	void abandon(const session_key &key, const slot_ptr &value,
+	void abandon(const session_key &key, const slot_ptr_t &value,
 		uint64_t generation, bool reusable)
 	{
 		std::shared_ptr<client_session> session;
@@ -755,7 +755,7 @@ private:
 		release_slot(key, value, reusable);
 	}
 
-	void complete(const waiter_ptr &value, error_code error,
+	void complete(const waiter_ptr_t &value, error_code error,
 		std::shared_ptr<stream> active)
 	{
 		if( not value or value->completed ) return;
@@ -771,7 +771,7 @@ private:
 		}
 	}
 
-	static void self_finish_unused(const waiter_ptr &item, error_code error)
+	static void self_finish_unused(const waiter_ptr_t &item, error_code error)
 	{
 		if( item and not item->completed )
 		{
@@ -786,16 +786,23 @@ private:
 	bool m_stopped = false;
 };
 
-session_pool::session_pool(executor_type executor, client_config config,
-	connector_ptr connector, session_factory_ptr factory) :
+session_pool::session_pool(executor_t executor, client_config config,
+	connector_ptr_t connector, session_factory_ptr_t factory) :
 	m_impl(std::make_shared<impl>(std::move(executor), std::move(config),
 		std::move(connector), std::move(factory)))
 {
 }
 
+session_pool::session_pool(client_config config,
+	connector_ptr_t connector, session_factory_ptr_t factory) :
+	session_pool(executor_t(riwo::get_executor()), std::move(config),
+		std::move(connector), std::move(factory))
+{
+}
+
 session_pool::~session_pool() = default;
 
-auto session_pool::get_executor() const noexcept -> executor_type {
+auto session_pool::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
 
@@ -821,13 +828,13 @@ std::shared_ptr<stream> session_pool::open_sync(const origin &target,
 }
 
 void session_pool::open(const session_key &key, request_head head,
-	body_spec spec, open_handler handler)
+	body_spec spec, open_handler_t handler)
 {
 	m_impl->open(key, std::move(head), std::move(spec), std::move(handler));
 }
 
 void session_pool::open(const origin &target, request_head head,
-	body_spec spec, open_handler handler)
+	body_spec spec, open_handler_t handler)
 {
 	auto key = make_session_key(head, m_impl->m_config);
 	if( not target.scheme.empty() ) key.scheme = target.scheme;

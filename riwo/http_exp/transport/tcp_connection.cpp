@@ -14,12 +14,12 @@ namespace
 {
 
 #if defined(_WIN32)
-using socket_timeout_type = DWORD;
+using socket_timeout_t = DWORD;
 #else
-using socket_timeout_type = timeval;
+using socket_timeout_t = timeval;
 #endif
 
-[[nodiscard]] socket_timeout_type socket_timeout(
+[[nodiscard]] socket_timeout_t socket_timeout(
 	const std::chrono::milliseconds &value)
 {
 #if defined(_WIN32)
@@ -36,7 +36,7 @@ void apply_socket_timeout(asio::ip::tcp::socket &socket, int option,
 	std::optional<std::chrono::milliseconds> value) noexcept
 {
 	error_code error;
-	const auto timeout = value ? socket_timeout(*value) : socket_timeout_type{};
+	const auto timeout = value ? socket_timeout(*value) : socket_timeout_t{};
 	(void)::setsockopt(socket.native_handle(), SOL_SOCKET, option,
 		reinterpret_cast<const char*>(&timeout), sizeof(timeout));
 	ignore_unused(error);
@@ -64,10 +64,15 @@ public:
 	}
 
 	asio::ip::tcp::socket m_socket;
-	executor_type m_executor;
+	executor_t m_executor;
 	optional<std::chrono::milliseconds> m_read_timeout;
 	optional<std::chrono::milliseconds> m_write_timeout;
 };
+
+tcp_connection::tcp_connection() :
+	tcp_connection(riwo::get_executor())
+{
+}
 
 tcp_connection::tcp_connection(asio::any_io_executor executor) :
 	m_impl(std::make_unique<impl>(std::move(executor)))
@@ -81,11 +86,11 @@ tcp_connection::tcp_connection(asio::ip::tcp::socket socket) :
 
 tcp_connection::~tcp_connection() = default;
 
-auto tcp_connection::get_executor() const noexcept -> executor_type {
+auto tcp_connection::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
 
-void tcp_connection::read_some(mutable_buffer buffer, io_handler handler)
+void tcp_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 {
 	if( not m_impl->m_read_timeout )
 	{
@@ -126,7 +131,7 @@ void tcp_connection::read_some(mutable_buffer buffer, io_handler handler)
 	});
 }
 
-void tcp_connection::write(const_buffer buffer, io_handler handler)
+void tcp_connection::write(const_buffer buffer, io_handler_t handler)
 {
 	if( not m_impl->m_write_timeout )
 	{
@@ -167,7 +172,7 @@ void tcp_connection::write(const_buffer buffer, io_handler handler)
 	});
 }
 
-void tcp_connection::close(close_handler handler)
+void tcp_connection::close(close_handler_t handler)
 {
 	auto self = shared_from_this();
 	asio::post(m_impl->m_socket.get_executor(),
@@ -194,13 +199,13 @@ void tcp_connection::cancel() noexcept
 	}
 }
 
-void tcp_connection::set_read_timeout(optional<timeout_type> value)
+void tcp_connection::set_read_timeout(optional<timeout_t> value)
 {
 	m_impl->m_read_timeout = value;
 	apply_socket_timeout(m_impl->m_socket, SO_RCVTIMEO, value);
 }
 
-void tcp_connection::set_write_timeout(optional<timeout_type> value)
+void tcp_connection::set_write_timeout(optional<timeout_t> value)
 {
 	m_impl->m_write_timeout = value;
 	apply_socket_timeout(m_impl->m_socket, SO_SNDTIMEO, value);
@@ -302,7 +307,7 @@ void tcp_connection::connect_sync(std::string_view host, uint16_t port,
 }
 
 void tcp_connection::connect_async(std::string_view host, uint16_t port,
-	close_handler handler)
+	close_handler_t handler)
 {
 	struct operation final : std::enable_shared_from_this<operation>
 	{
@@ -310,12 +315,12 @@ void tcp_connection::connect_async(std::string_view host, uint16_t port,
 		asio::ip::tcp::socket *socket;
 		std::string host;
 		uint16_t port;
-		close_handler handler;
+		close_handler_t handler;
 		asio::ip::tcp::resolver resolver;
 
 		operation(std::shared_ptr<tcp_connection> owner_value,
 			std::string host_value,
-			uint16_t port_value, close_handler completion) :
+			uint16_t port_value, close_handler_t completion) :
 			owner(std::move(owner_value)), socket(&owner->socket()),
 			host(std::move(host_value)), port(port_value),
 			handler(std::move(completion)),
@@ -348,14 +353,14 @@ void tcp_connection::connect_async(std::string_view host, uint16_t port,
 }
 
 auto tcp_connection::remote_endpoint(error_code &error) const noexcept
-	-> endpoint_type
+	-> endpoint_t
 {
 	error.clear();
 	return m_impl->m_socket.remote_endpoint(error);
 }
 
 auto tcp_connection::local_endpoint(error_code &error) const noexcept
-	-> endpoint_type
+	-> endpoint_t
 {
 	error.clear();
 	return m_impl->m_socket.local_endpoint(error);

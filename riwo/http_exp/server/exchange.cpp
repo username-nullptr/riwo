@@ -100,7 +100,7 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 }
 
 void server_exchange_state::respond(response_head head, body_spec spec,
-	operation_handler handler)
+	operation_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_response_pending )
@@ -147,7 +147,7 @@ void server_exchange_state::inform(response_head head,
 }
 
 void server_exchange_state::inform(response_head head,
-	operation_handler handler)
+	operation_handler_t handler)
 {
 	if( head.status.code() < 100 or head.status.code() >= 200 or
 		head.status.code() == status::switching_protocols )
@@ -188,7 +188,7 @@ std::shared_ptr<duplex_state> server_exchange_state::accept_duplex(
 }
 
 void server_exchange_state::accept_duplex(response_head head,
-	duplex_handler handler)
+	duplex_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_response_pending or state->m_response_started or

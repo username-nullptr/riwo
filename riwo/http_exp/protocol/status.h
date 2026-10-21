@@ -97,16 +97,19 @@ public:
 
 public:
 	friend bool operator==(status lhs, well_known rhs) noexcept {
-		return lhs.m_code == static_cast<uint16_t>(rhs);
+		return lhs.code() == static_cast<uint16_t>(rhs);
 	}
 	friend bool operator==(well_known lhs, status rhs) noexcept {
-		return static_cast<uint16_t>(lhs) == rhs.m_code;
+		return static_cast<uint16_t>(lhs) == rhs.code();
 	}
-	friend bool operator==(status, status) noexcept = default;
+	friend bool operator==(status lhs, status rhs) noexcept {
+		return lhs.code() == rhs.code();
+	}
 	operator uint16_t() const noexcept;
 
 private:
-	uint16_t m_code;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 } //namespace riwo::http_exp

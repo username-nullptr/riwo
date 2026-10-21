@@ -33,23 +33,27 @@ public:
 		using reference = const field &;
 
 		const_iterator() = default;
+		~const_iterator();
+		const_iterator(const const_iterator &other);
+		const_iterator &operator=(const const_iterator &other);
+		const_iterator(const_iterator &&other) noexcept;
+		const_iterator &operator=(const_iterator &&other) noexcept;
+
 		reference operator*() const noexcept;
 		pointer operator->() const noexcept;
 		const_iterator &operator++() noexcept;
 		const_iterator operator++(int) noexcept;
-		friend bool operator==(const const_iterator &,
-			const const_iterator &) noexcept = default;
+		friend bool operator==(const const_iterator &lhs,
+			const const_iterator &rhs) noexcept;
 
 	private:
 		friend class field_range;
-		using base_iterator = std::vector<field>::const_iterator;
-		const_iterator(base_iterator current, base_iterator end,
+		using base_iterator_t = std::vector<field>::const_iterator;
+		const_iterator(base_iterator_t current, base_iterator_t end,
 			std::string_view name) noexcept;
-		void skip() noexcept;
 
-		base_iterator m_current {};
-		base_iterator m_end {};
-		std::string_view m_name {};
+		class impl;
+		std::unique_ptr<impl> m_impl;
 	};
 
 	[[nodiscard]] const_iterator begin() const noexcept;
@@ -58,15 +62,22 @@ public:
 private:
 	friend class fields;
 	field_range(const std::vector<field> &values, std::string name);
-	const std::vector<field> *m_values;
-	std::string m_name;
+	class impl;
+	std::shared_ptr<impl> m_impl;
 };
 
 class RIWO_HTTP_EXP_API fields
 {
 public:
-	using container_type = std::vector<field>;
-	using const_iterator = container_type::const_iterator;
+	using container_t = std::vector<field>;
+	using const_iterator = container_t::const_iterator;
+
+	fields();
+	~fields();
+	fields(const fields &other);
+	fields &operator=(const fields &other);
+	fields(fields &&other) noexcept;
+	fields &operator=(fields &&other) noexcept;
 
 	void add(std::string name, riwo::value value);
 	void set(std::string name, riwo::value value);
@@ -81,7 +92,8 @@ public:
 	[[nodiscard]] size_t size() const noexcept;
 
 private:
-	container_type m_values;
+	class impl;
+	std::unique_ptr<impl> m_impl;
 };
 
 } //namespace riwo::http_exp

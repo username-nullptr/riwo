@@ -22,28 +22,30 @@ class RIWO_HTTP_EXP_TAPI basic_acceptor_wrap
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
-	using protocol_type = asio::ip::tcp;
-	using acceptor_type = asio::basic_socket_acceptor<protocol_type,executor_type>;
-	using acceptor_t = acceptor_type;
+	using protocol_t = asio::ip::tcp;
+	using acceptor_t = asio::basic_socket_acceptor<protocol_t,executor_t>;
 
 	basic_acceptor_wrap(basic_acceptor_wrap &&) noexcept = default;
 	basic_acceptor_wrap &operator=(basic_acceptor_wrap &&) noexcept = default;
 
+	basic_acceptor_wrap()
+		requires core_concepts::match_sched<io_executor_t,executor_t>;
+
 	// Intentionally implicit: `server(std::move(tcp_acceptor))` remains valid.
-	basic_acceptor_wrap(acceptor_type &&acceptor);
+	basic_acceptor_wrap(acceptor_t &&acceptor);
 
-	[[nodiscard]] executor_type get_executor() noexcept;
+	[[nodiscard]] executor_t get_executor() noexcept;
 
-	[[nodiscard]] const acceptor_type &acceptor() const noexcept;
+	[[nodiscard]] const acceptor_t &acceptor() const noexcept;
 
-	[[nodiscard]] acceptor_type &acceptor() noexcept;
+	[[nodiscard]] acceptor_t &acceptor() noexcept;
 
 private:
 	class impl;
 	std::shared_ptr<impl> m_impl;
 };
 
-using acceptor_wrap = basic_acceptor_wrap<>;
+using acceptor_wrap_t = basic_acceptor_wrap<>;
 
 } //namespace riwo::http_exp
 

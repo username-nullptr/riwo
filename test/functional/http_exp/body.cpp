@@ -38,7 +38,7 @@ public:
 		return {size, offset_ == bytes_.size()};
 	}
 
-	void read_some(riwo::mutable_buffer buffer, read_handler handler) override
+	void read_some(riwo::mutable_buffer buffer, read_handler_t handler) override
 	{
 		if( hold_ )
 		{
@@ -57,7 +57,7 @@ public:
 		return trailers_;
 	}
 
-	void trailers(trailers_handler handler) override {
+	void trailers(trailers_handler_t handler) override {
 		std::move(handler)(riwo::error_code{}, trailers_);
 	}
 
@@ -91,7 +91,7 @@ private:
 	bool hold_ = false;
 	bool cancelled_ = false;
 	riwo::mutable_buffer pending_buffer_;
-	std::optional<read_handler> pending_;
+	std::optional<read_handler_t> pending_;
 };
 
 class fake_writer_adapter final : public http::detail::body_writer_adapter
@@ -111,7 +111,7 @@ public:
 		return buffer.size();
 	}
 
-	void write(riwo::const_buffer buffer, write_handler handler) override
+	void write(riwo::const_buffer buffer, write_handler_t handler) override
 	{
 		if( hold_ )
 		{
@@ -132,7 +132,7 @@ public:
 		finished_ = true;
 	}
 
-	void finish(http::fields trailers, finish_handler handler) override
+	void finish(http::fields trailers, finish_handler_t handler) override
 	{
 		riwo::error_code error;
 		finish_sync(std::move(trailers), error);
@@ -168,7 +168,7 @@ public:
 	bool hold_ = false;
 	bool cancelled_ = false;
 	riwo::const_buffer pending_buffer_;
-	std::optional<write_handler> pending_;
+	std::optional<write_handler_t> pending_;
 };
 
 class fake_stream final : public http::detail::stream
@@ -200,7 +200,7 @@ public:
 		return {http::status::created, {}};
 	}
 
-	void wait_response(response_handler handler) override {
+	void wait_response(response_handler_t handler) override {
 		std::move(handler)(riwo::error_code{},
 			http::response_head{http::status::created, {}});
 	}
@@ -213,7 +213,7 @@ public:
 	}
 
 	void respond(http::response_head head, http::body_spec,
-		operation_handler handler) override
+		operation_handler_t handler) override
 	{
 		response = std::move(head);
 		std::move(handler)(riwo::error_code{});
@@ -226,7 +226,7 @@ public:
 		informationals.push_back(std::move(head));
 	}
 
-	void inform(http::response_head head, operation_handler handler) override
+	void inform(http::response_head head, operation_handler_t handler) override
 	{
 		informationals.push_back(std::move(head));
 		std::move(handler)(riwo::error_code{});
@@ -268,14 +268,14 @@ public:
 	}
 
 	void open(http::request_head head, http::body_spec spec,
-		open_handler handler) override
+		open_handler_t handler) override
 	{
 		riwo::error_code error;
 		auto result = open_sync(std::move(head), std::move(spec), error);
 		std::move(handler)(error, std::move(result));
 	}
 
-	void graceful_shutdown(shutdown_handler handler) override {
+	void graceful_shutdown(shutdown_handler_t handler) override {
 		std::move(handler)(riwo::error_code{});
 	}
 
@@ -338,7 +338,7 @@ void built_in_sources()
 void reader_state_machine()
 {
 	riwo::io_context_t context;
-	http::body_reader unbound(context);
+	http::body_reader_t unbound(context);
 	std::array<char,8> data{};
 	riwo::error_code error;
 	RIWO_TEST_CHECK_EQ(
@@ -350,7 +350,7 @@ void reader_state_machine()
 	trailers.add("Digest", "sha-256=value");
 	auto adapter = std::make_shared<fake_reader_adapter>("payload", trailers);
 	auto state = http::detail::make_body_reader_state(adapter, true);
-	http::body_reader reader(context, state);
+	http::body_reader_t reader(context, state);
 	RIWO_TEST_CHECK(!reader.is_finished());
 	(void)reader.trailers(error);
 	RIWO_TEST_CHECK_EQ(error,
@@ -376,7 +376,7 @@ void reader_state_machine()
 		"sha-256=value");
 
 	auto discard_adapter = std::make_shared<fake_reader_adapter>("discarded");
-	http::body_reader discard_reader(context,
+	http::body_reader_t discard_reader(context,
 		http::detail::make_body_reader_state(discard_adapter, true));
 	RIWO_TEST_CHECK(!discard_reader.is_finished());
 	discard_reader.discard(error);
@@ -388,7 +388,7 @@ void reader_state_machine()
 	RIWO_TEST_CHECK(read.eof);
 
 	auto empty_adapter = std::make_shared<fake_reader_adapter>();
-	http::body_reader empty_reader(context,
+	http::body_reader_t empty_reader(context,
 		http::detail::make_body_reader_state(empty_adapter, true));
 	read = empty_reader.read_some(riwo::buffer(data), error);
 	RIWO_TEST_CHECK(!error);
@@ -402,7 +402,7 @@ void reader_state_machine()
 	bool first = false;
 	bool second = false;
 	overlap->read_some(riwo::buffer(data),
-		http::detail::body_reader_state::read_handler(
+		http::detail::body_reader_state::read_handler_t(
 		[&](riwo::error_code value, http::body_read_result result) {
 			RIWO_TEST_CHECK(!value);
 			RIWO_TEST_CHECK_EQ(result.bytes, 2U);
@@ -410,7 +410,7 @@ void reader_state_machine()
 			first = true;
 		}));
 	overlap->read_some(riwo::buffer(data),
-		http::detail::body_reader_state::read_handler(
+		http::detail::body_reader_state::read_handler_t(
 		[&](riwo::error_code value, http::body_read_result) {
 			RIWO_TEST_CHECK_EQ(value,
 				http::make_error_code(http::errc::operation_in_progress));
@@ -429,7 +429,7 @@ void writer_state_machine()
 	auto short_adapter = std::make_shared<fake_writer_adapter>();
 	auto short_state = http::detail::make_body_writer_state(short_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer short_writer(context, short_state);
+	http::body_writer_t short_writer(context, short_state);
 	RIWO_TEST_CHECK_EQ(short_writer.write(
 		riwo::buffer(std::string_view("ab")), error), 2U);
 	RIWO_TEST_CHECK(!error);
@@ -444,7 +444,7 @@ void writer_state_machine()
 	auto excess_adapter = std::make_shared<fake_writer_adapter>();
 	auto excess_state = http::detail::make_body_writer_state(excess_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer excess(context, excess_state);
+	http::body_writer_t excess(context, excess_state);
 	RIWO_TEST_CHECK_EQ(excess.write(
 		riwo::buffer(std::string_view("abcd")), error), 3U);
 	RIWO_TEST_CHECK_EQ(error,
@@ -454,7 +454,7 @@ void writer_state_machine()
 	auto trailer_adapter = std::make_shared<fake_writer_adapter>();
 	auto trailer_state = http::detail::make_body_writer_state(trailer_adapter,
 		http::body_spec::streaming({{"Digest"}}), true);
-	http::body_writer trailer_writer(context, trailer_state);
+	http::body_writer_t trailer_writer(context, trailer_state);
 	RIWO_TEST_CHECK_EQ(trailer_writer.write(
 		riwo::buffer(std::string_view("x")), error), 1U);
 	http::fields values;
@@ -467,7 +467,7 @@ void writer_state_machine()
 	borrowed_adapter->hold();
 	auto borrowed_state = http::detail::make_body_writer_state(borrowed_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer borrowed_writer(context, borrowed_state);
+	http::body_writer_t borrowed_writer(context, borrowed_state);
 	std::string borrowed_body = "abc";
 	bool borrowed_done = false;
 	borrowed_writer.write(riwo::buffer(borrowed_body),
@@ -487,7 +487,7 @@ void writer_state_machine()
 	detached_adapter->hold();
 	auto detached_state = http::detail::make_body_writer_state(detached_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer detached_writer(context, detached_state);
+	http::body_writer_t detached_writer(context, detached_state);
 	std::string detached_body = "abc";
 	detached_writer.write(riwo::buffer(detached_body), riwo::detached);
 	detached_body = "xyz";
@@ -503,14 +503,14 @@ void writer_state_machine()
 	bool first = false;
 	bool second = false;
 	overlap->write(riwo::buffer(std::string_view("x")),
-		http::detail::body_writer_state::write_handler(
+		http::detail::body_writer_state::write_handler_t(
 		[&](riwo::error_code value, size_t count) {
 			RIWO_TEST_CHECK(!value);
 			RIWO_TEST_CHECK_EQ(count, 1U);
 			first = true;
 		}));
 	overlap->write(riwo::buffer(std::string_view("y")),
-		http::detail::body_writer_state::write_handler(
+		http::detail::body_writer_state::write_handler_t(
 		[&](riwo::error_code value, size_t) {
 			RIWO_TEST_CHECK_EQ(value,
 				http::make_error_code(http::errc::operation_in_progress));

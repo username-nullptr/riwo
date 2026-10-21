@@ -26,7 +26,7 @@ namespace http = riwo::http_exp;
 	);
 }
 
-[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader &reader)
+[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader_t &reader)
 {
 	std::string result;
 	std::array<char,4096> buffer {};
@@ -53,11 +53,11 @@ int main(int argc, const char *argv[])
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config config;
 	config.protocols.requirement = requirement;
-	http::server service(std::move(acceptor), config);
+	http::server_t service(std::move(acceptor), config);
 	service
 		.bind({riwo::ip_type::v4, port})
 		.on_request<http::method::get>("/health",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
 			head.headers.add("Content-Type", "text/plain; charset=utf-8");
@@ -65,7 +65,7 @@ int main(int argc, const char *argv[])
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::post>("/echo",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			auto body = co_await read_body(exchange.request_body());
 			http::response_head head {http::status::created, {}};
@@ -74,7 +74,7 @@ int main(int argc, const char *argv[])
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/stream",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
 			head.headers.add("Content-Type", "text/plain; charset=utf-8");
@@ -92,7 +92,7 @@ int main(int argc, const char *argv[])
 				std::move(trailers), riwo::use_awaitable);
 		})
 		.on_default(
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::not_found, {}},
 				"not found\n", riwo::use_awaitable);

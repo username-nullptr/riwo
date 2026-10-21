@@ -10,7 +10,7 @@ namespace
 
 namespace http = riwo::http_exp;
 
-[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader &reader)
+[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader_t &reader)
 {
 	std::string result;
 	std::array<char,1024> buffer {};
@@ -28,11 +28,11 @@ void h1_client_server_round_trip()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor));
+	http::server_t service(std::move(acceptor));
 	service
 		.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/get",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			const std::string body = "hello-http-exp";
 			http::response_head head;
@@ -40,14 +40,14 @@ void h1_client_server_round_trip()
 			co_await exchange.respond(std::move(head), body, riwo::use_awaitable);
 		})
 		.on_request<http::method::post>("/echo",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			auto body = co_await read_body(exchange.request_body());
 			co_await exchange.respond({http::status::created, {}}, body,
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::post>("/cancel",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			try {
 				(void)co_await read_body(exchange.request_body());
@@ -56,7 +56,7 @@ void h1_client_server_round_trip()
 			}
 		})
 		.on_request<http::method::get>("/chunks",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::ok, {}},
 				http::body_spec::streaming({{"Digest"}}), riwo::use_awaitable);
@@ -72,7 +72,7 @@ void h1_client_server_round_trip()
 				std::move(trailers), riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/reset-content",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			auto [rejected] = co_await exchange.respond(
 				{http::status::reset_content, {}}, std::string_view("forbidden"),
@@ -87,7 +87,7 @@ void h1_client_server_round_trip()
 	const auto base = std::format("http://127.0.0.1:{}", port);
 	http::client_config client_config;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(1);
-	http::client client(context, client_config);
+	http::client_t client(context, client_config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		auto fetched = co_await client.fetch(
@@ -173,10 +173,10 @@ void h1_0_and_cancel()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server service(std::move(acceptor));
+	http::server_t service(std::move(acceptor));
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/version",
-		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
 		{
 			RIWO_TEST_CHECK_EQ(exchange.selected_protocol(), http::protocol::v1_0);
 			co_await exchange.respond({http::status::ok, {}},
@@ -187,7 +187,7 @@ void h1_0_and_cancel()
 	http::client_config config;
 	config.protocols.preference = {http::protocol::v1_0};
 	config.pool.idle_timeout = std::chrono::milliseconds(1);
-	http::client client(context, config);
+	http::client_t client(context, config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		auto result = co_await client.fetch(http::request(http::method::get,

@@ -44,7 +44,7 @@ public:
 		return m_next->get_executor();
 	}
 
-	void read_some(mutable_buffer buffer, io_handler handler) override
+	void read_some(mutable_buffer buffer, io_handler_t handler) override
 	{
 		if( m_offset == m_prefix.size() )
 			return m_next->read_some(buffer, std::move(handler));
@@ -63,31 +63,31 @@ public:
 		return m_next->read_some_sync(buffer, error);
 	}
 
-	void write(const_buffer buffer, io_handler handler) override {
+	void write(const_buffer buffer, io_handler_t handler) override {
 		m_next->write(buffer, std::move(handler));
 	}
 	[[nodiscard]] size_t write_sync(const_buffer buffer,
 		error_code &error) noexcept override {
 		return m_next->write_sync(buffer, error);
 	}
-	void close(close_handler handler) override {
+	void close(close_handler_t handler) override {
 		m_next->close(std::move(handler));
 	}
 	void cancel() noexcept override { m_next->cancel(); }
-	void set_read_timeout(optional<timeout_type> value) override {
+	void set_read_timeout(optional<timeout_t> value) override {
 		m_next->set_read_timeout(value);
 	}
-	void set_write_timeout(optional<timeout_type> value) override {
+	void set_write_timeout(optional<timeout_t> value) override {
 		m_next->set_write_timeout(value);
 	}
 	[[nodiscard]] bool is_open() const noexcept override {
 		return m_next->is_open();
 	}
-	[[nodiscard]] endpoint_type remote_endpoint(
+	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override {
 		return m_next->remote_endpoint(error);
 	}
-	[[nodiscard]] endpoint_type local_endpoint(
+	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override {
 		return m_next->local_endpoint(error);
 	}
@@ -113,7 +113,7 @@ class pending_server_connection final : public server_connection,
 public:
 	pending_server_connection(
 		std::shared_ptr<::riwo::http_exp::connection> transport,
-		server_config config, server_accept_handler handler) :
+		server_config config, server_accept_handler_t handler) :
 		m_transport(std::move(transport)), m_config(std::move(config)),
 		m_handler(std::move(handler))
 	{
@@ -182,9 +182,9 @@ private:
 
 	std::shared_ptr<::riwo::http_exp::connection> m_transport;
 	server_config m_config;
-	server_accept_handler m_handler;
+	server_accept_handler_t m_handler;
 	http2_preface_detector m_detector;
-	server_connection_ptr m_selected;
+	server_connection_ptr_t m_selected;
 };
 
 } //namespace
@@ -246,8 +246,8 @@ error_code validate_server_config(const server_config &config) noexcept
 	return {};
 }
 
-server_connection_ptr accept_server(asio::ip::tcp::socket socket,
-	server_config config, server_accept_handler handler)
+server_connection_ptr_t accept_server(asio::ip::tcp::socket socket,
+	server_config config, server_accept_handler_t handler)
 {
 	error_code option_error;
 	(void)socket.set_option(asio::ip::tcp::no_delay(true), option_error);
@@ -258,10 +258,10 @@ server_connection_ptr accept_server(asio::ip::tcp::socket socket,
 	return value;
 }
 
-server_connection_ptr accept_server(
+server_connection_ptr_t accept_server(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
 	protocol selected_protocol, server_config config,
-	server_accept_handler handler)
+	server_accept_handler_t handler)
 {
 	if( not transport )
 	{
