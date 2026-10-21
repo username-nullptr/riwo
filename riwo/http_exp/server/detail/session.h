@@ -48,6 +48,11 @@ using server_connection_ptr = std::shared_ptr<server_connection>;
 	asio::ip::tcp::socket socket, server_config config,
 	server_accept_handler handler);
 
+[[nodiscard]] RIWO_HTTP_EXP_API server_connection_ptr accept_server(
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	protocol selected_protocol, server_config config,
+	server_accept_handler handler);
+
 [[nodiscard]] RIWO_HTTP_EXP_API error_code validate_server_config(
 	const server_config &config) noexcept;
 

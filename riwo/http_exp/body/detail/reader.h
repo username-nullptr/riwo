@@ -130,7 +130,7 @@ auto basic_body_reader<Exec>::read_some(mutable_buffer buffer, Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto result = m_impl->state->read_some(buffer, error);
+		auto result = m_impl->m_state->read_some(buffer, error);
 		return expected_value_or_throw(error ?
 			sys_expected<body_read_result>(sys_unexpected(error)) :
 			sys_expected<body_read_result>(result));
@@ -157,7 +157,7 @@ auto basic_body_reader<Exec>::discard(Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		m_impl->state->discard(error);
+		m_impl->m_state->discard(error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
@@ -190,8 +190,8 @@ auto basic_body_reader<Exec>::trailers(Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->state;
-		return initiate_io<fields>(m_impl->executor,
+		auto state = m_impl->m_state;
+		return initiate_io<fields>(m_impl->m_executor,
 		[state = std::move(state)](auto handler) mutable {
 			state->trailers(typename detail::body_reader_state::trailers_handler(
 				std::move(handler)));
@@ -201,7 +201,7 @@ auto basic_body_reader<Exec>::trailers(Token &&token)
 
 template <core_concepts::exec Exec>
 void basic_body_reader<Exec>::cancel() noexcept {
-	m_impl->state->cancel();
+	m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>

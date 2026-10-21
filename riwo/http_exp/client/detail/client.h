@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_CLIENT_DETAIL_CLIENT_H
 
 #include <riwo/http_exp/body/detail/unsupported.h>
+#include <riwo/http_exp/transport/detail/connector_adapter.h>
 
 namespace riwo::http_exp::detail
 {
@@ -33,7 +34,8 @@ public:
 		error_code,send_result)>;
 
 	client_state(asio::any_io_executor executor, client_config config,
-		std::shared_ptr<client_session> session = {});
+		std::shared_ptr<client_session> session = {},
+		std::shared_ptr<connector> connector = {});
 	~client_state();
 	[[nodiscard]] std::shared_ptr<stream> open(request request_value,
 		body_spec spec, error_code &error) noexcept;
@@ -41,6 +43,9 @@ public:
 	[[nodiscard]] send_result send(request request_value,
 		error_code &error) noexcept;
 	void send(request request_value, send_handler handler);
+	[[nodiscard]] std::shared_ptr<cookie_jar> cookie_store() const noexcept;
+	void capture_cookies(const riwo::url &origin,
+		const response_head &response) noexcept;
 
 private:
 	class impl;
@@ -50,7 +55,8 @@ private:
 [[nodiscard]] RIWO_HTTP_EXP_API
 std::shared_ptr<client_state> make_client_state(
 	asio::any_io_executor executor, client_config config,
-	std::shared_ptr<client_session> session = {});
+	std::shared_ptr<client_session> session = {},
+	std::shared_ptr<connector> connector = {});
 
 } //namespace riwo::http_exp::detail
 
@@ -62,11 +68,16 @@ class basic_client<Exec>::impl
 {
 public:
 	impl(executor_type executor_value, config_type config_value,
-		std::shared_ptr<detail::client_session> session) :
-		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
-		m_state(detail::make_client_state(asio::any_io_executor(m_executor), m_config,
-			std::move(session)))
+		std::shared_ptr<detail::client_session> session,
+		detail::connector_ptr connector = {}) :
+		m_executor(std::move(executor_value)), m_config(std::move(config_value))
 	{
+		if( m_config.cookies.enabled and not m_config.cookies.jar )
+			m_config.cookies.jar = std::make_shared<cookie_jar>();
+		else if( not m_config.cookies.enabled )
+			m_config.cookies.jar.reset();
+		m_state = detail::make_client_state(asio::any_io_executor(m_executor),
+			m_config, std::move(session), std::move(connector));
 	}
 
 	executor_type m_executor;
@@ -80,7 +91,8 @@ basic_client<Exec>::basic_client(Exec0 &&executor, config_type config)
 	requires (
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_type>) :
-	basic_client(std::forward<Exec0>(executor), {}, std::move(config))
+	basic_client(std::forward<Exec0>(executor),
+		std::shared_ptr<detail::client_session>{}, std::move(config))
 {
 }
 
@@ -98,13 +110,38 @@ basic_client<Exec>::basic_client(Exec0 &&executor,
 }
 
 template <core_concepts::exec Exec>
+template <typename Exec0>
+basic_client<Exec>::basic_client(Exec0 &&executor,
+	std::shared_ptr<basic_transport_connector<executor_type>> connector,
+	config_type config)
+	requires (
+		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
+		core_concepts::match_sched<Exec0,executor_type>)
+{
+	if( not connector ) throw std::invalid_argument(
+		"riwo::http_exp::basic_client: connector is null");
+	auto selected_executor = get_executor_helper(
+		std::forward<Exec0>(executor));
+	auto adapter = detail::make_connector_adapter(
+		asio::any_io_executor(selected_executor), std::move(connector));
+	m_impl = std::make_shared<impl>(std::move(selected_executor),
+		std::move(config), std::shared_ptr<detail::client_session>{},
+		std::move(adapter));
+}
+
+template <core_concepts::exec Exec>
 auto basic_client<Exec>::get_executor() const noexcept -> executor_type {
 	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::config() const noexcept -> const config_type& {
-	return m_impl->config;
+	return m_impl->m_config;
+}
+
+template <core_concepts::exec Exec>
+std::shared_ptr<cookie_jar> basic_client<Exec>::cookie_store() const noexcept {
+	return m_impl->m_state->cookie_store();
 }
 
 template <core_concepts::exec Exec>
@@ -244,38 +281,45 @@ auto basic_client<Exec>::open(request request_value, body_spec spec,
 	requires core_concepts::dis_detached_tf_opt_token<
 		Token,error_code,exchange_type>
 {
+	auto origin = request_value.url();
+	auto cookies = m_impl->m_state->cookie_store();
 	if constexpr( is_error_code_token_v<Token> )
 	{
 		auto stream = m_impl->m_state->open(
 			std::move(request_value), std::move(spec), token);
-		return exchange_type(m_impl->m_executor, std::move(stream));
+		return exchange_type(m_impl->m_executor, std::move(stream),
+			std::move(cookies), std::move(origin));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto stream = m_impl->state->open(
+		auto stream = m_impl->m_state->open(
 			std::move(request_value), std::move(spec), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<exchange_type>(
 				sys_unexpected(error)));
-		return exchange_type(m_impl->executor, std::move(stream));
+		return exchange_type(m_impl->m_executor, std::move(stream),
+			std::move(cookies), std::move(origin));
 	}
 	else
 	{
 		auto state = m_impl->m_state;
 		auto executor = m_impl->m_executor;
 		return initiate_io<exchange_type>(m_impl->m_executor,
-		[state = std::move(state), executor,
+		[state = std::move(state), executor, cookies = std::move(cookies),
+		 origin = std::move(origin),
 		 request_value = std::move(request_value), spec = std::move(spec)]
 		(auto handler) mutable
 		{
 			state->open(std::move(request_value), std::move(spec),
-			[handler = std::move(handler), executor]
+			[handler = std::move(handler), executor,
+			 cookies = std::move(cookies), origin = std::move(origin)]
 			(error_code error, std::shared_ptr<detail::stream> stream) mutable
 			{
 				try {
 					std::move(handler)(error,
-						exchange_type(executor, std::move(stream)));
+						exchange_type(executor, std::move(stream),
+							std::move(cookies), std::move(origin)));
 				}
 				catch(...) {
 					std::move(handler)(exception_error(

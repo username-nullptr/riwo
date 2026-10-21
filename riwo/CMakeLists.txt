@@ -47,13 +47,14 @@ if (RIWO_BUILD_HTTP_EXP)
 	riwo_install_module_headers(http_exp
 		PATTERN "v2.md" EXCLUDE
 		REGEX "/protocol/detail/" EXCLUDE
-		REGEX "/transport/connection[.]h$" EXCLUDE
+		REGEX "/protocol/v1/detail/" EXCLUDE
+		REGEX "/protocol/v2/detail/" EXCLUDE
 		REGEX "/transport/tcp_connection[.]h$" EXCLUDE
 		REGEX "/transport/tls_connection[.]h$" EXCLUDE
 		REGEX "/transport/preface[.]h$" EXCLUDE
 	)
 	# basic_duplex_channel is a public class template whose definitions live in
-	# this focused detail header; keep the rest of protocol/detail private.
+	# this focused detail header; keep all protocol detail trees private.
 	install(FILES http_exp/protocol/detail/duplex_channel.h
 		DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp/protocol/detail
 	)

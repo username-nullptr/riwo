@@ -1,0 +1,318 @@
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-License-Identifier: MIT
+
+#include "test.h"
+#include <riwo/http_exp.h>
+#include <deque>
+
+namespace
+{
+
+namespace http = riwo::http_exp;
+using executor_type = riwo::io_context_t::executor_type;
+
+struct memory_state
+{
+	std::string input;
+	std::string output;
+	size_t offset = 0;
+	bool open = true;
+	bool deferred = false;
+	riwo::error_code read_error {};
+	riwo::error_code write_error {};
+};
+
+struct memory_stream
+{
+	using executor_type = riwo::io_context_t::executor_type;
+	executor_type executor;
+	std::shared_ptr<memory_state> state;
+
+	[[nodiscard]] executor_type get_executor() const noexcept { return executor; }
+	void read_some(riwo::mutable_buffer buffer,
+		asio::any_completion_handler<void(riwo::error_code,size_t)> handler)
+	{
+		auto operation = [state = state, buffer,
+			handler = std::move(handler)]() mutable
+		{
+			if( state->read_error )
+			{
+				auto error = state->read_error;
+				state->read_error.clear();
+				return std::move(handler)(error, 0);
+			}
+			if( state->offset == state->input.size() )
+				return std::move(handler)(
+					asio::error::make_error_code(asio::error::eof), 0);
+			const auto count = std::min(buffer.size(),
+				state->input.size() - state->offset);
+			std::memcpy(buffer.data(), state->input.data() + state->offset, count);
+			state->offset += count;
+			std::move(handler)(riwo::error_code{}, count);
+		};
+		if( state->deferred ) asio::post(executor, std::move(operation));
+		else operation();
+	}
+	void write(riwo::const_buffer buffer,
+		asio::any_completion_handler<void(riwo::error_code,size_t)> handler)
+	{
+		auto operation = [state = state, buffer,
+			handler = std::move(handler)]() mutable
+		{
+			if( state->write_error )
+			{
+				auto error = state->write_error;
+				state->write_error.clear();
+				return std::move(handler)(error, 0);
+			}
+			state->output.append(static_cast<const char *>(buffer.data()),
+				buffer.size());
+			std::move(handler)(riwo::error_code{}, buffer.size());
+		};
+		if( state->deferred ) asio::post(executor, std::move(operation));
+		else operation();
+	}
+	void close(asio::any_completion_handler<void(riwo::error_code)> handler)
+	{
+		auto operation = [state = state,
+			handler = std::move(handler)]() mutable {
+			state->open = false;
+			std::move(handler)(riwo::error_code{});
+		};
+		if( state->deferred ) asio::post(executor, std::move(operation));
+		else operation();
+	}
+	void cancel() noexcept { state->open = false; }
+	[[nodiscard]] bool is_open() const noexcept { return state->open; }
+	[[nodiscard]] http::transport_metadata metadata() const {
+		return {.remote_endpoint = "127.0.0.1:8080"};
+	}
+};
+
+static_assert(http::byte_stream_model<memory_stream>);
+static_assert(!std::copy_constructible<http::basic_byte_stream<executor_type>>);
+static_assert(std::move_constructible<http::basic_byte_stream<executor_type>>);
+
+class fake_connector final : public http::basic_transport_connector<executor_type>
+{
+public:
+	fake_connector(executor_type executor, std::shared_ptr<memory_state> state) :
+		executor_(executor), state_(std::move(state)) {}
+	[[nodiscard]] executor_type get_executor() const noexcept override {
+		return executor_;
+	}
+	[[nodiscard]] riwo::sys_expected<result_type> connect_sync(
+		const http::connect_request &) noexcept override
+	{
+		return result_type {
+			http::make_byte_stream(memory_stream{executor_, state_}),
+			http::protocol::v1_1, {}, {}
+		};
+	}
+	void connect(http::connect_request request, connect_handler handler) override
+	{
+		(void)request;
+		asio::post(executor_, [executor = executor_, state = state_,
+			handler = std::move(handler)]() mutable {
+			std::move(handler)(riwo::error_code{}, result_type {
+				http::make_byte_stream(memory_stream{executor, std::move(state)}),
+				http::protocol::v1_1, {}, {}
+			});
+		});
+	}
+	void cancel() noexcept override {}
+
+private:
+	executor_type executor_;
+	std::shared_ptr<memory_state> state_;
+};
+
+class fake_listener final : public http::basic_transport_listener<executor_type>
+{
+public:
+	explicit fake_listener(executor_type executor,
+		std::shared_ptr<memory_state> state = {},
+		std::vector<std::byte> initial_input = {}) :
+		executor_(executor), state_(std::move(state)),
+		initial_input_(std::move(initial_input)) {}
+	[[nodiscard]] executor_type get_executor() const noexcept override {
+		return executor_;
+	}
+	void accept(accept_handler handler) override
+	{
+		if( not state_ or delivered_ )
+		{
+			pending_.emplace(std::move(handler));
+			return;
+		}
+		delivered_ = true;
+		asio::post(executor_, [executor = executor_, state = state_,
+			initial = std::move(initial_input_), handler = std::move(handler)]() mutable {
+			std::move(handler)(riwo::error_code{}, result_type {
+				http::make_byte_stream(memory_stream{executor, std::move(state)}),
+				http::protocol::v1_1, {}, std::move(initial)
+			});
+		});
+	}
+	void cancel() noexcept override { pending_.reset(); }
+
+private:
+	executor_type executor_;
+	std::shared_ptr<memory_state> state_;
+	std::vector<std::byte> initial_input_;
+	bool delivered_ = false;
+	std::optional<accept_handler> pending_;
+};
+
+[[nodiscard]] std::vector<std::byte> bytes(std::string_view value)
+{
+	std::vector<std::byte> result(value.size());
+	std::memcpy(result.data(), value.data(), value.size());
+	return result;
+}
+
+static_assert(std::constructible_from<http::basic_client<executor_type>,
+	executor_type,std::shared_ptr<http::basic_transport_connector<executor_type>>>);
+static_assert(std::constructible_from<http::basic_server<executor_type>,
+	std::shared_ptr<http::basic_transport_listener<executor_type>>>);
+
+void byte_stream_erasure()
+{
+	riwo::io_context_t context;
+	auto state = std::make_shared<memory_state>();
+	state->input = "input";
+	auto stream = http::make_byte_stream(memory_stream{
+		context.get_executor(), state});
+	RIWO_TEST_CHECK(stream.is_open());
+	RIWO_TEST_CHECK(!stream.capabilities().synchronous);
+	std::array<char,8> input {};
+	size_t read = 0;
+	stream.read_some(riwo::buffer(input),
+	[&](riwo::error_code error, size_t size) {
+		RIWO_TEST_CHECK(!error);
+		read = size;
+	});
+	RIWO_TEST_CHECK_EQ(read, 5U);
+	RIWO_TEST_CHECK_EQ(std::string_view(input.data(), read), "input");
+	size_t written = 0;
+	stream.write(riwo::buffer(std::string_view("output")),
+	[&](riwo::error_code error, size_t size) {
+		RIWO_TEST_CHECK(!error);
+		written = size;
+	});
+	RIWO_TEST_CHECK_EQ(written, 6U);
+	RIWO_TEST_CHECK_EQ(state->output, "output");
+	riwo::error_code error;
+	RIWO_TEST_CHECK_EQ(stream.read_some_sync(riwo::buffer(input), error), 0U);
+	RIWO_TEST_CHECK_EQ(error,
+		http::make_error_code(http::errc::operation_not_supported));
+}
+
+void injected_connector_and_listener_compile()
+{
+	riwo::io_context_t context;
+	auto state = std::make_shared<memory_state>();
+	auto connector = std::make_shared<fake_connector>(context.get_executor(), state);
+	http::basic_client<executor_type> client(context.get_executor(), connector);
+	RIWO_TEST_CHECK(client.get_executor() == context.get_executor());
+	auto listener = std::make_shared<fake_listener>(context.get_executor());
+	http::basic_server<executor_type> server(listener);
+	riwo::error_code error;
+	server.start(error);
+	RIWO_TEST_CHECK(!error);
+	server.stop();
+}
+
+void byte_stream_failure_injection()
+{
+	riwo::io_context_t context;
+	auto state = std::make_shared<memory_state>();
+	state->read_error = asio::error::make_error_code(
+		asio::error::connection_reset);
+	state->write_error = asio::error::make_error_code(asio::error::broken_pipe);
+	auto stream = http::make_byte_stream(memory_stream{
+		context.get_executor(), state});
+	std::array<char,4> buffer {};
+	bool read_completed = false;
+	stream.read_some(riwo::buffer(buffer),
+	[&](riwo::error_code error, size_t size) {
+		RIWO_TEST_CHECK_EQ(error, asio::error::make_error_code(
+			asio::error::connection_reset));
+		RIWO_TEST_CHECK_EQ(size, 0U);
+		read_completed = true;
+	});
+	bool write_completed = false;
+	stream.write(riwo::buffer(std::string_view("data")),
+	[&](riwo::error_code error, size_t size) {
+		RIWO_TEST_CHECK_EQ(error, asio::error::make_error_code(
+			asio::error::broken_pipe));
+		RIWO_TEST_CHECK_EQ(size, 0U);
+		write_completed = true;
+	});
+	RIWO_TEST_CHECK(read_completed);
+	RIWO_TEST_CHECK(write_completed);
+	stream.cancel();
+	RIWO_TEST_CHECK(!stream.is_open());
+}
+
+void injected_connector_drives_client()
+{
+	riwo::io_context_t context;
+	auto state = std::make_shared<memory_state>();
+	state->deferred = true;
+	state->input = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+	auto connector = std::make_shared<fake_connector>(context.get_executor(), state);
+	http::basic_client<executor_type> client(context.get_executor(), connector);
+	bool completed = false;
+	client.fetch(http::request(http::method::get, "http://example.test/custom"),
+	[&](riwo::error_code error, http::basic_reply<executor_type> reply) mutable {
+		RIWO_TEST_CHECK(!error);
+		const auto body = reply.buffered_body();
+		RIWO_TEST_CHECK_EQ(std::string_view(
+			reinterpret_cast<const char *>(body.data()), body.size()), "ok");
+		completed = true;
+		context.stop();
+	});
+	context.run();
+	RIWO_TEST_CHECK(completed);
+	RIWO_TEST_CHECK(state->output.starts_with("GET /custom HTTP/1.1\r\n"));
+}
+
+void injected_listener_replays_initial_input()
+{
+	riwo::io_context_t context;
+	auto state = std::make_shared<memory_state>();
+	state->deferred = true;
+	auto listener = std::make_shared<fake_listener>(context.get_executor(), state,
+		bytes("GET /custom HTTP/1.1\r\nHost: example.test\r\n\r\n"));
+	http::basic_server<executor_type> server(listener);
+	server.on_request<http::method::get>("/custom",
+	[&context](http::basic_server_exchange<executor_type> &exchange)
+		-> riwo::awaitable<void>
+	{
+		co_await exchange.respond({http::status::ok, {}},
+			std::string_view("accepted"), riwo::use_awaitable);
+		context.stop();
+	});
+	riwo::error_code error;
+	server.start(error);
+	RIWO_TEST_CHECK(!error);
+	context.run();
+	server.stop();
+	RIWO_TEST_CHECK(state->output.starts_with("HTTP/1.1 200 OK\r\n"));
+	RIWO_TEST_CHECK(state->output.ends_with("accepted"));
+}
+
+} //namespace
+
+int main(int argc, const char *const argv[])
+{
+	return riwo::test::run(argc, argv, {
+		{"byte stream type erasure", byte_stream_erasure},
+		{"byte stream failure injection", byte_stream_failure_injection},
+		{"connector and listener injection", injected_connector_and_listener_compile},
+		{"custom connector drives client", injected_connector_drives_client},
+		{"custom listener replays initial input",
+			injected_listener_replays_initial_input}
+	});
+}

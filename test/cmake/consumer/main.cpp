@@ -16,6 +16,8 @@
 #endif
 #if RIWO_CONSUME_HTTP_EXP
 # include <riwo/http_exp.h>
+# include <riwo/http_exp/protocol/v1/engine.h>
+# include <riwo/http_exp/transport/byte_stream.h>
 #endif
 #if RIWO_CONSUME_WEBSOCKET
 # include <riwo/websocket.h>
@@ -57,6 +59,25 @@ int main()
 	riwo::http_exp::method request_method(riwo::http_exp::method::get);
 	if(request_method.text() != "GET" or !request_method.is_safe())
 		return 4;
+	riwo::http_exp::request_head head;
+	head.method = request_method;
+	head.scheme = "http";
+	head.authority = "example.test";
+	head.target = "/";
+	auto encoded = riwo::http_exp::v1::serialize_request_head(head,
+		riwo::http_exp::body_spec::empty(),
+		riwo::http_exp::protocol::v1_1);
+	if(!encoded or encoded->wire.empty())
+		return 6;
+	riwo::http_exp::v1::connection_engine engine({
+		.role = riwo::http_exp::protocol_role::client,
+		.version = riwo::http_exp::protocol::v1_1
+	});
+	if(!engine.submit(riwo::http_exp::open_request_action{
+		.stream = 1, .head = std::move(head),
+		.body = riwo::http_exp::body_spec::empty()
+	}))
+		return 7;
 #endif
 
 #if RIWO_CONSUME_WEBSOCKET_EXP

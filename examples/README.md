@@ -114,6 +114,7 @@ changing their request, response, body, or routing code.
 | --- | --- | --- |
 | [`server`](http_exp/server.cpp) | Protocol-neutral routes, echo, streaming response, trailers | `[port] [auto\|http1\|http2]`; 8084, auto |
 | [`client`](http_exp/client.cpp) | Buffered GET/POST, streamed body/trailers, selected protocol | `[base-url] [auto\|http1\|http2]`; local server, auto |
+| [`protocol`](http_exp/protocol.cpp) | Socket-free manual HTTP/1 engine loop and incremental output | none |
 
 Run the pair in separate terminals:
 

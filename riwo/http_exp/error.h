@@ -26,7 +26,10 @@ X_MACRO(buffer_limit_exceeded,      13, "HTTP buffer limit exceeded") \
 X_MACRO(negotiation_failed,         14, "HTTP protocol negotiation failed") \
 X_MACRO(connection_protocol_error,  15, "HTTP connection protocol error") \
 X_MACRO(stream_protocol_error,      16, "HTTP stream protocol error") \
-X_MACRO(operation_not_supported,    17, "HTTP operation not supported")
+X_MACRO(operation_not_supported,    17, "HTTP operation not supported") \
+X_MACRO(invalid_cookie,              18, "Invalid HTTP cookie") \
+X_MACRO(unexpected_eof,              19, "Unexpected end of HTTP input") \
+X_MACRO(invalid_protocol_action,     20, "Invalid HTTP protocol action")
 
 enum class errc
 {

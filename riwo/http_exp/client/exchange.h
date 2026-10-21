@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_CLIENT_EXCHANGE_H
 
 #include <riwo/http_exp/body.h>
+#include <riwo/http_exp/client/cookie_jar.h>
 #include <riwo/http_exp/protocol/response_head.h>
 #include <riwo/http_exp/protocol.h>
 
@@ -39,7 +40,8 @@ public:
 
 	template <typename Exec0>
 	basic_client_exchange(Exec0 &&executor,
-		std::shared_ptr<detail::stream> stream)
+		std::shared_ptr<detail::stream> stream,
+		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {})
 		requires core_concepts::match_sched<Exec0,executor_type>;
 
 	~basic_client_exchange();

@@ -3,9 +3,9 @@
 
 #include "detail/connector.h"
 #include "detail/factory.h"
-#include <riwo/http_exp/protocol/detail/h1/session.h>
+#include <riwo/http_exp/protocol/v1/detail/session.h>
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-# include <riwo/http_exp/protocol/detail/h2/session.h>
+# include <riwo/http_exp/protocol/v2/detail/session.h>
 #endif
 #include <riwo/http_exp/transport/tcp_connection.h>
 
@@ -853,7 +853,8 @@ public:
 			return sys_unexpected(make_error_code(errc::negotiation_failed));
 	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		if( transport.selected_protocol == protocol::v2 )
-			return h2::make_client_session(std::move(transport.stream), config,
+			return ::riwo::http_exp::v2::detail::make_client_session(
+				std::move(transport.stream), config,
 				transport.remote, transport.local);
 	#endif
 		if( not http1(transport.selected_protocol) )
@@ -863,7 +864,8 @@ public:
 		auto executor = transport.stream->get_executor();
 		auto selected = transport.selected_protocol;
 		auto limits = config.response_limits;
-		return h1::make_client_session(std::move(executor), selected,
+		return ::riwo::http_exp::v1::detail::make_client_session(
+			std::move(executor), selected,
 			std::move(limits), std::move(transport.stream), config.timeout,
 			transport.absolute_form);
 	}

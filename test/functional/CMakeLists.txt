@@ -38,6 +38,8 @@ endif ()
 
 if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.public-api http_exp/public_api.cpp riwo.http_exp)
+	add_riwo_test(http_exp.protocol-api http_exp/protocol_api.cpp riwo.http_exp)
+	add_riwo_test(http_exp.transport-extension http_exp/transport_extension.cpp riwo.http_exp)
 	add_riwo_test(http_exp.body http_exp/body.cpp riwo.http_exp)
 	add_riwo_test(http_exp.http1 http_exp/http1.cpp riwo.http_exp)
 	add_riwo_test(http_exp.session-pool http_exp/session_pool.cpp riwo.http_exp)

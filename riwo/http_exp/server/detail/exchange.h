@@ -140,7 +140,7 @@ auto basic_server_exchange<Exec>::respond(response_head head, body_spec spec,
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		m_impl->state->respond(std::move(head), std::move(spec), error);
+		m_impl->m_state->respond(std::move(head), std::move(spec), error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
@@ -253,15 +253,15 @@ auto basic_server_exchange<Exec>::inform(response_head head, Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		m_impl->state->inform(std::move(head), error);
+		m_impl->m_state->inform(std::move(head), error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
 	}
 	else
 	{
-		auto state = m_impl->state;
-		return initiate_io_void(m_impl->executor,
+		auto state = m_impl->m_state;
+		return initiate_io_void(m_impl->m_executor,
 		[state = std::move(state), head = std::move(head)]
 		(auto handler) mutable {
 			state->inform(std::move(head),
@@ -281,24 +281,24 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 	using channel_type = basic_duplex_channel<executor_type>;
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto state = m_impl->state->accept_duplex(std::move(head), token);
+		auto state = m_impl->m_state->accept_duplex(std::move(head), token);
 		if( not token )
 		{
-			m_impl->request_body->detach();
-			m_impl->response_body->detach();
+			m_impl->m_request_body->detach();
+			m_impl->m_response_body->detach();
 		}
-		return channel_type(m_impl->executor, std::move(state));
+		return channel_type(m_impl->m_executor, std::move(state));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto state = m_impl->state->accept_duplex(std::move(head), error);
+		auto state = m_impl->m_state->accept_duplex(std::move(head), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<channel_type>(
 				sys_unexpected(error)));
-		m_impl->request_body->detach();
-		m_impl->response_body->detach();
-		return channel_type(m_impl->executor, std::move(state));
+		m_impl->m_request_body->detach();
+		m_impl->m_response_body->detach();
+		return channel_type(m_impl->m_executor, std::move(state));
 	}
 	else
 	{
@@ -326,12 +326,12 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 
 template <core_concepts::exec Exec>
 void basic_server_exchange<Exec>::cancel() noexcept {
-	m_impl->state->cancel();
+	m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
 stream_capabilities basic_server_exchange<Exec>::capabilities() const noexcept {
-	return m_impl->state->capabilities();
+	return m_impl->m_state->capabilities();
 }
 
 template <core_concepts::exec Exec>

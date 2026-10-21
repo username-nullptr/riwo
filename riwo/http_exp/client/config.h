@@ -5,6 +5,8 @@
 #define RIWO_HTTP_EXP_CLIENT_CONFIG_H
 
 #include <riwo/http_exp/protocol/policy.h>
+#include <riwo/http_exp/protocol/limits.h>
+#include <riwo/http_exp/client/cookie_jar.h>
 
 namespace riwo::http_exp
 {
@@ -49,18 +51,6 @@ struct retry_policy
 	bool retry_non_idempotent = false;
 };
 
-struct message_limits
-{
-	size_t max_start_line_size = 8 * 1024;
-	size_t max_field_name_size = 8 * 1024;
-	size_t max_field_value_size = 16 * 1024;
-	size_t max_header_list_size = 64 * 1024;
-	size_t max_field_count = 100;
-	optional<uint64_t> max_body_size {};
-	uint64_t max_buffered_body = 8 * 1024 * 1024;
-	uint64_t max_discard_body = 1024 * 1024;
-};
-
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 struct h2_config
 {
@@ -87,6 +77,7 @@ struct client_config
 	pool_config pool {};
 	redirect_policy redirects {};
 	retry_policy retries {};
+	cookie_config cookies {};
 	message_limits response_limits {};
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	h2_config h2 {};

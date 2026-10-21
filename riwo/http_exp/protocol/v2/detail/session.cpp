@@ -11,7 +11,20 @@
 #include <deque>
 #include <mutex>
 
-namespace riwo::http_exp::detail::h2 { namespace
+namespace riwo::http_exp::v2::detail
+{
+using ::riwo::http_exp::detail::client_session;
+using ::riwo::http_exp::detail::body_reader_adapter;
+using ::riwo::http_exp::detail::body_reader_state;
+using ::riwo::http_exp::detail::body_writer_adapter;
+using ::riwo::http_exp::detail::body_writer_state;
+using ::riwo::http_exp::detail::duplex_state;
+using ::riwo::http_exp::detail::make_body_reader_state;
+using ::riwo::http_exp::detail::make_body_duplex_state;
+using ::riwo::http_exp::detail::make_body_writer_state;
+using ::riwo::http_exp::detail::stream;
+
+namespace
 {
 
 class h2_session;
@@ -1565,6 +1578,6 @@ sys_expected<std::shared_ptr<client_session>> make_client_session(
 	return std::static_pointer_cast<client_session>(std::move(result));
 }
 
-} //namespace riwo::http_exp::detail::h2
+} //namespace riwo::http_exp::v2::detail
 
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT

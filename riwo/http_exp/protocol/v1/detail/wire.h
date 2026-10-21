@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_HTTP_EXP_PROTOCOL_DETAIL_H1_WIRE_H
-#define RIWO_HTTP_EXP_PROTOCOL_DETAIL_H1_WIRE_H
+#ifndef RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_WIRE_H
+#define RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_WIRE_H
 
 #include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/client/config.h>
@@ -10,7 +10,7 @@
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/response_head.h>
 
-namespace riwo::http_exp::detail::h1
+namespace riwo::http_exp::v1::detail
 {
 
 enum class body_framing { none, content_length, chunked, until_eof };
@@ -54,6 +54,6 @@ struct parsed_response
 [[nodiscard]] std::string serialize_chunk_header(size_t size);
 [[nodiscard]] std::string serialize_last_chunk(const fields &trailers);
 
-} //namespace riwo::http_exp::detail::h1
+} //namespace riwo::http_exp::v1::detail
 
-#endif //RIWO_HTTP_EXP_PROTOCOL_DETAIL_H1_WIRE_H
+#endif //RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_WIRE_H

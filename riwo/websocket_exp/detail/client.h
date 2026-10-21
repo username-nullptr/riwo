@@ -178,11 +178,11 @@ void open_sync(const std::shared_ptr<typename basic_client<Exec>::impl> &self,
 {
 	try {
 		if( diagnostics ) diagnostics->endpoint = request.endpoint;
-		auto prepared = prepare_open(std::move(request), self->config,
-			self->use_extended_connect);
+		auto prepared = prepare_open(std::move(request), self->m_config,
+			self->m_use_extended_connect);
 		if( not prepared ) { error = prepared.error(); return; }
-		result = basic_stream<Exec>(self->executor, prepared->stream);
-		auto exchange = self->http.open(std::move(prepared->request),
+		result = basic_stream<Exec>(self->m_executor, prepared->stream);
+		auto exchange = self->m_http.open(std::move(prepared->request),
 			std::move(prepared->spec), error);
 		if( error ) return;
 		auto response = exchange.wait_response(error);
@@ -283,16 +283,16 @@ auto basic_client<Exec>::open_impl(connect_request_t request,
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		stream_t result(m_impl->executor,
-			request.stream_options.value_or(m_impl->config.stream));
+		stream_t result(m_impl->m_executor,
+			request.stream_options.value_or(m_impl->m_config.stream));
 		detail::open_sync(m_impl, std::move(request), diagnostics, result, token);
 		return result;
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		stream_t result(m_impl->executor,
-			request.stream_options.value_or(m_impl->config.stream));
+		stream_t result(m_impl->m_executor,
+			request.stream_options.value_or(m_impl->m_config.stream));
 		detail::open_sync(m_impl, std::move(request), diagnostics, result, error);
 		if( error ) system_error::loc_throw(error,
 			"riwo::websocket_exp::basic_client::open");
@@ -358,12 +358,12 @@ auto basic_client<Exec>::open(url endpoint, diagnostics_t &diagnostics,
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::config() const noexcept -> const config_t& {
-	return m_impl->config;
+	return m_impl->m_config;
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::http_client() const noexcept -> const http_client_t& {
-	return m_impl->http;
+	return m_impl->m_http;
 }
 
 template <core_concepts::exec Exec>

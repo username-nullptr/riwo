@@ -9,7 +9,24 @@
 #include <charconv>
 #include <deque>
 
-namespace riwo::http_exp::detail::h2 { namespace
+namespace riwo::http_exp::v2::detail
+{
+using ::riwo::http_exp::detail::body_reader_adapter;
+using ::riwo::http_exp::detail::body_reader_state;
+using ::riwo::http_exp::detail::body_writer_adapter;
+using ::riwo::http_exp::detail::body_writer_state;
+using ::riwo::http_exp::detail::duplex_state;
+using ::riwo::http_exp::detail::make_body_reader_state;
+using ::riwo::http_exp::detail::make_body_duplex_state;
+using ::riwo::http_exp::detail::make_body_writer_state;
+using ::riwo::http_exp::detail::server_accept_handler;
+using ::riwo::http_exp::detail::server_connection;
+using ::riwo::http_exp::detail::server_connection_ptr;
+using ::riwo::http_exp::detail::server_session;
+using ::riwo::http_exp::detail::stream;
+using ::riwo::http_exp::detail::validate_server_config;
+
+namespace
 {
 
 class server_session_impl;
@@ -1507,6 +1524,6 @@ server_connection_ptr accept_h2(
 	return std::make_shared<h2_server_connection>(std::move(loop));
 }
 
-} //namespace riwo::http_exp::detail::h2
+} //namespace riwo::http_exp::v2::detail
 
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT

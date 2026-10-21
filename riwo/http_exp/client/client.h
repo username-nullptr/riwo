@@ -8,6 +8,7 @@
 #include <riwo/http_exp/client/exchange.h>
 #include <riwo/http_exp/client/request.h>
 #include <riwo/http_exp/client/reply.h>
+#include <riwo/http_exp/transport/connector.h>
 
 namespace riwo::http_exp::detail
 {
@@ -50,8 +51,17 @@ public:
 			not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 			core_concepts::match_sched<Exec0,executor_type>);
 
+	template <typename Exec0>
+	basic_client(Exec0 &&executor,
+		std::shared_ptr<basic_transport_connector<executor_type>> connector,
+		config_type config = {})
+		requires (
+			not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
+			core_concepts::match_sched<Exec0,executor_type>);
+
 	[[nodiscard]] executor_type get_executor() const noexcept;
 	[[nodiscard]] const config_type &config() const noexcept;
+	[[nodiscard]] std::shared_ptr<cookie_jar> cookie_store() const noexcept;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto send(request, Token &&token = {})

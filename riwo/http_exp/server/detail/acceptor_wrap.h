@@ -28,7 +28,7 @@ auto basic_acceptor_wrap<Exec>::get_executor() noexcept -> executor_type {
 
 template <core_concepts::exec Exec>
 auto basic_acceptor_wrap<Exec>::acceptor() const noexcept -> const acceptor_type& {
-	return m_impl->acceptor;
+	return m_impl->m_acceptor;
 }
 
 template <core_concepts::exec Exec>

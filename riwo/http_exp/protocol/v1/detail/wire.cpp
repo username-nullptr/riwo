@@ -4,7 +4,7 @@
 #include "wire.h"
 #include <charconv>
 
-namespace riwo::http_exp::detail::h1 { namespace
+namespace riwo::http_exp::v1::detail { namespace
 {
 
 [[nodiscard]] bool equal_ci(std::string_view lhs,
@@ -443,4 +443,4 @@ std::string serialize_last_chunk(const fields &trailers)
 	return result;
 }
 
-} //namespace riwo::http_exp::detail::h1
+} //namespace riwo::http_exp::v1::detail

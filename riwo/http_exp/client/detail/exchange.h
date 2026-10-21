@@ -17,7 +17,8 @@ public:
 	using duplex_handler = asio::any_completion_handler<void(
 		error_code,std::shared_ptr<duplex_state>)>;
 
-	explicit client_exchange_state(std::shared_ptr<stream> stream = {});
+	explicit client_exchange_state(std::shared_ptr<stream> stream = {},
+		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {});
 	~client_exchange_state();
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
@@ -37,7 +38,8 @@ private:
 
 [[nodiscard]] RIWO_HTTP_EXP_API
 std::shared_ptr<client_exchange_state> make_client_exchange_state(
-	std::shared_ptr<stream> stream = {});
+	std::shared_ptr<stream> stream = {},
+	std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {});
 
 } //namespace riwo::http_exp::detail
 
@@ -48,9 +50,11 @@ template <core_concepts::exec Exec>
 class basic_client_exchange<Exec>::impl
 {
 public:
-	impl(executor_type executor_value, std::shared_ptr<detail::stream> stream) :
+	impl(executor_type executor_value, std::shared_ptr<detail::stream> stream,
+		std::shared_ptr<cookie_jar> cookies, riwo::url origin) :
 		m_executor(std::move(executor_value)),
-		m_state(detail::make_client_exchange_state(std::move(stream))),
+		m_state(detail::make_client_exchange_state(std::move(stream),
+			std::move(cookies), std::move(origin))),
 		m_request_body(std::make_unique<body_writer_type>(
 			m_executor, m_state->request_body())),
 		m_response_body(std::make_unique<body_reader_type>(
@@ -87,10 +91,12 @@ basic_client_exchange<Exec>::~basic_client_exchange() {
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor,
-	std::shared_ptr<detail::stream> stream)
+	std::shared_ptr<detail::stream> stream,
+	std::shared_ptr<cookie_jar> cookies, riwo::url origin)
 	requires core_concepts::match_sched<Exec0,executor_type> :
 	m_impl(std::make_shared<impl>(
-		get_executor_helper(std::forward<Exec0>(executor)), std::move(stream)))
+		get_executor_helper(std::forward<Exec0>(executor)), std::move(stream),
+		std::move(cookies), std::move(origin)))
 {
 }
 
@@ -119,7 +125,7 @@ auto basic_client_exchange<Exec>::wait_response(Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto head = m_impl->state->wait_response(error);
+		auto head = m_impl->m_state->wait_response(error);
 		return expected_value_or_throw(error ?
 			sys_expected<response_head>(sys_unexpected(error)) :
 			sys_expected<response_head>(std::move(head)));
@@ -150,24 +156,24 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token)
 	using channel_type = basic_duplex_channel<executor_type>;
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto state = m_impl->state->release_duplex(token);
+		auto state = m_impl->m_state->release_duplex(token);
 		if( not token )
 		{
-			m_impl->request_body->detach();
-			m_impl->response_body->detach();
+			m_impl->m_request_body->detach();
+			m_impl->m_response_body->detach();
 		}
-		return channel_type(m_impl->executor, std::move(state));
+		return channel_type(m_impl->m_executor, std::move(state));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto state = m_impl->state->release_duplex(error);
+		auto state = m_impl->m_state->release_duplex(error);
 		if( error )
 			return expected_value_or_throw(sys_expected<channel_type>(
 				sys_unexpected(error)));
-		m_impl->request_body->detach();
-		m_impl->response_body->detach();
-		return channel_type(m_impl->executor, std::move(state));
+		m_impl->m_request_body->detach();
+		m_impl->m_response_body->detach();
+		return channel_type(m_impl->m_executor, std::move(state));
 	}
 	else
 	{
@@ -199,7 +205,7 @@ void basic_client_exchange<Exec>::cancel() noexcept {
 
 template <core_concepts::exec Exec>
 stream_capabilities basic_client_exchange<Exec>::capabilities() const noexcept {
-	return m_impl->state->capabilities();
+	return m_impl->m_state->capabilities();
 }
 
 template <core_concepts::exec Exec>

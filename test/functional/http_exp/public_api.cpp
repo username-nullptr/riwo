@@ -67,6 +67,9 @@ static_assert(std::copyable<http::protocol_policy>);
 static_assert(std::copyable<http::fields>);
 static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
+static_assert(std::copyable<http::cookie_pair>);
+static_assert(std::copyable<http::response_cookie>);
+static_assert(std::copyable<http::cookie_jar_config>);
 static_assert(std::copyable<http::body_spec>);
 static_assert(std::copyable<http::body_read_result>);
 static_assert(std::is_trivially_copyable_v<http::body_read_result>);
@@ -74,6 +77,7 @@ static_assert(std::copyable<http::client_config>);
 static_assert(std::copyable<http::server_config>);
 
 static_assert(!std::copy_constructible<http::request>);
+static_assert(!std::copy_constructible<http::cookie_jar>);
 static_assert(std::is_nothrow_move_constructible_v<http::request>);
 static_assert(!std::copy_constructible<http::client>);
 static_assert(std::is_nothrow_move_constructible_v<http::client>);
@@ -263,6 +267,114 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_EQ(custom_source.body_description().length().value(), 3U);
 }
 
+void cookie_value_contracts()
+{
+	http::fields request_headers;
+	request_headers.add("Cookie", "sid=abc; duplicate=short");
+	request_headers.add("cookie", "duplicate=long; enabled=true");
+	auto parsed_request = http::parse_cookie_fields(request_headers);
+	RIWO_TEST_CHECK(parsed_request);
+	RIWO_TEST_CHECK_EQ(parsed_request->size(), 4U);
+	RIWO_TEST_CHECK_EQ(parsed_request->at(0).name, "sid");
+	RIWO_TEST_CHECK_EQ(parsed_request->at(0).value.to_string(), "abc");
+	RIWO_TEST_CHECK_EQ(parsed_request->at(1).name, "duplicate");
+	RIWO_TEST_CHECK_EQ(parsed_request->at(2).name, "duplicate");
+	RIWO_TEST_CHECK_EQ(http::serialize_cookie(*parsed_request),
+		"sid=abc; duplicate=short; duplicate=long; enabled=true");
+
+	http::fields invalid_headers;
+	invalid_headers.add("Cookie", "valid=one; missing-value");
+	auto invalid = http::parse_cookie_fields(invalid_headers);
+	RIWO_TEST_CHECK(!invalid);
+	RIWO_TEST_CHECK_EQ(invalid.error(),
+		http::make_error_code(http::errc::invalid_cookie));
+
+	http::response_cookie response {
+		.name = "sid",
+		.value = riwo::value("42"),
+		.path = "/",
+		.max_age = std::chrono::seconds(60),
+		.same_site = http::cookie_same_site::lax,
+		.secure = true,
+		.http_only = true,
+		.extensions = {{"Priority", riwo::value("High")}}
+	};
+	RIWO_TEST_CHECK_EQ(http::serialize_set_cookie(response),
+		"sid=42; Max-Age=60; Path=/; Secure; HttpOnly; SameSite=Lax; Priority=High");
+	RIWO_TEST_CHECK_THROWS(http::serialize_set_cookie({
+		.name = "sid", .value = riwo::value("42"), .domain = "bad domain"}),
+		std::invalid_argument);
+	http::fields response_headers;
+	http::add_set_cookie(response_headers, response);
+	RIWO_TEST_CHECK_EQ(response_headers.find_first("set-cookie").value(),
+		"sid=42; Max-Age=60; Path=/; Secure; HttpOnly; SameSite=Lax; Priority=High");
+
+	auto parsed_response = http::parse_set_cookie(
+		"sid=42; Path=/account; Secure; HttpOnly; SameSite=Strict; Feature=on");
+	RIWO_TEST_CHECK(parsed_response);
+	RIWO_TEST_CHECK_EQ(parsed_response->name, "sid");
+	RIWO_TEST_CHECK_EQ(parsed_response->value.to_string(), "42");
+	RIWO_TEST_CHECK_EQ(parsed_response->path.value(), "/account");
+	RIWO_TEST_CHECK(parsed_response->secure);
+	RIWO_TEST_CHECK(parsed_response->http_only);
+	RIWO_TEST_CHECK(parsed_response->same_site == http::cookie_same_site::strict);
+	RIWO_TEST_CHECK_EQ(parsed_response->extensions.size(), 1U);
+
+	http::cookie_jar jar;
+	const riwo::url origin("https://api.example.test/account/login");
+	RIWO_TEST_CHECK(jar.store(origin, {
+		.name = "sid", .value = riwo::value("host"),
+		.path = "/account", .secure = true}));
+	RIWO_TEST_CHECK(jar.store(origin, {
+		.name = "sid", .value = riwo::value("domain"),
+		.domain = "example.test", .path = "/"}));
+	RIWO_TEST_CHECK(jar.store(origin, {
+		.name = "strict", .value = riwo::value("one"),
+		.path = "/", .same_site = http::cookie_same_site::strict}));
+	RIWO_TEST_CHECK(jar.store(origin, {
+		.name = "cross", .value = riwo::value("one"),
+		.path = "/", .same_site = http::cookie_same_site::none,
+		.secure = true}));
+	RIWO_TEST_CHECK(!jar.store(riwo::url("http://api.example.test/"), {
+		.name = "secure", .value = riwo::value("bad"), .secure = true}));
+	RIWO_TEST_CHECK(!jar.store(origin, {
+		.name = "__Host-invalid", .value = riwo::value("bad"),
+		.domain = "example.test", .path = "/", .secure = true}));
+	RIWO_TEST_CHECK(!jar.store(riwo::url("http://api.example.test/account/x"), {
+		.name = "sid", .value = riwo::value("shadow"),
+		.path = "/account/x", .max_age = std::chrono::seconds(0)}));
+
+	auto account = jar.select(
+		riwo::url("https://api.example.test/account/profile"));
+	RIWO_TEST_CHECK_EQ(account.size(), 4U);
+	RIWO_TEST_CHECK_EQ(account.at(0).value.to_string(), "host");
+	RIWO_TEST_CHECK_EQ(account.at(1).value.to_string(), "domain");
+
+	http::cookie_request_context cross_site;
+	cross_site.site = http::cookie_site_context::cross_site;
+	cross_site.request_method = http::method(http::method::post);
+	auto cross = jar.select(
+		riwo::url("https://api.example.test/account/profile"), cross_site);
+	RIWO_TEST_CHECK_EQ(cross.size(), 1U);
+	RIWO_TEST_CHECK_EQ(cross.front().name, "cross");
+	RIWO_TEST_CHECK(std::ranges::none_of(cross, [](const http::cookie_pair &item) {
+		return item.name == "strict";
+	}));
+	cross_site.http_api = false;
+	cross_site.top_level_navigation = true;
+	cross_site.request_method = http::method(http::method::get);
+	RIWO_TEST_CHECK_EQ(jar.select(
+		riwo::url("https://api.example.test/account/profile"), cross_site).size(), 1U);
+
+	RIWO_TEST_CHECK(jar.store(origin, {
+		.name = "sid", .value = riwo::value("gone"),
+		.path = "/account", .max_age = std::chrono::seconds(0),
+		.secure = true}));
+	auto after_delete = jar.select(
+		riwo::url("https://api.example.test/account/profile"));
+	RIWO_TEST_CHECK_EQ(after_delete.size(), 3U);
+}
+
 void fake_boundaries_and_unsupported_entry_points()
 {
 	riwo::io_context_t context;
@@ -362,6 +474,7 @@ int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
 		{"semantic value contracts", semantic_value_contracts},
+		{"cookie value contracts", cookie_value_contracts},
 		{"fake boundaries and unsupported entry points",
 			fake_boundaries_and_unsupported_entry_points},
 		{"server facade contract", server_facade_contract}

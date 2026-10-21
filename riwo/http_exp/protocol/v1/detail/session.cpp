@@ -6,7 +6,21 @@
 #include <riwo/http_exp/server/detail/session.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 
-namespace riwo::http_exp::detail::h1 { namespace
+namespace riwo::http_exp::v1::detail
+{
+using ::riwo::http_exp::detail::client_session;
+using ::riwo::http_exp::detail::body_reader_adapter;
+using ::riwo::http_exp::detail::body_reader_state;
+using ::riwo::http_exp::detail::body_writer_adapter;
+using ::riwo::http_exp::detail::body_writer_state;
+using ::riwo::http_exp::detail::duplex_state;
+using ::riwo::http_exp::detail::make_body_reader_state;
+using ::riwo::http_exp::detail::make_body_duplex_state;
+using ::riwo::http_exp::detail::make_body_writer_state;
+using ::riwo::http_exp::detail::server_session;
+using ::riwo::http_exp::detail::stream;
+
+namespace
 {
 
 struct connection final
@@ -1979,7 +1993,7 @@ std::shared_ptr<server_session> make_server_session(
 		std::move(transport), version, std::move(limits), timeouts);
 }
 
-} //namespace riwo::http_exp::detail::h1
+} //namespace riwo::http_exp::v1::detail
 
 namespace riwo::http_exp::detail
 {
@@ -1988,7 +2002,7 @@ class h1_server_loop final :
 	public std::enable_shared_from_this<h1_server_loop>
 {
 public:
-	std::shared_ptr<h1::h1_server_session> session;
+	std::shared_ptr<::riwo::http_exp::v1::detail::h1_server_session> session;
 	server_accept_handler handler;
 	bool served = false;
 
@@ -2046,7 +2060,8 @@ server_connection_ptr accept_h1(
 	message_limits limits, timeout_policy timeouts,
 	server_accept_handler handler)
 {
-	auto session = std::make_shared<h1::h1_server_session>(
+	auto session = std::make_shared<
+		::riwo::http_exp::v1::detail::h1_server_session>(
 		std::move(transport), protocol::v1_1, std::move(limits), timeouts);
 	auto value = std::make_shared<h1_server_loop>();
 	value->session = session;

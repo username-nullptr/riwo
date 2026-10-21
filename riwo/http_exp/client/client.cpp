@@ -6,7 +6,7 @@
 #include "detail/session_pool.h"
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/detail/session.h>
-#include <riwo/http_exp/protocol/detail/h1/session.h>
+#include <riwo/http_exp/protocol/v1/detail/session.h>
 #include <riwo/http_exp/body/detail/decoder.h>
 #include <charconv>
 
@@ -226,6 +226,24 @@ void add_accept_encoding(request_head &head, const client_config &config)
 	head.headers.add("Accept-Encoding", "gzip, deflate");
 }
 
+[[nodiscard]] error_code add_request_cookies(request_head &head,
+	const std::shared_ptr<cookie_jar> &store) noexcept
+{
+	if( not store or head.headers.find_first("Cookie") ) return {};
+	try
+	{
+		cookie_request_context context;
+		context.request_method = head.method;
+		auto values = store->select(head.url, context);
+		if( not values.empty() )
+			head.headers.add("Cookie", serialize_cookie(values));
+		return {};
+	}
+	catch(...) {
+		return exception_error(std::current_exception());
+	}
+}
+
 [[nodiscard]] uint16_t effective_port(const riwo::url &value) noexcept
 {
 	if( value.port() != 0 ) return value.port();
@@ -353,12 +371,14 @@ class client_state::impl
 {
 public:
 	impl(asio::any_io_executor executor_value, client_config config_value,
-		std::shared_ptr<client_session> session_value) :
+		std::shared_ptr<client_session> session_value,
+		connector_ptr connector_value) :
 		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
 		m_injected_session(std::move(session_value))
 	{
 		if( not m_injected_session )
-			m_pool = std::make_shared<session_pool>(m_executor, m_config);
+			m_pool = std::make_shared<session_pool>(m_executor, m_config,
+				std::move(connector_value));
 	}
 
 	[[nodiscard]] std::shared_ptr<stream> open_sync(const request_head &head,
@@ -396,9 +416,9 @@ public:
 };
 
 client_state::client_state(asio::any_io_executor executor, client_config config,
-	std::shared_ptr<client_session> session) :
+	std::shared_ptr<client_session> session, connector_ptr connector) :
 	m_impl(std::make_shared<impl>(std::move(executor), std::move(config),
-		std::move(session)))
+		std::move(session), std::move(connector)))
 {
 }
 
@@ -414,6 +434,11 @@ std::shared_ptr<stream> client_state::open(request request_value,
 		error = head.error();
 		return {};
 	}
+	if( auto cookie_error = add_request_cookies(*head, cookie_store()) )
+	{
+		error = cookie_error;
+		return {};
+	}
 	return m_impl->open_sync(*head, std::move(spec), error);
 }
 
@@ -426,7 +451,28 @@ void client_state::open(request request_value, body_spec spec,
 		std::move(handler)(head.error(), std::shared_ptr<stream>{});
 		return;
 	}
+	if( auto cookie_error = add_request_cookies(*head, cookie_store()) )
+	{
+		std::move(handler)(cookie_error, std::shared_ptr<stream>{});
+		return;
+	}
 	m_impl->open(*head, std::move(spec), std::move(handler));
+}
+
+std::shared_ptr<cookie_jar> client_state::cookie_store() const noexcept {
+	return m_impl->m_config.cookies.jar;
+}
+
+void client_state::capture_cookies(const riwo::url &origin,
+	const response_head &response) noexcept
+{
+	const auto store = cookie_store();
+	if( not store ) return;
+	try {
+		store->store(origin, response.headers);
+	}
+	catch(...) {
+	}
 }
 
 send_result client_state::send(request request_value,
@@ -443,6 +489,11 @@ send_result client_state::send(request request_value,
 	if( not head )
 	{
 		error = head.error();
+		return {};
+	}
+	if( auto cookie_error = add_request_cookies(*head, cookie_store()) )
+	{
+		error = cookie_error;
 		return {};
 	}
 	add_accept_encoding(*head, m_impl->m_config);
@@ -556,6 +607,7 @@ send_result client_state::send(request request_value,
 			return retried;
 		return {};
 	}
+	capture_cookies(request_value.url(), response);
 	auto body = active_stream->inbound_body();
 	if( not body )
 	{
@@ -614,6 +666,11 @@ void client_state::send(request request_value, send_handler handler)
 	if( not head )
 	{
 		std::move(handler)(head.error(), send_result{});
+		return;
+	}
+	if( auto cookie_error = add_request_cookies(*head, cookie_store()) )
+	{
+		std::move(handler)(cookie_error, send_result{});
 		return;
 	}
 	add_accept_encoding(*head, m_impl->m_config);
@@ -759,6 +816,7 @@ void client_state::send(request request_value, send_handler handler)
 					self->fail(error);
 					return;
 				}
+				self->owner->capture_cookies(self->request_value.url(), head);
 				auto body = self->active_stream->inbound_body();
 				if( not body )
 				{
@@ -919,10 +977,10 @@ void client_state::send(request request_value, send_handler handler)
 
 std::shared_ptr<client_state> make_client_state(
 	asio::any_io_executor executor, client_config config,
-	std::shared_ptr<client_session> session)
+	std::shared_ptr<client_session> session, connector_ptr connector)
 {
 	return std::make_shared<client_state>(std::move(executor),
-		std::move(config), std::move(session));
+		std::move(config), std::move(session), std::move(connector));
 }
 
 } //namespace riwo::http_exp::detail

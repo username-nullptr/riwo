@@ -278,10 +278,10 @@ auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 				});
 			}
 		};
-		return initiate_io<uint64_t>(m_impl->executor,
+		return initiate_io<uint64_t>(m_impl->m_executor,
 		[state = m_impl, path = std::move(path)](auto handler) mutable {
 			auto value = std::make_shared<operation>();
-			value->reader = state->body.get();
+			value->reader = state->m_body.get();
 			value->stream.open(path, std::ios::binary | std::ios::trunc);
 			value->handler = decltype(value->handler)(std::move(handler));
 			value->start();
@@ -297,7 +297,7 @@ basic_reply<Exec>::buffered_body() const noexcept {
 
 template <core_concepts::exec Exec>
 void basic_reply<Exec>::cancel() noexcept {
-	if( m_impl->body ) m_impl->body->cancel();
+	if( m_impl->m_body ) m_impl->m_body->cancel();
 }
 
 } //namespace riwo::http_exp

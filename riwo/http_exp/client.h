@@ -4,6 +4,7 @@
 #ifndef RIWO_HTTP_EXP_CLIENT_H
 #define RIWO_HTTP_EXP_CLIENT_H
 
+#include <riwo/http_exp/client/cookie_jar.h>
 #include <riwo/http_exp/client/config.h>
 #include <riwo/http_exp/client/request.h>
 #include <riwo/http_exp/client/reply.h>

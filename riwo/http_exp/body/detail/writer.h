@@ -120,7 +120,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto size = m_impl->state->write(buffer, error);
+		auto size = m_impl->m_state->write(buffer, error);
 		return expected_value_or_throw(error ?
 			sys_expected<size_t>(sys_unexpected(error)) : sys_expected<size_t>(size));
 	}
@@ -165,7 +165,7 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		m_impl->state->finish(std::move(trailers), error);
+		m_impl->m_state->finish(std::move(trailers), error);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
@@ -185,7 +185,7 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 
 template <core_concepts::exec Exec>
 void basic_body_writer<Exec>::cancel() noexcept {
-	m_impl->state->cancel();
+	m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>

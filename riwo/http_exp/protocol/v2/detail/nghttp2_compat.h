@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_HTTP_EXP_PROTOCOL_DETAIL_H2_NGHTTP2_COMPAT_H
-#define RIWO_HTTP_EXP_PROTOCOL_DETAIL_H2_NGHTTP2_COMPAT_H
+#ifndef RIWO_HTTP_EXP_PROTOCOL_V2_DETAIL_NGHTTP2_COMPAT_H
+#define RIWO_HTTP_EXP_PROTOCOL_V2_DETAIL_NGHTTP2_COMPAT_H
 
 #include <riwo/http_exp/cxx/configs.h>
 
@@ -16,7 +16,7 @@ typedef SSIZE_T ssize_t;
 
 #include <nghttp2/nghttp2.h>
 
-namespace riwo::http_exp::detail::h2::nghttp2_api {
+namespace riwo::http_exp::v2::detail::nghttp2_api {
 
 #if RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
 
@@ -84,6 +84,6 @@ inline int submit_response(nghttp2_session *session, int32_t stream_id,
 
 #endif
 
-} //namespace riwo::http_exp::detail::h2::nghttp2_api
+} //namespace riwo::http_exp::v2::detail::nghttp2_api
 
-#endif //RIWO_HTTP_EXP_PROTOCOL_DETAIL_H2_NGHTTP2_COMPAT_H
+#endif //RIWO_HTTP_EXP_PROTOCOL_V2_DETAIL_NGHTTP2_COMPAT_H

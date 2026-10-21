@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
-#include <riwo/http_exp/protocol/detail/h2/session.h>
+#include <riwo/http_exp/protocol/v2/detail/session.h>
 #include <riwo/http_exp/transport/preface.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 
@@ -135,7 +135,8 @@ public:
 				if( error ) return self->finish_error(error);
 				if( result == preface_result::http2 )
 				{
-					self->m_selected = h2::accept_h2(self->m_transport,
+					self->m_selected =
+						::riwo::http_exp::v2::detail::accept_h2(self->m_transport,
 						self->m_config, std::move(prefix),
 						std::move(self->m_handler));
 					return;
@@ -255,6 +256,49 @@ server_connection_ptr accept_server(asio::ip::tcp::socket socket,
 		std::move(config), std::move(handler));
 	value->start();
 	return value;
+}
+
+server_connection_ptr accept_server(
+	std::shared_ptr<::riwo::http_exp::connection> transport,
+	protocol selected_protocol, server_config config,
+	server_accept_handler handler)
+{
+	if( not transport )
+	{
+		if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+		return {};
+	}
+	if( auto error = validate_server_config(config) )
+	{
+		if( handler ) handler(error, {}, {});
+		return {};
+	}
+	if( selected_protocol == protocol::v1_0 or
+		selected_protocol == protocol::v1_1 )
+	{
+		if( not permits_http1(config.protocols) )
+		{
+			if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+			return {};
+		}
+		return accept_h1(std::move(transport), config.request_limits,
+			config.timeout, std::move(handler));
+	}
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	if( selected_protocol == protocol::v2 )
+	{
+		if( not permits_http2(config.protocols) )
+		{
+			if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+			return {};
+		}
+		return ::riwo::http_exp::v2::detail::accept_h2(
+			std::move(transport), std::move(config), {},
+			std::move(handler));
+	}
+#endif
+	if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+	return {};
 }
 
 } //namespace riwo::http_exp::detail

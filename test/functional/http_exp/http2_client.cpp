@@ -4,7 +4,7 @@
 #include "test.h"
 
 #include <riwo/http_exp.h>
-#include <riwo/http_exp/protocol/detail/h2/nghttp2_compat.h>
+#include <riwo/http_exp/protocol/v2/detail/nghttp2_compat.h>
 #include <array>
 #include <map>
 #include <thread>
@@ -13,7 +13,7 @@ namespace
 {
 
 namespace http = riwo::http_exp;
-namespace nghttp2_api = riwo::http_exp::detail::h2::nghttp2_api;
+namespace nghttp2_api = riwo::http_exp::v2::detail::nghttp2_api;
 
 struct peer_stream
 {

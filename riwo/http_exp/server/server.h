@@ -7,6 +7,7 @@
 #include <riwo/http_exp/server/acceptor_wrap.h>
 #include <riwo/http_exp/server/config.h>
 #include <riwo/http_exp/server/exchange.h>
+#include <riwo/http_exp/transport/listener.h>
 #include <riwo/core/utils/utils.h>
 
 namespace riwo::http_exp
@@ -70,6 +71,17 @@ public:
 		config_type config = {})
 		requires core_concepts::match_sched<ServiceExec0,service_executor_type>;
 
+	explicit basic_server(
+		std::shared_ptr<basic_transport_listener<executor_type>> listener,
+		config_type config = {})
+		requires core_concepts::match_sched<executor_type,service_executor_type>;
+
+	template <typename ServiceExec0>
+	basic_server(
+		std::shared_ptr<basic_transport_listener<executor_type>> listener,
+		ServiceExec0 &&service_executor, config_type config = {})
+		requires core_concepts::match_sched<ServiceExec0,service_executor_type>;
+
 	[[nodiscard]] executor_type get_executor() noexcept;
 	[[nodiscard]] service_executor_type get_service_executor() const noexcept;
 	basic_server &bind(endpoint_wrapper_type endpoint);
@@ -98,6 +110,9 @@ public:
 	basic_server &start(size_t max = asio::socket_base::max_listen_connections);
 	basic_server &start(size_t max, error_code &error) noexcept;
 	basic_server &start(error_code &error) noexcept;
+	basic_server &serve(basic_negotiated_transport<executor_type> transport);
+	basic_server &serve(basic_negotiated_transport<executor_type> transport,
+		error_code &error) noexcept;
 
 	template <typename ServiceExec0>
 	basic_server &start(ServiceExec0 &&service_executor,

@@ -94,4 +94,9 @@ bool status::allows_body() const noexcept
 		m_code != reset_content and m_code != not_modified;
 }
 
+status::operator unsigned short() const noexcept
+{
+	return m_code;
+}
+
 } //namespace riwo::http_exp

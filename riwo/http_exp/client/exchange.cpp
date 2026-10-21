@@ -10,7 +10,10 @@ namespace riwo::http_exp::detail
 class client_exchange_state::impl
 {
 public:
-	explicit impl(std::shared_ptr<stream> value) : m_stream(std::move(value)),
+	explicit impl(std::shared_ptr<stream> value,
+		std::shared_ptr<cookie_jar> cookie_store, riwo::url request_origin) :
+		m_stream(std::move(value)), m_cookie_store(std::move(cookie_store)),
+		m_origin(std::move(request_origin)),
 		m_request_body(m_stream ? m_stream->outbound_body() : make_body_writer_state()),
 		m_response_body(m_stream ? m_stream->inbound_body() : make_body_reader_state())
 	{
@@ -21,16 +24,30 @@ public:
 	}
 
 	std::shared_ptr<stream> m_stream;
+	std::shared_ptr<cookie_jar> m_cookie_store;
+	riwo::url m_origin;
 	std::shared_ptr<body_writer_state> m_request_body;
 	std::shared_ptr<body_reader_state> m_response_body;
 	bool m_wait_pending = false;
 	bool m_response_ready = false;
 	bool m_duplex_taken = false;
 	response_head m_response {};
+
+	void capture_cookies(const response_head &response) noexcept
+	{
+		if( not m_cookie_store ) return;
+		try {
+			m_cookie_store->store(m_origin, response.headers);
+		}
+		catch(...) {
+		}
+	}
 };
 
-client_exchange_state::client_exchange_state(std::shared_ptr<stream> stream) :
-	m_impl(std::make_shared<impl>(std::move(stream)))
+client_exchange_state::client_exchange_state(std::shared_ptr<stream> stream,
+	std::shared_ptr<cookie_jar> cookies, riwo::url origin) :
+	m_impl(std::make_shared<impl>(std::move(stream), std::move(cookies),
+		std::move(origin)))
 {
 }
 
@@ -77,6 +94,7 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 	state->m_wait_pending = false;
 	if( not error )
 	{
+		state->capture_cookies(result);
 		state->m_response = result;
 		state->m_response_ready = true;
 		state->m_response_body->set_ready();
@@ -112,6 +130,7 @@ void client_exchange_state::wait_response(response_handler handler)
 		state->m_wait_pending = false;
 		if( not error )
 		{
+			state->capture_cookies(result);
 			state->m_response = result;
 			state->m_response_ready = true;
 			state->m_response_body->set_ready();
@@ -161,9 +180,11 @@ void client_exchange_state::cancel() noexcept
 }
 
 std::shared_ptr<client_exchange_state> make_client_exchange_state(
-	std::shared_ptr<stream> stream)
+	std::shared_ptr<stream> stream, std::shared_ptr<cookie_jar> cookies,
+	riwo::url origin)
 {
-	return std::make_shared<client_exchange_state>(std::move(stream));
+	return std::make_shared<client_exchange_state>(std::move(stream),
+		std::move(cookies), std::move(origin));
 }
 
 } //namespace riwo::http_exp::detail
