@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_TRANSPORT_LISTENER_H
 #define RIWO_HTTP_EXP_TRANSPORT_LISTENER_H
 
-#include <riwo/http_exp/transport/connector.h>
+#include <riwo/http_exp/transport/negotiated_transport.h>
 
 namespace riwo::http_exp
 {

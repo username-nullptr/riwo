@@ -87,6 +87,7 @@ public:
 		network_auth_required = 511
 	};
 
+public:
 	status(well_known value) noexcept;
 	explicit status(uint16_t code);
 
@@ -94,8 +95,15 @@ public:
 	[[nodiscard]] std::string_view text() const noexcept;
 	[[nodiscard]] bool allows_body() const noexcept;
 
-	operator uint16_t() const noexcept;
+public:
+	friend bool operator==(status lhs, well_known rhs) noexcept {
+		return lhs.m_code == static_cast<uint16_t>(rhs);
+	}
+	friend bool operator==(well_known lhs, status rhs) noexcept {
+		return static_cast<uint16_t>(lhs) == rhs.m_code;
+	}
 	friend bool operator==(status, status) noexcept = default;
+	operator uint16_t() const noexcept;
 
 private:
 	uint16_t m_code;

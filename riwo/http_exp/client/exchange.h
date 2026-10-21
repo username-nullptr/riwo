@@ -4,10 +4,14 @@
 #ifndef RIWO_HTTP_EXP_CLIENT_EXCHANGE_H
 #define RIWO_HTTP_EXP_CLIENT_EXCHANGE_H
 
-#include <riwo/http_exp/body.h>
+#include <riwo/http_exp/body/reader.h>
+#include <riwo/http_exp/body/spec.h>
+#include <riwo/http_exp/body/writer.h>
 #include <riwo/http_exp/client/cookie_jar.h>
+#include <riwo/http_exp/protocol/capabilities.h>
+#include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/protocol/response_head.h>
-#include <riwo/http_exp/protocol.h>
+#include <riwo/http_exp/protocol/version.h>
 
 namespace riwo::http_exp::detail
 {

@@ -6,7 +6,7 @@
 
 #include <riwo/http_exp/body/reader.h>
 #include <riwo/http_exp/protocol/response_head.h>
-#include <riwo/http_exp/protocol.h>
+#include <riwo/http_exp/protocol/version.h>
 
 namespace riwo::http_exp::detail
 {

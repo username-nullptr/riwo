@@ -4,8 +4,6 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_CAPABILITIES_H
 #define RIWO_HTTP_EXP_PROTOCOL_CAPABILITIES_H
 
-#include <riwo/http_exp/protocol/version.h>
-
 namespace riwo::http_exp
 {
 

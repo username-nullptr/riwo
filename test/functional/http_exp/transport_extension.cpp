@@ -206,6 +206,11 @@ void byte_stream_erasure()
 	RIWO_TEST_CHECK_EQ(stream.read_some_sync(riwo::buffer(input), error), 0U);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_supported));
+
+	http::transport_metadata metadata;
+	metadata.attributes.emplace("http.absolute_form", true);
+	RIWO_TEST_CHECK_EQ(metadata.attributes.at(
+		"http.absolute_form").to_bool().value(), true);
 }
 
 void injected_connector_and_listener_compile()

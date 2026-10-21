@@ -6,30 +6,13 @@
 
 #include <riwo/http_exp/protocol/policy.h>
 #include <riwo/http_exp/protocol/limits.h>
+#include <riwo/http_exp/protocol/v2/config.h>
+#include <riwo/http_exp/transport/connect_options.h>
+#include <riwo/http_exp/timeout.h>
 #include <riwo/http_exp/client/cookie_jar.h>
 
 namespace riwo::http_exp
 {
-
-struct proxy_policy
-{
-	optional<riwo::url> forward_proxy {};
-};
-
-struct tls_policy
-{
-	bool verify_peer = true;
-	optional<std::filesystem::path> certificate_authority_file {};
-};
-
-struct timeout_policy
-{
-	milliseconds connect {30000};
-	milliseconds header {30000};
-	milliseconds body_idle {30000};
-	optional<milliseconds> overall {};
-	milliseconds pool_wait {30000};
-};
 
 struct pool_config
 {
@@ -50,23 +33,6 @@ struct retry_policy
 	bool retry_idempotent = true;
 	bool retry_non_idempotent = false;
 };
-
-#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-struct h2_config
-{
-	uint32_t initial_stream_window = 65'535;
-	uint32_t initial_connection_window = 1024 * 1024;
-	uint32_t max_concurrent_streams = 100;
-	uint32_t max_frame_size = 16 * 1024;
-	size_t max_header_list_size = 64 * 1024;
-	size_t max_dynamic_table_size = 4 * 1024;
-	size_t inbound_stream_buffer = 256 * 1024;
-	size_t outbound_stream_buffer = 256 * 1024;
-	size_t inbound_connection_buffer = 8 * 1024 * 1024;
-	size_t outbound_connection_buffer = 8 * 1024 * 1024;
-	bool enable_extended_connect = false;
-};
-#endif
 
 struct client_config
 {

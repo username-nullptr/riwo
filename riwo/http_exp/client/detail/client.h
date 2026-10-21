@@ -5,7 +5,7 @@
 #define RIWO_HTTP_EXP_CLIENT_DETAIL_CLIENT_H
 
 #include <riwo/http_exp/body/detail/unsupported.h>
-#include <riwo/http_exp/transport/detail/connector_adapter.h>
+#include <riwo/http_exp/client/detail/connector_adapter.h>
 
 namespace riwo::http_exp::detail
 {

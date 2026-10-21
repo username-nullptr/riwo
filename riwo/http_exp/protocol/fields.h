@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_PROTOCOL_FIELDS_H
 
 #include <riwo/http_exp/global.h>
+#include <riwo/core/value.h>
 
 namespace riwo::http_exp
 {
@@ -12,7 +13,7 @@ namespace riwo::http_exp
 struct field
 {
 	std::string name;
-	std::string value;
+	riwo::value value;
 
 	friend bool operator==(const field &, const field &) = default;
 };
@@ -67,8 +68,8 @@ public:
 	using container_type = std::vector<field>;
 	using const_iterator = container_type::const_iterator;
 
-	void add(std::string name, std::string value);
-	void set(std::string name, std::string value);
+	void add(std::string name, riwo::value value);
+	void set(std::string name, riwo::value value);
 	void erase(std::string_view name);
 
 	[[nodiscard]] field_range find_all(std::string_view name) const;

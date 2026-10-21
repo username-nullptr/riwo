@@ -3,6 +3,7 @@
 
 #include "session.h"
 #include "wire.h"
+#include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/server/detail/session.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 
@@ -237,7 +238,7 @@ private:
 	auto range = values.find_all(name);
 	for( auto iterator = range.begin(); iterator != range.end(); ++iterator )
 	{
-		std::string_view text = iterator->value;
+		std::string_view text = iterator->value.to_string();
 		while( not text.empty() )
 		{
 			const auto comma = text.find(',');
@@ -265,7 +266,7 @@ private:
 	auto range = values.find_all("Expect");
 	for( auto iterator = range.begin(); iterator != range.end(); ++iterator )
 	{
-		std::string_view text = iterator->value;
+		std::string_view text = iterator->value.to_string();
 		while( not text.empty() )
 		{
 			const auto comma = text.find(',');

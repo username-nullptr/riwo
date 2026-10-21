@@ -230,10 +230,11 @@ sys_expected<std::vector<cookie_pair>> parse_cookie_fields(
 		for( const auto &header : values.find_all("Cookie") )
 		{
 			size_t begin = 0;
-			while( begin <= header.value.size() )
+			while( begin <= header.value->size() )
 			{
-				const auto end = header.value.find(';', begin);
-				const auto statement = std::string_view(header.value).substr(begin,
+				const auto end = header.value->find(';', begin);
+				const auto statement = std::string_view(
+					header.value.to_string()).substr(begin,
 					end == std::string::npos ? std::string::npos : end - begin);
 				if( trim_ows(statement).empty() )
 					return invalid_cookie<std::vector<cookie_pair>>();

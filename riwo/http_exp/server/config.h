@@ -4,7 +4,10 @@
 #ifndef RIWO_HTTP_EXP_SERVER_CONFIG_H
 #define RIWO_HTTP_EXP_SERVER_CONFIG_H
 
-#include <riwo/http_exp/client/config.h>
+#include <riwo/http_exp/protocol/limits.h>
+#include <riwo/http_exp/protocol/policy.h>
+#include <riwo/http_exp/protocol/v2/config.h>
+#include <riwo/http_exp/timeout.h>
 
 namespace riwo::http_exp
 {

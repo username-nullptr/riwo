@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
+#include <riwo/http_exp/protocol/duplex_channel.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
@@ -99,14 +100,14 @@ void add_nv(nv_block &block, std::string name, std::string value)
 			if( name.starts_with(':') or forbidden_header(name) )
 				return sys_unexpected(make_error_code(errc::invalid_field_name));
 			if( name == "content-length" or name == "trailer" ) continue;
-			if( name == "te" and lower(field.value) != "trailers" )
+			if( name == "te" and lower(field.value.to_string()) != "trailers" )
 				return sys_unexpected(make_error_code(errc::invalid_field_value));
-			if( name.size() + field.value.size() + 32 >
+			if( name.size() + field.value->size() + 32 >
 				limit - std::min(limit, decoded_size) )
 				return sys_unexpected(
 					make_error_code(errc::header_limit_exceeded));
-			decoded_size += name.size() + field.value.size() + 32;
-			add_nv(result, std::move(name), field.value);
+			decoded_size += name.size() + field.value->size() + 32;
+			add_nv(result, std::move(name), field.value.to_string());
 		}
 		if( body_allowed and (spec.type() == body_spec::mode::known_length or
 			spec.type() == body_spec::mode::head) )
@@ -139,12 +140,12 @@ void add_nv(nv_block &block, std::string name, std::string value)
 			if( name.starts_with(':') or forbidden_header(name) or name == "te" or
 				name == "content-length" or name == "host" or name == "trailer" )
 				return sys_unexpected(make_error_code(errc::invalid_trailer));
-			if( name.size() + field.value.size() + 32 >
+			if( name.size() + field.value->size() + 32 >
 				limit - std::min(limit, decoded_size) )
 				return sys_unexpected(
 					make_error_code(errc::header_limit_exceeded));
-			decoded_size += name.size() + field.value.size() + 32;
-			add_nv(result, std::move(name), field.value);
+			decoded_size += name.size() + field.value->size() + 32;
+			add_nv(result, std::move(name), field.value.to_string());
 		}
 		return result;
 	}
@@ -941,7 +942,7 @@ private:
 			for( const auto &field : value.m_request.headers )
 			{
 				if( lower(field.name) != "content-length" ) continue;
-				const std::string_view content_length = field.value;
+				const std::string_view content_length = field.value.to_string();
 				uint64_t length = 0;
 				const auto parsed = std::from_chars(content_length.data(),
 					content_length.data() + content_length.size(), length);

@@ -4,8 +4,9 @@
 #ifndef RIWO_HTTP_EXP_TRANSPORT_CONNECTOR_H
 #define RIWO_HTTP_EXP_TRANSPORT_CONNECTOR_H
 
-#include <riwo/http_exp/client/config.h>
-#include <riwo/http_exp/transport/byte_stream.h>
+#include <riwo/http_exp/protocol/policy.h>
+#include <riwo/http_exp/transport/connect_options.h>
+#include <riwo/http_exp/transport/negotiated_transport.h>
 
 namespace riwo::http_exp
 {
@@ -21,17 +22,6 @@ struct connect_request
 	milliseconds deadline {30000};
 	optional<std::string> local_bind {};
 };
-
-template<core_concepts::exec Exec = asio::any_io_executor>
-struct basic_negotiated_transport
-{
-	basic_byte_stream<Exec> stream;
-	protocol selected_protocol = protocol::v1_1;
-	transport_metadata metadata {};
-	std::vector<std::byte> initial_input {};
-};
-
-using negotiated_transport = basic_negotiated_transport<>;
 
 template<core_concepts::exec Exec = asio::any_io_executor>
 class RIWO_HTTP_EXP_TAPI basic_transport_connector

@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_H
 
 #include <riwo/http_exp/error.h>
+#include <riwo/http_exp/timeout.h>
 #include <riwo/http_exp/protocol.h>
 #include <riwo/http_exp/transport.h>
 #include <riwo/http_exp/body.h>

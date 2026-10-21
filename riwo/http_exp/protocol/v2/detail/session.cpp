@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
+#include <riwo/http_exp/protocol/duplex_channel.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
@@ -98,9 +99,9 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		{
 			auto name = lower(field.name);
 			if( forbidden_header(name) or
-				(name == "te" and lower(field.value) != "trailers") )
+				(name == "te" and lower(field.value.to_string()) != "trailers") )
 				return sys_unexpected(make_error_code(errc::invalid_field_name));
-			add_nv(result, std::move(name), field.value);
+			add_nv(result, std::move(name), field.value.to_string());
 		}
 		return result;
 	}
@@ -121,7 +122,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 			auto name = lower(field.name);
 			if( name.starts_with(':') or forbidden_header(name) or name == "te" )
 				return sys_unexpected(make_error_code(errc::invalid_trailer));
-			add_nv(result, std::move(name), field.value);
+			add_nv(result, std::move(name), field.value.to_string());
 		}
 		return result;
 	}

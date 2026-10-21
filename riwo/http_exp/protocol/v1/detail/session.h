@@ -4,9 +4,10 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_SESSION_H
 #define RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_SESSION_H
 
-#include <riwo/http_exp/client/config.h>
 #include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/protocol/limits.h>
 #include <riwo/http_exp/transport/connection.h>
+#include <riwo/http_exp/timeout.h>
 
 namespace riwo::http_exp::v1::detail
 {

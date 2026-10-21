@@ -13,8 +13,10 @@ enum class protocol
 {
 	v1_0,
 	v1_1,
+	v1 = v1_1,
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	v2
+	v2_0,
+	v2 = v2_0
 #endif
 };
 

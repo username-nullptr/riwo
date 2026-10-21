@@ -288,7 +288,7 @@ size_t cookie_jar::store(const riwo::url &origin,
 	size_t result = 0;
 	for( const auto &header : response_headers.find_all("Set-Cookie") )
 	{
-		auto parsed = parse_set_cookie(header.value);
+		auto parsed = parse_set_cookie(header.value.to_string());
 		if( parsed and store(origin, *parsed) ) ++result;
 	}
 	return result;

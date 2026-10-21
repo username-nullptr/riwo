@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_TRANSPORT_METADATA_H
 
 #include <riwo/http_exp/global.h>
+#include <riwo/core/value.h>
 #include <unordered_map>
 
 namespace riwo::http_exp
@@ -23,7 +24,7 @@ struct transport_metadata
 	optional<std::string> remote_endpoint {};
 	bool tls = false;
 	optional<std::string> alpn {};
-	std::unordered_map<std::string,std::string> attributes {};
+	std::unordered_map<std::string,riwo::value> attributes {};
 };
 
 } //namespace riwo::http_exp

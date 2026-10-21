@@ -64,6 +64,7 @@ static_assert(!http::body_source_model<source_without_cancel>);
 static_assert(!http::body_source_model<source_with_wrong_completion>);
 
 static_assert(std::copyable<http::protocol_policy>);
+static_assert(std::same_as<decltype(http::field::value),riwo::value>);
 static_assert(std::copyable<http::fields>);
 static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
@@ -226,6 +227,9 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_THROWS(http::method("bad method"), std::invalid_argument);
 	RIWO_TEST_CHECK_THROWS(http::status(99), std::invalid_argument);
 	RIWO_TEST_CHECK_EQ(http::status(599).code(), 599);
+	RIWO_TEST_CHECK(http::status(http::status::ok) == http::status::ok);
+	RIWO_TEST_CHECK(http::status::ok == http::status(http::status::ok));
+	RIWO_TEST_CHECK(http::status(http::status::ok) != http::status::created);
 	RIWO_TEST_CHECK_EQ(http::status(http::status::reset_content).text(),
 		"Reset Content");
 	RIWO_TEST_CHECK_EQ(http::status(418).text(), "I'm a teapot");
@@ -247,6 +251,13 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_EQ(fields.begin()->name, "SET-cookie");
 	RIWO_TEST_CHECK_THROWS(fields.add("bad name", "value"), std::invalid_argument);
 	RIWO_TEST_CHECK_THROWS(fields.add("name", "bad\rvalue"), std::invalid_argument);
+
+	http::fields typed_fields;
+	typed_fields.add("Content-Length", 42U);
+	typed_fields.set("X-Enabled", true);
+	RIWO_TEST_CHECK_EQ(typed_fields.find_first("content-length").value(), "42");
+	RIWO_TEST_CHECK_EQ(typed_fields.begin()->value.get<uint32_t>().value(), 42U);
+	RIWO_TEST_CHECK_EQ(std::next(typed_fields.begin())->value.to_bool().value(), true);
 
 	auto known = http::body_spec::known(7, {{"Digest"}});
 	RIWO_TEST_CHECK(known.type() == http::body_spec::mode::known_length);

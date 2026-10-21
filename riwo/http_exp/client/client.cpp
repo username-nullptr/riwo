@@ -190,7 +190,7 @@ namespace
 	std::string_view value;
 	auto values = head.headers.find_all("Content-Encoding");
 	for( auto iterator = values.begin(); iterator != values.end(); ++iterator )
-		value = iterator->value;
+		value = iterator->value.to_string();
 	while( not value.empty() and
 		(value.front() == ' ' or value.front() == '\t') )
 		value.remove_prefix(1);

@@ -83,15 +83,15 @@ field_range::const_iterator field_range::end() const noexcept {
 	return {m_values->end(), m_values->end(), m_name};
 }
 
-void fields::add(std::string name, std::string value)
+void fields::add(std::string name, riwo::value value)
 {
-	validate(name, value);
+	validate(name, value.to_string());
 	m_values.push_back({std::move(name), std::move(value)});
 }
 
-void fields::set(std::string name, std::string value)
+void fields::set(std::string name, riwo::value value)
 {
-	validate(name, value);
+	validate(name, value.to_string());
 	auto first = std::ranges::find_if(m_values, [&](const field &item) {
 		return equal_name(item.name, name);
 	});
@@ -123,7 +123,8 @@ optional<std::string_view> fields::find_first(std::string_view name) const
 	const auto found = std::ranges::find_if(m_values, [&](const field &item) {
 		return equal_name(item.name, name);
 	});
-	return found == m_values.end() ? optional<std::string_view>{} : found->value;
+	return found == m_values.end() ? optional<std::string_view>{} :
+		std::string_view(found->value.to_string());
 }
 
 fields::const_iterator fields::begin() const noexcept {

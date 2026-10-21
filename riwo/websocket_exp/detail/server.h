@@ -29,7 +29,7 @@ inline bool header_has_token(const http_exp::fields &headers,
 {
 	for( const auto &field : headers.find_all(name) )
 	{
-		std::string_view value = field.value;
+		std::string_view value = field.value.to_string();
 		while( not value.empty() )
 		{
 			auto comma = value.find(',');

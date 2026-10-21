@@ -82,9 +82,10 @@ struct header_block
 		{
 			auto name = lower(field.name);
 			if( name == "host" ) continue;
-			if( forbidden(name) or (name == "te" and lower(field.value) != "trailers") )
+			if( forbidden(name) or (name == "te" and
+				lower(field.value.to_string()) != "trailers") )
 				return sys_unexpected(protocol_error());
-			result.add(std::move(name), field.value);
+			result.add(std::move(name), field.value.to_string());
 		}
 		result.finalize();
 		return result;
@@ -104,9 +105,10 @@ struct header_block
 		for( const auto &field : head.headers )
 		{
 			auto name = lower(field.name);
-			if( forbidden(name) or (name == "te" and lower(field.value) != "trailers") )
+			if( forbidden(name) or (name == "te" and
+				lower(field.value.to_string()) != "trailers") )
 				return sys_unexpected(protocol_error());
-			result.add(std::move(name), field.value);
+			result.add(std::move(name), field.value.to_string());
 		}
 		result.finalize();
 		return result;
@@ -128,7 +130,7 @@ struct header_block
 			if( name.starts_with(':') or forbidden(name) or name == "te" or
 				name == "content-length" or name == "trailer" )
 				return sys_unexpected(make_error_code(errc::invalid_trailer));
-			result.add(std::move(name), field.value);
+			result.add(std::move(name), field.value.to_string());
 		}
 		result.finalize();
 		return result;

@@ -4,6 +4,7 @@
 #ifndef RIWO_HTTP_EXP_CLIENT_REQUEST_H
 #define RIWO_HTTP_EXP_CLIENT_REQUEST_H
 
+#include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/body/source.h>
 #include <riwo/http_exp/protocol/request_head.h>
 

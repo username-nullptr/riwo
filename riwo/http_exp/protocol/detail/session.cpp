@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
+#include <riwo/http_exp/protocol/duplex_channel.h>
 
 namespace riwo::http_exp::detail
 {

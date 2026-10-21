@@ -87,7 +87,7 @@ void append_fields(std::string &result, const fields &values,
 		if( skip_framing and framing_header(value.name) ) continue;
 		result += value.name;
 		result += ": ";
-		result += value.value;
+		result += value.value.to_string();
 		result += "\r\n";
 	}
 }
@@ -309,7 +309,7 @@ sys_expected<parsed_request> parse_request(std::string_view wire,
 			if( equal_ci(field.name, "Host") )
 			{
 				++host_count;
-				host_value = field.value;
+				host_value = field.value.to_string();
 			}
 		}
 		if( host_count > 1 )

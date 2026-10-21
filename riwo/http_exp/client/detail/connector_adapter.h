@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_HTTP_EXP_TRANSPORT_DETAIL_CONNECTOR_ADAPTER_H
-#define RIWO_HTTP_EXP_TRANSPORT_DETAIL_CONNECTOR_ADAPTER_H
+#ifndef RIWO_HTTP_EXP_CLIENT_DETAIL_CONNECTOR_ADAPTER_H
+#define RIWO_HTTP_EXP_CLIENT_DETAIL_CONNECTOR_ADAPTER_H
 
 #include <riwo/http_exp/client/detail/connector.h>
 #include <riwo/http_exp/transport/connector.h>
@@ -84,7 +84,7 @@ private:
 		bool absolute = false;
 		if( auto found = metadata.attributes.find("http.absolute_form");
 			found != metadata.attributes.end() )
-			absolute = found->second == "true" or found->second == "1";
+			absolute = found->second.to_bool().value_or(false);
 		auto selected = value.selected_protocol;
 		auto alpn = metadata.alpn;
 		return detail::negotiated_transport {
@@ -109,4 +109,4 @@ template<core_concepts::exec Exec>
 
 } //namespace riwo::http_exp::detail
 
-#endif //RIWO_HTTP_EXP_TRANSPORT_DETAIL_CONNECTOR_ADAPTER_H
+#endif //RIWO_HTTP_EXP_CLIENT_DETAIL_CONNECTOR_ADAPTER_H
