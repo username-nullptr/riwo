@@ -54,6 +54,8 @@ public:
 	std::string_view name;
 };
 
+field_range::const_iterator::const_iterator() = default;
+
 field_range::const_iterator::const_iterator(base_iterator_t current,
 	base_iterator_t end, std::string_view name) noexcept :
 	m_impl(std::make_unique<impl>(current, end, name))

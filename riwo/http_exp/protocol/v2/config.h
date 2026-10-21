@@ -10,7 +10,7 @@ namespace riwo::http_exp
 {
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-struct h2_config
+struct v2_config
 {
 	uint32_t initial_stream_window = 65'535;
 	uint32_t initial_connection_window = 1024 * 1024;

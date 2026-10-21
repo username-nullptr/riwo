@@ -69,11 +69,6 @@ public:
 	optional<std::chrono::milliseconds> m_write_timeout;
 };
 
-tcp_connection::tcp_connection() :
-	tcp_connection(riwo::get_executor())
-{
-}
-
 tcp_connection::tcp_connection(asio::any_io_executor executor) :
 	m_impl(std::make_unique<impl>(std::move(executor)))
 {

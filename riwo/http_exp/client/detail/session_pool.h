@@ -25,7 +25,8 @@ public:
 
 	explicit session_pool(client_config config,
 		connector_ptr_t connector = {},
-		session_factory_ptr_t factory = {});
+		session_factory_ptr_t factory = {},
+		executor_t executor = riwo::get_executor());
 	session_pool(executor_t executor, client_config config,
 		connector_ptr_t connector = {},
 		session_factory_ptr_t factory = {});

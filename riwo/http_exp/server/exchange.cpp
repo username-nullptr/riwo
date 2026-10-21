@@ -56,6 +56,28 @@ uint16_t server_exchange_state::remote_port() const noexcept {
 	return error ? 0 : endpoint.port();
 }
 
+asio::ip::tcp::endpoint server_exchange_state::remote_endpoint(
+	error_code &error) const noexcept
+{
+	if( not m_impl->m_stream )
+	{
+		error = make_error_code(errc::operation_not_permitted);
+		return {};
+	}
+	return m_impl->m_stream->remote_endpoint(error);
+}
+
+asio::ip::tcp::endpoint server_exchange_state::local_endpoint(
+	error_code &error) const noexcept
+{
+	if( not m_impl->m_stream )
+	{
+		error = make_error_code(errc::operation_not_permitted);
+		return {};
+	}
+	return m_impl->m_stream->local_endpoint(error);
+}
+
 stream_capabilities server_exchange_state::capabilities() const noexcept {
 	return m_impl->m_stream ? m_impl->m_stream->capabilities() : stream_capabilities{};
 }

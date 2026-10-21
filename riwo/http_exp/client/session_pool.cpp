@@ -794,8 +794,9 @@ session_pool::session_pool(executor_t executor, client_config config,
 }
 
 session_pool::session_pool(client_config config,
-	connector_ptr_t connector, session_factory_ptr_t factory) :
-	session_pool(executor_t(riwo::get_executor()), std::move(config),
+	connector_ptr_t connector, session_factory_ptr_t factory,
+	executor_t executor) :
+	session_pool(std::move(executor), std::move(config),
 		std::move(connector), std::move(factory))
 {
 }

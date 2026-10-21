@@ -17,12 +17,14 @@ namespace ws = riwo::websocket_exp;
 using native_executor = riwo::io_context_t::executor_type;
 using native_stream = ws::basic_stream<native_executor>;
 using native_client = ws::basic_client<native_executor>;
+using native_server = ws::basic_server<native_executor,native_executor>;
 using native_diagnostics = ws::basic_open_diagnostics<native_executor>;
 using native_accept_result = ws::basic_accept_result<native_executor>;
 using native_retry_result = ws::basic_retry_open_result<native_executor>;
 
 static_assert(riwo::test::canonical_executor_type<ws::stream>);
 static_assert(riwo::test::canonical_executor_type<ws::client>);
+static_assert(riwo::test::canonical_executor_type<ws::server>);
 static_assert(riwo::test::canonical_executor_type<ws::open_diagnostics>);
 static_assert(riwo::test::canonical_executor_type<ws::accept_result>);
 static_assert(riwo::test::canonical_executor_type<ws::retry_open_result>);
@@ -33,6 +35,8 @@ static_assert(std::movable<ws::stream>);
 static_assert(not std::copy_constructible<ws::stream>);
 static_assert(std::movable<ws::client>);
 static_assert(not std::copy_constructible<ws::client>);
+static_assert(not std::movable<ws::server>);
+static_assert(not std::copy_constructible<ws::server>);
 static_assert(std::movable<ws::retry_open_result>);
 static_assert(not std::copy_constructible<ws::retry_open_result>);
 static_assert(std::is_error_code_enum_v<ws::errc>);
@@ -122,6 +126,12 @@ void executor_bound_objects()
 
 	native_stream stream(executor);
 	native_client client(executor);
+	http::basic_client<native_executor> http_client(executor);
+	auto cookie_store = http_client.cookie_store();
+	native_client adapted_client(std::move(http_client));
+	asio::basic_socket_acceptor<asio::ip::tcp,native_executor>
+		acceptor(context.get_executor());
+	native_server server(std::move(acceptor));
 	native_diagnostics diagnostics;
 	native_accept_result accepted(executor);
 	native_retry_result retried(executor);
@@ -129,6 +139,14 @@ void executor_bound_objects()
 	RIWO_TEST_CHECK(stream.get_executor() == executor);
 	RIWO_TEST_CHECK(client.get_executor() == executor);
 	RIWO_TEST_CHECK(client.http_client().get_executor() == executor);
+	RIWO_TEST_CHECK(adapted_client.get_executor() == executor);
+	RIWO_TEST_CHECK(adapted_client.cookie_store() == cookie_store);
+	RIWO_TEST_CHECK(server.get_executor() == executor);
+	RIWO_TEST_CHECK(server.get_service_executor() == executor);
+	RIWO_TEST_CHECK(server.http_server().get_executor() == executor);
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	RIWO_TEST_CHECK(server.config().http.h2.enable_extended_connect);
+#endif
 	RIWO_TEST_CHECK(accepted.stream.get_executor() == executor);
 	RIWO_TEST_CHECK(retried.get_executor() == executor);
 	RIWO_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);

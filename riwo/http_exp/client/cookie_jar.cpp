@@ -81,11 +81,11 @@ namespace riwo::http_exp { namespace
 	std::chrono::system_clock::time_point now,
 	std::chrono::seconds age) noexcept
 {
-	using clock_t = std::chrono::system_clock;
+	using system_clock_t = std::chrono::system_clock;
 	if( age.count() <= 0 ) return now;
 	const auto available = std::chrono::duration_cast<std::chrono::seconds>(
-		clock_t::time_point::max() - now);
-	if( age >= available ) return clock_t::time_point::max();
+		system_clock_t::time_point::max() - now);
+	if( age >= available ) return system_clock_t::time_point::max();
 	return now + age;
 }
 

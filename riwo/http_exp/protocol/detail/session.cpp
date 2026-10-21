@@ -208,9 +208,10 @@ std::shared_ptr<duplex_state> make_body_duplex_state(protocol version,
 	std::shared_ptr<body_reader_state> reader,
 	std::shared_ptr<body_writer_state> writer,
 	asio::ip::tcp::endpoint remote, asio::ip::tcp::endpoint local,
-	std::shared_ptr<void> owner, std::function<void()> cancel)
+	std::shared_ptr<void> owner, std::function<void()> cancel,
+	asio::any_io_executor executor)
 {
-	return make_body_duplex_state(asio::any_io_executor(riwo::get_executor()),
+	return make_body_duplex_state(std::move(executor),
 		version, std::move(reader), std::move(writer), remote, local,
 		std::move(owner), std::move(cancel));
 }

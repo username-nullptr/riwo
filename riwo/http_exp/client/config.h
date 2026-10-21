@@ -46,7 +46,7 @@ struct client_config
 	cookie_config cookies {};
 	message_limits response_limits {};
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	h2_config h2 {};
+	v2_config h2 {};
 #endif
 	bool automatic_decompression = true;
 };

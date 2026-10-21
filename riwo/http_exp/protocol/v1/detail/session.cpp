@@ -1959,9 +1959,10 @@ private:
 } //namespace
 
 std::shared_ptr<client_session> make_client_session(protocol version,
-	message_limits limits, timeout_policy timeouts, bool absolute_form)
+	message_limits limits, timeout_policy timeouts, bool absolute_form,
+	asio::any_io_executor executor)
 {
-	return make_client_session(asio::any_io_executor(riwo::get_executor()),
+	return make_client_session(std::move(executor),
 		version, std::move(limits), timeouts, absolute_form);
 }
 
@@ -1977,9 +1978,10 @@ std::shared_ptr<client_session> make_client_session(
 std::shared_ptr<client_session> make_client_session(protocol version,
 	message_limits limits,
 	std::shared_ptr<::riwo::http_exp::connection> transport,
-	timeout_policy timeouts, bool absolute_form)
+	timeout_policy timeouts, bool absolute_form,
+	asio::any_io_executor executor)
 {
-	return make_client_session(asio::any_io_executor(riwo::get_executor()),
+	return make_client_session(std::move(executor),
 		version, std::move(limits), std::move(transport), timeouts,
 		absolute_form);
 }

@@ -24,7 +24,7 @@ struct server_config
 	message_limits request_limits {};
 	h1_config h1 {};
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	h2_config h2 {};
+	v2_config h2 {};
 #endif
 	std::filesystem::path resource_root {};
 };

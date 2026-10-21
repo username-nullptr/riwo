@@ -56,6 +56,10 @@ public:
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] std::string remote_address() const;
 	[[nodiscard]] uint16_t remote_port() const noexcept;
+	[[nodiscard]] asio::ip::tcp::endpoint
+	remote_endpoint(error_code &error) const noexcept;
+	[[nodiscard]] asio::ip::tcp::endpoint
+	local_endpoint(error_code &error) const noexcept;
 	[[nodiscard]] const request_t &request() const noexcept;
 	[[nodiscard]] body_reader_t &request_body() noexcept;
 	[[nodiscard]] body_writer_t &response_body() noexcept;

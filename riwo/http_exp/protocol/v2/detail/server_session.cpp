@@ -1434,7 +1434,7 @@ void server_writer_adapter::cancel() noexcept {
 	if( auto owner = m_owner.lock() ) owner->cancel();
 }
 
-class h2_server_loop final : public std::enable_shared_from_this<h2_server_loop>
+class v2_server_loop final : public std::enable_shared_from_this<v2_server_loop>
 {
 public:
 	std::shared_ptr<server_session_impl> session;
@@ -1468,10 +1468,10 @@ public:
 	}
 };
 
-class h2_server_connection final : public server_connection
+class v2_server_connection final : public server_connection
 {
 public:
-	explicit h2_server_connection(std::shared_ptr<h2_server_loop> loop) :
+	explicit v2_server_connection(std::shared_ptr<v2_server_loop> loop) :
 		m_loop(std::move(loop)) {}
 	void cancel() noexcept override {
 		m_loop->session->graceful_shutdown([](error_code) {});
@@ -1480,7 +1480,7 @@ public:
 		return m_loop->session->closed();
 	}
 private:
-	std::shared_ptr<h2_server_loop> m_loop;
+	std::shared_ptr<v2_server_loop> m_loop;
 };
 
 } //namespace
@@ -1518,11 +1518,11 @@ server_connection_ptr_t accept_h2(
 		return {};
 	}
 	auto concrete = std::static_pointer_cast<server_session_impl>(*made);
-	auto loop = std::make_shared<h2_server_loop>();
+	auto loop = std::make_shared<v2_server_loop>();
 	loop->session = std::move(concrete);
 	loop->handler = std::move(handler);
 	loop->start();
-	return std::make_shared<h2_server_connection>(std::move(loop));
+	return std::make_shared<v2_server_connection>(std::move(loop));
 }
 
 } //namespace riwo::http_exp::v2::detail

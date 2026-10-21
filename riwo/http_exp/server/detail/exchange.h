@@ -22,6 +22,10 @@ public:
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] std::string remote_address() const;
 	[[nodiscard]] uint16_t remote_port() const noexcept;
+	[[nodiscard]] asio::ip::tcp::endpoint
+	remote_endpoint(error_code &error) const noexcept;
+	[[nodiscard]] asio::ip::tcp::endpoint
+	local_endpoint(error_code &error) const noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 	[[nodiscard]] const request_head &request() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_reader_state> request_body() const noexcept;
@@ -128,6 +132,18 @@ std::string basic_server_exchange<Exec>::remote_address() const {
 template <core_concepts::exec Exec>
 uint16_t basic_server_exchange<Exec>::remote_port() const noexcept {
 	return m_impl->m_state->remote_port();
+}
+
+template <core_concepts::exec Exec>
+asio::ip::tcp::endpoint basic_server_exchange<Exec>::remote_endpoint(
+	error_code &error) const noexcept {
+	return m_impl->m_state->remote_endpoint(error);
+}
+
+template <core_concepts::exec Exec>
+asio::ip::tcp::endpoint basic_server_exchange<Exec>::local_endpoint(
+	error_code &error) const noexcept {
+	return m_impl->m_state->local_endpoint(error);
 }
 
 template <core_concepts::exec Exec>

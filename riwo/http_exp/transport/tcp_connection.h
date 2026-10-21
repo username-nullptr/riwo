@@ -15,8 +15,8 @@ class RIWO_HTTP_EXP_API tcp_connection final : public connection,
 	RIWO_DISABLE_COPY_MOVE(tcp_connection)
 
 public:
-	tcp_connection();
-	explicit tcp_connection(asio::any_io_executor executor);
+	explicit tcp_connection(
+		asio::any_io_executor executor = riwo::get_executor());
 	explicit tcp_connection(asio::ip::tcp::socket socket);
 	~tcp_connection() override;
 

@@ -36,31 +36,12 @@ try
 	const std::string_view policy = argc > 2 ? argv[2] : "auto";
 
 	riwo::io_context_t context;
-	http::server_config config;
-	config.protocols.requirement = protocol_requirement(policy);
-#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	config.h2.enable_extended_connect = true;
-#endif
+	ws::server_config config;
+	config.http.protocols.requirement = protocol_requirement(policy);
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server_t service(std::move(acceptor), config);
-	auto echo = [](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+	ws::server service(std::move(acceptor), config);
+	auto echo = [](ws::accept_result accepted) -> riwo::awaitable<void>
 	{
-		if( not ws::is_upgrade_request(exchange) )
-		{
-			co_await exchange.respond({http::status::bad_request, {}},
-				"WebSocket upgrade required\n", riwo::use_awaitable);
-			co_return;
-		}
-
-		ws::upgrade_options options;
-		options.supported_subprotocols = {"riwo.echo.v1"};
-		options.require_subprotocol = true;
-#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
-		options.supported_extensions.push_back(
-			ws::permessage_deflate_extension());
-#endif
-		auto accepted = co_await ws::upgrade(exchange, std::move(options),
-			riwo::use_awaitable);
 		for(;;)
 		{
 			auto [error, message] = co_await accepted.stream.read<std::string>(
@@ -74,19 +55,23 @@ try
 					riwo::buffer(message.body), riwo::use_awaitable);
 		}
 	};
+	ws::upgrade_options upgrade;
+	upgrade.supported_subprotocols = {"riwo.echo.v1"};
+	upgrade.require_subprotocol = true;
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	upgrade.supported_extensions.push_back(
+		ws::permessage_deflate_extension());
+#endif
 
 	service.bind({riwo::ip_type::v4, port});
-#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	service.on_request<http::method::get,http::method::connect>("/echo", echo);
-#else
-	service.on_request<http::method::get>("/echo", echo);
-#endif
+	service.on_connection("/echo", std::move(echo), std::move(upgrade));
 	service
 		.on_default(
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](ws::accept_result accepted) -> riwo::awaitable<void>
 		{
-			co_await exchange.respond({http::status::not_found, {}},
-				"not found\n", riwo::use_awaitable);
+			co_await accepted.stream.close(ws::close_frame(
+				ws::close_code::policy_violation, "unknown WebSocket route"),
+				riwo::use_awaitable);
 		})
 		.on_server_error([](riwo::error_code error)
 		{

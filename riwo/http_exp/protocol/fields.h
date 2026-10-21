@@ -32,7 +32,7 @@ public:
 		using pointer = const field *;
 		using reference = const field &;
 
-		const_iterator() = default;
+		const_iterator();
 		~const_iterator();
 		const_iterator(const const_iterator &other);
 		const_iterator &operator=(const const_iterator &other);
@@ -43,7 +43,7 @@ public:
 		pointer operator->() const noexcept;
 		const_iterator &operator++() noexcept;
 		const_iterator operator++(int) noexcept;
-		friend bool operator==(const const_iterator &lhs,
+		friend RIWO_HTTP_EXP_API bool operator==(const const_iterator &lhs,
 			const const_iterator &rhs) noexcept;
 
 	private:

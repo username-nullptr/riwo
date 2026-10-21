@@ -25,6 +25,12 @@ struct connect_request
 	optional<std::chrono::milliseconds> handshake_timeout {};
 	std::vector<std::string> subprotocols {};
 	std::vector<extension> extensions {};
+	size_t max_redirects = 0;
+	bool allow_insecure_redirects = false;
+
+	connect_request() = default;
+	explicit connect_request(url endpoint_value) :
+		endpoint(std::move(endpoint_value)) {}
 };
 
 template <core_concepts::exec Exec = asio::any_io_executor>
@@ -67,10 +73,11 @@ public:
 	explicit basic_client(Exec0 &&executor, config_t config = {}) requires (
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_type>);
+	explicit basic_client(http_client_t &&http_client, config_t config = {});
 
-	basic_client(basic_client &&) noexcept = default;
-	basic_client &operator=(basic_client &&) noexcept = default;
-	~basic_client() = default;
+	basic_client(basic_client &&) noexcept;
+	basic_client &operator=(basic_client &&) noexcept;
+	~basic_client();
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto open(connect_request_t request, Token &&token = {})
@@ -88,11 +95,14 @@ public:
 	[[nodiscard]] auto open(url endpoint, diagnostics_t &diagnostics,
 		Token &&token = {}) requires open_token_v<Token>;
 
-	[[nodiscard]] const config_t &config() const noexcept;
+	[[nodiscard]] std::shared_ptr<http_exp::cookie_jar>
+	cookie_store() const noexcept;
+	[[nodiscard]] size_t pending_open_count() const noexcept;
+	[[nodiscard]] config_t config() const;
 	[[nodiscard]] const http_client_t &http_client() const noexcept;
 	[[nodiscard]] http_client_t &http_client() noexcept;
 	[[nodiscard]] executor_type get_executor() const noexcept;
-	void cancel() noexcept;
+	basic_client &cancel() noexcept;
 
 public:
 	class impl;
@@ -106,6 +116,32 @@ private:
 };
 
 using client = basic_client<>;
+
+template <core_concepts::exec Exec, typename Token = use_sync_t>
+[[nodiscard]] RIWO_WEBSOCKET_EXP_TAPI auto open(
+	http_exp::basic_client<Exec> &http_client, connect_request request,
+	Token &&token = {}) requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,basic_stream<Exec>>;
+
+template <core_concepts::exec Exec, typename Token = use_sync_t>
+[[nodiscard]] RIWO_WEBSOCKET_EXP_TAPI auto open(
+	http_exp::basic_client<Exec> &http_client, connect_request request,
+	basic_open_diagnostics<Exec> &diagnostics, Token &&token = {})
+	requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,basic_stream<Exec>>;
+
+template <core_concepts::exec Exec, typename Token = use_sync_t>
+[[nodiscard]] RIWO_WEBSOCKET_EXP_TAPI auto open(
+	http_exp::basic_client<Exec> &http_client, url endpoint,
+	Token &&token = {}) requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,basic_stream<Exec>>;
+
+template <core_concepts::exec Exec, typename Token = use_sync_t>
+[[nodiscard]] RIWO_WEBSOCKET_EXP_TAPI auto open(
+	http_exp::basic_client<Exec> &http_client, url endpoint,
+	basic_open_diagnostics<Exec> &diagnostics, Token &&token = {})
+	requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,basic_stream<Exec>>;
 
 } //namespace riwo::websocket_exp
 
