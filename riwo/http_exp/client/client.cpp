@@ -579,6 +579,7 @@ send_result client_state::send(request request_value,
 			total += written;
 			if( error ) break;
 		}
+		if( not error ) source->finish_sync(error);
 		if( not error ) writer->finish(std::move(trailers), error);
 		if( error )
 		{
@@ -687,6 +688,7 @@ void client_state::send(request request_value, send_handler_t handler)
 		uint64_t total = 0;
 		uint64_t max_buffered_body = 8U * 1024U * 1024U;
 		bool automatic_decompression = true;
+		bool source_finished = false;
 		retry_policy retries;
 		redirect_policy redirects;
 
@@ -793,6 +795,21 @@ void client_state::send(request request_value, send_handler_t handler)
 
 		void finish_request()
 		{
+			if( source and not source_finished )
+			{
+				auto self = shared_from_this();
+				source->finish(
+				[self = std::move(self)](error_code error) mutable {
+					if( error )
+					{
+						self->fail(error);
+						return;
+					}
+					self->source_finished = true;
+					self->finish_request();
+				});
+				return;
+			}
 			auto self = shared_from_this();
 			writer->finish(std::move(trailers),
 			[self = std::move(self)](error_code error) mutable {

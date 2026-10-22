@@ -23,6 +23,16 @@ concept body_source_model = requires(
 	{ source.cancel() } noexcept -> std::same_as<void>;
 };
 
+template <typename Source>
+concept finalizable_body_source_model = requires(
+	Source &source,
+	error_code &error,
+	asio::any_completion_handler<void(error_code)> finish_handler)
+{
+	{ source.finish(error) } -> std::same_as<void>;
+	{ source.finish(std::move(finish_handler)) } -> std::same_as<void>;
+};
+
 } //namespace riwo::http_exp
 
 #include <riwo/http_exp/body/file.h>
@@ -33,6 +43,7 @@ namespace riwo::http_exp
 
 static_assert(body_source_model<memory_body_source>);
 static_assert(body_source_model<file_body_source>);
+static_assert(finalizable_body_source_model<file_body_source>);
 
 } //namespace riwo::http_exp
 

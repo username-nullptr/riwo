@@ -25,6 +25,8 @@ public:
 		error_code &error) noexcept = 0;
 	virtual void read_some(mutable_buffer buffer, read_handler_t handler) = 0;
 	virtual void rewind(rewind_handler_t handler) = 0;
+	virtual void finish_sync(error_code &error) noexcept = 0;
+	virtual void finish(rewind_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
 };
 
@@ -66,6 +68,23 @@ public:
 
 	void rewind(rewind_handler_t handler) override {
 		m_source.rewind(std::move(handler));
+	}
+
+	void finish_sync(error_code &error) noexcept override
+	{
+		if constexpr( finalizable_body_source_model<Source> )
+		{
+			try { m_source.finish(error); }
+			catch(...) { error = exception_error(std::current_exception()); }
+		}
+		else error.clear();
+	}
+
+	void finish(rewind_handler_t handler) override
+	{
+		if constexpr( finalizable_body_source_model<Source> )
+			m_source.finish(std::move(handler));
+		else std::move(handler)(error_code{});
 	}
 
 	void cancel() noexcept override {

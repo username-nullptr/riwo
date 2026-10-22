@@ -4,8 +4,6 @@
 #ifndef RIWO_HTTP_EXP_CLIENT_DETAIL_REPLY_H
 #define RIWO_HTTP_EXP_CLIENT_DETAIL_REPLY_H
 
-#include <fstream>
-
 namespace riwo::http_exp
 {
 
@@ -210,95 +208,21 @@ template <typename Token>
 auto basic_reply<Exec>::save_file(std::filesystem::path path, Token &&token)
 	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,uint64_t>
 {
-	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> )
-	{
-		std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-		error_code error;
-		uint64_t total = 0;
-		if( not stream )
-			error = make_system_error_code(std::errc::io_error);
-		std::array<std::byte,8192> buffer;
-		while( not error )
-		{
-			auto read = body().read_some(riwo::buffer(buffer), error);
-			if( error ) break;
-			stream.write(reinterpret_cast<const char*>(buffer.data()),
-				static_cast<std::streamsize>(read.bytes));
-			if( not stream )
-			{
-				error = make_system_error_code(std::errc::io_error);
-				break;
-			}
-			total += read.bytes;
-			if( read.eof ) break;
-		}
-		if constexpr( is_error_code_token_v<Token> )
-		{
-			token = error;
-			return total;
-		}
-		else
-		{
-			return expected_value_or_throw(error ?
-				sys_expected<uint64_t>(sys_unexpected(error)) :
-				sys_expected<uint64_t>(total));
-		}
-	}
-	else
-	{
-		struct operation : std::enable_shared_from_this<operation>
-		{
-			body_reader_t *reader;
-			std::ofstream stream;
-			std::array<std::byte,8192> buffer;
-			uint64_t total = 0;
-			asio::any_completion_handler<void(error_code,uint64_t)> handler;
+	return detail::pipe_body(body(), file_sink(std::move(path)), m_impl,
+		std::forward<Token>(token));
+}
 
-			void start()
-			{
-				if( not stream )
-				{
-					std::move(handler)(make_system_error_code(std::errc::io_error), 0);
-					return;
-				}
-				auto self = this->shared_from_this();
-				reader->read_some(riwo::buffer(buffer),
-				[self = std::move(self)]
-				(error_code error, body_read_result read) mutable
-				{
-					if( error )
-					{
-						std::move(self->handler)(error, self->total);
-						return;
-					}
-					self->stream.write(
-						reinterpret_cast<const char*>(self->buffer.data()),
-						static_cast<std::streamsize>(read.bytes));
-					if( not self->stream )
-					{
-						std::move(self->handler)(
-							make_system_error_code(std::errc::io_error), self->total);
-						return;
-					}
-					self->total += read.bytes;
-					if( read.eof )
-					{
-						std::move(self->handler)(error_code{}, self->total);
-						return;
-					}
-					self->start();
-				});
-			}
-		};
-		return initiate_io<uint64_t>(m_impl->m_executor,
-		[state = m_impl, path = std::move(path)](auto handler) mutable {
-			auto value = std::make_shared<operation>();
-			value->reader = state->m_body.get();
-			value->stream.open(path, std::ios::binary | std::ios::trunc);
-			value->handler = decltype(value->handler)(std::move(handler));
-			value->start();
-		}, std::forward<Token>(token));
-	}
+template <core_concepts::exec Exec>
+template <typename File, typename Token>
+auto basic_reply<Exec>::save_file(File &&file, Token &&token)
+	requires (not std::same_as<std::remove_cvref_t<File>,std::filesystem::path>)
+		and std::constructible_from<file_sink,File>
+		and core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,uint64_t>
+{
+	return detail::pipe_body(body(),
+		file_sink(std::forward<File>(file)), m_impl,
+		std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec>

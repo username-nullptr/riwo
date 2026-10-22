@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_CLIENT_REPLY_H
 #define RIWO_HTTP_EXP_CLIENT_REPLY_H
 
-#include <riwo/http_exp/body/reader.h>
+#include <riwo/http_exp/body/pipe.h>
 #include <riwo/http_exp/protocol/response_head.h>
 #include <riwo/http_exp/protocol/version.h>
 
@@ -69,6 +69,13 @@ public:
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto save_file(std::filesystem::path path, Token &&token = {})
 		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,uint64_t>;
+
+	template <typename File, typename Token = use_sync_t>
+	[[nodiscard]] auto save_file(File &&file, Token &&token = {})
+		requires (not std::same_as<std::remove_cvref_t<File>,std::filesystem::path>)
+			and std::constructible_from<file_sink,File>
+			and core_concepts::dis_detached_tf_opt_token<
+				Token,error_code,uint64_t>;
 
 	[[nodiscard]] std::span<const std::byte> buffered_body() const noexcept;
 	void cancel() noexcept;

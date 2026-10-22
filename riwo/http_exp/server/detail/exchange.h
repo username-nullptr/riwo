@@ -276,6 +276,253 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 }
 
 template <core_concepts::exec Exec>
+template <typename Source, typename Token>
+auto basic_server_exchange<Exec>::respond(response_head head,
+	Source &&source_value, Token &&token)
+	requires body_source_model<std::remove_cvref_t<Source>>
+		and core_concepts::tf_opt_token<Token,error_code>
+{
+	auto source = detail::make_body_source(std::forward<Source>(source_value));
+	const auto length = source->size();
+	const bool head_only = head.status.allows_body() and
+		m_impl->m_state->request().method.known() == method::head;
+	auto spec = head_only ?
+		(length ? body_spec::head(*length) : body_spec::empty()) :
+		(length ? body_spec::known(*length) : body_spec::streaming());
+	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> )
+	{
+		error_code error;
+		m_impl->m_state->respond(std::move(head), spec, error);
+		std::array<std::byte,8192> buffer;
+		uint64_t total = 0;
+		while( not error and not head_only )
+		{
+			if( length and total == *length ) break;
+			auto target = riwo::buffer(buffer);
+			if( length )
+				target = mutable_buffer(target.data(), static_cast<size_t>(
+					std::min<uint64_t>(target.size(), *length - total)));
+			const auto read = source->read_some_sync(target, error);
+			if( error == asio::error::make_error_code(asio::error::eof) )
+			{
+				if( length ) error = make_error_code(errc::body_length_mismatch);
+				else error.clear();
+				break;
+			}
+			if( error ) break;
+			if( read == 0 or read > target.size() )
+			{
+				error = read == 0 ?
+					make_error_code(errc::body_length_mismatch) :
+					make_system_error_code(std::errc::io_error);
+				break;
+			}
+			size_t offset = 0;
+			while( offset != read )
+			{
+				const auto remaining = read - offset;
+				const auto written = m_impl->m_response_body->write(
+					const_buffer(static_cast<const std::byte*>(target.data()) + offset,
+						remaining), error);
+				if( written > remaining )
+				{
+					error = make_system_error_code(std::errc::io_error);
+					break;
+				}
+				if( written > std::numeric_limits<uint64_t>::max() - total )
+				{
+					error = make_system_error_code(std::errc::value_too_large);
+					break;
+				}
+				offset += written;
+				total += written;
+				if( error or written == 0 )
+				{
+					if( not error )
+						error = make_system_error_code(std::errc::io_error);
+					break;
+				}
+			}
+		}
+		if( not error ) source->finish_sync(error);
+		if( not error and not head_only )
+			m_impl->m_response_body->finish({}, error);
+		if( error )
+		{
+			source->cancel();
+			m_impl->m_state->cancel();
+		}
+		if constexpr( is_error_code_token_v<Token> ) token = error;
+		else if( error )
+			(void)expected_value_or_throw(sys_expected<std::monostate>(
+				sys_unexpected(error)));
+	}
+	else
+	{
+		struct operation : std::enable_shared_from_this<operation>
+		{
+			std::shared_ptr<impl> owner;
+			std::shared_ptr<detail::body_source> source;
+			response_head head;
+			body_spec spec = body_spec::empty();
+			optional<uint64_t> length;
+			bool head_only = false;
+			std::array<std::byte,8192> buffer;
+			size_t chunk_size = 0;
+			size_t chunk_offset = 0;
+			uint64_t total = 0;
+			asio::any_completion_handler<void(error_code)> handler;
+
+			void start()
+			{
+				auto self = this->shared_from_this();
+				owner->m_state->respond(std::move(head), spec,
+				[self = std::move(self)](error_code error) mutable {
+					if( error ) self->fail(error);
+					else if( self->head_only ) self->finish_source();
+					else self->read_next();
+				});
+			}
+
+			void read_next()
+			{
+				if( length and total == *length )
+				{
+					finish_source();
+					return;
+				}
+				auto target = riwo::buffer(buffer);
+				if( length )
+					target = mutable_buffer(target.data(), static_cast<size_t>(
+						std::min<uint64_t>(target.size(), *length - total)));
+				auto self = this->shared_from_this();
+				source->read_some(target,
+				[self = std::move(self), target]
+				(error_code error, size_t size) mutable {
+					self->read_complete(target, error, size);
+				});
+			}
+
+			void read_complete(mutable_buffer target,
+				error_code error, size_t size)
+			{
+				if( error == asio::error::make_error_code(asio::error::eof) )
+				{
+					if( length ) fail(make_error_code(errc::body_length_mismatch));
+					else finish_source();
+					return;
+				}
+				if( error )
+				{
+					fail(error);
+					return;
+				}
+				if( size == 0 or size > target.size() )
+				{
+					fail(size == 0 ?
+						make_error_code(errc::body_length_mismatch) :
+						make_system_error_code(std::errc::io_error));
+					return;
+				}
+				chunk_size = size;
+				chunk_offset = 0;
+				write_next();
+			}
+
+			void write_next()
+			{
+				auto self = this->shared_from_this();
+				owner->m_response_body->write(const_buffer(
+					buffer.data() + chunk_offset, chunk_size - chunk_offset),
+				[self = std::move(self)]
+				(error_code write_error, size_t written) mutable {
+					self->write_complete(write_error, written);
+				});
+			}
+
+			void write_complete(error_code error, size_t written)
+			{
+				const auto remaining = chunk_size - chunk_offset;
+				if( written > remaining )
+				{
+					fail(make_system_error_code(std::errc::io_error));
+					return;
+				}
+				if( written > std::numeric_limits<uint64_t>::max() - total )
+				{
+					fail(make_system_error_code(std::errc::value_too_large));
+					return;
+				}
+				chunk_offset += written;
+				total += written;
+				if( error )
+				{
+					fail(error);
+					return;
+				}
+				if( written == 0 )
+				{
+					fail(make_system_error_code(std::errc::io_error));
+					return;
+				}
+				if( chunk_offset != chunk_size ) write_next();
+				else read_next();
+			}
+
+			void finish_source()
+			{
+				auto self = this->shared_from_this();
+				source->finish(
+				[self = std::move(self)](error_code error) mutable {
+					if( error )
+					{
+						self->fail(error);
+						return;
+					}
+					if( self->head_only ) self->complete({});
+					else self->finish_response();
+				});
+			}
+
+			void finish_response()
+			{
+				auto self = this->shared_from_this();
+				owner->m_response_body->finish({},
+				[self = std::move(self)](error_code error) mutable {
+					if( error ) self->fail(error);
+					else self->complete({});
+				});
+			}
+
+			void fail(error_code error)
+			{
+				source->cancel();
+				owner->m_state->cancel();
+				complete(error);
+			}
+
+			void complete(error_code error) {
+				std::move(handler)(error);
+			}
+		};
+
+		return initiate_io_void(m_impl->m_executor,
+		[owner = m_impl, source = std::move(source), head = std::move(head),
+		 spec = std::move(spec), length, head_only](auto handler) mutable {
+			auto value = std::make_shared<operation>();
+			value->owner = std::move(owner);
+			value->source = std::move(source);
+			value->head = std::move(head);
+			value->spec = std::move(spec);
+			value->length = length;
+			value->head_only = head_only;
+			value->handler = decltype(value->handler)(std::move(handler));
+			value->start();
+		}, std::forward<Token>(token));
+	}
+}
+
+template <core_concepts::exec Exec>
 template <typename Token>
 auto basic_server_exchange<Exec>::inform(response_head head, Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>

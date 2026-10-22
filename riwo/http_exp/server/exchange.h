@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_SERVER_EXCHANGE_H
 
 #include <riwo/http_exp/body/reader.h>
+#include <riwo/http_exp/body/source.h>
 #include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/body/writer.h>
 #include <riwo/http_exp/protocol/capabilities.h>
@@ -73,6 +74,11 @@ public:
 	template <typename Token = use_sync_t>
 	auto respond(response_head head, const const_buffer &body, Token &&token = {})
 		requires core_concepts::tf_opt_token<Token,error_code>;
+
+	template <typename Source, typename Token = use_sync_t>
+	auto respond(response_head head, Source &&source, Token &&token = {})
+		requires body_source_model<std::remove_cvref_t<Source>>
+			and core_concepts::tf_opt_token<Token,error_code>;
 
 	template <typename Token = use_sync_t>
 	auto inform(response_head, Token &&token = {})
