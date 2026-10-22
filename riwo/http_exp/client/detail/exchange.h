@@ -24,6 +24,8 @@ public:
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_writer_state> request_body() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_reader_state> reply_body() const noexcept;
+	[[nodiscard]] void *protocol_extension(
+		const std::type_info &type) noexcept;
 	[[nodiscard]] reply_head wait_reply(error_code &error) noexcept;
 	void wait_reply(reply_handler_t handler);
 	[[nodiscard]] std::shared_ptr<duplex_state> release_duplex(
@@ -221,7 +223,8 @@ stream_capabilities basic_client_exchange<Exec>::capabilities() const noexcept {
 template <core_concepts::exec Exec>
 template <typename Extension>
 Extension *basic_client_exchange<Exec>::extension() noexcept {
-	return nullptr;
+	return static_cast<Extension *>(
+		m_impl->m_state->protocol_extension(typeid(Extension)));
 }
 
 } //namespace riwo::http_exp

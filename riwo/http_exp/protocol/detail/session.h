@@ -10,6 +10,7 @@
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/response_head.h>
 #include <riwo/http_exp/protocol/version.h>
+#include <typeinfo>
 
 namespace riwo::http_exp::detail
 {
@@ -31,12 +32,12 @@ public:
 	[[nodiscard]] virtual protocol response_protocol() const noexcept {
 		return selected_protocol();
 	}
-	[[nodiscard]] virtual stream_capabilities capabilities() const noexcept;
-	[[nodiscard]] virtual request_head request() const;
+	[[nodiscard]] virtual stream_capabilities capabilities() const noexcept = 0;
+	[[nodiscard]] virtual request_head request() const = 0;
 	[[nodiscard]] virtual std::shared_ptr<body_reader_state>
-	inbound_body() const noexcept;
+	inbound_body() const noexcept = 0;
 	[[nodiscard]] virtual std::shared_ptr<body_writer_state>
-	outbound_body() const noexcept;
+	outbound_body() const noexcept = 0;
 	[[nodiscard]] virtual response_head wait_response_sync(error_code &error) noexcept;
 	[[nodiscard]] virtual endpoint_t remote_endpoint(
 		error_code &error) const noexcept;
@@ -57,6 +58,10 @@ public:
 	[[nodiscard]] virtual request_delivery delivery() const noexcept {
 		return request_delivery::possibly_processed;
 	}
+	// Protocol-specific diagnostic handles are opt-in. Non-matching protocols
+	// intentionally return nullptr.
+	[[nodiscard]] virtual void *protocol_extension(
+		const std::type_info &type) noexcept;
 	virtual void cancel() noexcept = 0;
 };
 

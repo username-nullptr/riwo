@@ -71,6 +71,13 @@ client_exchange_state::reply_body() const noexcept {
 	return m_impl->m_reply_body;
 }
 
+void *client_exchange_state::protocol_extension(
+	const std::type_info &type) noexcept
+{
+	return m_impl->m_stream ?
+		m_impl->m_stream->protocol_extension(type) : nullptr;
+}
+
 reply_head client_exchange_state::wait_reply(error_code &error) noexcept
 {
 	auto state = m_impl;

@@ -297,6 +297,18 @@ struct fake_stream final : http::detail::stream
 	http::protocol selected_protocol() const noexcept override {
 		return http::protocol::v1_1;
 	}
+	http::stream_capabilities capabilities() const noexcept override {
+		return {};
+	}
+	http::request_head request() const override { return {}; }
+	std::shared_ptr<http::detail::body_reader_state>
+	inbound_body() const noexcept override {
+		return http::detail::make_body_reader_state();
+	}
+	std::shared_ptr<http::detail::body_writer_state>
+	outbound_body() const noexcept override {
+		return http::detail::make_body_writer_state();
+	}
 	void cancel() noexcept override {}
 };
 

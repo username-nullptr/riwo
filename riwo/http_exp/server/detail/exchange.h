@@ -30,6 +30,8 @@ public:
 	[[nodiscard]] const request_head &request() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_reader_state> request_body() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_writer_state> response_body() const noexcept;
+	[[nodiscard]] void *protocol_extension(
+		const std::type_info &type) noexcept;
 	void respond(response_head head, body_spec spec, error_code &error) noexcept;
 	void respond(response_head head, body_spec spec, operation_handler_t handler);
 	void inform(response_head head, error_code &error) noexcept;
@@ -616,7 +618,8 @@ stream_capabilities basic_server_exchange<Exec>::capabilities() const noexcept {
 template <core_concepts::exec Exec>
 template <typename Extension>
 Extension *basic_server_exchange<Exec>::extension() noexcept {
-	return nullptr;
+	return static_cast<Extension *>(
+		m_impl->m_state->protocol_extension(typeid(Extension)));
 }
 
 } //namespace riwo::http_exp

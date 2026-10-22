@@ -49,6 +49,8 @@ behavior rather than by implementation source file.
 
 - `http_exp/public_api.cpp`: public types, completion signatures, configuration,
   client/server construction, and compile-time ownership contracts.
+- `http_exp/protocol_api.cpp`: HTTP/1 and HTTP/2 incremental engines, event/action
+  flow control, codecs, public V2 diagnostics extensions, and malformed input.
 - `http_exp/body.cpp`: body sources/readers/writers, exchange state machines,
   request metadata, informational responses, and reply convenience operations.
 - `http_exp/http1.cpp`: HTTP/1.0 and HTTP/1.1 loopback, buffered/file/streaming
@@ -60,8 +62,8 @@ behavior rather than by implementation source file.
   request/response bodies and trailers, RST_STREAM/GOAWAY mapping, automatic
   retry, redirects, and replayable-source rewind behavior.
 - `http_exp/http2_server.cpp`: HTTP/2 prior-knowledge routing, multiplexed
-  exchanges, resource validation, HEAD/bodyless responses, trailers, and
-  graceful shutdown.
+  exchanges, stream extensions, resource validation, HEAD/bodyless responses,
+  trailers, and graceful shutdown.
 - `http_exp/application.cpp`: public-API application workflow covering routing,
   query targets, authentication rejection and body draining, state mutation,
   case-insensitive headers, streaming events/trailers, and 404 responses.

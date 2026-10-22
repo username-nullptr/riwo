@@ -186,6 +186,11 @@ public:
 class fake_stream final : public http::detail::stream
 {
 public:
+	struct test_extension
+	{
+		int value = 42;
+	};
+
 	explicit fake_stream(http::body_spec spec) :
 		reader_adapter(std::make_shared<fake_reader_adapter>("reply")),
 		writer_adapter(std::make_shared<fake_writer_adapter>()),
@@ -197,6 +202,19 @@ public:
 
 	http::protocol selected_protocol() const noexcept override {
 		return http::protocol::v1_1;
+	}
+
+	http::stream_capabilities capabilities() const noexcept override {
+		return {};
+	}
+
+	http::request_head request() const override { return {}; }
+
+	void *protocol_extension(
+		const std::type_info &type) noexcept override
+	{
+		return type == typeid(test_extension) ?
+			std::addressof(extension) : nullptr;
 	}
 
 	std::shared_ptr<http::detail::body_reader_state>
@@ -250,6 +268,7 @@ public:
 	std::shared_ptr<fake_writer_adapter> writer_adapter;
 	std::shared_ptr<http::detail::body_reader_state> reader;
 	std::shared_ptr<http::detail::body_writer_state> writer;
+	test_extension extension {};
 	http::response_head response;
 	std::vector<http::response_head> informationals;
 	bool cancelled = false;
@@ -685,6 +704,10 @@ void client_open_and_metadata()
 	auto exchange = client.open(std::move(request),
 		http::body_spec::known(3), error);
 	RIWO_TEST_CHECK(!error);
+	auto *extension = exchange.extension<fake_stream::test_extension>();
+	RIWO_TEST_CHECK(extension != nullptr);
+	RIWO_TEST_CHECK_EQ(extension->value, 42);
+	RIWO_TEST_CHECK(exchange.extension<int>() == nullptr);
 	RIWO_TEST_CHECK_EQ(session->open_count, 1U);
 	RIWO_TEST_CHECK_EQ(session->last_head->scheme, "http");
 	RIWO_TEST_CHECK_EQ(session->last_head->authority, "example.test");

@@ -42,6 +42,10 @@ void prior_knowledge_server_and_multiplexing()
 		{
 			echo_started = true;
 			RIWO_TEST_CHECK_EQ(exchange.selected_protocol(), http::protocol::v2);
+			auto *extension =
+				exchange.extension<http::v2::stream_extension>();
+			RIWO_TEST_CHECK(extension != nullptr);
+			RIWO_TEST_CHECK(extension->stream_id() > 0);
 			auto body = co_await read_body(exchange.request_body());
 			auto trailers = exchange.request_body().trailers();
 			RIWO_TEST_CHECK_EQ(trailers.find_first("x-client-trailer"), "done");

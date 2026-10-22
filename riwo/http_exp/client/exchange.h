@@ -13,6 +13,7 @@
 #include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/protocol/response_head.h>
 #include <riwo/http_exp/protocol/version.h>
+#include <typeinfo>
 
 namespace riwo::http_exp::detail
 {

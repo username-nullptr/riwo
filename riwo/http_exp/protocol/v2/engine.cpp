@@ -581,6 +581,7 @@ public:
 	bool paused = false;
 	bool input_finished = false;
 	bool draining = false;
+	connection_extension extension {};
 };
 
 connection_engine::connection_engine(connection_config config) :
@@ -866,6 +867,14 @@ connection_diagnostics connection_engine::diagnostics() const noexcept
 			m_impl->pending_output_offset + m_impl->outbound_size,
 		.draining = m_impl->draining
 	};
+}
+
+void *connection_engine::protocol_extension(
+	const std::type_info &type) noexcept
+{
+	if( type != typeid(connection_extension) ) return nullptr;
+	m_impl->extension = connection_extension(diagnostics());
+	return std::addressof(m_impl->extension);
 }
 
 } //namespace riwo::http_exp::v2

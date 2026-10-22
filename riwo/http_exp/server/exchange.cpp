@@ -96,6 +96,13 @@ server_exchange_state::response_body() const noexcept {
 	return m_impl->m_response_body;
 }
 
+void *server_exchange_state::protocol_extension(
+	const std::type_info &type) noexcept
+{
+	return m_impl->m_stream ?
+		m_impl->m_stream->protocol_extension(type) : nullptr;
+}
+
 void server_exchange_state::respond(response_head head, body_spec spec,
 	error_code &error) noexcept
 {

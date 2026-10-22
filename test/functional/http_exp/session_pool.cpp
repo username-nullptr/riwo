@@ -22,6 +22,18 @@ public:
 	[[nodiscard]] http::protocol selected_protocol() const noexcept override {
 		return m_version;
 	}
+	[[nodiscard]] http::stream_capabilities capabilities() const noexcept override {
+		return {};
+	}
+	[[nodiscard]] http::request_head request() const override { return {}; }
+	[[nodiscard]] std::shared_ptr<detail::body_reader_state>
+	inbound_body() const noexcept override {
+		return detail::make_body_reader_state();
+	}
+	[[nodiscard]] std::shared_ptr<detail::body_writer_state>
+	outbound_body() const noexcept override {
+		return detail::make_body_writer_state();
+	}
 	void cancel() noexcept override { cancelled = true; }
 	http::protocol m_version;
 	bool cancelled = false;

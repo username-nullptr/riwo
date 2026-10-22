@@ -282,6 +282,12 @@ void h2_manual_engine_loop()
 {
 	http::v2::connection_engine client({.role = http::protocol_role::client});
 	http::v2::connection_engine server({.role = http::protocol_role::server});
+	auto *diagnostics = client.extension<http::v2::connection_extension>();
+	RIWO_TEST_CHECK(diagnostics != nullptr);
+	RIWO_TEST_CHECK_EQ(diagnostics->local_settings().initial_window_size,
+		http::v2::connection_config{}.initial_stream_window);
+	RIWO_TEST_CHECK_EQ(diagnostics->pending_output(), 0U);
+	RIWO_TEST_CHECK(client.extension<int>() == nullptr);
 	http::request_head request;
 	request.method = http::method::get;
 	request.scheme = "http";

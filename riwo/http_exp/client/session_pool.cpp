@@ -53,6 +53,10 @@ public:
 	[[nodiscard]] request_delivery delivery() const noexcept override {
 		return m_inner->delivery();
 	}
+	[[nodiscard]] void *protocol_extension(
+		const std::type_info &type) noexcept override {
+		return m_inner->protocol_extension(type);
+	}
 	[[nodiscard]] response_head wait_response_sync(
 		error_code &error) noexcept override {
 		return m_inner->wait_response_sync(error);

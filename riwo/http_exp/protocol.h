@@ -20,6 +20,7 @@
 #include <riwo/http_exp/protocol/v1/engine.h>
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 # include <riwo/http_exp/protocol/v2/config.h>
+# include <riwo/http_exp/protocol/v2/extension.h>
 # include <riwo/http_exp/protocol/v2/engine.h>
 #endif
 #include <riwo/http_exp/protocol/duplex_channel.h>

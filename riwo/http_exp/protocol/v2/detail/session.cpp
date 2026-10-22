@@ -4,6 +4,7 @@
 #include "session.h"
 #include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/protocol/duplex_channel.h>
+#include <riwo/http_exp/protocol/v2/extension.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
@@ -220,6 +221,12 @@ public:
 	[[nodiscard]] request_delivery delivery() const noexcept override {
 		return m_delivery;
 	}
+	[[nodiscard]] void *protocol_extension(
+		const std::type_info &type) noexcept override
+	{
+		return type == typeid(stream_extension) ?
+			std::addressof(m_extension) : nullptr;
+	}
 	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
 		optional<response_head> response, error_code &error) noexcept override;
 	void open_duplex(optional<response_head> response,
@@ -230,6 +237,7 @@ public:
 	request_head m_request;
 	body_spec m_spec;
 	int32_t m_id = -1;
+	stream_extension m_extension {};
 	std::shared_ptr<v2_reader_adapter> m_reader_adapter;
 	std::shared_ptr<v2_writer_adapter> m_writer_adapter;
 	std::shared_ptr<body_reader_state> m_inbound;
@@ -778,6 +786,7 @@ private:
 				return {};
 			}
 			value->m_id = stream_id;
+			value->m_extension = stream_extension(stream_id);
 			value->m_delivery = request_delivery::possibly_processed;
 			m_streams.emplace(stream_id, value);
 			++m_active_streams;

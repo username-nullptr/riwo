@@ -4,6 +4,7 @@
 #include "session.h"
 #include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/protocol/duplex_channel.h>
+#include <riwo/http_exp/protocol/v2/extension.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
@@ -190,7 +191,8 @@ class server_stream_impl final : public stream,
 {
 public:
 	server_stream_impl(std::shared_ptr<server_session_impl> session,
-		int32_t id) : m_session(std::move(session)), m_id(id) {}
+		int32_t id) : m_session(std::move(session)), m_id(id),
+		m_extension(id) {}
 	~server_stream_impl() override;
 
 	void initialize();
@@ -222,10 +224,17 @@ public:
 	void open_duplex(optional<response_head> response,
 		duplex_handler_t handler) override;
 	[[nodiscard]] bool reusable() const noexcept override;
+	[[nodiscard]] void *protocol_extension(
+		const std::type_info &type) noexcept override
+	{
+		return type == typeid(stream_extension) ?
+			std::addressof(m_extension) : nullptr;
+	}
 	void cancel() noexcept override;
 
 	std::shared_ptr<server_session_impl> m_session;
 	int32_t m_id;
+	stream_extension m_extension {};
 	request_head m_request;
 	std::string m_method;
 	std::string m_scheme;
