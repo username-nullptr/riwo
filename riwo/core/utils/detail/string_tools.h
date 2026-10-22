@@ -186,7 +186,7 @@ std::basic_string<CharT> to_string(concepts::floating_p auto &&value) noexcept
 	return oss.str();
 }
 
-decltype(auto) to_string(concepts::any_text_p auto &&text) noexcept
+constexpr decltype(auto) to_string(concepts::any_text_p auto &&text) noexcept
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
@@ -200,7 +200,7 @@ decltype(auto) to_string(concepts::any_text_p auto &&text) noexcept
 		return std::basic_string<char_t>(std::forward<Text>(text));
 }
 
-decltype(auto) to_view(concepts::any_text_p auto &&text) noexcept
+constexpr decltype(auto) to_view(concepts::any_text_p auto &&text) noexcept
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
@@ -647,38 +647,66 @@ template <concepts::floating_p T>
 	return detail::try_to_booltot<char_t,T>(_text);
 }
 
-auto to_lower(concepts::any_text_p auto &&text)
+constexpr auto to_lower(concepts::any_text_p auto &&text)
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
 	using char_t = get_char_t<text_t>;
 
 	if constexpr( concepts::character<text_t> )
-		return static_cast<char_t>(std::tolower(text));
+	{
+		return text >= static_cast<char_t>('A') and text <= static_cast<char_t>('Z') ?
+			static_cast<char_t>(text + static_cast<char_t>('a' - 'A')) : text;
+	}
 	else
 	{
 		std::basic_string<char_t> result(std::forward<Text>(text));
 		for(auto &c : result)
-			c = static_cast<char_t>(std::tolower(c));
+			c = to_lower(c);
 		return result;
 	}
 }
 
-auto to_upper(concepts::any_text_p auto &&text)
+constexpr auto to_upper(concepts::any_text_p auto &&text)
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
 	using char_t = get_char_t<text_t>;
 
 	if constexpr( concepts::character<text_t> )
-		return static_cast<char_t>(std::toupper(text));
+	{
+		return text >= static_cast<char_t>('a') and text <= static_cast<char_t>('z') ?
+			static_cast<char_t>(text - static_cast<char_t>('a' - 'A')) : text;
+	}
 	else
 	{
 		std::basic_string<char_t> result(std::forward<Text>(text));
 		for(auto &c : result)
-			c = static_cast<char_t>(std::toupper(c));
+			c = to_upper(c);
 		return result;
 	}
+}
+
+template <concepts::any_text_p Left, concepts::text_p<get_char_t<Left>> Right>
+constexpr bool ascii_equal(const Left &left, const Right &right, bool cs) noexcept
+{
+	const auto left_view = to_view(left);
+	const auto right_view = to_view(right);
+
+	if( left_view.size() != right_view.size() )
+		return false;
+	if( cs )
+		return std::ranges::equal(left_view, right_view);
+
+	return std::ranges::equal(left_view, right_view, [](auto lhs, auto rhs) {
+		return to_lower(lhs) == to_lower(rhs);
+	});
+}
+
+template <concepts::any_text_p Left, concepts::text_p<get_char_t<Left>> Right>
+constexpr bool ascii_inequal(const Left &left, const Right &right, bool cs) noexcept
+{
+	return not ascii_equal(left, right, cs);
 }
 
 template <concepts::any_string_p Str>

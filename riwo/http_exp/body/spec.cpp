@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 #include "spec.h"
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp { namespace
 {
 
 [[nodiscard]] bool equal_name(std::string_view lhs, std::string_view rhs) noexcept
 {
-	return lhs.size() == rhs.size() and std::ranges::equal(lhs, rhs, [](char left, char right) {
-		return std::tolower(static_cast<unsigned char>(left)) ==
-			std::tolower(static_cast<unsigned char>(right));
-	});
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)

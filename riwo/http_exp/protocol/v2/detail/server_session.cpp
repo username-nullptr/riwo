@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
+#include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/protocol/duplex_channel.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
@@ -43,11 +44,7 @@ class server_stream_impl;
 
 [[nodiscard]] std::string lower(std::string_view value)
 {
-	std::string result(value);
-	std::ranges::transform(result, result.begin(), [](unsigned char byte) {
-		return static_cast<char>(std::tolower(byte));
-	});
-	return result;
+	return strtls::to_lower(value);
 }
 
 [[nodiscard]] bool forbidden_header(std::string_view name) noexcept

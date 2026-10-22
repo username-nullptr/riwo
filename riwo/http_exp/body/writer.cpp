@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "writer.h"
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp::detail
 {
@@ -35,14 +36,9 @@ namespace
 	return make_error_code(value);
 }
 
-[[nodiscard]] bool equal_name(std::string_view lhs,
-	std::string_view rhs) noexcept
+[[nodiscard]] bool equal_name(std::string_view lhs, std::string_view rhs) noexcept
 {
-	return lhs.size() == rhs.size() and
-		std::ranges::equal(lhs, rhs, [](char left, char right) {
-			return std::tolower(static_cast<unsigned char>(left)) ==
-				std::tolower(static_cast<unsigned char>(right));
-		});
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 [[nodiscard]] bool valid_trailers(const body_spec &spec,

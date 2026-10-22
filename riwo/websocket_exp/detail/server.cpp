@@ -2,22 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/websocket_exp/server.h>
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::websocket_exp::detail
 {
 
 bool server_equal_ci(std::string_view lhs, std::string_view rhs) noexcept
 {
-	if( lhs.size() != rhs.size() ) return false;
-	for( size_t index = 0; index < lhs.size(); ++index )
-	{
-		auto left = static_cast<unsigned char>(lhs[index]);
-		auto right = static_cast<unsigned char>(rhs[index]);
-		if( left >= 'A' and left <= 'Z' ) left += 'a' - 'A';
-		if( right >= 'A' and right <= 'Z' ) right += 'a' - 'A';
-		if( left != right ) return false;
-	}
-	return true;
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 bool server_is_h2(http_exp::protocol version) noexcept

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "request_head.h"
+#include <riwo/core/utils/string_tools.h>
 #include <charconv>
 
 namespace riwo::http_exp { namespace
@@ -10,11 +11,7 @@ namespace riwo::http_exp { namespace
 [[nodiscard]] bool equal_ascii_case_insensitive(
 	std::string_view lhs, std::string_view rhs) noexcept
 {
-	return lhs.size() == rhs.size() and
-		std::ranges::equal(lhs, rhs, [](char left, char right) {
-			return std::tolower(static_cast<unsigned char>(left)) ==
-				std::tolower(static_cast<unsigned char>(right));
-		});
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 [[nodiscard]] optional<uint64_t> parse_content_length(

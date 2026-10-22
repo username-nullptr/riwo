@@ -83,23 +83,14 @@ private:
 
 [[nodiscard]] bool has_header(std::string_view head, std::string_view name)
 {
-	std::string lower(head);
-	std::ranges::transform(lower, lower.begin(), [](unsigned char value) {
-		return static_cast<char>(std::tolower(value));
-	});
-	std::string wanted(name);
-	std::ranges::transform(wanted, wanted.begin(), [](unsigned char value) {
-		return static_cast<char>(std::tolower(value));
-	});
+	auto lower = riwo::strtls::to_lower(head);
+	auto wanted = riwo::strtls::to_lower(name);
 	return lower.find("\r\n" + wanted + ":") != std::string::npos;
 }
 
 [[nodiscard]] std::size_t content_length(std::string_view head)
 {
-	std::string lower(head);
-	std::ranges::transform(lower, lower.begin(), [](unsigned char value) {
-		return static_cast<char>(std::tolower(value));
-	});
+	auto lower = riwo::strtls::to_lower(head);
 	const auto mark = lower.find("\r\ncontent-length:");
 	if( mark == std::string::npos ) return 0;
 	const auto begin = mark + std::string_view("\r\ncontent-length:").size();

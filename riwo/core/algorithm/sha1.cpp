@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "sha1.h"
+#include "base64.h"
 
 namespace riwo
 {
@@ -322,35 +323,17 @@ std::string sha1::hex(bool upper_case) const
 
 std::string sha1::base64() const
 {
-	static constexpr const char *table =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-		"abcdefghijklmnopqrstuvwxyz"
-		"0123456789"
-		"+/";
-
-	uint32_t triples[7]
+	std::array<std::byte,20> digest {};
+	for(size_t word = 0; word < 5; ++word)
 	{
-		( (m_impl->m_state[0] & 0xFFFFFF00) >> (1 << 3) ),
-		( (m_impl->m_state[0] & 0x000000FF) << (2 << 3) ) | ( (m_impl->m_state[1] & 0xFFFF0000) >> (2 << 3) ),
-		( (m_impl->m_state[1] & 0x0000FFFF) << (1 << 3) ) | ( (m_impl->m_state[2] & 0xFF000000) >> (3 << 3) ),
-		( (m_impl->m_state[2] & 0x00FFFFFF) << (0 << 3) ),
-		( (m_impl->m_state[3] & 0xFFFFFF00) >> (1 << 3) ),
-		( (m_impl->m_state[3] & 0x000000FF) << (2 << 3) ) | ( (m_impl->m_state[4] & 0xFFFF0000) >> (2 << 3) ),
-		( (m_impl->m_state[4] & 0x0000FFFF) << (1 << 3) ),
-	};
-	char _base64[32] = "";
-	int i = 0;
-
-	for(; i<7; i++)
-	{
-		auto x = triples[i];
-		_base64[(i << 2) + 0] = table[(x >> 3 * 6) % 64];
-		_base64[(i << 2) + 1] = table[(x >> 2 * 6) % 64];
-		_base64[(i << 2) + 2] = table[(x >> 1 * 6) % 64];
-		_base64[(i << 2) + 3] = table[(x >> 0 * 6) % 64];
+		for(size_t byte = 0; byte < 4; ++byte)
+		{
+			digest[word * 4 + byte] = static_cast<std::byte>(
+				(m_impl->m_state[word] >> ((3 - byte) * 8)) & 0xFF
+			);
+		}
 	}
-	_base64[(--i << 2) + 3] = '=';
-	return _base64;
+	return base64_encode(digest);
 }
 
 } //namespace riwo

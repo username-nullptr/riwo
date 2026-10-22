@@ -2,47 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 #include "request_arg.h"
+#include <riwo/core/algorithm/base64.h>
 #include <riwo/http/protocol/utils/core/compression.h>
 
 namespace riwo::http { namespace
 {
-
-[[nodiscard]] std::string base64_encode(std::string_view input)
-{
-	static constexpr std::string_view alphabet =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-	std::string output {};
-	output.reserve((input.size() + 2) / 3 * 4);
-
-	for(size_t offset=0; offset<input.size(); offset += 3)
-	{
-		uint32_t value = static_cast<uint32_t>(static_cast<unsigned char>(input[offset])) << 16U;
-
-		if( offset + 1 < input.size() )
-			value |= static_cast<uint32_t>(static_cast<unsigned char>(input[offset + 1])) << 8U;
-
-		if( offset + 2 < input.size() )
-			value |= static_cast<uint32_t>(static_cast<unsigned char>(input[offset + 2]));
-
-		output += alphabet[(value >> 18) & 0x3F];
-		output += alphabet[(value >> 12) & 0x3F];
-
-		output += offset + 1 < input.size() ?
-			alphabet[(value >> 6) & 0x3F] : '=';
-
-		output += offset + 2 < input.size() ?
-			alphabet[value & 0x3F] : '=';
-	}
-	return output;
-}
 
 [[nodiscard]] std::string basic_credentials
 (std::string_view username, std::string_view password)
 {
 	if( username.find(':') != std::string_view::npos )
 		invalid_argument::loc_throw("HTTP Basic user name cannot contain ':'.");
-	return "Basic " + base64_encode(std::string(username) + ":" + std::string(password));
+
+	return "Basic " + riwo::base64_encode (
+		std::string(username) + ":" + std::string(password)
+	);
 }
 
 } //namespace

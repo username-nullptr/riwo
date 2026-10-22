@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "request.h"
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp
 {
@@ -88,13 +89,9 @@ request &request::trailers(fields values)
 	for( const auto &value : values )
 	{
 		const auto duplicate = std::ranges::any_of(description.names,
-		[&](const std::string &name) {
-			return name.size() == value.name.size() and
-				std::ranges::equal(name, value.name, [](char lhs, char rhs) {
-					return std::tolower(static_cast<unsigned char>(lhs)) ==
-						std::tolower(static_cast<unsigned char>(rhs));
-				});
-		});
+			[&](const std::string &name) {
+				return strtls::ascii_equal(name, value.name, false);
+			});
 		if( not duplicate ) description.names.push_back(value.name);
 	}
 	if( auto length = m_impl->m_body_spec.length() )

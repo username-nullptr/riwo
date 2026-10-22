@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
+#include <riwo/core/utils/string_tools.h>
 #include "wire.h"
 #include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/server/detail/session.h>
@@ -247,12 +248,7 @@ private:
 				item.remove_prefix(1);
 			while( not item.empty() and (item.back() == ' ' or item.back() == '\t') )
 				item.remove_suffix(1);
-			if( item.size() == token.size() and
-				std::ranges::equal(item, token,
-					[](char lhs, char rhs) {
-						return std::tolower(static_cast<unsigned char>(lhs)) ==
-							std::tolower(static_cast<unsigned char>(rhs));
-					}) )
+			if( strtls::ascii_equal(item, token, false) )
 				return true;
 			if( comma == std::string_view::npos ) break;
 			text.remove_prefix(comma + 1);
@@ -277,12 +273,8 @@ private:
 			while( not item.empty() and
 				(item.back() == ' ' or item.back() == '\t') )
 				item.remove_suffix(1);
-			if( item.empty() or item.size() != 12 or
-				not std::ranges::equal(item, std::string_view("100-continue"),
-					[](char lhs, char rhs) {
-						return std::tolower(static_cast<unsigned char>(lhs)) ==
-							std::tolower(static_cast<unsigned char>(rhs));
-					}) )
+			if( item.empty() or
+				not strtls::ascii_equal(item, "100-continue", false) )
 				return true;
 			if( comma == std::string_view::npos ) break;
 			text.remove_prefix(comma + 1);

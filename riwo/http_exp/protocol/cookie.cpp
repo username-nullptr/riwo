@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "cookie.h"
+#include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/error.h>
 #include <charconv>
 #include <cstdio>
@@ -90,11 +91,7 @@ namespace riwo::http_exp { namespace
 
 [[nodiscard]] std::string lower(std::string_view value)
 {
-	std::string result(value);
-	std::ranges::transform(result, result.begin(), [](unsigned char byte) {
-		return static_cast<char>(std::tolower(byte));
-	});
-	return result;
+	return strtls::to_lower(value);
 }
 
 [[nodiscard]] std::time_t utc_time(std::tm *value) noexcept

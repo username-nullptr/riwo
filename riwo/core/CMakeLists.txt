@@ -57,14 +57,16 @@ endif ()
 
 if (UNIX)
 	target_link_libraries(${target_name} PUBLIC pthread dl)
-elseif (WIN32 AND (
-	CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
-	CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+
+elseif (WIN32)
+	target_link_libraries(${target_name} PUBLIC bcrypt)
 	# OpenSSL is an Asio dependency and is linked above. Keep its Windows API
 	# closure after the static archive; compression remains in HTTP/WebSocket.
-	target_link_libraries(${target_name} PUBLIC
-		ws2_32 wsock32 crypt32 bcrypt ole32 shell32 uuid
-	)
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		target_link_libraries(${target_name} PUBLIC
+			ws2_32 wsock32 crypt32 ole32 shell32 uuid
+		)
+	endif()
 endif()
 
 if (RIWO_IO_URING_SUPPORT)

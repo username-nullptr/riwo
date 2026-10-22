@@ -3,9 +3,10 @@
 
 #include <riwo/websocket/detail/stream/frame_builder.h>
 #include <riwo/websocket/detail/permessage_deflate.h>
-#include <riwo/websocket/detail/secure_random.h>
+
 #include <riwo/websocket/protocol/detail/utf8.h>
 #include <riwo/websocket/protocol/generator.h>
+#include <riwo/core/algorithm/secure_random.h>
 
 namespace riwo::websocket::detail
 {
@@ -142,7 +143,7 @@ sys_expected<prepared_frame> frame_builder::prepare_data_frame
 		if( m_role == role::client )
 		{
 			masking_key key;
-			auto random = secure_random_bytes (
+			auto random = ::riwo::secure_random_bytes (
 				mutable_buffer(key.bytes.data(), key.bytes.size())
 			);
 			if( not random )

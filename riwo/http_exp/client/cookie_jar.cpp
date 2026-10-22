@@ -2,17 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 #include "cookie_jar.h"
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp { namespace
 {
 
 [[nodiscard]] std::string lower(std::string_view value)
 {
-	std::string result(value);
-	std::ranges::transform(result, result.begin(), [](unsigned char byte) {
-		return static_cast<char>(std::tolower(byte));
-	});
-	return result;
+	return strtls::to_lower(value);
 }
 
 [[nodiscard]] std::string canonical_host(std::string_view host)

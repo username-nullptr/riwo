@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "handshake.h"
+#include <riwo/core/algorithm/base64.h>
 #include <riwo/core/algorithm/sha1.h>
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::websocket_exp { namespace
 {
@@ -38,22 +40,7 @@ constexpr const char
 
 [[nodiscard]] bool ascii_equal_case_insensitive(std::string_view left, std::string_view right) noexcept
 {
-	if( left.size() != right.size() )
-		return false;
-
-	for(size_t index=0; index<left.size(); index++)
-	{
-		const auto lower = [](char value) noexcept
-		{
-			auto byte = static_cast<unsigned char>(value);
-			if( byte >= 'A' and byte <= 'Z' )
-				byte += 'a' - 'A';
-			return byte;
-		};
-		if( lower(left[index]) != lower(right[index]) )
-			return false;
-	}
-	return true;
+	return strtls::ascii_equal(left, right, false);
 }
 
 [[nodiscard]] bool contains_header_token(std::string_view value, std::string_view wanted) noexcept
@@ -344,33 +331,6 @@ private:
 	return (base64_value(value[21]) & 0x0F) == 0;
 }
 
-[[nodiscard]] std::string base64_encode(std::span<const std::byte> input)
-{
-	static constexpr std::string_view alphabet =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-	std::string output;
-	output.reserve((input.size() + 2) / 3 * 4);
-
-	for(size_t offset=0; offset<input.size(); offset+=3)
-	{
-		uint32_t value = static_cast<uint32_t>(std::to_integer<uint8_t>(input[offset])) << 16U;
-
-		if( offset + 1 < input.size() )
-			value |= static_cast<uint32_t>(std::to_integer<uint8_t>(input[offset + 1])) << 8U;
-
-		if( offset + 2 < input.size() )
-			value |= static_cast<uint32_t>(std::to_integer<uint8_t>(input[offset + 2]));
-
-		output += alphabet[(value >> 18) & 0x3F];
-		output += alphabet[(value >> 12) & 0x3F];
-
-		output += offset + 1 < input.size() ? alphabet[(value >> 6) & 0x3F] : '=';
-		output += offset + 2 < input.size() ? alphabet[value & 0x3F] : '=';
-	}
-	return output;
-}
-
 [[nodiscard]] optional<std::string_view> header_value(
 	const http_exp::fields &headers, const char *name)
 {
@@ -398,7 +358,7 @@ template <typename Result, typename Function>
 sys_expected<std::string> make_client_key(std::span<const std::byte,16> nonce) noexcept
 {
 	return guard_allocation<std::string>([&] {
-		return base64_encode(nonce);
+		return riwo::base64_encode(nonce);
 	});
 }
 

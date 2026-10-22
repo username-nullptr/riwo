@@ -17,7 +17,7 @@
 # include <unistd.h>
 #endif
 
-namespace riwo::websocket::detail { namespace
+namespace riwo { namespace
 {
 
 [[nodiscard]] sys_expected<> invalid_output() noexcept
@@ -31,7 +31,7 @@ namespace riwo::websocket::detail { namespace
 [[nodiscard]] error_code errno_error() noexcept {
 	return { std::error_code(errno, std::generic_category()) };
 }
-#endif //...
+#endif
 
 } //namespace
 
@@ -68,8 +68,6 @@ sys_expected<> secure_random_bytes(const mutable_buffer &output) noexcept
 #elif defined(__linux__) && !defined(__ANDROID__)
 	while( remaining > 0 )
 	{
-		// Linux guarantees that urandom requests no larger than 256 bytes are
-		// completed atomically once the entropy pool has initialized.
 		auto chunk = std::min<size_t>(remaining, 256);
 		auto size = ::getrandom(data, chunk, 0);
 		if( size < 0 )
@@ -134,4 +132,4 @@ sys_expected<> secure_random_bytes(const mutable_buffer &output) noexcept
 	return make_sys_expected();
 }
 
-} //namespace riwo::websocket::detail
+} //namespace riwo

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "engine.h"
+#include <riwo/core/utils/string_tools.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
@@ -21,11 +22,7 @@ namespace api = detail::nghttp2_api;
 
 [[nodiscard]] std::string lower(std::string_view value)
 {
-	std::string result(value);
-	std::ranges::transform(result, result.begin(), [](unsigned char item) {
-		return static_cast<char>(std::tolower(item));
-	});
-	return result;
+	return strtls::to_lower(value);
 }
 
 [[nodiscard]] bool forbidden(std::string_view name) noexcept

@@ -7,23 +7,15 @@
 #include <riwo/websocket_exp/protocol/handshake.h>
 #include <riwo/websocket_exp/detail/handshake_io.h>
 #include <riwo/websocket_exp/detail/permessage_deflate.h>
-#include <riwo/websocket_exp/detail/secure_random.h>
+#include <riwo/core/algorithm/secure_random.h>
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::websocket_exp::detail
 {
 
 inline bool equal_ci(std::string_view lhs, std::string_view rhs) noexcept
 {
-	if( lhs.size() != rhs.size() ) return false;
-	for( size_t index = 0; index < lhs.size(); ++index )
-	{
-		auto left = static_cast<unsigned char>(lhs[index]);
-		auto right = static_cast<unsigned char>(rhs[index]);
-		if( left >= 'A' and left <= 'Z' ) left += 'a' - 'A';
-		if( right >= 'A' and right <= 'Z' ) right += 'a' - 'A';
-		if( left != right ) return false;
-	}
-	return true;
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 inline bool websocket_owned_request_header(std::string_view name) noexcept
@@ -176,7 +168,7 @@ inline sys_expected<prepared_open> prepare_open(const connect_request &request,
 		if( not target ) return sys_unexpected(target.error());
 
 		std::array<std::byte,16> nonce {};
-		if( auto random = secure_random_bytes(asio::buffer(nonce)); not random )
+		if( auto random = ::riwo::secure_random_bytes(asio::buffer(nonce)); not random )
 			return sys_unexpected(random.error());
 		auto key = make_client_key(nonce);
 		if( not key ) return sys_unexpected(key.error());

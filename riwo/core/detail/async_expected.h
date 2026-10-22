@@ -973,9 +973,9 @@ auto initiate_io_direct(const Exec &exec, Initiator initiation, Token &&token)
 	completion_token);
 }
 
-template <typename Value, typename Exec>
+template <typename Value, typename Exec, typename Fallback>
 class RIWO_CORE_TAPI timed_io_state :
-	public std::enable_shared_from_this<timed_io_state<Value,Exec>>
+	public std::enable_shared_from_this<timed_io_state<Value,Exec,Fallback>>
 {
 	using self_t = timed_io_state;
 	using completion_fn_t = void (*)(self_t&, error_code, Value, bool);
@@ -1025,8 +1025,7 @@ class RIWO_CORE_TAPI timed_io_state :
 
 	struct caller_cancellation_handler
 	{
-		std::weak_ptr<self_t> state;
-
+		std::weak_ptr<self_t> state {};
 		void operator()(asio::cancellation_type_t type)
 		{
 			if( auto active = state.lock() )
@@ -1036,9 +1035,9 @@ class RIWO_CORE_TAPI timed_io_state :
 
 public:
 	timed_io_state(const Exec &exec, asio::cancellation_slot caller_slot,
-		std::chrono::nanoseconds timeout, completion_fn_t completion_fn) :
+		std::chrono::nanoseconds timeout, Fallback fallback, completion_fn_t completion_fn) :
 		m_exec(exec), m_timer(exec), m_caller_slot(caller_slot),
-		m_completion_fn(completion_fn)
+		m_fallback(std::move(fallback)), m_completion_fn(completion_fn)
 	{
 		m_timer.expires_after(timeout);
 	}
@@ -1221,10 +1220,11 @@ private:
 		}
 		m_caller_slot.clear();
 
-		emit_cancellation(asio::cancellation_type::all,
+		emit_cancellation (
+			asio::cancellation_type::all,
 			asio::cancellation_type::all
 		);
-		m_completion_fn(*this, exception_error(exception), Value{}, true);
+		m_completion_fn(*this, exception_error(exception), m_fallback(), true);
 	}
 
 	void emit_cancellation
@@ -1244,6 +1244,8 @@ private:
 	asio::cancellation_signal m_io_cancellation;
 	asio::cancellation_signal m_timer_cancellation;
 	asio::cancellation_slot m_caller_slot;
+
+	Fallback m_fallback;
 	completion_fn_t m_completion_fn;
 
 	std::mutex m_mutex;
@@ -1266,18 +1268,19 @@ private:
 	bool m_completed = false;
 };
 
-template <typename Value, typename Exec, typename Handler>
-class RIWO_CORE_TAPI timed_io_operation final :
-	public timed_io_state<Value,Exec>
+template <typename Value, typename Exec, typename Handler, typename Fallback>
+class RIWO_CORE_TAPI timed_io_operation final : public timed_io_state<Value,Exec,Fallback>
 {
 	using self_t = timed_io_operation;
-	using base_t = timed_io_state<Value,Exec>;
+	using base_t = timed_io_state<Value,Exec,Fallback>;
 
 public:
-	timed_io_operation(const Exec &exec, Handler handler, std::chrono::nanoseconds timeout) :
-		base_t(exec, asio::get_associated_cancellation_slot(handler), timeout, &self_t::complete),
-		m_handler(std::move(handler))
-	{}
+	timed_io_operation(const Exec &exec, Handler handler,
+		std::chrono::nanoseconds timeout, Fallback fallback) :
+		base_t(exec, asio::get_associated_cancellation_slot(handler),
+			timeout, std::move(fallback), &self_t::complete
+		),
+		m_handler(std::move(handler)) {}
 
 private:
 	static void complete(base_t &base, error_code error, Value value, bool post)
@@ -1300,7 +1303,6 @@ private:
 			}
 			return ;
 		}
-
 		auto completion_exec = asio::get_associated_executor(handler, self.executor());
 		auto allocator = asio::get_associated_allocator(handler);
 
@@ -1321,32 +1323,44 @@ private:
 	optional<Handler> m_handler;
 };
 
-template <typename Value, typename Exec, typename Initiator, typename Handler>
-RIWO_CORE_TAPI void start_timed_io
-(const Exec &exec, Initiator initiation, std::chrono::nanoseconds timeout, Handler &&handler)
+template <typename Value, typename Exec, typename Initiator, typename Fallback, typename Handler>
+RIWO_CORE_TAPI void start_timed_io(const Exec &exec, Initiator initiation,
+	std::chrono::nanoseconds timeout, Fallback fallback, Handler &&handler)
 {
-	auto allocator = asio::get_associated_allocator(handler);
 	using handler_t = std::remove_cvref_t<Handler>;
-	using state_t = timed_io_operation<Value,Exec,handler_t>;
+	using fallback_t = std::remove_cvref_t<Fallback>;
+	using state_t = timed_io_operation<Value,Exec,handler_t,fallback_t>;
 
+	auto allocator = asio::get_associated_allocator(handler);
 	auto state = std::allocate_shared<state_t>(allocator, exec,
-		std::forward<Handler>(handler), timeout
+		std::forward<Handler>(handler), timeout, std::move(fallback)
 	);
 	state->start(std::move(initiation));
 }
 
-template <typename Value, typename Exec, typename Initiator, typename Token>
-[[nodiscard]] RIWO_CORE_TAPI auto initiate_io_timed
-(const Exec &exec, Initiator initiation, std::chrono::nanoseconds timeout, Token &&token)
+template <typename Value, typename Exec, typename Initiator, typename Handler>
+RIWO_CORE_TAPI void start_timed_io
+(const Exec &exec, Initiator initiation, std::chrono::nanoseconds timeout, Handler &&handler)
+{
+	start_timed_io<Value>(exec, std::move(initiation), timeout,
+		[] { return Value{}; }, std::forward<Handler>(handler)
+	);
+}
+
+template <typename Value, typename Exec, typename Initiator, typename Fallback, typename Token>
+[[nodiscard]] RIWO_CORE_TAPI auto initiate_io_timed(const Exec &exec, Initiator initiation,
+	std::chrono::nanoseconds timeout, Fallback fallback, Token &&token)
 {
 	using token_t = std::remove_cvref_t<Token>;
 	token_t completion_token(std::forward<Token>(token));
 
 	return asio::async_initiate<token_t,void(error_code,Value)>(
-	[exec, operation = std::move(initiation), timeout](auto completion_handler) mutable
+	[exec, operation = std::move(initiation), timeout,
+	 fallback = std::move(fallback)](auto completion_handler) mutable
 	{
 		start_timed_io<Value>(exec,
-			std::move(operation), timeout, std::move(completion_handler)
+			std::move(operation), timeout, std::move(fallback),
+			std::move(completion_handler)
 		);
 	},
 	completion_token);
@@ -1363,7 +1377,8 @@ template <typename Exec, typename Initiator, typename Token>
 	[exec, operation = std::move(initiation), timeout](auto completion_handler) mutable
 	{
 		start_timed_io<std::monostate>(exec,
-			std::move(operation), timeout, std::move(completion_handler)
+			std::move(operation), timeout, [] { return std::monostate{}; },
+			std::move(completion_handler)
 		);
 	}, completion_token);
 }
@@ -1563,6 +1578,7 @@ template <typename Value, concepts::exec Exec, typename Initiator, typename Toke
 		}
 		return detail::initiate_io_timed<Value>(exec, std::move(initiation),
 			std::chrono::duration_cast<std::chrono::nanoseconds>(timed_token.time),
+			[] { return Value{}; },
 			std::move(timed_token.token)
 		);
 	}
@@ -1572,6 +1588,18 @@ template <typename Value, concepts::exec Exec, typename Initiator, typename Toke
 			std::forward<Token>(token)
 		);
 	}
+}
+
+template <typename Value, concepts::exec Exec, typename Initiator,
+	typename Rep, typename Period, typename Fallback, typename Token>
+[[nodiscard]] auto initiate_timed_io(const Exec &exec, Initiator initiation,
+	const std::chrono::duration<Rep,Period> &timeout, Fallback fallback, Token &&token)
+	requires std::invocable<Fallback&> and std::convertible_to<std::invoke_result_t<Fallback&>,Value>
+{
+	return detail::initiate_io_timed<Value>(exec, std::move(initiation),
+		std::chrono::duration_cast<std::chrono::nanoseconds>(timeout),
+		std::move(fallback), std::forward<Token>(token)
+	);
 }
 
 template <concepts::exec Exec, typename Initiator, typename Token>

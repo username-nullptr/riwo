@@ -48,6 +48,3 @@ install(FILES
 	${RIWO_WEBSOCKET_EXP_CONFIG_INCLUDE}/riwo/websocket_exp/cxx/configs.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/websocket_exp/cxx
 )
-if (WIN32)
-	target_link_libraries(${target_name} PRIVATE bcrypt)
-endif ()

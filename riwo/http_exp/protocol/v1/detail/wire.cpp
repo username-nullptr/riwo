@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "wire.h"
+#include <riwo/core/utils/string_tools.h>
 #include <charconv>
 
 namespace riwo::http_exp::v1::detail { namespace
@@ -10,10 +11,7 @@ namespace riwo::http_exp::v1::detail { namespace
 [[nodiscard]] bool equal_ci(std::string_view lhs,
 	std::string_view rhs) noexcept
 {
-	return lhs.size() == rhs.size() and
-		std::ranges::equal(lhs, rhs, [](unsigned char left, unsigned char right) {
-			return std::tolower(left) == std::tolower(right);
-		});
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 [[nodiscard]] std::string_view trim(std::string_view value) noexcept

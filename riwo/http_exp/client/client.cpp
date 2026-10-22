@@ -8,6 +8,7 @@
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <riwo/http_exp/protocol/v1/detail/session.h>
 #include <riwo/http_exp/body/detail/decoder.h>
+#include <riwo/core/utils/string_tools.h>
 #include <charconv>
 
 namespace riwo::http_exp::detail
@@ -97,18 +98,12 @@ namespace
 {
 
 [[nodiscard]] bool ascii(std::string_view text) noexcept {
-	return std::ranges::all_of(text, [](unsigned char value) {
-		return value < 0x80;
-	});
+	return strtls::is_ascii(text);
 }
 
 [[nodiscard]] std::string lower(std::string_view text)
 {
-	std::string result(text);
-	std::ranges::transform(result, result.begin(), [](unsigned char value) {
-		return static_cast<char>(std::tolower(value));
-	});
-	return result;
+	return strtls::to_lower(text);
 }
 
 [[nodiscard]] bool owned_header(std::string_view name) noexcept
@@ -118,11 +113,7 @@ namespace
 		"proxy-connection", "upgrade"
 	};
 	return std::ranges::any_of(names, [name](std::string_view value) {
-		return name.size() == value.size() and
-			std::ranges::equal(name, value, [](char lhs, char rhs) {
-				return std::tolower(static_cast<unsigned char>(lhs)) ==
-					std::tolower(static_cast<unsigned char>(rhs));
-			});
+		return strtls::ascii_equal(name, value, false);
 	});
 }
 
@@ -197,10 +188,7 @@ namespace
 	while( not value.empty() and
 		(value.back() == ' ' or value.back() == '\t') )
 		value.remove_suffix(1);
-	std::string lower(value);
-	std::ranges::transform(lower, lower.begin(), [](unsigned char byte) {
-		return static_cast<char>(std::tolower(byte));
-	});
+	auto lower = strtls::to_lower(value);
 	if( lower == "gzip" or lower == "x-gzip" or lower == "deflate" )
 		return lower == "x-gzip" ? "gzip" : lower;
 	return {};

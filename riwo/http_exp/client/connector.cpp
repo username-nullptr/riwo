@@ -8,6 +8,7 @@
 # include <riwo/http_exp/protocol/v2/detail/session.h>
 #endif
 #include <riwo/http_exp/transport/tcp_connection.h>
+#include <riwo/core/utils/string_tools.h>
 
 #if RIWO_OPENSSL_SUPPORT
 # include <riwo/http_exp/transport/tls_connection.h>
@@ -214,11 +215,7 @@ void tls_handshake_with_timeout(tls_socket_t &socket,
 
 [[nodiscard]] std::string lower(std::string_view text)
 {
-	std::string result(text);
-	std::ranges::transform(result, result.begin(), [](unsigned char value) {
-		return static_cast<char>(std::tolower(value));
-	});
-	return result;
+	return strtls::to_lower(text);
 }
 
 struct proxy_target

@@ -72,11 +72,11 @@ template <concepts::character CharT = char>
 	concepts::floating_p auto &&value
 ) noexcept;
 
-[[nodiscard]] RIWO_CORE_TAPI decltype(auto) to_string (
+[[nodiscard]] constexpr decltype(auto) to_string (
 	concepts::any_text_p auto &&text
 ) noexcept;
 
-[[nodiscard]] RIWO_CORE_TAPI decltype(auto) to_view (
+[[nodiscard]] constexpr decltype(auto) to_view (
 	concepts::any_text_p auto &&text
 ) noexcept;
 
@@ -143,12 +143,18 @@ template <concepts::floating_p T>
 	const concepts::any_text_p auto &text
 ) noexcept;
 
-[[nodiscard]] RIWO_CORE_TAPI auto to_lower (
-	concepts::any_text_p auto &&text
-);
-[[nodiscard]] RIWO_CORE_TAPI auto to_upper (
-	concepts::any_text_p auto &&text
-);
+[[nodiscard]] constexpr auto to_lower(concepts::any_text_p auto &&text);
+[[nodiscard]] constexpr auto to_upper(concepts::any_text_p auto &&text);
+
+template <concepts::any_text_p Left, concepts::text_p<get_char_t<Left>> Right>
+[[nodiscard]] constexpr bool ascii_equal (
+	const Left &left, const Right &right, bool cs = true
+) noexcept;
+
+template <concepts::any_text_p Left, concepts::text_p<get_char_t<Left>> Right>
+[[nodiscard]] constexpr bool ascii_inequal (
+	const Left &left, const Right &right, bool cs = true
+) noexcept;
 
 template <concepts::any_string_p Str>
 [[nodiscard]] RIWO_CORE_TAPI auto replace (
