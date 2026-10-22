@@ -543,18 +543,18 @@ void client_open_and_metadata()
 		"application/octet-stream");
 
 	std::array<char,8> data{};
-	RIWO_TEST_CHECK_EQ(exchange.response_body().read_some(
+	RIWO_TEST_CHECK_EQ(exchange.reply_body().read_some(
 		riwo::buffer(data), error).bytes, 0U);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
-	auto head = exchange.wait_response(error);
+	auto head = exchange.wait_reply(error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(head.status, http::status::created);
-	auto read = exchange.response_body().read_some(riwo::buffer(data), error);
+	auto read = exchange.reply_body().read_some(riwo::buffer(data), error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(std::string_view(data.data(), read.bytes), "reply");
 	RIWO_TEST_CHECK(read.eof);
-	RIWO_TEST_CHECK(exchange.response_body().is_finished());
+	RIWO_TEST_CHECK(exchange.reply_body().is_finished());
 
 	http::request with_body(http::method::post, "http://example.test/");
 	with_body.body("bound");

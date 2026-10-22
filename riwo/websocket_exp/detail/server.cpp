@@ -84,14 +84,14 @@ void select_server_subprotocol(server_upgrade_plan &plan,
 {
 	try {
 		if( options.subprotocol_selector )
-			plan.opening_response.subprotocol = options.subprotocol_selector(
+			plan.response_message.subprotocol = options.subprotocol_selector(
 				plan.request, plan.opening.subprotocols);
 		else
 			for( const auto &offered : plan.opening.subprotocols )
 				if( std::ranges::find(options.supported_subprotocols, offered) !=
 					options.supported_subprotocols.end() )
 				{
-					plan.opening_response.subprotocol = offered;
+					plan.response_message.subprotocol = offered;
 					break;
 				}
 	}
@@ -106,17 +106,17 @@ void validate_server_subprotocol(server_upgrade_plan &plan,
 	if( server_deadline_expired(deadline) )
 		return reject_upgrade(plan,
 			asio::error::make_error_code(asio::error::timed_out));
-	if( plan.opening_response.subprotocol and
+	if( plan.response_message.subprotocol and
 		(std::ranges::find(plan.opening.subprotocols,
-			*plan.opening_response.subprotocol) ==
+			*plan.response_message.subprotocol) ==
 			plan.opening.subprotocols.end() or
 		 std::ranges::find(options.supported_subprotocols,
-			*plan.opening_response.subprotocol) ==
+			*plan.response_message.subprotocol) ==
 			options.supported_subprotocols.end()) )
 		return reject_upgrade(plan,
 			make_error_code(errc::unsupported_subprotocol));
 	if( options.require_subprotocol and
-		not plan.opening_response.subprotocol )
+		not plan.response_message.subprotocol )
 		reject_upgrade(plan, make_error_code(errc::unsupported_subprotocol));
 }
 
@@ -125,7 +125,7 @@ void select_server_extensions(server_upgrade_plan &plan,
 {
 	try {
 		if( options.extension_selector )
-			plan.opening_response.extensions = options.extension_selector(
+			plan.response_message.extensions = options.extension_selector(
 				plan.request, plan.opening.extensions);
 		else if( not options.supported_extensions.empty() )
 			for( const auto &offered : plan.opening.extensions )
@@ -134,11 +134,11 @@ void select_server_extensions(server_upgrade_plan &plan,
 					if( auto selected = negotiate_permessage_deflate(
 						offered, policy) )
 					{
-						plan.opening_response.extensions = {
+						plan.response_message.extensions = {
 							std::move(*selected)};
 						break;
 					}
-				if( not plan.opening_response.extensions.empty() ) break;
+				if( not plan.response_message.extensions.empty() ) break;
 			}
 	}
 	catch(...) { reject_selector_exception(plan, std::current_exception()); }
@@ -149,8 +149,8 @@ void validate_server_extensions(server_upgrade_plan &plan,
 	std::chrono::steady_clock::time_point deadline) noexcept
 {
 	if( not plan.accepted ) return;
-	if( not plan.opening_response.extensions.empty() and
-		(not supported_extension_response(plan.opening_response.extensions,
+	if( not plan.response_message.extensions.empty() and
+		(not supported_extension_response(plan.response_message.extensions,
 			plan.opening.extensions) or options.supported_extensions.empty()) )
 		return reject_upgrade(plan,
 			make_error_code(errc::unsupported_extension));
@@ -169,7 +169,7 @@ void finalize_server_upgrade_plan(server_upgrade_plan &plan,
 			return reject_upgrade(plan,
 				asio::error::make_error_code(asio::error::timed_out));
 		auto headers = make_opening_response_headers(plan.opening,
-			plan.opening_response, plan.request.version);
+			plan.response_message, plan.request.version);
 		if( not headers ) return reject_upgrade(plan, headers.error());
 		plan.response = {};
 		plan.response.headers = options.response_headers;

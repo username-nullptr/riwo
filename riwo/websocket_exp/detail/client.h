@@ -389,10 +389,10 @@ void open_sync(http_exp::basic_client<Exec> &http_client,
 			auto exchange = http_client.open(std::move(prepared->request),
 				std::move(prepared->spec), error);
 			if( error ) return;
-			auto response = exchange.wait_response(error);
+			auto reply_head_value = exchange.wait_reply(error);
 			if( error ) return;
 			const auto selected_protocol = exchange.selected_protocol();
-			auto decision = evaluate_open_response(response,
+			auto decision = evaluate_open_response(reply_head_value,
 				prepared->opening, request, endpoint, selected_protocol,
 				redirects);
 			if( decision.action == open_response_action::redirect )
@@ -410,7 +410,7 @@ void open_sync(http_exp::basic_client<Exec> &http_client,
 			if( diagnostics )
 			{
 				diagnostics->endpoint = endpoint;
-				diagnostics->response = response;
+				diagnostics->response = reply_head_value;
 				diagnostics->selected_protocol = selected_protocol;
 			}
 			if( decision.action == open_response_action::reject )
@@ -489,7 +489,7 @@ co_open(http_exp::basic_client<Exec> *http_client, connect_request request,
 				http_exp::basic_client_exchange<Exec>>(
 					std::move(exchange_value));
 			cancellation->activate(exchange);
-			auto [head_error, response] = co_await exchange->wait_response(
+			auto [head_error, reply_head_value] = co_await exchange->wait_reply(
 				asio::as_tuple(asio::use_awaitable_t<Exec>{}));
 			cancellation->clear(exchange);
 			if( head_error ) co_return std::tuple {
@@ -499,7 +499,7 @@ co_open(http_exp::basic_client<Exec> *http_client, connect_request request,
 				asio::error::make_error_code(asio::error::operation_aborted),
 				std::move(result)};
 			const auto selected_protocol = exchange->selected_protocol();
-			auto decision = evaluate_open_response(response,
+			auto decision = evaluate_open_response(reply_head_value,
 				prepared->opening, request, endpoint, selected_protocol,
 				redirects);
 			if( decision.action == open_response_action::redirect )
@@ -517,7 +517,7 @@ co_open(http_exp::basic_client<Exec> *http_client, connect_request request,
 			if( diagnostics )
 			{
 				diagnostics->endpoint = endpoint;
-				diagnostics->response = response;
+				diagnostics->response = reply_head_value;
 				diagnostics->selected_protocol = selected_protocol;
 			}
 			if( decision.action == open_response_action::reject )

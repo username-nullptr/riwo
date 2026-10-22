@@ -260,9 +260,9 @@ void note_service_workflow()
 		auto open = co_await client.open(http::method::get,
 			base + "/cookies/open-set", http::body_spec::empty(),
 			riwo::use_awaitable);
-		auto open_head = co_await open.wait_response(riwo::use_awaitable);
+		auto open_head = co_await open.wait_reply(riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(open_head.status, http::status::ok);
-		co_await open.response_body().discard(riwo::use_awaitable);
+		co_await open.reply_body().discard(riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(client.cookie_store()->size(), 2U);
 
 		auto disabled_config = client_config;

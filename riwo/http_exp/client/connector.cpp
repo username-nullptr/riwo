@@ -457,13 +457,13 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 				tcp->socket(), asio::buffer(request),
 				asio::as_tuple(asio::use_awaitable));
 			(void)written;
-			std::string response;
+			std::string reply;
 			size_t read_size = 0;
 			error_code read_error;
 			if( not write_error )
 			{
 				auto read = co_await asio::async_read_until(tcp->socket(),
-					asio::dynamic_buffer(response, 64U * 1024U),
+					asio::dynamic_buffer(reply, 64U * 1024U),
 					"\r\n\r\n", asio::as_tuple(asio::use_awaitable));
 				read_error = std::get<0>(read);
 				read_size = std::get<1>(read);
@@ -476,14 +476,14 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 			if( read_error ) co_return sys_unexpected(read_error);
 			(void)read_size;
 
-			const auto first = response.find(' ');
+			const auto first = reply.find(' ');
 			const auto second = first == std::string::npos ?
-				std::string::npos : response.find(' ', first + 1);
+				std::string::npos : reply.find(' ', first + 1);
 			if( first == std::string::npos or
 				second == std::string::npos )
 				co_return sys_unexpected(make_error_code(
 					errc::connection_protocol_error));
-			const auto code_text = std::string_view(response).substr(
+			const auto code_text = std::string_view(reply).substr(
 				first + 1, second - first - 1);
 			uint16_t code = 0;
 			const auto parsed_code = std::from_chars(code_text.data(),
@@ -676,9 +676,9 @@ public:
 				(void)tcp->write_sync(asio::buffer(request), error);
 				if( error ) return sys_unexpected(error);
 
-				std::string response;
+				std::string reply;
 				std::array<char,4096> buffer {};
-				while( response.find("\r\n\r\n") == std::string::npos )
+				while( reply.find("\r\n\r\n") == std::string::npos )
 				{
 					const auto read = tcp->read_some_sync(riwo::buffer(buffer),
 						error);
@@ -686,20 +686,20 @@ public:
 					if( read == 0 )
 						return sys_unexpected(make_error_code(
 							errc::negotiation_failed));
-					response.append(buffer.data(), read);
-					if( response.size() > 64U * 1024U )
+					reply.append(buffer.data(), read);
+					if( reply.size() > 64U * 1024U )
 						return sys_unexpected(make_error_code(
 							errc::header_limit_exceeded));
 				}
-				auto line_end = response.find("\r\n");
-				auto first = response.find(' ');
+				auto line_end = reply.find("\r\n");
+				auto first = reply.find(' ');
 				auto second = first == std::string::npos ? std::string::npos :
-					response.find(' ', first + 1);
+					reply.find(' ', first + 1);
 				if( first == std::string::npos or second == std::string::npos )
 					return sys_unexpected(make_error_code(
 						errc::connection_protocol_error));
 				uint16_t code = 0;
-				const auto code_text = std::string_view(response).substr(
+				const auto code_text = std::string_view(reply).substr(
 					first + 1, second - first - 1);
 				const auto parsed_code = std::from_chars(code_text.data(),
 					code_text.data() + code_text.size(), code);
@@ -860,7 +860,7 @@ public:
 		ignore_unused(key);
 		auto executor = transport.stream->get_executor();
 		auto selected = transport.selected_protocol;
-		auto limits = config.response_limits;
+		auto limits = config.reply_limits;
 		return ::riwo::http_exp::v1::detail::make_client_session(
 			std::move(executor), selected,
 			std::move(limits), std::move(transport.stream), config.timeout,

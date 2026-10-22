@@ -14,12 +14,12 @@ class basic_reply<Exec>::impl
 {
 public:
 	impl(executor_t executor_value, protocol protocol_value,
-		protocol response_protocol_value, response_head head_value,
+		protocol reply_protocol_value, reply_head head_value,
 		std::shared_ptr<detail::body_reader_state> state,
 		std::vector<std::byte> buffered_body_value,
 		std::shared_ptr<void> owner_value, uint64_t max_buffered_body_value) :
 		m_executor(std::move(executor_value)), m_protocol_value(protocol_value),
-		m_response_protocol_value(response_protocol_value),
+		m_reply_protocol_value(reply_protocol_value),
 		m_head(std::move(head_value)),
 		m_body(std::make_unique<body_reader_t>(m_executor, std::move(state))),
 		m_buffered_body(std::move(buffered_body_value)),
@@ -30,8 +30,8 @@ public:
 
 	executor_t m_executor;
 	protocol m_protocol_value;
-	protocol m_response_protocol_value;
-	response_head m_head;
+	protocol m_reply_protocol_value;
+	reply_head m_head;
 	std::unique_ptr<body_reader_t> m_body;
 	std::vector<std::byte> m_buffered_body;
 	std::shared_ptr<void> m_owner;
@@ -46,14 +46,14 @@ basic_reply<Exec>::basic_reply()
 }
 
 template <core_concepts::exec Exec>
-basic_reply<Exec>::basic_reply(protocol selected_protocol, response_head head,
+basic_reply<Exec>::basic_reply(protocol selected_protocol, reply_head head,
 	std::shared_ptr<detail::body_reader_state> body,
 	std::vector<std::byte> buffered_body, std::shared_ptr<void> owner,
-	uint64_t max_buffered_body, protocol response_protocol)
+	uint64_t max_buffered_body, protocol reply_protocol)
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_reply(executor_t(riwo::get_executor()), selected_protocol,
 		std::move(head), std::move(body), std::move(buffered_body),
-		std::move(owner), max_buffered_body, response_protocol)
+		std::move(owner), max_buffered_body, reply_protocol)
 {
 }
 
@@ -69,14 +69,14 @@ basic_reply<Exec>::basic_reply(Exec0 &&executor)
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_reply<Exec>::basic_reply(Exec0 &&executor,
-	protocol selected_protocol, response_head head,
+	protocol selected_protocol, reply_head head,
 	std::shared_ptr<detail::body_reader_state> body,
 		std::vector<std::byte> buffered_body, std::shared_ptr<void> owner,
-		uint64_t max_buffered_body, protocol response_protocol)
+		uint64_t max_buffered_body, protocol reply_protocol)
 	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)), selected_protocol,
-		response_protocol, std::move(head), std::move(body),
+		reply_protocol, std::move(head), std::move(body),
 		std::move(buffered_body), std::move(owner), max_buffered_body))
 {
 }
@@ -96,7 +96,7 @@ protocol basic_reply<Exec>::selected_protocol() const noexcept {
 
 template <core_concepts::exec Exec>
 protocol basic_reply<Exec>::http_version() const noexcept {
-	return m_impl->m_response_protocol_value;
+	return m_impl->m_reply_protocol_value;
 }
 
 template <core_concepts::exec Exec>

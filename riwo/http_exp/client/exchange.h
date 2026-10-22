@@ -8,6 +8,7 @@
 #include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/body/writer.h>
 #include <riwo/http_exp/client/cookie_jar.h>
+#include <riwo/http_exp/client/reply.h>
 #include <riwo/http_exp/protocol/capabilities.h>
 #include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/protocol/response_head.h>
@@ -59,10 +60,10 @@ public:
 	[[nodiscard]] body_writer_t &request_body() noexcept;
 
 	template <typename Token = use_sync_t>
-	[[nodiscard]] auto wait_response(Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response_head>;
+	[[nodiscard]] auto wait_reply(Token &&token = {})
+		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,reply_head>;
 
-	[[nodiscard]] body_reader_t &response_body() noexcept;
+	[[nodiscard]] body_reader_t &reply_body() noexcept;
 
 	template <typename Token = use_sync_t>
 	[[nodiscard]] auto release_duplex(Token &&token = {})

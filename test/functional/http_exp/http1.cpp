@@ -125,9 +125,9 @@ void h1_client_server_round_trip()
 		(void)co_await streamed.request_body().write(
 			riwo::buffer(std::string_view("body")), riwo::use_awaitable);
 		co_await streamed.request_body().finish({}, riwo::use_awaitable);
-		auto streamed_head = co_await streamed.wait_response(riwo::use_awaitable);
+		auto streamed_head = co_await streamed.wait_reply(riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(streamed_head.status, http::status::created);
-		RIWO_TEST_CHECK_EQ(co_await read_body(streamed.response_body()),
+		RIWO_TEST_CHECK_EQ(co_await read_body(streamed.reply_body()),
 			"stream-body");
 
 		auto reset = co_await client.fetch(http::request(http::method::get,

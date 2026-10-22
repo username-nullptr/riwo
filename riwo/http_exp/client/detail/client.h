@@ -15,8 +15,8 @@ class stream;
 struct send_result
 {
 	protocol selected_protocol = protocol::v1_1;
-	protocol response_protocol = protocol::v1_1;
-	response_head head {};
+	protocol reply_protocol = protocol::v1_1;
+	reply_head head {};
 	std::shared_ptr<body_reader_state> body;
 	std::shared_ptr<void> owner;
 	uint64_t max_buffered_body = 8U * 1024U * 1024U;
@@ -48,7 +48,7 @@ public:
 	void send(request request_value, send_handler_t handler);
 	[[nodiscard]] std::shared_ptr<cookie_jar> cookie_store() const noexcept;
 	void capture_cookies(const riwo::url &origin,
-		const response_head &response) noexcept;
+		const reply_head &head) noexcept;
 
 private:
 	class impl;
@@ -191,7 +191,7 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 		return token ? reply_t(m_impl->m_executor) : reply_t(m_impl->m_executor,
 			result.selected_protocol, std::move(result.head), std::move(result.body),
 			{}, std::move(result.owner), result.max_buffered_body,
-			result.response_protocol);
+			result.reply_protocol);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
@@ -203,7 +203,7 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 		return reply_t(m_impl->m_executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), {},
 			std::move(result.owner), result.max_buffered_body,
-			result.response_protocol);
+			result.reply_protocol);
 	}
 	else
 	{
@@ -225,7 +225,7 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 				std::move(handler)(error_code{}, reply_t(executor,
 					result.selected_protocol, std::move(result.head),
 					std::move(result.body), {}, std::move(result.owner),
-					result.max_buffered_body, result.response_protocol));
+					result.max_buffered_body, result.reply_protocol));
 			});
 		}, std::forward<Token>(token));
 	}
@@ -243,13 +243,13 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 		if( token ) return reply_t(m_impl->m_executor);
 		reply_t active(m_impl->m_executor, result.selected_protocol,
 			result.head, result.body, {}, result.owner,
-			result.max_buffered_body, result.response_protocol);
+			result.max_buffered_body, result.reply_protocol);
 		auto bytes = active.read_all(token);
 		if( token ) return reply_t(m_impl->m_executor);
 		return reply_t(m_impl->m_executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner), result.max_buffered_body,
-			result.response_protocol);
+			result.reply_protocol);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
@@ -260,12 +260,12 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 				sys_unexpected(error)));
 		reply_t active(m_impl->m_executor, result.selected_protocol,
 			result.head, result.body, {}, result.owner,
-			result.max_buffered_body, result.response_protocol);
+			result.max_buffered_body, result.reply_protocol);
 		auto bytes = active.read_all();
 		return reply_t(m_impl->m_executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner), result.max_buffered_body,
-			result.response_protocol);
+			result.reply_protocol);
 	}
 	else
 	{
@@ -287,7 +287,7 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 				auto active = std::make_shared<reply_t>(executor,
 					result.selected_protocol, result.head, result.body,
 					std::vector<std::byte>{}, result.owner,
-					result.max_buffered_body, result.response_protocol);
+					result.max_buffered_body, result.reply_protocol);
 				active->read_all(
 				[handler = std::move(handler), executor, active,
 				 result = std::move(result)]
@@ -302,7 +302,7 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 						result.selected_protocol, std::move(result.head),
 						std::move(result.body), std::move(bytes),
 						std::move(result.owner), result.max_buffered_body,
-						result.response_protocol));
+						result.reply_protocol));
 				});
 			});
 		}, std::forward<Token>(token));
