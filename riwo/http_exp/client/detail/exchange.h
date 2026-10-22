@@ -12,8 +12,8 @@ class RIWO_HTTP_EXP_API client_exchange_state
 	RIWO_DISABLE_COPY_MOVE(client_exchange_state)
 
 public:
-	using response_handler_t = asio::any_completion_handler<void(
-		error_code,response_head)>;
+	using reply_handler_t = asio::any_completion_handler<void(
+		error_code,reply_head)>;
 	using duplex_handler_t = asio::any_completion_handler<void(
 		error_code,std::shared_ptr<duplex_state>)>;
 
@@ -23,9 +23,9 @@ public:
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_writer_state> request_body() const noexcept;
-	[[nodiscard]] std::shared_ptr<body_reader_state> response_body() const noexcept;
-	[[nodiscard]] response_head wait_response(error_code &error) noexcept;
-	void wait_response(response_handler_t handler);
+	[[nodiscard]] std::shared_ptr<body_reader_state> reply_body() const noexcept;
+	[[nodiscard]] reply_head wait_reply(error_code &error) noexcept;
+	void wait_reply(reply_handler_t handler);
 	[[nodiscard]] std::shared_ptr<duplex_state> release_duplex(
 		error_code &error) noexcept;
 	void release_duplex(duplex_handler_t handler);
@@ -57,15 +57,15 @@ public:
 			std::move(cookies), std::move(origin))),
 		m_request_body(std::make_unique<body_writer_t>(
 			m_executor, m_state->request_body())),
-		m_response_body(std::make_unique<body_reader_t>(
-			m_executor, m_state->response_body()))
+		m_reply_body(std::make_unique<body_reader_t>(
+			m_executor, m_state->reply_body()))
 	{
 	}
 
 	executor_t m_executor;
 	std::shared_ptr<detail::client_exchange_state> m_state;
 	std::unique_ptr<body_writer_t> m_request_body;
-	std::unique_ptr<body_reader_t> m_response_body;
+	std::unique_ptr<body_reader_t> m_reply_body;
 };
 
 template <core_concepts::exec Exec>
@@ -127,34 +127,34 @@ auto basic_client_exchange<Exec>::request_body() noexcept -> body_writer_t& {
 
 template <core_concepts::exec Exec>
 template <typename Token>
-auto basic_client_exchange<Exec>::wait_response(Token &&token)
-	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,response_head>
+auto basic_client_exchange<Exec>::wait_reply(Token &&token)
+	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,reply_head>
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return m_impl->m_state->wait_response(token);
+		return m_impl->m_state->wait_reply(token);
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto head = m_impl->m_state->wait_response(error);
+		auto head = m_impl->m_state->wait_reply(error);
 		return expected_value_or_throw(error ?
-			sys_expected<response_head>(sys_unexpected(error)) :
-			sys_expected<response_head>(std::move(head)));
+			sys_expected<reply_head>(sys_unexpected(error)) :
+			sys_expected<reply_head>(std::move(head)));
 	}
 	else
 	{
 		auto state = m_impl->m_state;
-		return initiate_io<response_head>(m_impl->m_executor,
+		return initiate_io<reply_head>(m_impl->m_executor,
 		[state = std::move(state)](auto handler) mutable {
-			state->wait_response(
-				typename detail::client_exchange_state::response_handler_t(
+			state->wait_reply(
+				typename detail::client_exchange_state::reply_handler_t(
 					std::move(handler)));
 		}, std::forward<Token>(token));
 	}
 }
 
 template <core_concepts::exec Exec>
-auto basic_client_exchange<Exec>::response_body() noexcept -> body_reader_t& {
-	return *m_impl->m_response_body;
+auto basic_client_exchange<Exec>::reply_body() noexcept -> body_reader_t& {
+	return *m_impl->m_reply_body;
 }
 
 template <core_concepts::exec Exec>
@@ -170,7 +170,7 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token)
 		if( not token )
 		{
 			m_impl->m_request_body->detach();
-			m_impl->m_response_body->detach();
+			m_impl->m_reply_body->detach();
 		}
 		return channel_t(m_impl->m_executor, std::move(state));
 	}
@@ -182,7 +182,7 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token)
 			return expected_value_or_throw(sys_expected<channel_t>(
 				sys_unexpected(error)));
 		m_impl->m_request_body->detach();
-		m_impl->m_response_body->detach();
+		m_impl->m_reply_body->detach();
 		return channel_t(m_impl->m_executor, std::move(state));
 	}
 	else
@@ -199,7 +199,7 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token)
 					if( not error )
 					{
 						owner->m_request_body->detach();
-						owner->m_response_body->detach();
+						owner->m_reply_body->detach();
 					}
 					std::move(handler)(error,
 						channel_t(executor, std::move(channel)));

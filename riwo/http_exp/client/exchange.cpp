@@ -15,29 +15,29 @@ public:
 		m_stream(std::move(value)), m_cookie_store(std::move(cookie_store)),
 		m_origin(std::move(request_origin)),
 		m_request_body(m_stream ? m_stream->outbound_body() : make_body_writer_state()),
-		m_response_body(m_stream ? m_stream->inbound_body() : make_body_reader_state())
+		m_reply_body(m_stream ? m_stream->inbound_body() : make_body_reader_state())
 	{
 		if( not m_request_body )
 			m_request_body = make_body_writer_state();
-		if( not m_response_body )
-			m_response_body = make_body_reader_state();
+		if( not m_reply_body )
+			m_reply_body = make_body_reader_state();
 	}
 
 	std::shared_ptr<stream> m_stream;
 	std::shared_ptr<cookie_jar> m_cookie_store;
 	riwo::url m_origin;
 	std::shared_ptr<body_writer_state> m_request_body;
-	std::shared_ptr<body_reader_state> m_response_body;
+	std::shared_ptr<body_reader_state> m_reply_body;
 	bool m_wait_pending = false;
-	bool m_response_ready = false;
+	bool m_reply_ready = false;
 	bool m_duplex_taken = false;
-	response_head m_response {};
+	reply_head m_reply_head {};
 
-	void capture_cookies(const response_head &response) noexcept
+	void capture_cookies(const reply_head &head) noexcept
 	{
 		if( not m_cookie_store ) return;
 		try {
-			m_cookie_store->store(m_origin, response.headers);
+			m_cookie_store->store(m_origin, head.headers);
 		}
 		catch(...) {
 		}
@@ -67,11 +67,11 @@ client_exchange_state::request_body() const noexcept {
 }
 
 std::shared_ptr<body_reader_state>
-client_exchange_state::response_body() const noexcept {
-	return m_impl->m_response_body;
+client_exchange_state::reply_body() const noexcept {
+	return m_impl->m_reply_body;
 }
 
-response_head client_exchange_state::wait_response(error_code &error) noexcept
+reply_head client_exchange_state::wait_reply(error_code &error) noexcept
 {
 	auto state = m_impl;
 	if( state->m_wait_pending )
@@ -79,10 +79,10 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 		error = make_error_code(errc::operation_in_progress);
 		return {};
 	}
-	if( state->m_response_ready )
+	if( state->m_reply_ready )
 	{
 		error.clear();
-		return state->m_response;
+		return state->m_reply_head;
 	}
 	if( not state->m_stream )
 	{
@@ -95,45 +95,45 @@ response_head client_exchange_state::wait_response(error_code &error) noexcept
 	if( not error )
 	{
 		state->capture_cookies(result);
-		state->m_response = result;
-		state->m_response_ready = true;
-		state->m_response_body->set_ready();
+		state->m_reply_head = result;
+		state->m_reply_ready = true;
+		state->m_reply_body->set_ready();
 	}
 	return result;
 }
 
-void client_exchange_state::wait_response(response_handler_t handler)
+void client_exchange_state::wait_reply(reply_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_wait_pending )
 	{
 		std::move(handler)(make_error_code(errc::operation_in_progress),
-			response_head{});
+			reply_head{});
 		return;
 	}
-	if( state->m_response_ready )
+	if( state->m_reply_ready )
 	{
-		std::move(handler)(error_code{}, state->m_response);
+		std::move(handler)(error_code{}, state->m_reply_head);
 		return;
 	}
 	if( not state->m_stream )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
-			response_head{});
+			reply_head{});
 		return;
 	}
 	state->m_wait_pending = true;
 	state->m_stream->wait_response(
 	[state, handler = std::move(handler)]
-	(error_code error, response_head result) mutable
+	(error_code error, reply_head result) mutable
 	{
 		state->m_wait_pending = false;
 		if( not error )
 		{
 			state->capture_cookies(result);
-			state->m_response = result;
-			state->m_response_ready = true;
-			state->m_response_body->set_ready();
+			state->m_reply_head = result;
+			state->m_reply_ready = true;
+			state->m_reply_body->set_ready();
 		}
 		std::move(handler)(error, std::move(result));
 	});
@@ -143,7 +143,7 @@ std::shared_ptr<duplex_state> client_exchange_state::release_duplex(
 	error_code &error) noexcept
 {
 	auto state = m_impl;
-	if( not state->m_response_ready or state->m_duplex_taken or not state->m_stream )
+	if( not state->m_reply_ready or state->m_duplex_taken or not state->m_stream )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return {};
@@ -156,7 +156,7 @@ std::shared_ptr<duplex_state> client_exchange_state::release_duplex(
 void client_exchange_state::release_duplex(duplex_handler_t handler)
 {
 	auto state = m_impl;
-	if( not state->m_response_ready or state->m_duplex_taken or not state->m_stream )
+	if( not state->m_reply_ready or state->m_duplex_taken or not state->m_stream )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			std::shared_ptr<duplex_state>{});
@@ -174,7 +174,7 @@ void client_exchange_state::cancel() noexcept
 {
 	if( m_impl->m_duplex_taken ) return;
 	m_impl->m_request_body->cancel();
-	m_impl->m_response_body->cancel();
+	m_impl->m_reply_body->cancel();
 	if( m_impl->m_stream )
 		m_impl->m_stream->cancel();
 }

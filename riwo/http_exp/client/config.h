@@ -44,7 +44,7 @@ struct client_config
 	redirect_policy redirects {};
 	retry_policy retries {};
 	cookie_config cookies {};
-	message_limits response_limits {};
+	message_limits reply_limits {};
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	v2_config h2 {};
 #endif

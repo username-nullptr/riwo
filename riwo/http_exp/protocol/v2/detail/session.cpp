@@ -1126,13 +1126,13 @@ private:
 		if( found == self.m_streams.end() ) return 0;
 		auto &value = *found->second;
 		const auto header_limit = std::min(self.m_config.h2.max_header_list_size,
-			self.m_config.response_limits.max_header_list_size);
+			self.m_config.reply_limits.max_header_list_size);
 		value.m_header_bytes += name_size + value_size + 32;
 		++value.m_header_count;
 		if( value.m_header_bytes > header_limit or
-			value.m_header_count > self.m_config.response_limits.max_field_count or
-			name_size > self.m_config.response_limits.max_field_name_size or
-			value_size > self.m_config.response_limits.max_field_value_size )
+			value.m_header_count > self.m_config.reply_limits.max_field_count or
+			name_size > self.m_config.reply_limits.max_field_name_size or
+			value_size > self.m_config.reply_limits.max_field_value_size )
 		{
 			(void)nghttp2_submit_rst_stream(self.m_native, NGHTTP2_FLAG_NONE,
 				value.m_id, NGHTTP2_ENHANCE_YOUR_CALM);
@@ -1238,9 +1238,9 @@ private:
 				self.m_config.h2.inbound_stream_buffer or
 			self.m_inbound_buffered + size >
 				self.m_config.h2.inbound_connection_buffer or
-			(self.m_config.response_limits.max_body_size and
+			(self.m_config.reply_limits.max_body_size and
 				value.m_inbound_total + size >
-					*self.m_config.response_limits.max_body_size) )
+					*self.m_config.reply_limits.max_body_size) )
 		{
 			(void)nghttp2_submit_rst_stream(self.m_native, NGHTTP2_FLAG_NONE,
 				stream_id, NGHTTP2_ENHANCE_YOUR_CALM);
@@ -1417,7 +1417,7 @@ void v2_stream::initialize()
 	m_reader_adapter = std::make_shared<v2_reader_adapter>(weak_from_this());
 	m_writer_adapter = std::make_shared<v2_writer_adapter>(weak_from_this());
 	m_inbound = make_body_reader_state(m_reader_adapter, false,
-		m_session->config().response_limits.max_discard_body);
+		m_session->config().reply_limits.max_discard_body);
 	m_outbound = make_body_writer_state(m_writer_adapter, m_spec, true);
 }
 

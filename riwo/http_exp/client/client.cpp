@@ -175,7 +175,7 @@ namespace
 	}
 }
 
-[[nodiscard]] std::string decodable_encoding(const response_head &head)
+[[nodiscard]] std::string decodable_encoding(const reply_head &head)
 {
 	if( not gzip_available_v ) return {};
 	std::string_view value;
@@ -195,7 +195,7 @@ namespace
 }
 
 [[nodiscard]] std::shared_ptr<body_reader_state> decoded_body(
-	std::shared_ptr<body_reader_state> body, response_head &head,
+	std::shared_ptr<body_reader_state> body, reply_head &head,
 	bool automatic_decompression)
 {
 	if( not automatic_decompression or not body or body->is_finished() )
@@ -295,17 +295,17 @@ void add_accept_encoding(request_head &head, const client_config &config)
 }
 
 [[nodiscard]] std::unique_ptr<request> make_redirect_request(
-	const request &value, const response_head &response,
+	const request &value, const reply_head &head,
 	const redirect_policy &policy, error_code &error) noexcept
 {
 	error.clear();
-	const auto code = response.status.code();
+	const auto code = head.status.code();
 	if( code != 301 and code != 302 and code != 303 and
 		code != 307 and code != 308 )
 		return {};
 	if( request_access::redirect_count(value) >= policy.max_redirects )
 		return {};
-	const auto location = response.headers.find_first("Location");
+	const auto location = head.headers.find_first("Location");
 	if( not location ) return {};
 	try {
 		auto target = riwo::url::resolve(value.url(), *location);
@@ -459,12 +459,12 @@ std::shared_ptr<cookie_jar> client_state::cookie_store() const noexcept {
 }
 
 void client_state::capture_cookies(const riwo::url &origin,
-	const response_head &response) noexcept
+	const reply_head &head) noexcept
 {
 	const auto store = cookie_store();
 	if( not store ) return;
 	try {
-		store->store(origin, response.headers);
+		store->store(origin, head.headers);
 	}
 	catch(...) {
 	}
@@ -592,7 +592,7 @@ send_result client_state::send(request request_value,
 		}
 	}
 
-	auto response = active_stream->wait_response_sync(error);
+	auto reply_head_value = active_stream->wait_response_sync(error);
 	if( error )
 	{
 		const auto delivery = active_stream->delivery();
@@ -603,7 +603,7 @@ send_result client_state::send(request request_value,
 			return retried;
 		return {};
 	}
-	capture_cookies(request_value.url(), response);
+	capture_cookies(request_value.url(), reply_head_value);
 	auto body = active_stream->inbound_body();
 	if( not body )
 	{
@@ -612,7 +612,7 @@ send_result client_state::send(request request_value,
 		return {};
 	}
 	error_code redirect_error;
-	auto redirect = make_redirect_request(request_value, response,
+	auto redirect = make_redirect_request(request_value, reply_head_value,
 		m_impl->m_config.redirects, redirect_error);
 	if( redirect_error )
 	{
@@ -638,15 +638,15 @@ send_result client_state::send(request request_value,
 		return send(std::move(*redirect), error);
 	}
 	body->set_ready();
-	body = decoded_body(std::move(body), response,
+	body = decoded_body(std::move(body), reply_head_value,
 		m_impl->m_config.automatic_decompression);
 	return send_result {
 		.selected_protocol = active_stream->selected_protocol(),
-		.response_protocol = active_stream->response_protocol(),
-		.head = std::move(response),
+		.reply_protocol = active_stream->response_protocol(),
+		.head = std::move(reply_head_value),
 		.body = std::move(body),
 		.owner = std::move(active_stream),
-		.max_buffered_body = m_impl->m_config.response_limits.max_buffered_body
+		.max_buffered_body = m_impl->m_config.reply_limits.max_buffered_body
 	};
 }
 
@@ -727,7 +727,7 @@ void client_state::send(request request_value, send_handler_t handler)
 			}
 			if( not source )
 			{
-				wait_response();
+				wait_reply();
 				return;
 			}
 			read_next();
@@ -814,15 +814,15 @@ void client_state::send(request request_value, send_handler_t handler)
 			writer->finish(std::move(trailers),
 			[self = std::move(self)](error_code error) mutable {
 				if( error ) self->fail(error);
-				else self->wait_response();
+				else self->wait_reply();
 			});
 		}
 
-		void wait_response()
+		void wait_reply()
 		{
 			auto self = shared_from_this();
 			active_stream->wait_response(
-			[self = std::move(self)](error_code error, response_head head) mutable {
+			[self = std::move(self)](error_code error, reply_head head) mutable {
 				if( error )
 				{
 					self->fail(error);
@@ -855,7 +855,7 @@ void client_state::send(request request_value, send_handler_t handler)
 				auto result = send_result {
 					.selected_protocol =
 						self->active_stream->selected_protocol(),
-					.response_protocol =
+					.reply_protocol =
 						self->active_stream->response_protocol(),
 					.head = std::move(head),
 					.body = std::move(body),
@@ -867,10 +867,10 @@ void client_state::send(request request_value, send_handler_t handler)
 		}
 
 		void follow_redirect(request next,
-			std::shared_ptr<body_reader_state> response_body)
+			std::shared_ptr<body_reader_state> reply_body)
 		{
 			auto self = shared_from_this();
-			response_body->discard(
+			reply_body->discard(
 			[self = std::move(self), next = std::move(next)]
 			(error_code error) mutable {
 				if( error )
@@ -953,7 +953,7 @@ void client_state::send(request request_value, send_handler_t handler)
 	[owner, request_value = std::move(request_value), request_body,
 	 source = std::move(source), spec = std::move(operation_spec),
 	 trailers = std::move(trailers),
-	 max_buffered_body = m_impl->m_config.response_limits.max_buffered_body,
+	 max_buffered_body = m_impl->m_config.reply_limits.max_buffered_body,
 	 automatic_decompression = m_impl->m_config.automatic_decompression,
 	 retries = m_impl->m_config.retries, redirects = m_impl->m_config.redirects,
 	 handler = std::move(handler)]

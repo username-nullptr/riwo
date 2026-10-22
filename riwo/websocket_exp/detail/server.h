@@ -46,7 +46,7 @@ struct server_upgrade_plan
 {
 	request_info request {};
 	opening_request opening {};
-	opening_response opening_response {};
+	opening_response response_message {};
 	http_exp::response_head response {};
 	std::string body {};
 	error_code error {};
@@ -174,8 +174,8 @@ void upgrade_sync(http_exp::basic_server_exchange<Exec> &exchange,
 			std::move(plan.response), error);
 		if( error ) return;
 		result.handshake.subprotocol =
-			plan.opening_response.subprotocol.value_or("");
-		result.handshake.extensions = plan.opening_response.extensions;
+			plan.response_message.subprotocol.value_or("");
+		result.handshake.extensions = plan.response_message.extensions;
 		result.stream.adopt(
 			std::make_shared<http_exp::basic_duplex_channel<Exec>>(
 				std::move(channel)), adopt_options {
@@ -246,7 +246,7 @@ co_upgrade(http_exp::basic_server_exchange<Exec> *exchange,
 		if( plan.accepted and options.async_subprotocol_selector )
 		{
 			try {
-				plan.opening_response.subprotocol = co_await asio::co_spawn(
+				plan.response_message.subprotocol = co_await asio::co_spawn(
 					exchange->get_executor(),
 					options.async_subprotocol_selector(plan.request,
 						plan.opening.subprotocols),
@@ -262,7 +262,7 @@ co_upgrade(http_exp::basic_server_exchange<Exec> *exchange,
 		if( plan.accepted and options.async_extension_selector )
 		{
 			try {
-				plan.opening_response.extensions = co_await asio::co_spawn(
+				plan.response_message.extensions = co_await asio::co_spawn(
 					exchange->get_executor(),
 					options.async_extension_selector(plan.request,
 						plan.opening.extensions),
@@ -301,8 +301,8 @@ co_upgrade(http_exp::basic_server_exchange<Exec> *exchange,
 		if( accept_error ) co_return std::tuple {
 			accept_error, std::move(result)};
 		result.handshake.subprotocol =
-			plan.opening_response.subprotocol.value_or("");
-		result.handshake.extensions = plan.opening_response.extensions;
+			plan.response_message.subprotocol.value_or("");
+		result.handshake.extensions = plan.response_message.extensions;
 		error_code adopt_error;
 		result.stream.adopt(
 			std::make_shared<http_exp::basic_duplex_channel<Exec>>(

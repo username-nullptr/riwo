@@ -24,13 +24,20 @@ template <typename Value, typename Exec>
 [[nodiscard]] auto handshake_fallback(const Exec &exec,
 	optional<stream_config> fallback_config)
 {
-	return [exec, fallback_config = std::move(fallback_config)]() mutable -> Value
+	if constexpr( std::constructible_from<Value,const Exec&,stream_config> )
 	{
-		if constexpr( std::constructible_from<Value,const Exec&,stream_config> )
+		return [exec, fallback_config = std::move(fallback_config)]() mutable -> Value
+		{
 			return Value(exec, fallback_config.value_or(stream_config{}));
-		else
+		};
+	}
+	else
+	{
+		return [exec]() mutable -> Value
+		{
 			return Value(exec);
-	};
+		};
+	}
 }
 
 template <typename Value, typename Exec, typename Initiator, typename Handler>

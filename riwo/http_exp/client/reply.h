@@ -16,6 +16,8 @@ class body_reader_state;
 namespace riwo::http_exp
 {
 
+using reply_head = response_head;
+
 template <core_concepts::exec Exec = asio::any_io_executor>
 class RIWO_HTTP_EXP_TAPI basic_reply
 {
@@ -33,21 +35,21 @@ public:
 	explicit basic_reply(Exec0 &&executor)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	basic_reply(protocol selected_protocol, response_head head,
+	basic_reply(protocol selected_protocol, reply_head head,
 		std::shared_ptr<detail::body_reader_state> body,
 		std::vector<std::byte> buffered_body = {},
 		std::shared_ptr<void> owner = {},
 		uint64_t max_buffered_body = 8U * 1024U * 1024U,
-		protocol response_protocol = protocol::v1_1)
+		protocol reply_protocol = protocol::v1_1)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_reply(Exec0 &&executor, protocol selected_protocol,
-		response_head head, std::shared_ptr<detail::body_reader_state> body,
+		reply_head head, std::shared_ptr<detail::body_reader_state> body,
 		std::vector<std::byte> buffered_body = {},
 		std::shared_ptr<void> owner = {},
 		uint64_t max_buffered_body = 8U * 1024U * 1024U,
-		protocol response_protocol = protocol::v1_1)
+		protocol reply_protocol = protocol::v1_1)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_reply();

@@ -72,6 +72,7 @@ static_assert(std::same_as<decltype(http::field::value),riwo::value>);
 static_assert(std::copyable<http::fields>);
 static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
+static_assert(std::same_as<http::reply_head,http::response_head>);
 static_assert(std::is_aggregate_v<http::request_head>);
 static_assert(std::is_aggregate_v<http::response_head>);
 static_assert(std::same_as<decltype(http::request_head::headers), http::fields>);
@@ -634,7 +635,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	http::body_writer_t writer_with_state(writer_state);
 	http::client_exchange_t exchange_with_stream(stream);
 	http::reply_t reply_with_body(http::protocol::v1_1,
-		http::response_head{http::status::ok}, reader_state);
+		http::reply_head{http::status::ok}, reader_state);
 	http::server_exchange_t server_exchange_with_stream(stream,
 		http::request_head{});
 	std::shared_ptr<http::detail::duplex_state> duplex_state;
