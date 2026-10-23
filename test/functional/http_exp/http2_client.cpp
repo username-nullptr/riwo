@@ -270,7 +270,7 @@ void prior_knowledge_body_and_trailers()
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
 	config.pool.max_sessions_per_origin = 1;
-	http::client_t client(context, config);
+	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/upload",
 		acceptor.local_endpoint().port());
 	const std::string upload(128 * 1024, 'u');
@@ -308,7 +308,7 @@ void multiplexed_async_requests()
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
 	config.pool.max_sessions_per_origin = 1;
-	http::client_t client(context, config);
+	http::client client(context, config);
 	const auto base = std::format("http://127.0.0.1:{}",
 		acceptor.local_endpoint().port());
 	size_t completed = 0;
@@ -318,7 +318,7 @@ void multiplexed_async_requests()
 	{
 		client.fetch(http::request(http::method::get,
 			base + "/stream/" + std::to_string(index)),
-			[&, index](riwo::error_code error, http::reply_t reply) {
+			[&, index](riwo::error_code error, http::reply reply) {
 				errors[index] = error;
 				if( !error ) bodies[index] = text(reply.buffered_body());
 				++completed;
@@ -350,7 +350,7 @@ void reset_and_goaway_errors()
 		config.protocols.requirement =
 			http::protocol_requirement::require_http2;
 		config.retries.max_attempts = 1;
-		http::client_t client(context, config);
+		http::client client(context, config);
 		const auto target = std::format("http://127.0.0.1:{}/failure",
 			acceptor.local_endpoint().port());
 		riwo::error_code error;
@@ -373,14 +373,14 @@ void refused_stream_retries_async()
 	config.protocols.requirement =
 		http::protocol_requirement::require_http2;
 	config.retries.max_attempts = 2;
-	http::client_t client(context, config);
+	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/retry",
 		acceptor.local_endpoint().port());
 	riwo::error_code result_error;
 	std::string body;
 	size_t completions = 0;
 	client.fetch(http::request(http::method::get, target),
-	[&](riwo::error_code error, http::reply_t reply) {
+	[&](riwo::error_code error, http::reply reply) {
 		result_error = error;
 		if( !error ) body = text(reply.buffered_body());
 		++completions;
@@ -407,7 +407,7 @@ void redirect_rewinds_replayable_source()
 	http::client_config config;
 	config.protocols.requirement =
 		http::protocol_requirement::require_http2;
-	http::client_t client(context, config);
+	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/redirect",
 		acceptor.local_endpoint().port());
 	const std::string payload = "replayable-upload";

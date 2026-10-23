@@ -39,16 +39,15 @@ public:
 	virtual ~basic_transport_connector() = default;
 	[[nodiscard]] virtual executor_t get_executor() const noexcept = 0;
 	[[nodiscard]] virtual sys_expected<result_t>
-	connect_sync(const connect_request &) noexcept
-	{
-		return sys_unexpected(make_error_code(errc::operation_not_supported));
-	}
+	connect_sync(const connect_request &) noexcept;
 	virtual void connect(connect_request, connect_handler_t) = 0;
 	virtual void cancel() noexcept = 0;
 };
 
-using transport_connector_t = basic_transport_connector<>;
+using transport_connector = basic_transport_connector<>;
 
 } //namespace riwo::http_exp
+
+#include <riwo/http_exp/transport/detail/connector.h>
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_CONNECTOR_H

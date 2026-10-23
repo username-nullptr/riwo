@@ -79,7 +79,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using duplex_channel_t = basic_duplex_channel<>;
+using duplex_channel = basic_duplex_channel<>;
 
 } //namespace riwo::http_exp
 

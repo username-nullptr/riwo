@@ -4,6 +4,8 @@
 #ifndef RIWO_HTTP_EXP_SERVER_DETAIL_EXCHANGE_H
 #define RIWO_HTTP_EXP_SERVER_DETAIL_EXCHANGE_H
 
+#include <riwo/http_exp/body/detail/encoder.h>
+
 namespace riwo::http_exp::detail
 {
 
@@ -17,7 +19,12 @@ public:
 		error_code,std::shared_ptr<duplex_state>)>;
 
 	server_exchange_state(std::shared_ptr<stream> stream = {},
-		request_head request = {});
+		request_head request = {}, parameter_view path_parameters = {},
+		parameter_view query_parameters = {},
+		std::shared_ptr<application_session_manager> sessions = {},
+		std::filesystem::path resource_root = {},
+		bool automatic_compression = false,
+		uint64_t compression_minimum_size = 1024);
 	~server_exchange_state();
 	[[nodiscard]] protocol selected_protocol() const noexcept;
 	[[nodiscard]] std::string remote_address() const;
@@ -28,6 +35,16 @@ public:
 	local_endpoint(error_code &error) const noexcept;
 	[[nodiscard]] stream_capabilities capabilities() const noexcept;
 	[[nodiscard]] const request_head &request() const noexcept;
+	[[nodiscard]] const parameter_view &path_parameters() const noexcept;
+	[[nodiscard]] const parameter_view &query_parameters() const noexcept;
+	[[nodiscard]] bool response_started() const noexcept;
+	[[nodiscard]] application_session_ptr find_session();
+	[[nodiscard]] application_session_ptr session();
+	[[nodiscard]] const std::filesystem::path &resource_root() const noexcept;
+	[[nodiscard]] bool should_compress(const response_head &head,
+		optional<uint64_t> length) const noexcept;
+	[[nodiscard]] bool prepare_compression(response_head &head,
+		optional<uint64_t> length);
 	[[nodiscard]] std::shared_ptr<body_reader_state> request_body() const noexcept;
 	[[nodiscard]] std::shared_ptr<body_writer_state> response_body() const noexcept;
 	[[nodiscard]] void *protocol_extension(
@@ -48,7 +65,12 @@ private:
 
 [[nodiscard]] RIWO_HTTP_EXP_API
 std::shared_ptr<server_exchange_state> make_server_exchange_state(
-	std::shared_ptr<stream> stream = {}, request_head request = {});
+	std::shared_ptr<stream> stream = {}, request_head request = {},
+	parameter_view path_parameters = {}, parameter_view query_parameters = {},
+	std::shared_ptr<application_session_manager> sessions = {},
+	std::filesystem::path resource_root = {},
+	bool automatic_compression = false,
+	uint64_t compression_minimum_size = 1024);
 
 } //namespace riwo::http_exp::detail
 
@@ -60,9 +82,18 @@ class basic_server_exchange<Exec>::impl
 {
 public:
 	impl(executor_t executor_value, std::shared_ptr<detail::stream> stream,
-		request_t request) : m_executor(std::move(executor_value)),
+		request_t request, parameter_view path_parameters = {},
+		parameter_view query_parameters = {},
+		std::shared_ptr<application_session_manager> sessions = {},
+		std::filesystem::path resource_root = {},
+		bool automatic_compression = false,
+		uint64_t compression_minimum_size = 1024) :
+		m_executor(std::move(executor_value)),
 		m_state(detail::make_server_exchange_state(
-			std::move(stream), std::move(request))),
+			std::move(stream), std::move(request), std::move(path_parameters),
+			std::move(query_parameters), std::move(sessions),
+			std::move(resource_root), automatic_compression,
+			compression_minimum_size)),
 		m_request_body(std::make_unique<body_reader_t>(
 			m_executor, m_state->request_body())),
 		m_response_body(std::make_unique<body_writer_t>(
@@ -117,6 +148,24 @@ basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
 }
 
 template <core_concepts::exec Exec>
+template <typename Exec0>
+basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
+	std::shared_ptr<detail::stream> stream, request_t request_value,
+	parameter_view path_parameters, parameter_view query_parameters,
+	std::shared_ptr<application_session_manager> sessions,
+	std::filesystem::path resource_root, bool automatic_compression,
+	uint64_t compression_minimum_size)
+	requires core_concepts::match_sched<Exec0,executor_t> :
+	m_impl(std::make_shared<impl>(
+		get_executor_helper(std::forward<Exec0>(executor)),
+		std::move(stream), std::move(request_value),
+		std::move(path_parameters), std::move(query_parameters),
+		std::move(sessions), std::move(resource_root), automatic_compression,
+		compression_minimum_size))
+{
+}
+
+template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::get_executor() const noexcept -> executor_t {
 	return m_impl->m_executor;
 }
@@ -154,6 +203,45 @@ auto basic_server_exchange<Exec>::request() const noexcept -> const request_t& {
 }
 
 template <core_concepts::exec Exec>
+const parameter_view &basic_server_exchange<Exec>::path_parameters()
+	const noexcept { return m_impl->m_state->path_parameters(); }
+
+template <core_concepts::exec Exec>
+const parameter_view &basic_server_exchange<Exec>::query_parameters()
+	const noexcept { return m_impl->m_state->query_parameters(); }
+
+template <core_concepts::exec Exec>
+optional<std::string_view> basic_server_exchange<Exec>::path_parameter(
+	std::string_view name) const noexcept {
+	return path_parameters().find_first(name);
+}
+
+template <core_concepts::exec Exec>
+optional<std::string_view> basic_server_exchange<Exec>::query_parameter(
+	std::string_view name) const noexcept {
+	return query_parameters().find_first(name);
+}
+
+template <core_concepts::exec Exec>
+bool basic_server_exchange<Exec>::response_started() const noexcept {
+	return m_impl->m_state->response_started();
+}
+
+template <core_concepts::exec Exec>
+application_session_ptr basic_server_exchange<Exec>::find_session() {
+	return m_impl->m_state->find_session();
+}
+
+template <core_concepts::exec Exec>
+application_session_ptr basic_server_exchange<Exec>::session() {
+	return m_impl->m_state->session();
+}
+
+template <core_concepts::exec Exec>
+const std::filesystem::path &basic_server_exchange<Exec>::resource_root()
+	const noexcept { return m_impl->m_state->resource_root(); }
+
+template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::request_body() noexcept -> body_reader_t& {
 	return *m_impl->m_request_body;
 }
@@ -161,6 +249,31 @@ auto basic_server_exchange<Exec>::request_body() noexcept -> body_reader_t& {
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::response_body() noexcept -> body_writer_t& {
 	return *m_impl->m_response_body;
+}
+
+template <core_concepts::exec Exec>
+template <typename Token>
+auto basic_server_exchange<Exec>::save_file(std::filesystem::path path,
+	Token &&token)
+	requires core_concepts::dis_detached_tf_opt_token<
+		Token,error_code,uint64_t>
+{
+	return detail::pipe_body(request_body(), file_sink(std::move(path)), m_impl,
+		std::forward<Token>(token));
+}
+
+template <core_concepts::exec Exec>
+template <typename File, typename Token>
+auto basic_server_exchange<Exec>::save_file(File &&file, Token &&token)
+	requires (not std::same_as<std::remove_cvref_t<File>,
+		std::filesystem::path>)
+		and std::constructible_from<file_sink,File>
+		and core_concepts::dis_detached_tf_opt_token<
+			Token,error_code,uint64_t>
+{
+	return detail::pipe_body(request_body(),
+		file_sink(std::forward<File>(file)), m_impl,
+		std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec>
@@ -198,17 +311,25 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 	const const_buffer &body, Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>
 {
+	if( m_impl->m_state->should_compress(head, body.size()) )
+		return respond(std::move(head), memory_body_source(body),
+			std::forward<Token>(token));
+	const bool head_only = head.status.allows_body() and
+		m_impl->m_state->request().method.known() == method::head;
+	auto spec = head_only ? body_spec::head(body.size()) :
+		body_spec::known(body.size());
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		respond(std::move(head), body_spec::known(body.size()), token);
-		if( token ) return;
+		respond(std::move(head), std::move(spec), token);
+		if( token or head_only ) return;
 		(void)response_body().write(body, token);
 		if( token ) return;
 		response_body().finish({}, token);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
-		respond(std::move(head), body_spec::known(body.size()));
+		respond(std::move(head), std::move(spec));
+		if( head_only ) return;
 		(void)response_body().write(body);
 		response_body().finish();
 	}
@@ -221,15 +342,27 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			if( body.size() != 0 )
 				std::memcpy(owned->data(), body.data(), body.size());
 			return initiate_io_void(m_impl->m_executor,
-			[this, head = std::move(head), owned](auto handler) mutable
+			[this, head = std::move(head), owned, head_only](auto handler) mutable
 			{
-				respond(std::move(head), body_spec::known(owned->size()),
-				[this, owned, handler = std::move(handler)]
+				auto owned_spec = head_only ? body_spec::head(owned->size()) :
+					body_spec::known(owned->size());
+				respond(std::move(head), std::move(owned_spec),
+				[this, owned, head_only, handler = std::move(handler)]
 				(error_code error) mutable
 				{
 					if( error )
 					{
 						std::move(handler)(error);
+						return;
+					}
+					if( head_only )
+					{
+						std::move(handler)(error_code{});
+						return;
+					}
+					if( owned->empty() )
+					{
+						response_body().finish({}, std::move(handler));
 						return;
 					}
 					response_body().write(riwo::buffer(*owned),
@@ -249,15 +382,27 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 		else
 		{
 			return initiate_io_void(m_impl->m_executor,
-			[this, head = std::move(head), body](auto handler) mutable
+			[this, head = std::move(head), body, head_only](auto handler) mutable
 			{
-				respond(std::move(head), body_spec::known(body.size()),
-				[this, body, handler = std::move(handler)]
+				auto borrowed_spec = head_only ? body_spec::head(body.size()) :
+					body_spec::known(body.size());
+				respond(std::move(head), std::move(borrowed_spec),
+				[this, body, head_only, handler = std::move(handler)]
 				(error_code error) mutable
 				{
 					if( error )
 					{
 						std::move(handler)(error);
+						return;
+					}
+					if( head_only )
+					{
+						std::move(handler)(error_code{});
+						return;
+					}
+					if( body.size() == 0 )
+					{
+						response_body().finish({}, std::move(handler));
 						return;
 					}
 					response_body().write(body,
@@ -281,11 +426,16 @@ template <core_concepts::exec Exec>
 template <typename Source, typename Token>
 auto basic_server_exchange<Exec>::respond(response_head head,
 	Source &&source_value, Token &&token)
-	requires body_source_model<std::remove_cvref_t<Source>>
+	requires concepts::body_source_model<std::remove_cvref_t<Source>>
 		and core_concepts::tf_opt_token<Token,error_code>
 {
 	auto source = detail::make_body_source(std::forward<Source>(source_value));
-	const auto length = source->size();
+	auto length = source->size();
+	if( m_impl->m_state->prepare_compression(head, length) )
+	{
+		source = detail::make_gzip_body_source(std::move(source));
+		length.reset();
+	}
 	const bool head_only = head.status.allows_body() and
 		m_impl->m_state->request().method.known() == method::head;
 	auto spec = head_only ?
@@ -522,6 +672,28 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			value->start();
 		}, std::forward<Token>(token));
 	}
+}
+
+template <core_concepts::exec Exec>
+template <typename Token>
+auto basic_server_exchange<Exec>::respond_file(std::filesystem::path path,
+	file_response_options options, Token &&token)
+	requires core_concepts::tf_opt_token<Token,error_code>
+{
+	if( path.is_relative() )
+	{
+		auto resolved = resolve_resource_path(resource_root(), path);
+		if( not resolved )
+			throw std::system_error(std::error_code(resolved.error()));
+		path = std::move(*resolved);
+	}
+	file_response_source source(std::move(path), request(), std::move(options));
+	auto head = source.response();
+	if( not source.has_body() )
+		return respond(std::move(head), body_spec::empty(),
+			std::forward<Token>(token));
+	return respond(std::move(head), std::move(source),
+		std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec>

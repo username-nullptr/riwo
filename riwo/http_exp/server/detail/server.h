@@ -6,6 +6,7 @@
 
 #include <riwo/http_exp/server/detail/session.h>
 #include <riwo/http_exp/transport/detail/byte_stream_connection.h>
+#include <mutex>
 
 namespace riwo::http_exp
 {
@@ -19,9 +20,17 @@ class basic_server<Exec,ServiceExec>::impl :
 public:
 	struct route
 	{
-		std::string path;
+		route_pattern pattern;
 		std::vector<http_exp::method> methods;
 		request_handler_t handler;
+		std::vector<middleware_ptr_t> middleware;
+	};
+
+	struct route_table
+	{
+		std::vector<route> routes;
+		std::vector<middleware_ptr_t> middleware;
+		request_handler_t default_handler;
 	};
 
 	[[nodiscard]] static executor_t listener_executor(
@@ -36,14 +45,20 @@ public:
 		service_executor_t service_executor_value, config_t config_value) :
 		m_acceptor_wrap(std::move(acceptor_value)),
 		m_service_executor(std::move(service_executor_value)),
-		m_config(std::move(config_value))
+		m_config(std::move(config_value)),
+		m_sessions(std::make_shared<application_session_manager>(
+			m_config.sessions)),
+		m_routes(std::make_shared<const route_table>())
 	{
 	}
 
 	impl(acceptor_wrap_t &&acceptor_value, config_t config_value) :
 		m_acceptor_wrap(std::move(acceptor_value)),
 		m_service_executor(m_acceptor_wrap.get_executor()),
-		m_config(std::move(config_value))
+		m_config(std::move(config_value)),
+		m_sessions(std::make_shared<application_session_manager>(
+			m_config.sessions)),
+		m_routes(std::make_shared<const route_table>())
 	{
 	}
 
@@ -51,7 +66,11 @@ public:
 		service_executor_t service_executor_value, config_t config_value) :
 		m_acceptor_wrap(acceptor_t(listener_executor(listener))),
 		m_service_executor(std::move(service_executor_value)),
-		m_config(std::move(config_value)), m_listener(std::move(listener))
+		m_config(std::move(config_value)),
+		m_sessions(std::make_shared<application_session_manager>(
+			m_config.sessions)),
+		m_routes(std::make_shared<const route_table>()),
+		m_listener(std::move(listener))
 	{
 	}
 
@@ -59,7 +78,11 @@ public:
 		config_t config_value) :
 		m_acceptor_wrap(acceptor_t(listener_executor(listener))),
 		m_service_executor(listener_executor(listener)),
-		m_config(std::move(config_value)), m_listener(std::move(listener))
+		m_config(std::move(config_value)),
+		m_sessions(std::make_shared<application_session_manager>(
+			m_config.sessions)),
+		m_routes(std::make_shared<const route_table>()),
+		m_listener(std::move(listener))
 	{
 	}
 
@@ -95,22 +118,46 @@ public:
 	}
 
 	void register_route(std::string path,
-		std::vector<http_exp::method> methods, request_handler_t handler)
+		std::vector<http_exp::method> methods, request_handler_t handler,
+		std::vector<middleware_ptr_t> middleware = {})
 	{
 		if( path.empty() )
 			throw std::invalid_argument(
-				"riwo::http_exp::server_t::on_request: path is empty");
+				"riwo::http_exp::server::on_request: path is empty");
 		if( not handler )
 			throw std::invalid_argument(
-				"riwo::http_exp::server_t::on_request: handler is empty");
-		if( std::ranges::any_of(m_routes, [&path](const route &value) {
-			return value.path == path;
-		}) )
-			throw std::invalid_argument(
-				"riwo::http_exp::server_t::on_request: path is already bound");
-		m_routes.push_back(route{
-			std::move(path), std::move(methods), std::move(handler)
-		});
+				"riwo::http_exp::server::on_request: handler is empty");
+		route_pattern compiled(path);
+		std::lock_guard lock(m_routes_write_mutex);
+		auto current = m_routes.load(std::memory_order_acquire);
+		for( const auto &value : current->routes )
+		{
+			if( value.pattern.text() != path ) continue;
+			const bool overlaps = value.methods.empty() or methods.empty() or
+				std::ranges::any_of(value.methods,
+				[&methods](const http_exp::method &candidate) {
+					return std::ranges::find(methods, candidate) != methods.end();
+				});
+			if( overlaps ) throw std::invalid_argument(
+				"riwo::http_exp::server::on_request: route/method is already bound");
+		}
+		auto updated = std::make_shared<route_table>(*current);
+		updated->routes.push_back(route {std::move(compiled),
+			std::move(methods), std::move(handler), std::move(middleware)});
+		m_routes.store(std::shared_ptr<const route_table>(std::move(updated)),
+			std::memory_order_release);
+	}
+
+	void use_middleware(middleware_ptr_t middleware)
+	{
+		if( not middleware ) throw std::invalid_argument(
+			"riwo::http_exp::server::use: middleware is null");
+		std::lock_guard lock(m_routes_write_mutex);
+		auto current = m_routes.load(std::memory_order_acquire);
+		auto updated = std::make_shared<route_table>(*current);
+		updated->middleware.emplace_back(std::move(middleware));
+		m_routes.store(std::shared_ptr<const route_table>(std::move(updated)),
+			std::memory_order_release);
 	}
 
 	void report_server_error(error_code error) noexcept
@@ -125,6 +172,155 @@ public:
 	}
 
 private:
+	[[nodiscard]] static std::string method_list(
+		std::vector<http_exp::method> values)
+	{
+		if( std::ranges::any_of(values, [](const http_exp::method &value) {
+			return value == http_exp::method(http_exp::method::get);
+		}) and std::ranges::none_of(values, [](const http_exp::method &value) {
+			return value == http_exp::method(http_exp::method::head);
+		}) ) values.emplace_back(http_exp::method::head);
+		if( std::ranges::none_of(values, [](const http_exp::method &value) {
+			return value == http_exp::method(http_exp::method::options);
+		}) ) values.emplace_back(http_exp::method::options);
+		std::string result;
+		for( const auto &value : values )
+		{
+			if( not result.empty() ) result += ", ";
+			result += value.text();
+		}
+		return result;
+	}
+
+	[[nodiscard]] static bool method_matches(const route &value,
+		const http_exp::method &request_method, bool allow_head_fallback) noexcept
+	{
+		if( value.methods.empty() ) return true;
+		if( std::ranges::find(value.methods, request_method) !=
+			value.methods.end() ) return true;
+		return allow_head_fallback and
+			request_method == http_exp::method(http_exp::method::head) and
+			std::ranges::find(value.methods,
+				http_exp::method(http_exp::method::get)) != value.methods.end();
+	}
+
+	[[nodiscard]] static awaitable<void> call_route(context_t &exchange,
+		const route &selected, const route_table &table)
+	{
+		std::vector<middleware_ptr_t> chain = table.middleware;
+		chain.insert(chain.end(), selected.middleware.begin(),
+			selected.middleware.end());
+		size_t entered = 0;
+		try
+		{
+			bool stopped = false;
+			for( ; entered < chain.size(); ++entered )
+			{
+				const auto &middleware = chain[entered];
+				if( middleware and co_await middleware->before(exchange) )
+				{
+					++entered;
+					stopped = true;
+					break;
+				}
+			}
+			if( not stopped ) co_await selected.handler(exchange);
+			while( entered != 0 )
+			{
+				const auto &middleware = chain[--entered];
+				if( middleware ) (void)co_await middleware->after(exchange);
+			}
+		}
+		catch(const std::exception &exception)
+		{
+			while( entered != 0 )
+			{
+				const auto &middleware = chain[--entered];
+				try
+				{
+					if( middleware and middleware->exception(exchange, exception) )
+						co_return;
+				}
+				catch(...) {
+				}
+			}
+			throw;
+		}
+		co_return;
+	}
+
+	[[nodiscard]] awaitable<void> fallback(context_t &exchange,
+		http_exp::status response_status,
+		const std::shared_ptr<const route_table> &routes)
+	{
+		if( exchange.response_started() ) co_return;
+		if( routes->default_handler )
+		{
+			co_await routes->default_handler(exchange);
+			if( exchange.response_started() ) co_return;
+		}
+		if( not m_config.default_responses.enabled )
+		{
+			co_await exchange.respond({status::no_content, {}},
+				body_spec::empty(), riwo::use_awaitable);
+			co_return;
+		}
+
+		response_head head {response_status, {}};
+		std::string body;
+		if( m_config.default_responses.html )
+		{
+			head.headers.add("Content-Type", "text/html; charset=utf-8");
+			const auto title = response_status == status::ok ?
+				std::string("Welcome to RIWO") : std::string("RIWO");
+			const auto detail = response_status == status::ok ? std::string{} :
+				std::format("<h2>{} ({})</h2>", response_status.text(),
+					response_status.code());
+			body = std::format(
+				"<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+				"<title>{}</title></head><body><h1>{}</h1>{}"
+				"<p>[ This is the server's default reply ]</p>"
+				"</body></html>", title, title, detail);
+		}
+		else
+		{
+			head.headers.add("Content-Type", "text/plain; charset=utf-8");
+			body = response_status == status::ok ? "Welcome to RIWO\n" :
+				std::format("{} ({})\n", response_status.text(),
+					response_status.code());
+		}
+		co_await exchange.respond(std::move(head), riwo::buffer(body),
+			riwo::use_awaitable);
+	}
+
+	[[nodiscard]] awaitable<void> method_not_allowed(context_t &exchange,
+		std::vector<http_exp::method> allowed,
+		const std::shared_ptr<const route_table> &routes)
+	{
+		response_head head {status::method_not_allowed, {}};
+		head.headers.add("Allow", method_list(std::move(allowed)));
+		if( routes->default_handler )
+		{
+			co_await routes->default_handler(exchange);
+			if( exchange.response_started() ) co_return;
+		}
+		if( not m_config.default_responses.enabled )
+		{
+			head.status = status::no_content;
+			co_await exchange.respond(std::move(head), body_spec::empty(),
+				riwo::use_awaitable);
+			co_return;
+		}
+		std::string body = m_config.default_responses.html ?
+			std::format("<!DOCTYPE html><html><body><h1>{} ({})</h1>"
+				"</body></html>", head.status.text(), head.status.code()) :
+			std::format("{} ({})\n", head.status.text(), head.status.code());
+		head.headers.add("Content-Type", m_config.default_responses.html ?
+			"text/html; charset=utf-8" : "text/plain; charset=utf-8");
+		co_await exchange.respond(std::move(head), riwo::buffer(body),
+			riwo::use_awaitable);
+	}
+
 	void accept_next_transport()
 	{
 		if( not m_running or not m_listener ) return;
@@ -224,38 +420,73 @@ private:
 		 request = std::move(request)]
 		() mutable -> awaitable<void>
 		{
+			auto target_storage = request.target;
+			auto target = std::string_view(target_storage);
+			auto query_text = std::string_view{};
+			if( const auto query = target.find('?');
+				query != std::string_view::npos )
+			{
+				query_text = target.substr(query + 1);
+				target = target.substr(0, query);
+			}
+			auto query_parameters = parse_query_parameters(query_text);
+			if( not query_parameters ) query_parameters = parameter_view{};
+			auto routes = self->m_routes.load(std::memory_order_acquire);
+
+			const route *selected = nullptr;
+			optional<route_match> selected_match;
+			bool selected_direct = false;
+			size_t best_specificity = 0;
+			std::vector<const route*> path_matches;
+			for( const auto &candidate : routes->routes )
+			{
+				auto match = candidate.pattern.match(target);
+				if( not match ) continue;
+				if( path_matches.empty() or
+					match->specificity > best_specificity )
+				{
+					best_specificity = match->specificity;
+					path_matches.clear();
+					selected = nullptr;
+					selected_match.reset();
+					selected_direct = false;
+				}
+				if( match->specificity != best_specificity ) continue;
+				path_matches.push_back(&candidate);
+				// Prefer a direct method match over the implicit HEAD -> GET rule.
+				if( method_matches(candidate, request.method, false) )
+				{
+					selected = &candidate;
+					selected_match = std::move(match);
+					selected_direct = true;
+				}
+				else if( not selected_direct and not selected and method_matches(candidate,
+					request.method, true) )
+				{
+					selected = &candidate;
+					selected_match = std::move(match);
+				}
+			}
+
 			context_t exchange(self->m_service_executor, stream,
-				std::move(request));
+				std::move(request), selected_match ?
+					std::move(selected_match->path_parameters) : parameter_view{},
+				std::move(*query_parameters), self->m_sessions,
+				self->m_config.resource_root,
+				self->m_config.compression.enabled,
+				self->m_config.compression.minimum_size);
+			bool service_failed = false;
 			try
 			{
-				auto target = std::string_view(exchange.request().target);
-				if( auto query = target.find('?'); query != std::string_view::npos )
-					target = target.substr(0, query);
-
-				auto method_list = [](const std::vector<http_exp::method> &values) {
-					std::string result;
-					for( const auto &value : values )
-					{
-						if( not result.empty() ) result += ", ";
-						result += value.text();
-					}
-					return result;
-				};
-				auto all_methods = [self]() {
+				auto all_methods = [routes]() {
 					std::vector<http_exp::method> values;
-					for( const auto &route : self->m_routes )
+					for( const auto &route : routes->routes )
 						for( const auto &value : route.methods )
 							if( std::ranges::none_of(values,
 								[&value](const http_exp::method &item) {
 									return item == value;
 								}) )
 								values.push_back(value);
-					if( std::ranges::none_of(values,
-						[](const http_exp::method &item) {
-							return item == http_exp::method(
-								http_exp::method::options);
-						}) )
-						values.emplace_back(http_exp::method::options);
 					return values;
 				};
 
@@ -268,52 +499,28 @@ private:
 						co_await exchange.respond(std::move(head),
 							std::string_view{}, riwo::use_awaitable);
 					else
-					{
-						head.status = status(uint16_t(405));
-						co_await exchange.respond(std::move(head),
-							std::string_view("method not allowed\n"),
-							riwo::use_awaitable);
-					}
+						co_await self->method_not_allowed(exchange,
+							all_methods(), routes);
 					co_return;
 				}
 
-				auto selected = std::ranges::find_if(self->m_routes,
-				[target](const route &value) { return value.path == target; });
-				if( selected != self->m_routes.end() )
+				if( selected )
 				{
-					if( std::ranges::any_of(selected->methods,
-					[&exchange](const http_exp::method &value) {
-						return value == exchange.request().method;
-					}) )
-						co_await selected->handler(exchange);
-					else
-					{
-						response_head head {status(uint16_t(405)), {}};
-						head.headers.add("Allow", method_list(selected->methods));
-						head.headers.add("Content-Type",
-							"text/plain; charset=utf-8");
-						co_await exchange.respond(std::move(head),
-							std::string_view("method not allowed\n"),
-							riwo::use_awaitable);
-						co_return;
-					}
+					co_await call_route(exchange, *selected, *routes);
+					co_await self->fallback(exchange, status::ok, routes);
 				}
-				else if( self->m_default_handler )
-					co_await self->m_default_handler(exchange);
+				else if( not path_matches.empty() )
+				{
+					std::vector<http_exp::method> allowed;
+					for( const auto *candidate : path_matches )
+						for( const auto &value : candidate->methods )
+							if( std::ranges::find(allowed, value) == allowed.end() )
+								allowed.push_back(value);
+					co_await self->method_not_allowed(exchange,
+						std::move(allowed), routes);
+				}
 				else
-				{
-					response_head head {status::not_found, {}};
-					head.headers.add("Content-Type",
-						"text/plain; charset=utf-8");
-					co_await exchange.respond(std::move(head),
-						std::string_view("not found\n"),
-						riwo::use_awaitable);
-					co_return;
-				}
-
-				error_code ignored;
-				exchange.respond({status::no_content, {}},
-					body_spec::empty(), ignored);
+					co_await self->fallback(exchange, status::not_found, routes);
 			}
 			catch(const std::exception &exception)
 			{
@@ -325,18 +532,14 @@ private:
 				}
 				catch(...) {
 				}
-				if( not handled )
-				{
-						response_head head {
-							status::internal_server_error, {}
-						};
-						head.headers.add("Content-Type",
-							"text/plain; charset=utf-8");
-						error_code ignored;
-						exchange.respond(std::move(head),
-							std::string_view("internal server error\n"),
-							ignored);
-				}
+				ignore_unused(handled);
+				service_failed = true;
+			}
+			if( service_failed and not exchange.response_started() )
+			{
+				try { co_await self->fallback(exchange,
+					status::internal_server_error, routes); }
+				catch(...) { exchange.cancel(); }
 			}
 			co_return;
 		});
@@ -346,8 +549,9 @@ public:
 	acceptor_wrap_t m_acceptor_wrap;
 	service_executor_t m_service_executor;
 	config_t m_config;
-	std::vector<route> m_routes;
-	request_handler_t m_default_handler;
+	std::shared_ptr<application_session_manager> m_sessions;
+	std::atomic<std::shared_ptr<const route_table>> m_routes;
+	std::mutex m_routes_write_mutex;
 	server_error_handler_t m_server_error_handler;
 	service_error_handler_t m_service_error_handler;
 	std::vector<detail::server_connection_ptr_t> m_connections;
@@ -447,26 +651,57 @@ auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint,
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <method::well_known... Methods, typename Func>
-auto basic_server<Exec,ServiceExec>::on_request(std::string path, Func &&func)
+template <method::well_known... Methods, typename Func, typename... Middleware>
+auto basic_server<Exec,ServiceExec>::on_request(std::string path, Func &&func,
+	Middleware&&... middleware)
 	-> basic_server&
-	requires concepts::request_handler<Func,service_executor_t>
+	requires concepts::request_handler<Func,service_executor_t> and
+		concepts::middleware_list<service_executor_t,Middleware...>
 {
 	m_impl->register_route(std::move(path),
 		std::vector<http_exp::method>{http_exp::method(Methods)...},
-		request_handler_t(std::forward<Func>(func)));
+		request_handler_t(std::forward<Func>(func)),
+		std::vector<middleware_ptr_t> {
+			middleware_ptr_t(std::forward<Middleware>(middleware))...
+		});
 	return *this;
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <typename Func>
+template <typename Func, typename... Middleware>
 auto basic_server<Exec,ServiceExec>::on_request(http_exp::method request_method,
-	std::string path, Func &&func) -> basic_server&
-	requires concepts::request_handler<Func,service_executor_t>
+	std::string path, Func &&func, Middleware&&... middleware) -> basic_server&
+	requires concepts::request_handler<Func,service_executor_t> and
+		concepts::middleware_list<service_executor_t,Middleware...>
 {
 	m_impl->register_route(std::move(path),
 		std::vector<http_exp::method>{std::move(request_method)},
-		request_handler_t(std::forward<Func>(func)));
+		request_handler_t(std::forward<Func>(func)),
+		std::vector<middleware_ptr_t> {
+			middleware_ptr_t(std::forward<Middleware>(middleware))...
+		});
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+template <method::well_known... Methods>
+auto basic_server<Exec,ServiceExec>::on_request(std::string path,
+	controller_ptr_t controller) -> basic_server&
+{
+	if( not controller ) throw std::invalid_argument(
+		"riwo::http_exp::server::on_request: controller is null");
+	auto handler = [controller](context_t &exchange) -> awaitable<void> {
+		co_await controller->service(exchange);
+	};
+	return on_request<Methods...>(std::move(path), std::move(handler),
+		std::move(controller));
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::use(middleware_ptr_t middleware)
+	-> basic_server&
+{
+	m_impl->use_middleware(std::move(middleware));
 	return *this;
 }
 
@@ -475,7 +710,13 @@ template <typename Func>
 auto basic_server<Exec,ServiceExec>::on_default(Func &&func) -> basic_server&
 	requires concepts::request_handler<Func,service_executor_t>
 {
-	m_impl->m_default_handler = request_handler_t(std::forward<Func>(func));
+	std::lock_guard lock(m_impl->m_routes_write_mutex);
+	auto current = m_impl->m_routes.load(std::memory_order_acquire);
+	auto updated = std::make_shared<typename impl::route_table>(*current);
+	updated->default_handler = request_handler_t(std::forward<Func>(func));
+	m_impl->m_routes.store(
+		std::shared_ptr<const typename impl::route_table>(std::move(updated)),
+		std::memory_order_release);
 	return *this;
 }
 
@@ -499,9 +740,16 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::unbound_request(std::string_view path)
 	-> basic_server&
 {
-	std::erase_if(m_impl->m_routes, [path](const typename impl::route &value) {
-		return value.path == path;
+	std::lock_guard lock(m_impl->m_routes_write_mutex);
+	auto current = m_impl->m_routes.load(std::memory_order_acquire);
+	auto updated = std::make_shared<typename impl::route_table>(*current);
+	std::erase_if(updated->routes,
+	[path](const typename impl::route &value) {
+		return value.pattern.text() == path;
 	});
+	m_impl->m_routes.store(
+		std::shared_ptr<const typename impl::route_table>(std::move(updated)),
+		std::memory_order_release);
 	return *this;
 }
 
@@ -522,6 +770,7 @@ auto basic_server<Exec,ServiceExec>::set_config(config_t config)
 	-> basic_server&
 {
 	m_impl->m_config = std::move(config);
+	m_impl->m_sessions->set_config(m_impl->m_config.sessions);
 	return *this;
 }
 

@@ -89,7 +89,7 @@ struct memory_stream
 	}
 };
 
-static_assert(http::byte_stream_model<memory_stream>);
+static_assert(http::concepts::byte_stream_model<memory_stream>);
 static_assert(!std::copy_constructible<http::basic_byte_stream<executor_type>>);
 static_assert(std::move_constructible<http::basic_byte_stream<executor_type>>);
 
@@ -102,8 +102,12 @@ public:
 		return executor_;
 	}
 	[[nodiscard]] riwo::sys_expected<result_t> connect_sync(
-		const http::connect_request &) noexcept override
+		const http::connect_request &request) noexcept override
 	{
+		{
+			std::lock_guard lock(mutex_);
+			last_request_ = request;
+		}
 		return result_t {
 			http::make_byte_stream(memory_stream{executor_, state_}),
 			http::protocol::v1_1, {}, {}
@@ -111,7 +115,10 @@ public:
 	}
 	void connect(http::connect_request request, connect_handler_t handler) override
 	{
-		(void)request;
+		{
+			std::lock_guard lock(mutex_);
+			last_request_ = request;
+		}
 		asio::post(executor_, [executor = executor_, state = state_,
 			handler = std::move(handler)]() mutable {
 			std::move(handler)(riwo::error_code{}, result_t {
@@ -121,10 +128,16 @@ public:
 		});
 	}
 	void cancel() noexcept override {}
+	[[nodiscard]] std::optional<http::connect_request> last_request() const {
+		std::lock_guard lock(mutex_);
+		return last_request_;
+	}
 
 private:
 	executor_type executor_;
 	std::shared_ptr<memory_state> state_;
+	mutable std::mutex mutex_;
+	std::optional<http::connect_request> last_request_;
 };
 
 class fake_listener final : public http::basic_transport_listener<executor_type>
@@ -283,6 +296,68 @@ void injected_connector_drives_client()
 	RIWO_TEST_CHECK(state->output.starts_with("GET /custom HTTP/1.1\r\n"));
 }
 
+void request_proxy_override_reaches_connector()
+{
+	riwo::io_context_t context;
+	auto state = std::make_shared<memory_state>();
+	state->deferred = true;
+	state->input = "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+	auto connector = std::make_shared<fake_connector>(context.get_executor(), state);
+	http::client_config config;
+	config.proxy.forward_proxy = riwo::url("http://base-proxy.test:8080");
+	http::basic_client<executor_type> client(context.get_executor(), connector,
+		config);
+	http::proxy_policy override;
+	override.forward_proxy = riwo::url("socks5://127.0.0.1:1080");
+	override.type = http::proxy_type::socks5;
+	override.username = "alice";
+	override.password = "secret";
+	http::request request(http::method::get, "http://example.test/resource");
+	request.proxy(std::move(override));
+	bool completed = false;
+	client.fetch(std::move(request),
+	[&](riwo::error_code error, http::basic_reply<executor_type> reply) mutable {
+		RIWO_TEST_CHECK(!error);
+		RIWO_TEST_CHECK_EQ(reply.status(), http::status::no_content);
+		completed = true;
+		context.stop();
+	});
+	context.run();
+	RIWO_TEST_CHECK(completed);
+	auto observed = connector->last_request();
+	RIWO_TEST_CHECK(observed.has_value());
+	RIWO_TEST_CHECK(observed->proxy.forward_proxy.has_value());
+	RIWO_TEST_CHECK_EQ(observed->proxy.forward_proxy->protocol(), "socks5");
+	RIWO_TEST_CHECK_EQ(observed->proxy.type, http::proxy_type::socks5);
+	RIWO_TEST_CHECK_EQ(observed->proxy.username.value(), "alice");
+	RIWO_TEST_CHECK_EQ(observed->proxy.password.value(), "secret");
+
+	riwo::io_context_t bypass_context;
+	auto bypass_state = std::make_shared<memory_state>();
+	bypass_state->deferred = true;
+	bypass_state->input =
+		"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+	auto bypass_connector = std::make_shared<fake_connector>(
+		bypass_context.get_executor(), bypass_state);
+	http::basic_client<executor_type> bypass_client(
+		bypass_context.get_executor(), bypass_connector);
+	http::proxy_policy bypass_policy;
+	bypass_policy.forward_proxy = riwo::url("http://proxy.test:8080");
+	bypass_policy.no_proxy = {".example.test"};
+	http::request bypass_request(http::method::get,
+		"http://api.example.test/resource");
+	bypass_request.proxy(std::move(bypass_policy));
+	bypass_client.fetch(std::move(bypass_request),
+	[&](riwo::error_code error, http::basic_reply<executor_type>) mutable {
+		RIWO_TEST_CHECK(!error);
+		bypass_context.stop();
+	});
+	bypass_context.run();
+	auto bypass_observed = bypass_connector->last_request();
+	RIWO_TEST_CHECK(bypass_observed.has_value());
+	RIWO_TEST_CHECK(!bypass_observed->proxy.forward_proxy.has_value());
+}
+
 void injected_listener_replays_initial_input()
 {
 	riwo::io_context_t context;
@@ -317,6 +392,8 @@ int main(int argc, const char *const argv[])
 		{"byte stream failure injection", byte_stream_failure_injection},
 		{"connector and listener injection", injected_connector_and_listener_compile},
 		{"custom connector drives client", injected_connector_drives_client},
+		{"request proxy override reaches connector",
+			request_proxy_override_reaches_connector},
 		{"custom listener replays initial input",
 			injected_listener_replays_initial_input}
 	});

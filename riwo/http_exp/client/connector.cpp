@@ -8,6 +8,7 @@
 # include <riwo/http_exp/protocol/v2/detail/session.h>
 #endif
 #include <riwo/http_exp/transport/tcp_connection.h>
+#include <riwo/http_exp/protocol/authentication.h>
 #include <riwo/core/utils/string_tools.h>
 
 #if RIWO_OPENSSL_SUPPORT
@@ -25,7 +26,9 @@
 #include <asio/write.hpp>
 #include <cerrno>
 #include <charconv>
+#include <cctype>
 #include <chrono>
+#include <cstdlib>
 #include <thread>
 #include <vector>
 
@@ -222,19 +225,248 @@ struct proxy_target
 {
 	std::string host {};
 	uint16_t port = 80;
+	proxy_type type = proxy_type::http;
 };
+
+[[maybe_unused,nodiscard]] std::string origin_authority(
+	const session_key &key);
 
 [[nodiscard]] optional<proxy_target> parse_proxy(const session_key &key)
 {
 	if( not key.proxy.endpoint ) return std::nullopt;
 	riwo::url value(*key.proxy.endpoint);
-	if( not value.is_valid() or lower(value.protocol()) != "http" or
-		value.host().empty() )
+	auto scheme = lower(value.protocol());
+	auto type = key.proxy.type;
+	if( type == proxy_type::automatic )
+		type = scheme.starts_with("socks5") ? proxy_type::socks5 :
+			proxy_type::http;
+	if( not value.is_valid() or value.host().empty() or
+		(type == proxy_type::http and scheme != "http") or
+		(type == proxy_type::socks5 and scheme != "socks5" and
+			scheme != "socks5h") )
 		return std::nullopt;
 	return proxy_target {
 		.host = std::string(value.host()),
-		.port = static_cast<uint16_t>(value.port() == 0 ? 80 : value.port())
+		.port = static_cast<uint16_t>(value.port() == 0 ?
+			(type == proxy_type::socks5 ? 1080 : 80) : value.port()),
+		.type = type
 	};
+}
+
+[[nodiscard]] std::string proxy_connect_request(const session_key &key)
+{
+	const auto authority = origin_authority(key);
+	auto result = "CONNECT " + authority + " HTTP/1.1\r\nHost: " +
+		authority + "\r\n";
+	if( key.proxy.authorization )
+		result += "Proxy-Authorization: " + *key.proxy.authorization + "\r\n";
+	return result + "\r\n";
+}
+
+[[nodiscard]] error_code socks5_connect_sync(asio::ip::tcp::socket &socket,
+	const session_key &key) noexcept
+{
+	error_code error;
+	const bool credentials = key.proxy.username.has_value();
+	std::array<unsigned char,4> greeting {5, 1,
+		static_cast<unsigned char>(credentials ? 2 : 0), 0};
+	asio::write(socket, asio::buffer(greeting.data(), 3), error);
+	if( error ) return error;
+	asio::read(socket, asio::buffer(greeting.data(), 2), error);
+	if( error ) return error;
+	if( greeting[0] != 5 or greeting[1] == 0xff )
+		return make_error_code(errc::negotiation_failed);
+	if( greeting[1] == 2 )
+	{
+		const auto &username = *key.proxy.username;
+		const auto password = key.proxy.password.value_or(std::string{});
+		if( username.size() > 255 or password.size() > 255 )
+			return make_error_code(errc::invalid_target);
+		std::vector<unsigned char> auth {1,
+			static_cast<unsigned char>(username.size())};
+		auth.insert(auth.end(), username.begin(), username.end());
+		auth.push_back(static_cast<unsigned char>(password.size()));
+		auth.insert(auth.end(), password.begin(), password.end());
+		asio::write(socket, asio::buffer(auth), error);
+		if( error ) return error;
+		asio::read(socket, asio::buffer(greeting.data(), 2), error);
+		if( error ) return error;
+		if( greeting[0] != 1 or greeting[1] != 0 )
+			return make_error_code(errc::negotiation_failed);
+	}
+	else if( greeting[1] != 0 )
+		return make_error_code(errc::negotiation_failed);
+	if( key.host.size() > 255 ) return make_error_code(errc::invalid_target);
+	std::vector<unsigned char> request {5, 1, 0, 3,
+		static_cast<unsigned char>(key.host.size())};
+	request.insert(request.end(), key.host.begin(), key.host.end());
+	request.push_back(static_cast<unsigned char>(key.port >> 8));
+	request.push_back(static_cast<unsigned char>(key.port & 0xff));
+	asio::write(socket, asio::buffer(request), error);
+	if( error ) return error;
+	asio::read(socket, asio::buffer(greeting), error);
+	if( error ) return error;
+	if( greeting[0] != 5 or greeting[1] != 0 )
+		return make_error_code(errc::negotiation_failed);
+	size_t remaining = greeting[3] == 1 ? 4 : greeting[3] == 4 ? 16 : 0;
+	if( greeting[3] == 3 )
+	{
+		asio::read(socket, asio::buffer(greeting.data(), 1), error);
+		if( error ) return error;
+		remaining = greeting[0];
+	}
+	if( remaining == 0 ) return make_error_code(errc::negotiation_failed);
+	std::vector<unsigned char> tail(remaining + 2);
+	asio::read(socket, asio::buffer(tail), error);
+	return error;
+}
+
+[[nodiscard]] asio::awaitable<error_code> socks5_connect_async(
+	asio::ip::tcp::socket &socket, const session_key &key)
+{
+	const bool credentials = key.proxy.username.has_value();
+	std::array<unsigned char,4> reply {5, 1,
+		static_cast<unsigned char>(credentials ? 2 : 0), 0};
+	auto [error, size] = co_await asio::async_write(socket,
+		asio::buffer(reply.data(), 3), asio::as_tuple(asio::use_awaitable));
+	ignore_unused(size);
+	if( error ) co_return error;
+	std::tie(error, size) = co_await asio::async_read(socket,
+		asio::buffer(reply.data(), 2), asio::as_tuple(asio::use_awaitable));
+	if( error ) co_return error;
+	if( reply[0] != 5 or reply[1] == 0xff )
+		co_return make_error_code(errc::negotiation_failed);
+	if( reply[1] == 2 )
+	{
+		const auto &username = *key.proxy.username;
+		const auto password = key.proxy.password.value_or(std::string{});
+		if( username.size() > 255 or password.size() > 255 )
+			co_return make_error_code(errc::invalid_target);
+		std::vector<unsigned char> auth {1,
+			static_cast<unsigned char>(username.size())};
+		auth.insert(auth.end(), username.begin(), username.end());
+		auth.push_back(static_cast<unsigned char>(password.size()));
+		auth.insert(auth.end(), password.begin(), password.end());
+		std::tie(error, size) = co_await asio::async_write(socket,
+			asio::buffer(auth), asio::as_tuple(asio::use_awaitable));
+		if( error ) co_return error;
+		std::tie(error, size) = co_await asio::async_read(socket,
+			asio::buffer(reply.data(), 2), asio::as_tuple(asio::use_awaitable));
+		if( error ) co_return error;
+		if( reply[0] != 1 or reply[1] != 0 )
+			co_return make_error_code(errc::negotiation_failed);
+	}
+	else if( reply[1] != 0 )
+		co_return make_error_code(errc::negotiation_failed);
+	if( key.host.size() > 255 )
+		co_return make_error_code(errc::invalid_target);
+	std::vector<unsigned char> request {5, 1, 0, 3,
+		static_cast<unsigned char>(key.host.size())};
+	request.insert(request.end(), key.host.begin(), key.host.end());
+	request.push_back(static_cast<unsigned char>(key.port >> 8));
+	request.push_back(static_cast<unsigned char>(key.port & 0xff));
+	std::tie(error, size) = co_await asio::async_write(socket,
+		asio::buffer(request), asio::as_tuple(asio::use_awaitable));
+	if( error ) co_return error;
+	std::tie(error, size) = co_await asio::async_read(socket,
+		asio::buffer(reply), asio::as_tuple(asio::use_awaitable));
+	if( error ) co_return error;
+	if( reply[0] != 5 or reply[1] != 0 )
+		co_return make_error_code(errc::negotiation_failed);
+	size_t remaining = reply[3] == 1 ? 4 : reply[3] == 4 ? 16 : 0;
+	if( reply[3] == 3 )
+	{
+		std::tie(error, size) = co_await asio::async_read(socket,
+			asio::buffer(reply.data(), 1), asio::as_tuple(asio::use_awaitable));
+		if( error ) co_return error;
+		remaining = reply[0];
+	}
+	if( remaining == 0 )
+		co_return make_error_code(errc::negotiation_failed);
+	std::vector<unsigned char> tail(remaining + 2);
+	std::tie(error, size) = co_await asio::async_read(socket,
+		asio::buffer(tail), asio::as_tuple(asio::use_awaitable));
+	co_return error;
+}
+
+[[nodiscard]] bool no_proxy_match(std::string_view host, uint16_t port,
+	std::string_view rule)
+{
+	while( not rule.empty() and std::isspace(
+		static_cast<unsigned char>(rule.front())) ) rule.remove_prefix(1);
+	while( not rule.empty() and std::isspace(
+		static_cast<unsigned char>(rule.back())) ) rule.remove_suffix(1);
+	if( rule.empty() ) return false;
+	if( rule == "*" ) return true;
+	if( rule.starts_with('[') )
+	{
+		const auto close = rule.find(']');
+		if( close == std::string_view::npos ) return false;
+		if( close + 1 < rule.size() )
+		{
+			if( rule[close + 1] != ':' ) return false;
+			uint16_t rule_port = 0;
+			auto parsed = std::from_chars(rule.data() + close + 2,
+				rule.data() + rule.size(), rule_port);
+			if( parsed.ec != std::errc{} or
+				parsed.ptr != rule.data() + rule.size() or rule_port != port )
+				return false;
+		}
+		rule = rule.substr(1, close - 1);
+	}
+	else if( auto colon = rule.rfind(':'); colon != std::string_view::npos and
+		rule.find(':') == colon )
+	{
+		uint16_t rule_port = 0;
+		auto parsed = std::from_chars(rule.data() + colon + 1,
+			rule.data() + rule.size(), rule_port);
+		if( parsed.ec == std::errc{} and
+			parsed.ptr == rule.data() + rule.size() )
+		{
+			if( rule_port != port ) return false;
+			rule = rule.substr(0, colon);
+		}
+	}
+	if( rule.starts_with('.') ) rule.remove_prefix(1);
+	auto host_lower = lower(host);
+	auto rule_lower = lower(rule);
+	return host_lower == rule_lower or
+		(host_lower.size() > rule_lower.size() and
+		host_lower.ends_with(rule_lower) and
+		host_lower[host_lower.size() - rule_lower.size() - 1] == '.');
+}
+
+void append_no_proxy_environment(std::vector<std::string> &rules)
+{
+	const char *value = std::getenv("NO_PROXY");
+	if( not value ) value = std::getenv("no_proxy");
+	if( not value ) return;
+	std::string_view text(value);
+	while( not text.empty() )
+	{
+		auto comma = text.find(',');
+		rules.emplace_back(text.substr(0, comma));
+		if( comma == std::string_view::npos ) break;
+		text.remove_prefix(comma + 1);
+	}
+}
+
+[[nodiscard]] optional<riwo::url> environment_proxy(std::string_view scheme)
+{
+	const char *value = nullptr;
+	if( scheme == "https" )
+	{
+		value = std::getenv("HTTPS_PROXY");
+		if( not value ) value = std::getenv("https_proxy");
+	}
+	if( not value ) value = std::getenv("HTTP_PROXY");
+	if( not value ) value = std::getenv("http_proxy");
+	if( not value ) value = std::getenv("ALL_PROXY");
+	if( not value ) value = std::getenv("all_proxy");
+	if( not value or *value == '\0' ) return {};
+	std::string text(value);
+	if( text.find("://") == std::string::npos ) text = "http://" + text;
+	return riwo::url(std::move(text));
 }
 
 [[maybe_unused,nodiscard]] std::string origin_authority(
@@ -423,6 +655,21 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 
 		tcp->socket().set_option(asio::ip::tcp::no_delay(true), error);
 		if( error ) co_return sys_unexpected(error);
+		if( proxy and proxy->type == proxy_type::socks5 )
+		{
+			asio::steady_timer proxy_timer(executor);
+			bool proxy_expired = false;
+			arm_async_timeout(proxy_timer, connect_timeout, proxy_expired,
+				[&tcp] {
+					error_code ignored_error;
+					tcp->socket().close(ignored_error);
+				});
+			error = co_await socks5_connect_async(tcp->socket(), key);
+			proxy_timer.cancel();
+			if( proxy_expired ) error = asio::error::make_error_code(
+				asio::error::timed_out);
+			if( error ) co_return sys_unexpected(error);
+		}
 
 		if( key.scheme != "https" )
 		{
@@ -435,16 +682,14 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 				.selected_protocol = *selected,
 				.remote = remote,
 				.local = local,
-				.absolute_form = proxy.has_value()
+				.absolute_form = proxy and proxy->type == proxy_type::http
 			};
 		}
 
 #if RIWO_OPENSSL_SUPPORT
-		if( proxy )
+		if( proxy and proxy->type == proxy_type::http )
 		{
-			const auto authority = origin_authority(key);
-			const std::string request = "CONNECT " + authority +
-				" HTTP/1.1\r\nHost: " + authority + "\r\n\r\n";
+			const auto request = proxy_connect_request(key);
 			asio::steady_timer proxy_timer(executor);
 			bool proxy_expired = false;
 			arm_async_timeout(proxy_timer, connect_timeout, proxy_expired,
@@ -649,6 +894,15 @@ public:
 			if( error ) return sys_unexpected(error);
 			tcp->socket().set_option(asio::ip::tcp::no_delay(true), error);
 			if( error ) return sys_unexpected(error);
+			if( proxy and proxy->type == proxy_type::socks5 )
+			{
+				tcp->set_read_timeout(config.timeout.connect);
+				tcp->set_write_timeout(config.timeout.connect);
+				error = socks5_connect_sync(tcp->socket(), key);
+				tcp->set_read_timeout(std::nullopt);
+				tcp->set_write_timeout(std::nullopt);
+				if( error ) return sys_unexpected(error);
+			}
 
 			if( key.scheme != "https" )
 			{
@@ -661,16 +915,14 @@ public:
 					.selected_protocol = *selected,
 					.remote = remote,
 					.local = local,
-					.absolute_form = proxy.has_value()
+					.absolute_form = proxy and proxy->type == proxy_type::http
 				};
 			}
 
 #if RIWO_OPENSSL_SUPPORT
-			if( proxy )
+			if( proxy and proxy->type == proxy_type::http )
 			{
-				const auto authority = origin_authority(key);
-				const std::string request = "CONNECT " + authority +
-					" HTTP/1.1\r\nHost: " + authority + "\r\n\r\n";
+				const auto request = proxy_connect_request(key);
 				tcp->set_read_timeout(config.timeout.connect);
 				tcp->set_write_timeout(config.timeout.connect);
 				(void)tcp->write_sync(asio::buffer(request), error);
@@ -879,6 +1131,13 @@ size_t session_key_hash::operator()(const session_key &value) const noexcept
 		mix(seed, std::hash<std::string>{}(*value.proxy.endpoint));
 	else
 		mix(seed, 1);
+	mix(seed, static_cast<size_t>(value.proxy.type));
+	if( value.proxy.authorization )
+		mix(seed, std::hash<std::string>{}(*value.proxy.authorization));
+	if( value.proxy.username )
+		mix(seed, std::hash<std::string>{}(*value.proxy.username));
+	if( value.proxy.password )
+		mix(seed, std::hash<std::string>{}(*value.proxy.password));
 	mix(seed, std::hash<bool>{}(value.tls.enabled));
 	mix(seed, std::hash<bool>{}(value.tls.verify_peer));
 	mix(seed, std::hash<std::string>{}(
@@ -906,8 +1165,33 @@ session_key make_session_key(const request_head &head,
 	result.scheme = scheme;
 	result.host = lower(head.url.host());
 	result.port = port;
-	if( config.proxy.forward_proxy )
-		result.proxy.endpoint = config.proxy.forward_proxy->to_string();
+	auto proxy_url = config.proxy.forward_proxy;
+	if( not proxy_url and config.proxy.use_environment )
+		proxy_url = environment_proxy(scheme);
+	auto bypass = config.proxy.no_proxy;
+	if( config.proxy.use_environment ) append_no_proxy_environment(bypass);
+	const bool bypassed = std::ranges::any_of(bypass,
+		[&](const std::string &rule) {
+			return no_proxy_match(result.host, result.port, rule);
+		});
+	if( proxy_url and not bypassed )
+	{
+		result.proxy.endpoint = proxy_url->to_string();
+		result.proxy.type = config.proxy.type;
+		result.proxy.username = config.proxy.username;
+		result.proxy.password = config.proxy.password;
+		if( config.proxy.authorization )
+		{
+			if( config.proxy.authorization->find_first_of("\r\n") !=
+				std::string::npos )
+				throw std::invalid_argument("invalid proxy authorization");
+			result.proxy.authorization = config.proxy.authorization;
+		}
+		else if( config.proxy.username )
+			result.proxy.authorization = make_basic_authorization(
+				*config.proxy.username,
+				config.proxy.password.value_or(std::string{}));
+	}
 	if( scheme == "https" )
 		result.tls = {
 			.enabled = true,

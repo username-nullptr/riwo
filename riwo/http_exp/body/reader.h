@@ -73,7 +73,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using body_reader_t = basic_body_reader<>;
+using body_reader = basic_body_reader<>;
 
 } //namespace riwo::http_exp
 

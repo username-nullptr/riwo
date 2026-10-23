@@ -51,6 +51,7 @@ if (RIWO_BUILD_HTTP_EXP)
 		add_riwo_test(http_exp.http2-server http_exp/http2_server.cpp riwo.http_exp)
 	endif ()
 	add_riwo_test(http_exp.application http_exp/application.cpp riwo.http_exp)
+	add_riwo_test(http_exp.compatibility http_exp/compatibility.cpp riwo.http_exp)
 	add_riwo_test(http_exp.regressions http_exp/regressions.cpp riwo.http_exp)
 endif ()
 

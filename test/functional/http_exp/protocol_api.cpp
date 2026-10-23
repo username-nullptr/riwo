@@ -17,7 +17,8 @@ std::vector<std::byte> bytes(std::string_view value)
 	return result;
 }
 
-std::string drain(http::protocol_engine auto &engine, size_t chunk = 7)
+std::string drain(http::concepts::protocol_engine auto &engine,
+	size_t chunk = 7)
 {
 	std::string result;
 	std::vector<std::byte> buffer(chunk);

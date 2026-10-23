@@ -7,6 +7,7 @@
 #include <riwo/http_exp/protocol/limits.h>
 #include <riwo/http_exp/protocol/policy.h>
 #include <riwo/http_exp/protocol/v2/config.h>
+#include <riwo/http_exp/server/application_session.h>
 #include <riwo/http_exp/timeout.h>
 
 namespace riwo::http_exp
@@ -15,6 +16,19 @@ namespace riwo::http_exp
 struct h1_config
 {
 	size_t max_pipeline_depth = 1;
+};
+
+struct default_response_config
+{
+	// When disabled, an unfinished exchange is completed with an empty 204.
+	bool enabled = true;
+	bool html = true;
+};
+
+struct server_compression_config
+{
+	bool enabled = gzip_available_v;
+	uint64_t minimum_size = 1024;
 };
 
 struct server_config
@@ -26,6 +40,9 @@ struct server_config
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	v2_config h2 {};
 #endif
+	application_session_config sessions {};
+	default_response_config default_responses {};
+	server_compression_config compression {};
 	std::filesystem::path resource_root {};
 };
 

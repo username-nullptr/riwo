@@ -45,7 +45,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using acceptor_wrap_t = basic_acceptor_wrap<>;
+using acceptor_wrap = basic_acceptor_wrap<>;
 
 } //namespace riwo::http_exp
 

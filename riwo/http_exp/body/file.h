@@ -17,6 +17,9 @@ struct file_span
 	uint64_t length = 0;
 };
 
+namespace concepts
+{
+
 template <typename Stream>
 concept input_file_stream =
 	std::same_as<std::remove_cvref_t<Stream>,std::ifstream> or
@@ -27,36 +30,30 @@ concept output_file_stream =
 	std::same_as<std::remove_cvref_t<Stream>,std::ofstream> or
 	std::same_as<std::remove_cvref_t<Stream>,std::fstream>;
 
+} //namespace concepts
+
 template <typename Stream>
-requires (input_file_stream<Stream> or output_file_stream<Stream>)
+requires (concepts::input_file_stream<Stream> or
+	concepts::output_file_stream<Stream>)
 class borrowed_file_ref
 {
 public:
-	explicit borrowed_file_ref(Stream &stream) noexcept : m_stream(&stream) {}
+	explicit borrowed_file_ref(Stream &stream) noexcept;
 	borrowed_file_ref(const borrowed_file_ref&) = delete;
 	borrowed_file_ref &operator=(const borrowed_file_ref&) = delete;
-	borrowed_file_ref(borrowed_file_ref &&other) noexcept :
-		m_stream(std::exchange(other.m_stream, nullptr))
-	{
-	}
-	borrowed_file_ref &operator=(borrowed_file_ref &&other) noexcept
-	{
-		if( this != &other )
-			m_stream = std::exchange(other.m_stream, nullptr);
-		return *this;
-	}
+	borrowed_file_ref(borrowed_file_ref &&other) noexcept;
+	borrowed_file_ref &operator=(borrowed_file_ref &&other) noexcept;
 
-	[[nodiscard]] Stream *get() const noexcept { return m_stream; }
+	[[nodiscard]] Stream *get() const noexcept;
 
 private:
 	Stream *m_stream = nullptr;
 };
 
 template <typename Stream>
-requires (input_file_stream<Stream> or output_file_stream<Stream>)
-[[nodiscard]] borrowed_file_ref<Stream> borrowed_file(Stream &stream) noexcept {
-	return borrowed_file_ref<Stream>(stream);
-}
+requires (concepts::input_file_stream<Stream> or
+	concepts::output_file_stream<Stream>)
+[[nodiscard]] borrowed_file_ref<Stream> borrowed_file(Stream &stream) noexcept;
 
 class RIWO_HTTP_EXP_API owned_c_file
 {
@@ -170,6 +167,9 @@ private:
 	std::unique_ptr<impl> m_impl;
 };
 
+namespace concepts
+{
+
 template <typename Sink>
 concept body_sink_model = requires(
 	Sink &sink,
@@ -185,8 +185,12 @@ concept body_sink_model = requires(
 	{ sink.cancel() } noexcept -> std::same_as<void>;
 };
 
-static_assert(body_sink_model<file_sink>);
+} //namespace concepts
+
+static_assert(concepts::body_sink_model<file_sink>);
 
 } //namespace riwo::http_exp
+
+#include <riwo/http_exp/body/detail/file.h>
 
 #endif //RIWO_HTTP_EXP_BODY_FILE_H

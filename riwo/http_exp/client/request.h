@@ -6,6 +6,7 @@
 
 #include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/body/source.h>
+#include <riwo/http_exp/client/config.h>
 #include <riwo/http_exp/protocol/request_head.h>
 
 namespace riwo::http_exp::detail
@@ -15,6 +16,20 @@ struct request_access;
 
 namespace riwo::http_exp
 {
+
+// total is zero when the transfer length is unknown.
+using progress_observer = std::function<void(
+	uint64_t transferred, uint64_t total)>;
+
+struct request_options
+{
+	optional<proxy_policy> proxy;
+	optional<redirect_policy> redirects;
+	optional<retry_policy> retries;
+	optional<bool> automatic_decompression;
+	progress_observer upload_progress;
+	progress_observer download_progress;
+};
 
 class RIWO_HTTP_EXP_API request
 {
@@ -41,9 +56,17 @@ public:
 	request &borrowed_body(const_buffer body);
 	request &file(std::filesystem::path path);
 	request &trailers(fields values);
+	request &options(request_options value);
+	request &proxy(proxy_policy value);
+	request &redirects(redirect_policy value);
+	request &retries(retry_policy value);
+	request &automatic_decompression(bool value = true);
+	request &on_upload_progress(progress_observer observer);
+	request &on_download_progress(progress_observer observer);
+	[[nodiscard]] const request_options &options() const noexcept;
 
 	template <typename Source>
-	requires body_source_model<std::remove_cvref_t<Source>>
+	requires concepts::body_source_model<std::remove_cvref_t<Source>>
 	request &source(Source &&source);
 
 	[[nodiscard]] const body_spec &body_description() const noexcept;

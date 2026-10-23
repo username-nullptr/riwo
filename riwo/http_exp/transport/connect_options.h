@@ -9,9 +9,22 @@
 namespace riwo::http_exp
 {
 
+enum class proxy_type
+{
+	automatic,
+	http,
+	socks5
+};
+
 struct proxy_policy
 {
 	optional<riwo::url> forward_proxy {};
+	proxy_type type = proxy_type::automatic;
+	bool use_environment = false;
+	std::vector<std::string> no_proxy {};
+	optional<std::string> username {};
+	optional<std::string> password {};
+	optional<std::string> authorization {};
 };
 
 struct tls_policy

@@ -7,6 +7,8 @@
 #include <riwo/http_exp/server/acceptor_wrap.h>
 #include <riwo/http_exp/server/config.h>
 #include <riwo/http_exp/server/exchange.h>
+#include <riwo/http_exp/server/middleware.h>
+#include <riwo/http_exp/server/router.h>
 #include <riwo/http_exp/transport/listener.h>
 #include <riwo/core/utils/utils.h>
 
@@ -45,6 +47,10 @@ public:
 	using endpoint_wrapper_t = basic_endpoint_wrapper<protocol_t>;
 	using context_t = basic_server_exchange<service_executor_t>;
 	using request_handler_t = std::function<awaitable<void>(context_t&)>;
+	using middleware_t = basic_middleware<service_executor_t>;
+	using middleware_ptr_t = typename middleware_t::ptr_t;
+	using controller_t = basic_controller<service_executor_t>;
+	using controller_ptr_t = typename controller_t::ptr_t;
 	using server_error_handler_t = std::function<bool(error_code)>;
 	using service_error_handler_t =
 		std::function<bool(context_t&, const std::exception&)>;
@@ -82,14 +88,22 @@ public:
 	basic_server &bind(endpoint_wrapper_t endpoint);
 	basic_server &bind(endpoint_wrapper_t endpoint, error_code &error) noexcept;
 
-	template <method::well_known... Methods, typename Func>
-	basic_server &on_request(std::string path, Func &&func)
-		requires concepts::request_handler<Func,service_executor_t>;
+	template <method::well_known... Methods, typename Func, typename... Middleware>
+	basic_server &on_request(std::string path, Func &&func,
+		Middleware&&... middleware)
+		requires concepts::request_handler<Func,service_executor_t> and
+			concepts::middleware_list<service_executor_t,Middleware...>;
 
-	template <typename Func>
+	template <typename Func, typename... Middleware>
 	basic_server &on_request(http_exp::method request_method,
-		std::string path, Func &&func)
-		requires concepts::request_handler<Func,service_executor_t>;
+		std::string path, Func &&func, Middleware&&... middleware)
+		requires concepts::request_handler<Func,service_executor_t> and
+			concepts::middleware_list<service_executor_t,Middleware...>;
+
+	template <method::well_known... Methods>
+	basic_server &on_request(std::string path, controller_ptr_t controller);
+
+	basic_server &use(middleware_ptr_t middleware);
 
 	template <typename Func>
 	basic_server &on_default(Func &&func)
@@ -137,10 +151,10 @@ private:
 
 template <core_concepts::exec Exec = asio::any_io_executor,
 	core_concepts::exec ServiceExec = Exec>
-using basic_tcp_server_t = basic_server<Exec,ServiceExec>;
+using basic_tcp_server = basic_server<Exec,ServiceExec>;
 
-using tcp_server_t = basic_tcp_server_t<>;
-using server_t = tcp_server_t;
+using tcp_server = basic_tcp_server<>;
+using server = tcp_server;
 
 } //namespace riwo::http_exp
 #include <riwo/http_exp/server/detail/server.h>

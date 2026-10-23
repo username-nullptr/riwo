@@ -10,7 +10,7 @@ namespace
 
 namespace http = riwo::http_exp;
 
-[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader_t &reader)
+[[nodiscard]] riwo::awaitable<std::string> read_body(http::body_reader &reader)
 {
 	std::string result;
 	std::array<char,8192> buffer {};
@@ -33,12 +33,12 @@ void prior_knowledge_server_and_multiplexing()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server_t service(std::move(acceptor));
+	http::server service(std::move(acceptor));
 	bool echo_started = false;
 	bool echo_finished = false;
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::post>("/echo",
-		[&](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[&](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			echo_started = true;
 			RIWO_TEST_CHECK_EQ(exchange.selected_protocol(), http::protocol::v2);
@@ -65,7 +65,7 @@ void prior_knowledge_server_and_multiplexing()
 			echo_finished = true;
 		})
 		.on_request<http::method::get>("/slow",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({}, http::body_spec::streaming(),
 				riwo::use_awaitable);
@@ -76,7 +76,7 @@ void prior_knowledge_server_and_multiplexing()
 			co_await exchange.response_body().finish({}, riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/fast",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({}, std::string_view("fast"),
 				riwo::use_awaitable);
@@ -85,7 +85,7 @@ void prior_knowledge_server_and_multiplexing()
 			std::cerr << "HTTP/2 server error: " << error.message() << '\n';
 			return false;
 		})
-		.on_service_error([](http::server_exchange_t &,
+		.on_service_error([](http::server_exchange &,
 			const std::exception &error) {
 			std::cerr << "HTTP/2 service error: " << error.what() << '\n';
 			return false;
@@ -97,7 +97,7 @@ void prior_knowledge_server_and_multiplexing()
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
 	config.pool.max_sessions_per_origin = 1;
-	http::client_t client(context, config);
+	http::client client(context, config);
 
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
@@ -107,7 +107,7 @@ void prior_knowledge_server_and_multiplexing()
 		http::fields trailers;
 		trailers.add("x-client-trailer", "done");
 		request.trailers(std::move(trailers));
-		http::reply_t echo;
+		http::reply echo;
 		try {
 			echo = co_await client.fetch(std::move(request), riwo::use_awaitable);
 		}
@@ -157,7 +157,7 @@ void invalid_resource_configuration()
 	config.protocols.requirement = http::protocol_requirement::require_http2;
 	config.h2.initial_stream_window = 128 * 1024;
 	config.h2.inbound_stream_buffer = 64 * 1024;
-	http::server_t service(std::move(acceptor), config);
+	http::server service(std::move(acceptor), config);
 	service.bind({riwo::ip_type::v4, 0});
 	riwo::error_code error;
 	service.start(error);
@@ -169,10 +169,10 @@ void head_response_has_no_data()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server_t service(std::move(acceptor));
+	http::server service(std::move(acceptor));
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::head>("/metadata",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			RIWO_TEST_CHECK_EQ(exchange.selected_protocol(),
 				http::protocol::v2);
@@ -183,7 +183,7 @@ void head_response_has_no_data()
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::head>("/stream",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
 			head.headers.add("x-head-test", "stream");
@@ -198,7 +198,7 @@ void head_response_has_no_data()
 				riwo::use_awaitable);
 		})
 		.on_request<http::method::get>("/reset-content",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			auto [rejected] = co_await exchange.respond(
 				{http::status::reset_content, {}}, std::string_view("forbidden"),
@@ -212,7 +212,7 @@ void head_response_has_no_data()
 		service.acceptor().local_endpoint().port());
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
-	http::client_t client(context, config);
+	http::client client(context, config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		auto reply = co_await client.fetch(
@@ -248,10 +248,10 @@ void graceful_shutdown_keeps_active_stream()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server_t service(std::move(acceptor));
+	http::server service(std::move(acceptor));
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/shutdown",
-		[&](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[&](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			service.stop();
 			co_await exchange.respond({}, std::string_view("completed"),
@@ -262,7 +262,7 @@ void graceful_shutdown_keeps_active_stream()
 		service.acceptor().local_endpoint().port());
 	http::client_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http2;
-	http::client_t client(context, config);
+	http::client client(context, config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
 		auto reply = co_await client.fetch(

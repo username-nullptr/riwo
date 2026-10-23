@@ -508,7 +508,7 @@ void file_sinks()
 void reader_state_machine()
 {
 	riwo::io_context_t context;
-	http::body_reader_t unbound(context);
+	http::body_reader unbound(context);
 	std::array<char,8> data{};
 	riwo::error_code error;
 	RIWO_TEST_CHECK_EQ(
@@ -520,7 +520,7 @@ void reader_state_machine()
 	trailers.add("Digest", "sha-256=value");
 	auto adapter = std::make_shared<fake_reader_adapter>("payload", trailers);
 	auto state = http::detail::make_body_reader_state(adapter, true);
-	http::body_reader_t reader(context, state);
+	http::body_reader reader(context, state);
 	RIWO_TEST_CHECK(!reader.is_finished());
 	(void)reader.trailers(error);
 	RIWO_TEST_CHECK_EQ(error,
@@ -546,7 +546,7 @@ void reader_state_machine()
 		"sha-256=value");
 
 	auto discard_adapter = std::make_shared<fake_reader_adapter>("discarded");
-	http::body_reader_t discard_reader(context,
+	http::body_reader discard_reader(context,
 		http::detail::make_body_reader_state(discard_adapter, true));
 	RIWO_TEST_CHECK(!discard_reader.is_finished());
 	discard_reader.discard(error);
@@ -558,7 +558,7 @@ void reader_state_machine()
 	RIWO_TEST_CHECK(read.eof);
 
 	auto empty_adapter = std::make_shared<fake_reader_adapter>();
-	http::body_reader_t empty_reader(context,
+	http::body_reader empty_reader(context,
 		http::detail::make_body_reader_state(empty_adapter, true));
 	read = empty_reader.read_some(riwo::buffer(data), error);
 	RIWO_TEST_CHECK(!error);
@@ -599,7 +599,7 @@ void writer_state_machine()
 	auto short_adapter = std::make_shared<fake_writer_adapter>();
 	auto short_state = http::detail::make_body_writer_state(short_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer_t short_writer(context, short_state);
+	http::body_writer short_writer(context, short_state);
 	RIWO_TEST_CHECK_EQ(short_writer.write(
 		riwo::buffer(std::string_view("ab")), error), 2U);
 	RIWO_TEST_CHECK(!error);
@@ -614,7 +614,7 @@ void writer_state_machine()
 	auto excess_adapter = std::make_shared<fake_writer_adapter>();
 	auto excess_state = http::detail::make_body_writer_state(excess_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer_t excess(context, excess_state);
+	http::body_writer excess(context, excess_state);
 	RIWO_TEST_CHECK_EQ(excess.write(
 		riwo::buffer(std::string_view("abcd")), error), 3U);
 	RIWO_TEST_CHECK_EQ(error,
@@ -624,7 +624,7 @@ void writer_state_machine()
 	auto trailer_adapter = std::make_shared<fake_writer_adapter>();
 	auto trailer_state = http::detail::make_body_writer_state(trailer_adapter,
 		http::body_spec::streaming({{"Digest"}}), true);
-	http::body_writer_t trailer_writer(context, trailer_state);
+	http::body_writer trailer_writer(context, trailer_state);
 	RIWO_TEST_CHECK_EQ(trailer_writer.write(
 		riwo::buffer(std::string_view("x")), error), 1U);
 	http::fields values;
@@ -637,7 +637,7 @@ void writer_state_machine()
 	borrowed_adapter->hold();
 	auto borrowed_state = http::detail::make_body_writer_state(borrowed_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer_t borrowed_writer(context, borrowed_state);
+	http::body_writer borrowed_writer(context, borrowed_state);
 	std::string borrowed_body = "abc";
 	bool borrowed_done = false;
 	borrowed_writer.write(riwo::buffer(borrowed_body),
@@ -657,7 +657,7 @@ void writer_state_machine()
 	detached_adapter->hold();
 	auto detached_state = http::detail::make_body_writer_state(detached_adapter,
 		http::body_spec::known(3), true);
-	http::body_writer_t detached_writer(context, detached_state);
+	http::body_writer detached_writer(context, detached_state);
 	std::string detached_body = "abc";
 	detached_writer.write(riwo::buffer(detached_body), riwo::detached);
 	detached_body = "xyz";

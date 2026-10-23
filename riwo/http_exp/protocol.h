@@ -7,6 +7,12 @@
 #include <riwo/http_exp/protocol/method.h>
 #include <riwo/http_exp/protocol/status.h>
 #include <riwo/http_exp/protocol/fields.h>
+#include <riwo/http_exp/protocol/parameters.h>
+#include <riwo/http_exp/protocol/range.h>
+#include <riwo/http_exp/protocol/conditional.h>
+#include <riwo/http_exp/protocol/authentication.h>
+#include <riwo/http_exp/protocol/multipart.h>
+#include <riwo/http_exp/protocol/compression.h>
 #include <riwo/http_exp/protocol/cookie.h>
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/response_head.h>

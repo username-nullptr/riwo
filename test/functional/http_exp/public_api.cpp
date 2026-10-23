@@ -28,6 +28,29 @@ using native_acceptor_wrap = http::basic_acceptor_wrap<native_executor>;
 using native_strand = asio::strand<native_executor>;
 using split_server = http::basic_server<native_executor,native_strand>;
 
+static_assert(std::same_as<http::body_reader,http::basic_body_reader<>>);
+static_assert(std::same_as<http::body_writer,http::basic_body_writer<>>);
+static_assert(std::same_as<http::client,http::basic_client<>>);
+static_assert(std::same_as<http::client_exchange,http::basic_client_exchange<>>);
+static_assert(std::same_as<http::reply,http::basic_reply<>>);
+static_assert(std::same_as<http::server_exchange,http::basic_server_exchange<>>);
+static_assert(std::same_as<http::duplex_channel,http::basic_duplex_channel<>>);
+static_assert(std::same_as<http::byte_stream,http::basic_byte_stream<>>);
+static_assert(std::same_as<http::negotiated_transport,
+	http::basic_negotiated_transport<>>);
+static_assert(std::same_as<http::transport_connector,
+	http::basic_transport_connector<>>);
+static_assert(std::same_as<http::transport_listener,
+	http::basic_transport_listener<>>);
+static_assert(std::same_as<http::acceptor_wrap,http::basic_acceptor_wrap<>>);
+static_assert(std::same_as<http::middleware,http::basic_middleware<>>);
+static_assert(std::same_as<http::controller,http::basic_controller<>>);
+static_assert(std::same_as<http::aop,http::middleware>);
+static_assert(std::same_as<http::ctrlr_aop,http::controller>);
+static_assert(std::same_as<http::basic_tcp_server<>,http::basic_server<>>);
+static_assert(std::same_as<http::tcp_server,http::basic_tcp_server<>>);
+static_assert(std::same_as<http::server,http::tcp_server>);
+
 struct source_model
 {
 	[[nodiscard]] riwo::optional<uint64_t> size() const noexcept { return 3; }
@@ -63,9 +86,9 @@ struct source_with_wrong_completion
 	void cancel() noexcept {}
 };
 
-static_assert(http::body_source_model<source_model>);
-static_assert(!http::body_source_model<source_without_cancel>);
-static_assert(!http::body_source_model<source_with_wrong_completion>);
+static_assert(http::concepts::body_source_model<source_model>);
+static_assert(!http::concepts::body_source_model<source_without_cancel>);
+static_assert(!http::concepts::body_source_model<source_with_wrong_completion>);
 
 static_assert(std::copyable<http::protocol_policy>);
 static_assert(std::same_as<decltype(http::field::value),riwo::value>);
@@ -85,23 +108,45 @@ static_assert(std::copyable<http::body_read_result>);
 static_assert(std::is_trivially_copyable_v<http::body_read_result>);
 static_assert(std::copyable<http::client_config>);
 static_assert(std::copyable<http::server_config>);
+static_assert(std::copyable<http::proxy_policy>);
+static_assert(std::copyable<http::request_options>);
+static_assert(std::copyable<http::parameter>);
+static_assert(std::copyable<http::parameter_view>);
+static_assert(std::copyable<http::route_pattern>);
+static_assert(std::copyable<http::application_session_config>);
+static_assert(std::constructible_from<http::application_session_manager>);
+static_assert(std::derived_from<http::aop,http::middleware>);
+#if RIWO_OPENSSL_SUPPORT
+static_assert(std::constructible_from<http::server_tls_context,
+	http::server_tls_config>);
+static_assert(std::derived_from<http::tls_listener,http::transport_listener>);
+#endif
 
 static_assert(!std::copy_constructible<http::request>);
 static_assert(!std::copy_constructible<http::cookie_jar>);
 static_assert(std::is_nothrow_move_constructible_v<http::request>);
-static_assert(!std::copy_constructible<http::client_t>);
-static_assert(std::is_nothrow_move_constructible_v<http::client_t>);
-static_assert(std::constructible_from<http::client_t>);
-static_assert(std::constructible_from<http::client_t,http::client_config>);
+static_assert(!std::copy_constructible<http::client>);
+static_assert(std::is_nothrow_move_constructible_v<http::client>);
+static_assert(std::constructible_from<http::client>);
+static_assert(std::constructible_from<http::client,http::client_config>);
 static_assert(std::constructible_from<native_client>);
-static_assert(std::constructible_from<http::body_reader_t>);
-static_assert(std::constructible_from<http::body_writer_t>);
-static_assert(std::constructible_from<http::client_exchange_t>);
-static_assert(std::constructible_from<http::reply_t>);
-static_assert(std::constructible_from<http::server_exchange_t>);
-static_assert(std::constructible_from<http::duplex_channel_t>);
-static_assert(std::constructible_from<http::acceptor_wrap_t>);
-static_assert(std::constructible_from<http::server_t>);
+static_assert(std::constructible_from<http::body_reader>);
+static_assert(std::constructible_from<http::body_writer>);
+static_assert(std::constructible_from<http::client_exchange>);
+static_assert(std::constructible_from<http::reply>);
+static_assert(std::constructible_from<http::server_exchange>);
+static_assert(requires(http::server_exchange &exchange,
+	std::filesystem::path path, std::fstream &stream, std::FILE *file,
+	riwo::error_code &error) {
+	{ exchange.save_file(std::move(path), error) } -> std::same_as<uint64_t>;
+	{ exchange.save_file(http::borrowed_file(stream), error) } ->
+		std::same_as<uint64_t>;
+	{ exchange.save_file(http::owned_file(file), error) } ->
+		std::same_as<uint64_t>;
+});
+static_assert(std::constructible_from<http::duplex_channel>);
+static_assert(std::constructible_from<http::acceptor_wrap>);
+static_assert(std::constructible_from<http::server>);
 static_assert(std::constructible_from<http::tcp_connection>);
 static_assert(std::constructible_from<native_body_reader>);
 static_assert(std::constructible_from<native_body_writer>);
@@ -111,40 +156,40 @@ static_assert(std::constructible_from<native_server_exchange>);
 static_assert(std::constructible_from<native_duplex_channel>);
 static_assert(std::constructible_from<native_acceptor_wrap>);
 static_assert(std::constructible_from<native_server>);
-static_assert(std::constructible_from<http::body_reader_t,
+static_assert(std::constructible_from<http::body_reader,
 	std::shared_ptr<http::detail::body_reader_state>>);
-static_assert(std::constructible_from<http::body_writer_t,
+static_assert(std::constructible_from<http::body_writer,
 	std::shared_ptr<http::detail::body_writer_state>>);
-static_assert(std::constructible_from<http::client_exchange_t,
+static_assert(std::constructible_from<http::client_exchange,
 	std::shared_ptr<http::detail::stream>>);
-static_assert(std::constructible_from<http::reply_t,http::protocol,
+static_assert(std::constructible_from<http::reply,http::protocol,
 	http::response_head,std::shared_ptr<http::detail::body_reader_state>>);
-static_assert(std::constructible_from<http::server_exchange_t,
+static_assert(std::constructible_from<http::server_exchange,
 	std::shared_ptr<http::detail::stream>,http::request_head>);
-static_assert(std::constructible_from<http::duplex_channel_t,
+static_assert(std::constructible_from<http::duplex_channel,
 	std::shared_ptr<http::detail::duplex_state>>);
-static_assert(std::constructible_from<http::client_t,
+static_assert(std::constructible_from<http::client,
 	std::shared_ptr<http::detail::client_session>>);
-static_assert(std::constructible_from<http::client_t,
-	std::shared_ptr<http::transport_connector_t>>);
-static_assert(std::constructible_from<http::client_t,
+static_assert(std::constructible_from<http::client,
+	std::shared_ptr<http::transport_connector>>);
+static_assert(std::constructible_from<http::client,
 	std::shared_ptr<http::detail::client_session>,http::client_config>);
-static_assert(std::constructible_from<http::client_t,
-	std::shared_ptr<http::transport_connector_t>,http::client_config>);
-static_assert(!std::copy_constructible<http::client_exchange_t>);
-static_assert(std::is_nothrow_move_constructible_v<http::client_exchange_t>);
-static_assert(!std::copy_constructible<http::reply_t>);
-static_assert(std::is_nothrow_move_constructible_v<http::reply_t>);
-static_assert(!std::copy_constructible<http::server_exchange_t>);
-static_assert(!std::move_constructible<http::server_exchange_t>);
-static_assert(!std::copy_constructible<http::server_t>);
-static_assert(std::is_nothrow_move_constructible_v<http::server_t>);
-static_assert(!std::copy_constructible<http::acceptor_wrap_t>);
-static_assert(std::is_nothrow_move_constructible_v<http::acceptor_wrap_t>);
-static_assert(!std::copy_constructible<http::body_reader_t>);
-static_assert(!std::move_constructible<http::body_reader_t>);
-static_assert(!std::copy_constructible<http::body_writer_t>);
-static_assert(!std::move_constructible<http::body_writer_t>);
+static_assert(std::constructible_from<http::client,
+	std::shared_ptr<http::transport_connector>,http::client_config>);
+static_assert(!std::copy_constructible<http::client_exchange>);
+static_assert(std::is_nothrow_move_constructible_v<http::client_exchange>);
+static_assert(!std::copy_constructible<http::reply>);
+static_assert(std::is_nothrow_move_constructible_v<http::reply>);
+static_assert(!std::copy_constructible<http::server_exchange>);
+static_assert(!std::move_constructible<http::server_exchange>);
+static_assert(!std::copy_constructible<http::server>);
+static_assert(std::is_nothrow_move_constructible_v<http::server>);
+static_assert(!std::copy_constructible<http::acceptor_wrap>);
+static_assert(std::is_nothrow_move_constructible_v<http::acceptor_wrap>);
+static_assert(!std::copy_constructible<http::body_reader>);
+static_assert(!std::move_constructible<http::body_reader>);
+static_assert(!std::copy_constructible<http::body_writer>);
+static_assert(!std::move_constructible<http::body_writer>);
 
 static_assert(std::constructible_from<native_body_reader,riwo::io_context_t&>);
 static_assert(std::constructible_from<native_body_writer,riwo::io_context_t&>);
@@ -155,66 +200,66 @@ static_assert(std::constructible_from<native_acceptor_wrap,
 	native_acceptor_wrap::acceptor_t&&>);
 static_assert(std::constructible_from<native_server,native_acceptor_wrap&&>);
 
-static_assert(std::same_as<http::client_t::executor_type, asio::any_io_executor>);
-static_assert(std::same_as<http::client_t::executor_t, asio::any_io_executor>);
-static_assert(std::same_as<http::client_t::config_t, http::client_config>);
-static_assert(std::same_as<http::client_t::reply_t, http::reply_t>);
-static_assert(std::same_as<http::client_t::exchange_t, http::client_exchange_t>);
-static_assert(std::same_as<http::client_exchange_t::executor_type,
+static_assert(std::same_as<http::client::executor_type, asio::any_io_executor>);
+static_assert(std::same_as<http::client::executor_t, asio::any_io_executor>);
+static_assert(std::same_as<http::client::config_t, http::client_config>);
+static_assert(std::same_as<http::client::reply_t, http::reply>);
+static_assert(std::same_as<http::client::exchange_t, http::client_exchange>);
+static_assert(std::same_as<http::client_exchange::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::client_exchange_t::executor_t,
+static_assert(std::same_as<http::client_exchange::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::client_exchange_t::body_reader_t,
-	http::body_reader_t>);
-static_assert(std::same_as<http::client_exchange_t::body_writer_t,
-	http::body_writer_t>);
-static_assert(std::same_as<http::reply_t::executor_type, asio::any_io_executor>);
-static_assert(std::same_as<http::reply_t::executor_t, asio::any_io_executor>);
-static_assert(std::same_as<http::reply_t::body_reader_t, http::body_reader_t>);
-static_assert(std::same_as<http::body_reader_t::executor_type,
+static_assert(std::same_as<http::client_exchange::body_reader_t,
+	http::body_reader>);
+static_assert(std::same_as<http::client_exchange::body_writer_t,
+	http::body_writer>);
+static_assert(std::same_as<http::reply::executor_type, asio::any_io_executor>);
+static_assert(std::same_as<http::reply::executor_t, asio::any_io_executor>);
+static_assert(std::same_as<http::reply::body_reader_t, http::body_reader>);
+static_assert(std::same_as<http::body_reader::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::body_reader_t::executor_t,
+static_assert(std::same_as<http::body_reader::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::body_writer_t::executor_type,
+static_assert(std::same_as<http::body_writer::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::body_writer_t::executor_t,
+static_assert(std::same_as<http::body_writer::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::server_t::executor_type,
+static_assert(std::same_as<http::server::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::server_t::executor_t, asio::any_io_executor>);
-static_assert(std::same_as<http::server_t::service_executor_t,
+static_assert(std::same_as<http::server::executor_t, asio::any_io_executor>);
+static_assert(std::same_as<http::server::service_executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::server_t::config_t, http::server_config>);
-static_assert(std::same_as<http::acceptor_wrap_t::executor_type,
+static_assert(std::same_as<http::server::config_t, http::server_config>);
+static_assert(std::same_as<http::acceptor_wrap::executor_type,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::acceptor_wrap_t::executor_t,
+static_assert(std::same_as<http::acceptor_wrap::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::acceptor_wrap_t::protocol_t, asio::ip::tcp>);
-static_assert(std::same_as<http::acceptor_wrap_t::acceptor_t,
+static_assert(std::same_as<http::acceptor_wrap::protocol_t, asio::ip::tcp>);
+static_assert(std::same_as<http::acceptor_wrap::acceptor_t,
 	asio::ip::tcp::acceptor>);
-static_assert(std::same_as<http::server_t::context_t,
-	http::server_exchange_t>);
-static_assert(std::same_as<http::server_exchange_t::request_t,
+static_assert(std::same_as<http::server::context_t,
+	http::server_exchange>);
+static_assert(std::same_as<http::server_exchange::request_t,
 	http::request_head>);
-static_assert(std::same_as<http::server_exchange_t::body_reader_t,
-	http::body_reader_t>);
-static_assert(std::same_as<http::server_exchange_t::body_writer_t,
-	http::body_writer_t>);
-static_assert(std::same_as<http::duplex_channel_t::executor_t,
+static_assert(std::same_as<http::server_exchange::body_reader_t,
+	http::body_reader>);
+static_assert(std::same_as<http::server_exchange::body_writer_t,
+	http::body_writer>);
+static_assert(std::same_as<http::duplex_channel::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::duplex_channel_t::endpoint_t,
+static_assert(std::same_as<http::duplex_channel::endpoint_t,
 	asio::ip::tcp::endpoint>);
 static_assert(std::same_as<http::connection::endpoint_t,
 	asio::ip::tcp::endpoint>);
 static_assert(std::same_as<http::connection::timeout_t,
 	std::chrono::milliseconds>);
-static_assert(std::same_as<http::transport_connector_t::executor_t,
+static_assert(std::same_as<http::transport_connector::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::transport_connector_t::result_t,
-	http::negotiated_transport_t>);
-static_assert(std::same_as<http::transport_listener_t::result_t,
-	http::negotiated_transport_t>);
-static_assert(std::same_as<http::byte_stream_t::executor_t,
+static_assert(std::same_as<http::transport_connector::result_t,
+	http::negotiated_transport>);
+static_assert(std::same_as<http::transport_listener::result_t,
+	http::negotiated_transport>);
+static_assert(std::same_as<http::byte_stream::executor_t,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::detail::connector::executor_t,
 	asio::any_io_executor>);
@@ -242,17 +287,17 @@ static_assert(std::same_as<native_server::context_t,native_server_exchange>);
 static_assert(std::same_as<native_server::service_executor_t,native_executor>);
 static_assert(std::same_as<split_server::context_t,
 	http::basic_server_exchange<native_strand>>);
-static_assert(noexcept(std::declval<const http::client_t &>().get_executor()));
-static_assert(noexcept(std::declval<const http::reply_t &>().get_executor()));
-static_assert(noexcept(std::declval<http::client_exchange_t &>().cancel()));
-static_assert(noexcept(std::declval<const http::body_reader_t &>().is_finished()));
-static_assert(noexcept(std::declval<http::body_writer_t &>().cancel()));
+static_assert(noexcept(std::declval<const http::client &>().get_executor()));
+static_assert(noexcept(std::declval<const http::reply &>().get_executor()));
+static_assert(noexcept(std::declval<http::client_exchange &>().cancel()));
+static_assert(noexcept(std::declval<const http::body_reader &>().is_finished()));
+static_assert(noexcept(std::declval<http::body_writer &>().cancel()));
 
-riwo::awaitable<void> server_handler(http::server_exchange_t&) {
+riwo::awaitable<void> server_handler(http::server_exchange&) {
 	co_return;
 }
 
-riwo::awaitable<void> streaming_server_handler(http::server_exchange_t &exchange)
+riwo::awaitable<void> streaming_server_handler(http::server_exchange &exchange)
 {
 	http::response_head head{http::status::ok};
 	head.headers.set("content-type", "application/x-ndjson");
@@ -333,7 +378,7 @@ struct fake_session final : http::detail::client_session
 	executor_type executor_;
 };
 
-struct fake_transport_connector final : http::transport_connector_t
+struct fake_transport_connector final : http::transport_connector
 {
 	explicit fake_transport_connector(executor_type executor) :
 		executor_(std::move(executor)) {}
@@ -628,37 +673,37 @@ void fake_boundaries_and_unsupported_entry_points()
 	native_server_exchange server_exchange(context);
 	http::client_config config;
 	config.pool.max_sessions_per_origin = 0;
-	http::client_t default_client;
-	http::client_t configured_client(config);
-	http::body_reader_t default_reader;
-	http::body_writer_t default_writer;
-	http::client_exchange_t default_client_exchange;
-	http::reply_t default_reply;
-	http::server_exchange_t default_server_exchange;
-	http::duplex_channel_t default_channel;
-	http::acceptor_wrap_t default_acceptor_wrap;
-	http::server_t default_service;
+	http::client default_client;
+	http::client configured_client(config);
+	http::body_reader default_reader;
+	http::body_writer default_writer;
+	http::client_exchange default_client_exchange;
+	http::reply default_reply;
+	http::server_exchange default_server_exchange;
+	http::duplex_channel default_channel;
+	http::acceptor_wrap default_acceptor_wrap;
+	http::server default_service;
 	http::tcp_connection default_transport;
 	auto global_executor = asio::any_io_executor(riwo::get_executor());
 	auto reader_state = http::detail::make_body_reader_state();
 	auto writer_state = http::detail::make_body_writer_state();
 	auto stream = std::make_shared<fake_stream>();
-	http::body_reader_t reader_with_state(reader_state);
-	http::body_writer_t writer_with_state(writer_state);
-	http::client_exchange_t exchange_with_stream(stream);
-	http::reply_t reply_with_body(http::protocol::v1_1,
+	http::body_reader reader_with_state(reader_state);
+	http::body_writer writer_with_state(writer_state);
+	http::client_exchange exchange_with_stream(stream);
+	http::reply reply_with_body(http::protocol::v1_1,
 		http::reply_head{http::status::ok}, reader_state);
-	http::server_exchange_t server_exchange_with_stream(stream,
+	http::server_exchange server_exchange_with_stream(stream,
 		http::request_head{});
 	std::shared_ptr<http::detail::duplex_state> duplex_state;
-	http::duplex_channel_t channel_with_state(duplex_state);
+	http::duplex_channel channel_with_state(duplex_state);
 	auto client_session = std::make_shared<fake_session>(global_executor);
-	http::client_t session_client(client_session, config);
+	http::client session_client(client_session, config);
 	auto connector = std::make_shared<fake_transport_connector>(global_executor);
-	http::client_t connector_client(connector, config);
+	http::client connector_client(connector, config);
 	auto default_connector = http::detail::make_default_connector();
 	auto connector_adapter = http::detail::make_connector_adapter(
-		std::static_pointer_cast<http::transport_connector_t>(connector));
+		std::static_pointer_cast<http::transport_connector>(connector));
 	http::detail::session_pool pool_with_default_executor(config);
 	auto client_state_with_default_executor =
 		http::detail::make_client_state(config);
@@ -734,11 +779,11 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(transport.get_executor() == executor);
 	RIWO_TEST_CHECK_EQ(session.available_stream_capacity(), 1U);
 
-	http::client_t client(executor, config);
+	http::client client(executor, config);
 	RIWO_TEST_CHECK(client.get_executor() == executor);
 	bool completed = false;
 	client.send(http::request(http::method::get, "https://example.test/"),
-		[&](riwo::error_code error, http::reply_t reply) {
+		[&](riwo::error_code error, http::reply reply) {
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_permitted));
 			RIWO_TEST_CHECK(reply.get_executor() == executor);
@@ -762,7 +807,7 @@ void server_facade_contract()
 	riwo::io_context_t context;
 	auto executor = asio::any_io_executor(context.get_executor());
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server_t service(std::move(acceptor));
+	http::server service(std::move(acceptor));
 
 	RIWO_TEST_CHECK(service.get_executor() == executor);
 	RIWO_TEST_CHECK(service.get_service_executor() == executor);
@@ -772,7 +817,7 @@ void server_facade_contract()
 		.on_request(http::method("SUBSCRIBE"), "/custom-events", server_handler)
 		.on_default(server_handler)
 		.on_server_error([](riwo::error_code) { return true; })
-		.on_service_error([](http::server_exchange_t&,
+		.on_service_error([](http::server_exchange&,
 			const std::exception&) { return true; });
 
 	riwo::error_code error;

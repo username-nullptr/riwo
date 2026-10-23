@@ -82,7 +82,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using client_exchange_t = basic_client_exchange<>;
+using client_exchange = basic_client_exchange<>;
 
 } //namespace riwo::http_exp
 

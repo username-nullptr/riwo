@@ -76,6 +76,15 @@ private:
 		result.port = key.port;
 		result.protocols = config.protocols;
 		result.proxy = config.proxy;
+		result.proxy.forward_proxy.reset();
+		result.proxy.use_environment = false;
+		result.proxy.no_proxy.clear();
+		if( key.proxy.endpoint )
+			result.proxy.forward_proxy = riwo::url(*key.proxy.endpoint);
+		result.proxy.type = key.proxy.type;
+		result.proxy.authorization = key.proxy.authorization;
+		result.proxy.username = key.proxy.username;
+		result.proxy.password = key.proxy.password;
 		result.tls = config.tls;
 		result.deadline = config.timeout.connect;
 		if( key.local_bind ) result.local_bind =

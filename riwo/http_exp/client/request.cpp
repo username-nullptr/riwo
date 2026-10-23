@@ -104,6 +104,45 @@ request &request::trailers(fields values)
 	return *this;
 }
 
+request &request::options(request_options value) {
+	m_impl->m_options = std::move(value);
+	return *this;
+}
+
+request &request::proxy(proxy_policy value) {
+	m_impl->m_options.proxy = std::move(value);
+	return *this;
+}
+
+request &request::redirects(redirect_policy value) {
+	m_impl->m_options.redirects = std::move(value);
+	return *this;
+}
+
+request &request::retries(retry_policy value) {
+	m_impl->m_options.retries = std::move(value);
+	return *this;
+}
+
+request &request::automatic_decompression(bool value) {
+	m_impl->m_options.automatic_decompression = value;
+	return *this;
+}
+
+request &request::on_upload_progress(progress_observer observer) {
+	m_impl->m_options.upload_progress = std::move(observer);
+	return *this;
+}
+
+request &request::on_download_progress(progress_observer observer) {
+	m_impl->m_options.download_progress = std::move(observer);
+	return *this;
+}
+
+const request_options &request::options() const noexcept {
+	return m_impl->m_options;
+}
+
 const body_spec &request::body_description() const noexcept {
 	return m_impl->m_body_spec;
 }

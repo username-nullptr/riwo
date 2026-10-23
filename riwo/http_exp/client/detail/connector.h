@@ -34,6 +34,10 @@ struct tls_identity
 struct proxy_identity
 {
 	optional<std::string> endpoint {};
+	proxy_type type = proxy_type::automatic;
+	optional<std::string> authorization {};
+	optional<std::string> username {};
+	optional<std::string> password {};
 
 	friend bool operator==(
 		const proxy_identity &, const proxy_identity &) = default;

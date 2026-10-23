@@ -22,70 +22,38 @@ public:
 	using endpoint_t = asio::ip::tcp::endpoint;
 	using timeout_t = std::chrono::milliseconds;
 
-	connection() = default;
-	virtual ~connection() = default;
+	connection();
+	virtual ~connection();
 	[[nodiscard]] virtual executor_t get_executor() const noexcept = 0;
 	virtual void read_some(mutable_buffer buffer, io_handler_t handler) = 0;
 	virtual void write(const_buffer buffer, io_handler_t handler) = 0;
 	virtual void close(close_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
-	virtual void set_read_timeout(optional<timeout_t> value) {
-		ignore_unused(value);
-	}
-	virtual void set_write_timeout(optional<timeout_t> value) {
-		ignore_unused(value);
-	}
+	virtual void set_read_timeout(optional<timeout_t> value);
+	virtual void set_write_timeout(optional<timeout_t> value);
 
-	[[nodiscard]] virtual bool is_open() const noexcept {
-		return true;
-	}
+	[[nodiscard]] virtual bool is_open() const noexcept;
 
 	// Synchronous completion is used by the existing synchronous public API and
 	// by the pool's non-waiting fast path. Custom transports may keep the
 	// asynchronous interface only; the default reports that explicitly.
 	[[nodiscard]] virtual size_t read_some_sync(mutable_buffer,
-		error_code &error) noexcept
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return 0;
-	}
+		error_code &error) noexcept;
 
 	[[nodiscard]] virtual size_t write_sync(const_buffer,
-		error_code &error) noexcept
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return 0;
-	}
+		error_code &error) noexcept;
 
 	virtual void connect_sync(std::string_view host, uint16_t port,
-		error_code &error) noexcept
-	{
-		ignore_unused(host);
-		ignore_unused(port);
-		error = make_error_code(errc::operation_not_supported);
-	}
+		error_code &error) noexcept;
 
 	virtual void connect_async(std::string_view host, uint16_t port,
-		close_handler_t handler)
-	{
-		ignore_unused(host);
-		ignore_unused(port);
-		std::move(handler)(make_error_code(errc::operation_not_supported));
-	}
+		close_handler_t handler);
 
 	[[nodiscard]] virtual endpoint_t remote_endpoint(
-		error_code &error) const noexcept
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return {};
-	}
+		error_code &error) const noexcept;
 
 	[[nodiscard]] virtual endpoint_t local_endpoint(
-		error_code &error) const noexcept
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return {};
-	}
+		error_code &error) const noexcept;
 };
 
 } //namespace riwo::http_exp

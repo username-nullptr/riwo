@@ -64,7 +64,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using body_writer_t = basic_body_writer<>;
+using body_writer = basic_body_writer<>;
 
 } //namespace riwo::http_exp
 

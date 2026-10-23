@@ -8,6 +8,8 @@
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <riwo/http_exp/protocol/v1/detail/session.h>
 #include <riwo/http_exp/body/detail/decoder.h>
+#include <riwo/http_exp/body/detail/progress.h>
+#include <riwo/http_exp/protocol/authentication.h>
 #include <riwo/core/utils/string_tools.h>
 #include <charconv>
 
@@ -57,6 +59,7 @@ struct request_access
 		}
 		result.m_impl->m_retry_attempt = value.m_impl->m_retry_attempt;
 		result.m_impl->m_redirect_count = value.m_impl->m_redirect_count;
+		result.m_impl->m_options = value.m_impl->m_options;
 		if( not drop_body )
 		{
 			result.m_impl->m_body_spec = value.m_impl->m_body_spec;
@@ -65,6 +68,29 @@ struct request_access
 			result.m_impl->m_trailers = value.m_impl->m_trailers;
 		}
 		return result;
+	}
+
+	[[nodiscard]] static client_config effective_config(
+		const request &value, const client_config &base)
+	{
+		auto result = base;
+		const auto &options = value.m_impl->m_options;
+		if( options.proxy ) result.proxy = *options.proxy;
+		if( options.redirects ) result.redirects = *options.redirects;
+		if( options.retries ) result.retries = *options.retries;
+		if( options.automatic_decompression )
+			result.automatic_decompression = *options.automatic_decompression;
+		return result;
+	}
+
+	[[nodiscard]] static progress_observer upload_progress(
+		const request &value) {
+		return value.m_impl->m_options.upload_progress;
+	}
+
+	[[nodiscard]] static progress_observer download_progress(
+		const request &value) {
+		return value.m_impl->m_options.download_progress;
 	}
 
 	static void increment_retry(request &value) noexcept {
@@ -212,6 +238,45 @@ void add_accept_encoding(request_head &head, const client_config &config)
 	if( not config.automatic_decompression or not gzip_available_v ) return;
 	if( head.headers.find_first("Accept-Encoding") ) return;
 	head.headers.add("Accept-Encoding", "gzip, deflate");
+}
+
+void add_proxy_authorization(request_head &head,
+	const client_config &config)
+{
+	if( head.scheme != "http" or
+		head.headers.find_first("Proxy-Authorization") ) return;
+	const auto key = make_session_key(head, config);
+	if( not key.proxy.endpoint ) return;
+	auto type = key.proxy.type;
+	if( type == proxy_type::automatic )
+	{
+		riwo::url endpoint(*key.proxy.endpoint);
+		if( endpoint.protocol().starts_with("socks5") )
+			type = proxy_type::socks5;
+		else type = proxy_type::http;
+	}
+	if( type != proxy_type::http or not key.proxy.authorization ) return;
+	head.headers.add("Proxy-Authorization", *key.proxy.authorization);
+}
+
+[[nodiscard]] optional<uint64_t> content_length(const reply_head &head) noexcept
+{
+	auto value = head.headers.find_first("Content-Length");
+	if( not value ) return {};
+	uint64_t result = 0;
+	auto parsed = std::from_chars(value->data(), value->data() + value->size(),
+		result);
+	if( parsed.ec != std::errc{} or parsed.ptr != value->data() + value->size() )
+		return {};
+	return result;
+}
+
+void notify_progress(const progress_observer &observer,
+	uint64_t transferred, optional<uint64_t> total) noexcept
+{
+	if( not observer ) return;
+	try { observer(transferred, total.value_or(0)); }
+	catch(...) { /* Observers must not alter transfer or retry semantics. */ }
 }
 
 [[nodiscard]] error_code add_request_cookies(request_head &head,
@@ -370,13 +435,13 @@ public:
 	}
 
 	[[nodiscard]] std::shared_ptr<stream> open_sync(const request_head &head,
-		body_spec spec, error_code &error) noexcept
+		body_spec spec, const client_config &config, error_code &error) noexcept
 	{
 		error.clear();
 		try {
 			if( m_injected_session )
 				return m_injected_session->open_sync(head, std::move(spec), error);
-			return m_pool->open_sync(make_session_key(head, m_config), head,
+			return m_pool->open_sync(make_session_key(head, config), head,
 				std::move(spec), error);
 		}
 		catch(...) {
@@ -386,6 +451,7 @@ public:
 	}
 
 	void open(const request_head &head, body_spec spec,
+		const client_config &config,
 		client_session::open_handler_t handler)
 	{
 		if( m_injected_session )
@@ -393,7 +459,7 @@ public:
 			m_injected_session->open(head, std::move(spec), std::move(handler));
 			return;
 		}
-		m_pool->open(make_session_key(head, m_config), head, std::move(spec),
+		m_pool->open(make_session_key(head, config), head, std::move(spec),
 			std::move(handler));
 	}
 
@@ -434,7 +500,9 @@ std::shared_ptr<stream> client_state::open(request request_value,
 		error = cookie_error;
 		return {};
 	}
-	return m_impl->open_sync(*head, std::move(spec), error);
+	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	add_proxy_authorization(*head, config);
+	return m_impl->open_sync(*head, std::move(spec), config, error);
 }
 
 void client_state::open(request request_value, body_spec spec,
@@ -451,7 +519,9 @@ void client_state::open(request request_value, body_spec spec,
 		std::move(handler)(cookie_error, std::shared_ptr<stream>{});
 		return;
 	}
-	m_impl->open(*head, std::move(spec), std::move(handler));
+	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	add_proxy_authorization(*head, config);
+	m_impl->open(*head, std::move(spec), config, std::move(handler));
 }
 
 std::shared_ptr<cookie_jar> client_state::cookie_store() const noexcept {
@@ -480,6 +550,9 @@ send_result client_state::send(request request_value,
 		return {};
 	}
 	auto spec = request_value.body_description();
+	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	auto upload_progress = request_access::upload_progress(request_value);
+	auto download_progress = request_access::download_progress(request_value);
 	auto head = freeze_request(request_value, spec, false);
 	if( not head )
 	{
@@ -491,14 +564,15 @@ send_result client_state::send(request request_value,
 		error = cookie_error;
 		return {};
 	}
-	add_accept_encoding(*head, m_impl->m_config);
+	add_accept_encoding(*head, config);
+	add_proxy_authorization(*head, config);
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
 	auto retry_request = [&](request_delivery delivery, bool rewind_body,
 		send_result &result) -> bool
 	{
-		if( not retry_allowed(request_value, m_impl->m_config.retries, delivery) )
+		if( not retry_allowed(request_value, config.retries, delivery) )
 			return false;
 		try
 		{
@@ -516,7 +590,7 @@ send_result client_state::send(request request_value,
 		}
 		return true;
 	};
-	auto active_stream = m_impl->open_sync(*head, spec, error);
+	auto active_stream = m_impl->open_sync(*head, spec, config, error);
 	if( error or not active_stream )
 	{
 		if( not error ) error = make_error_code(errc::operation_not_supported);
@@ -536,6 +610,7 @@ send_result client_state::send(request request_value,
 	if( request_body )
 	{
 		auto written = writer->write(*request_body, error);
+		if( not error ) notify_progress(upload_progress, written, spec.length());
 		if( not error and written != request_body->size() )
 			error = make_error_code(errc::body_length_mismatch);
 		if( not error ) writer->finish(std::move(trailers), error);
@@ -577,6 +652,7 @@ send_result client_state::send(request request_value,
 			}
 			auto written = writer->write(const_buffer(target.data(), size), error);
 			total += written;
+			if( not error ) notify_progress(upload_progress, total, spec.length());
 			if( error ) break;
 		}
 		if( not error ) source->finish_sync(error);
@@ -613,7 +689,7 @@ send_result client_state::send(request request_value,
 	}
 	error_code redirect_error;
 	auto redirect = make_redirect_request(request_value, reply_head_value,
-		m_impl->m_config.redirects, redirect_error);
+		config.redirects, redirect_error);
 	if( redirect_error )
 	{
 		error = redirect_error;
@@ -638,8 +714,14 @@ send_result client_state::send(request request_value,
 		return send(std::move(*redirect), error);
 	}
 	body->set_ready();
+	if( download_progress )
+	{
+		const auto total = content_length(reply_head_value).value_or(0);
+		body = make_progress_body_reader(std::move(body), total,
+			std::move(download_progress));
+	}
 	body = decoded_body(std::move(body), reply_head_value,
-		m_impl->m_config.automatic_decompression);
+		config.automatic_decompression);
 	return send_result {
 		.selected_protocol = active_stream->selected_protocol(),
 		.reply_protocol = active_stream->response_protocol(),
@@ -658,6 +740,9 @@ void client_state::send(request request_value, send_handler_t handler)
 		return;
 	}
 	auto spec = request_value.body_description();
+	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	auto upload_progress = request_access::upload_progress(request_value);
+	auto download_progress = request_access::download_progress(request_value);
 	auto head = freeze_request(request_value, spec, false);
 	if( not head )
 	{
@@ -669,7 +754,8 @@ void client_state::send(request request_value, send_handler_t handler)
 		std::move(handler)(cookie_error, send_result{});
 		return;
 	}
-	add_accept_encoding(*head, m_impl->m_config);
+	add_accept_encoding(*head, config);
+	add_proxy_authorization(*head, config);
 	auto request_body = request_access::body(request_value);
 	auto source = request_access::source(request_value);
 	auto trailers = request_access::trailers(request_value);
@@ -691,6 +777,8 @@ void client_state::send(request request_value, send_handler_t handler)
 		bool source_finished = false;
 		retry_policy retries;
 		redirect_policy redirects;
+		progress_observer upload_progress;
+		progress_observer download_progress;
 
 		operation(std::shared_ptr<client_state> owner_value,
 			request original_request, std::shared_ptr<stream> stream_value,
@@ -698,7 +786,10 @@ void client_state::send(request request_value, send_handler_t handler)
 			std::shared_ptr<body_source> source_value, body_spec description,
 			fields trailer_values, uint64_t max_buffered_body_value,
 			bool automatic_decompression_value, retry_policy retry_values,
-			redirect_policy redirect_values, send_handler_t completion) :
+			redirect_policy redirect_values,
+			progress_observer upload_progress_value,
+			progress_observer download_progress_value,
+			send_handler_t completion) :
 			owner(std::move(owner_value)),
 			request_value(std::move(original_request)),
 			active_stream(std::move(stream_value)), body(body_value),
@@ -709,7 +800,9 @@ void client_state::send(request request_value, send_handler_t handler)
 			max_buffered_body(max_buffered_body_value),
 			automatic_decompression(automatic_decompression_value),
 			retries(std::move(retry_values)),
-			redirects(std::move(redirect_values))
+			redirects(std::move(redirect_values)),
+			upload_progress(std::move(upload_progress_value)),
+			download_progress(std::move(download_progress_value))
 		{
 		}
 
@@ -741,7 +834,12 @@ void client_state::send(request request_value, send_handler_t handler)
 				if( error ) self->fail(error);
 				else if( written != self->body->size() )
 					self->fail(make_error_code(errc::body_length_mismatch));
-				else self->finish_request();
+				else {
+					self->total = written;
+					notify_progress(self->upload_progress, self->total,
+						self->spec.length());
+					self->finish_request();
+				}
 			});
 		}
 
@@ -788,6 +886,9 @@ void client_state::send(request request_value, send_handler_t handler)
 			writer->write(const_buffer(target.data(), size),
 			[self = std::move(self)](error_code write_error, size_t written) mutable {
 				self->total += written;
+				if( not write_error )
+					notify_progress(self->upload_progress, self->total,
+						self->spec.length());
 				if( write_error ) self->fail(write_error);
 				else self->read_next();
 			});
@@ -850,6 +951,12 @@ void client_state::send(request request_value, send_handler_t handler)
 					return;
 				}
 				body->set_ready();
+				if( self->download_progress )
+				{
+					const auto total = content_length(head).value_or(0);
+					body = make_progress_body_reader(std::move(body), total,
+						self->download_progress);
+				}
 				body = decoded_body(std::move(body), head,
 					self->automatic_decompression);
 				auto result = send_result {
@@ -949,13 +1056,15 @@ void client_state::send(request request_value, send_handler_t handler)
 	// move the trailer declaration out before open() copies it.
 	auto operation_spec = spec;
 	auto owner = shared_from_this();
-	m_impl->open(*head, std::move(spec),
+	m_impl->open(*head, std::move(spec), config,
 	[owner, request_value = std::move(request_value), request_body,
 	 source = std::move(source), spec = std::move(operation_spec),
 	 trailers = std::move(trailers),
 	 max_buffered_body = m_impl->m_config.reply_limits.max_buffered_body,
-	 automatic_decompression = m_impl->m_config.automatic_decompression,
-	 retries = m_impl->m_config.retries, redirects = m_impl->m_config.redirects,
+	 automatic_decompression = config.automatic_decompression,
+	 retries = config.retries, redirects = config.redirects,
+	 upload_progress = std::move(upload_progress),
+	 download_progress = std::move(download_progress),
 	 handler = std::move(handler)]
 	(error_code error, std::shared_ptr<stream> active_stream) mutable
 	{
@@ -983,6 +1092,7 @@ void client_state::send(request request_value, send_handler_t handler)
 			std::move(source), std::move(spec), std::move(trailers),
 			max_buffered_body, automatic_decompression,
 			std::move(retries), std::move(redirects),
+			std::move(upload_progress), std::move(download_progress),
 			std::move(handler))->start();
 	});
 }

@@ -28,7 +28,7 @@ public:
 	virtual void cancel() noexcept = 0;
 };
 
-using transport_listener_t = basic_transport_listener<>;
+using transport_listener = basic_transport_listener<>;
 
 } //namespace riwo::http_exp
 

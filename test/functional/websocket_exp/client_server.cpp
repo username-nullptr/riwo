@@ -247,10 +247,10 @@ void redirect_and_external_client()
 	http::server_config server_config;
 	server_config.protocols.requirement =
 		http::protocol_requirement::require_http1;
-	http::server_t service(std::move(acceptor), server_config);
+	http::server service(std::move(acceptor), server_config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/redirect",
-	[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
 	{
 		http::response_head response;
 		response.status = http::status::temporary_redirect;
@@ -259,7 +259,7 @@ void redirect_and_external_client()
 			riwo::use_awaitable);
 	});
 	service.on_request<http::method::get>("/echo",
-	[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
 	{
 		auto accepted = co_await ws::upgrade(exchange, riwo::use_awaitable);
 		for(;;)
@@ -276,7 +276,7 @@ void redirect_and_external_client()
 	http::client_config client_config;
 	client_config.protocols.requirement =
 		http::protocol_requirement::require_http1;
-	http::client_t http_client(context, client_config);
+	http::client http_client(context, client_config);
 	const auto base = std::format("ws://127.0.0.1:{}",
 		service.acceptor().local_endpoint().port());
 	auto completed = asio::co_spawn(context,
@@ -322,10 +322,10 @@ void cancel_pending_open()
 	http::server_config server_config;
 	server_config.protocols.requirement =
 		http::protocol_requirement::require_http1;
-	http::server_t service(std::move(acceptor), server_config);
+	http::server service(std::move(acceptor), server_config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/stall",
-	[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
 	{
 		asio::steady_timer timer(exchange.get_executor());
 		timer.expires_after(std::chrono::seconds(10));
@@ -438,10 +438,10 @@ void upgrade_rejection_preserved()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config config;
 	config.protocols.requirement = http::protocol_requirement::require_http1;
-	http::server_t service(std::move(acceptor), config);
+	http::server service(std::move(acceptor), config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/deny",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			ws::upgrade_options options;
 			options.request_validator = [](const ws::request_info &) {

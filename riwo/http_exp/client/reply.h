@@ -87,7 +87,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using reply_t = basic_reply<>;
+using reply = basic_reply<>;
 
 } //namespace riwo::http_exp
 

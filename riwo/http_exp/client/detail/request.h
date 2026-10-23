@@ -23,12 +23,13 @@ public:
 	std::shared_ptr<detail::body_source> m_source;
 	std::filesystem::path m_file;
 	http_exp::fields m_trailers;
+	http_exp::request_options m_options;
 	size_t m_retry_attempt = 1;
 	size_t m_redirect_count = 0;
 };
 
 template <typename Source>
-requires body_source_model<std::remove_cvref_t<Source>>
+requires concepts::body_source_model<std::remove_cvref_t<Source>>
 request &request::source(Source &&source_value)
 {
 	auto value = detail::make_body_source(std::forward<Source>(source_value));

@@ -19,7 +19,7 @@ struct basic_negotiated_transport
 	std::vector<std::byte> initial_input {};
 };
 
-using negotiated_transport_t = basic_negotiated_transport<>;
+using negotiated_transport = basic_negotiated_transport<>;
 
 } //namespace riwo::http_exp
 

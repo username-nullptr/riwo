@@ -107,6 +107,18 @@ bool status::allows_body() const noexcept
 		value != reset_content and value != not_modified;
 }
 
+bool operator==(status lhs, status::well_known rhs) noexcept {
+	return lhs.code() == static_cast<uint16_t>(rhs);
+}
+
+bool operator==(status::well_known lhs, status rhs) noexcept {
+	return static_cast<uint16_t>(lhs) == rhs.code();
+}
+
+bool operator==(status lhs, status rhs) noexcept {
+	return lhs.code() == rhs.code();
+}
+
 status::operator unsigned short() const noexcept
 {
 	return code();

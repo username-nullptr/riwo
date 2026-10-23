@@ -44,7 +44,7 @@ private:
 	std::unique_ptr<impl> m_impl;
 };
 
-static_assert(protocol_engine<connection_engine>);
+static_assert(concepts::protocol_engine<connection_engine>);
 
 } //namespace riwo::http_exp::v1
 

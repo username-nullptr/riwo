@@ -54,9 +54,7 @@ public:
 	[[nodiscard]] connection_diagnostics diagnostics() const noexcept;
 
 	template <typename Extension>
-	[[nodiscard]] Extension *extension() noexcept {
-		return static_cast<Extension *>(protocol_extension(typeid(Extension)));
-	}
+	[[nodiscard]] Extension *extension() noexcept;
 
 private:
 	[[nodiscard]] void *protocol_extension(
@@ -66,9 +64,11 @@ private:
 	std::unique_ptr<impl> m_impl;
 };
 
-static_assert(protocol_engine<connection_engine>);
+static_assert(concepts::protocol_engine<connection_engine>);
 
 } //namespace riwo::http_exp::v2
+
+#include <riwo/http_exp/protocol/v2/detail/engine.h>
 
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
 

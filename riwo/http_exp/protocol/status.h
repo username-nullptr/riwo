@@ -96,15 +96,12 @@ public:
 	[[nodiscard]] bool allows_body() const noexcept;
 
 public:
-	friend bool operator==(status lhs, well_known rhs) noexcept {
-		return lhs.code() == static_cast<uint16_t>(rhs);
-	}
-	friend bool operator==(well_known lhs, status rhs) noexcept {
-		return static_cast<uint16_t>(lhs) == rhs.code();
-	}
-	friend bool operator==(status lhs, status rhs) noexcept {
-		return lhs.code() == rhs.code();
-	}
+	friend RIWO_HTTP_EXP_API bool operator==(
+		status lhs, well_known rhs) noexcept;
+	friend RIWO_HTTP_EXP_API bool operator==(
+		well_known lhs, status rhs) noexcept;
+	friend RIWO_HTTP_EXP_API bool operator==(
+		status lhs, status rhs) noexcept;
 	operator uint16_t() const noexcept;
 
 private:

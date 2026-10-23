@@ -30,7 +30,7 @@ public:
 	virtual void cancel() noexcept = 0;
 };
 
-template <body_source_model Source>
+template <concepts::body_source_model Source>
 class body_source_holder final : public body_source
 {
 public:
@@ -72,7 +72,7 @@ public:
 
 	void finish_sync(error_code &error) noexcept override
 	{
-		if constexpr( finalizable_body_source_model<Source> )
+		if constexpr( concepts::finalizable_body_source_model<Source> )
 		{
 			try { m_source.finish(error); }
 			catch(...) { error = exception_error(std::current_exception()); }
@@ -82,7 +82,7 @@ public:
 
 	void finish(rewind_handler_t handler) override
 	{
-		if constexpr( finalizable_body_source_model<Source> )
+		if constexpr( concepts::finalizable_body_source_model<Source> )
 			m_source.finish(std::move(handler));
 		else std::move(handler)(error_code{});
 	}
@@ -96,7 +96,7 @@ private:
 };
 
 template <typename Source>
-requires body_source_model<std::remove_cvref_t<Source>>
+requires concepts::body_source_model<std::remove_cvref_t<Source>>
 [[nodiscard]] std::shared_ptr<body_source> make_body_source(Source &&source)
 {
 	using source_t = std::remove_cvref_t<Source>;

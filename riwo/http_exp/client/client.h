@@ -111,7 +111,7 @@ private:
 	std::shared_ptr<impl> m_impl;
 };
 
-using client_t = basic_client<>;
+using client = basic_client<>;
 
 } //namespace riwo::http_exp
 

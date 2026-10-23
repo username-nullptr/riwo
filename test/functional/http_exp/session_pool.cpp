@@ -545,7 +545,7 @@ void h1_pool_reuses_connection()
 	http::client_config config;
 	config.pool.max_sessions_per_origin = 1;
 	config.pool.idle_timeout = std::chrono::milliseconds(0);
-	http::client_t client(context, config);
+	http::client client(context, config);
 	auto completed = asio::co_spawn(context,
 	[&]() -> riwo::awaitable<void>
 	{
@@ -575,10 +575,10 @@ void h1_server_keep_alive()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	http::server_t service(std::move(acceptor));
+	http::server service(std::move(acceptor));
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/value",
-		[](http::server_exchange_t &exchange) -> riwo::awaitable<void>
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::ok, {}},
 				std::string("value"), riwo::use_awaitable);
@@ -589,7 +589,7 @@ void h1_server_keep_alive()
 	http::client_config config;
 	config.pool.max_sessions_per_origin = 1;
 	config.pool.idle_timeout = std::chrono::milliseconds(5);
-	http::client_t client(context, config);
+	http::client client(context, config);
 	auto completed = asio::co_spawn(context,
 	[&]() -> riwo::awaitable<void>
 	{

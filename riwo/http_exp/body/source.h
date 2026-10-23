@@ -9,6 +9,9 @@
 namespace riwo::http_exp
 {
 
+namespace concepts
+{
+
 template <typename Source>
 concept body_source_model = requires(
 	Source &source,
@@ -33,6 +36,8 @@ concept finalizable_body_source_model = requires(
 	{ source.finish(std::move(finish_handler)) } -> std::same_as<void>;
 };
 
+} //namespace concepts
+
 } //namespace riwo::http_exp
 
 #include <riwo/http_exp/body/file.h>
@@ -41,9 +46,9 @@ concept finalizable_body_source_model = requires(
 namespace riwo::http_exp
 {
 
-static_assert(body_source_model<memory_body_source>);
-static_assert(body_source_model<file_body_source>);
-static_assert(finalizable_body_source_model<file_body_source>);
+static_assert(concepts::body_source_model<memory_body_source>);
+static_assert(concepts::body_source_model<file_body_source>);
+static_assert(concepts::finalizable_body_source_model<file_body_source>);
 
 } //namespace riwo::http_exp
 

@@ -173,7 +173,7 @@ public:
 	virtual void finish(error_code&) = 0;
 };
 
-template <input_file_stream Stream>
+template <concepts::input_file_stream Stream>
 class stream_input_backend final : public input_file_backend
 {
 public:
@@ -471,7 +471,7 @@ public:
 	virtual void finish(error_code&) = 0;
 };
 
-template <output_file_stream Stream>
+template <concepts::output_file_stream Stream>
 class stream_output_backend final : public output_file_backend
 {
 public:

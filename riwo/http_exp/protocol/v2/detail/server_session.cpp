@@ -1358,7 +1358,7 @@ void server_stream_impl::open_duplex(optional<response_head> response,
 }
 
 bool server_stream_impl::reusable() const noexcept {
-	// server_exchange_t destruction means the application handler is done, not
+	// server_exchange destruction means the application handler is done, not
 	// that nghttp2 has already emitted the final DATA/trailer frame.  Once both
 	// application directions are complete, keep the stream alive so the Session
 	// write pump can finish it instead of turning every successful response into

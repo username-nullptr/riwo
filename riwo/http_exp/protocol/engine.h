@@ -25,6 +25,9 @@ struct produce_result
 	bool has_more = false;
 };
 
+namespace concepts
+{
+
 template<class Engine>
 concept protocol_engine = requires(Engine &engine, const_buffer input,
 	mutable_buffer output, protocol_action_t action,
@@ -41,6 +44,8 @@ concept protocol_engine = requires(Engine &engine, const_buffer input,
 		std::same_as<sys_expected<produce_result>>;
 	{ engine.wants_write() } noexcept -> std::same_as<bool>;
 };
+
+} //namespace concepts
 
 } //namespace riwo::http_exp
 
