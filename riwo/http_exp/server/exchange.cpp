@@ -21,10 +21,10 @@ public:
 		m_path_parameters(std::move(path_values)),
 		m_query_parameters(std::move(query_values)),
 		m_sessions(std::move(manager)), m_resource_root(std::move(root)),
-		m_compression_enabled(compression_enabled),
-		m_compression_minimum(compression_minimum),
 		m_request_body(m_stream ? m_stream->inbound_body() : make_body_reader_state()),
-		m_response_body(m_stream ? m_stream->outbound_body() : make_body_writer_state())
+		m_response_body(m_stream ? m_stream->outbound_body() : make_body_writer_state()),
+		m_compression_enabled(compression_enabled),
+		m_compression_minimum(compression_minimum)
 	{
 		if( not m_request_body )
 			m_request_body = make_body_reader_state();

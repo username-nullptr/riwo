@@ -54,13 +54,15 @@ namespace
 	return whole == '1' ? 1. : fraction / divisor;
 }
 
+#if RIWO_HTTP_EXP_ZLIB_SUPPORT
 [[nodiscard]] error_code codec_error() noexcept {
 	return make_system_error_code(std::errc::illegal_byte_sequence);
 }
-
+#else
 [[nodiscard]] error_code unsupported_error() noexcept {
 	return make_system_error_code(std::errc::operation_not_supported);
 }
+#endif
 
 } //namespace
 

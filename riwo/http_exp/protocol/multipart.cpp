@@ -107,7 +107,10 @@ multipart_form::multipart_form(std::string boundary) :
 
 multipart_form &multipart_form::add_field(std::string name, std::string value)
 {
-	return add_part({.name = std::move(name), .data = std::move(value)});
+	multipart_part part;
+	part.name = std::move(name);
+	part.data = std::move(value);
+	return add_part(std::move(part));
 }
 
 multipart_form &multipart_form::add_file(std::string name,

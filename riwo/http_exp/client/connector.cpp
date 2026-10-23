@@ -253,6 +253,7 @@ struct proxy_target
 	};
 }
 
+#if RIWO_OPENSSL_SUPPORT
 [[nodiscard]] std::string proxy_connect_request(const session_key &key)
 {
 	const auto authority = origin_authority(key);
@@ -262,6 +263,7 @@ struct proxy_target
 		result += "Proxy-Authorization: " + *key.proxy.authorization + "\r\n";
 	return result + "\r\n";
 }
+#endif
 
 [[nodiscard]] error_code socks5_connect_sync(asio::ip::tcp::socket &socket,
 	const session_key &key) noexcept
