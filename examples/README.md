@@ -106,15 +106,21 @@ application; `resource_root` is not a sandbox.
 
 ## Experimental HTTP
 
-Requires `RIWO_BUILD_HTTP_EXP=ON`. The same examples exercise HTTP/1.x and,
-when `RIWO_HTTP_EXP_HTTP2_SUPPORT=1`, cleartext HTTP/2 prior knowledge without
-changing their request, response, body, or routing code.
+Requires `RIWO_BUILD_HTTP_EXP=ON`. These examples intentionally cover more
+ground than the stable HTTP programs. The high-level client and server use the
+same routing, request, response, body, cookie, session, and file code for
+HTTP/1.x and, when `RIWO_HTTP_EXP_HTTP2_SUPPORT=1`, cleartext HTTP/2 prior
+knowledge. Lower-level examples show the public protocol engine and transport
+extension without going through the stable HTTP implementation.
 
 | Program | Demonstrates | Arguments / default |
 | --- | --- | --- |
-| [`server`](http_exp/server.cpp) | Protocol-neutral routes, echo, streaming response, trailers | `[port] [auto\|http1\|http2]`; 8084, auto |
-| [`client`](http_exp/client.cpp) | Buffered GET/POST, streamed body/trailers, selected protocol | `[base-url] [auto\|http1\|http2]`; local server, auto |
-| [`protocol`](http_exp/protocol.cpp) | Socket-free manual HTTP/1 engine loop and incremental output | none |
+| [`server_file`](http_exp/server_file.cpp) | File response, ETag and Range handling, streamed upload to disk | `<download-file> [port] [upload-file] [auto\|http1\|http2]`; 8083 |
+| [`client_file`](http_exp/client_file.cpp) | File upload/download, progress, conditional GET, Range GET | `<upload-file> [download-file] [base-url] [auto\|http1\|http2]`; local server |
+| [`server`](http_exp/server.cpp) | Route parameters, duplicate query values, middleware, application sessions, Cookie redirect, buffered/streaming bodies, trailers, optional gzip | `[port] [auto\|http1\|http2]`; 8084, auto |
+| [`client`](http_exp/client.cpp) | Every server workflow through one protocol-neutral client, including Cookie persistence and redirect following | `[base-url] [auto\|http1\|http2]`; local server, auto |
+| [`protocol`](http_exp/protocol.cpp) | Socket-free, bidirectional HTTP/1 engine loop with chunked bodies and request/response trailers | none |
+| [`transport`](http_exp/transport.cpp) | User-defined byte stream and connector injected into the high-level client | none; no socket is opened |
 
 Run the pair in separate terminals:
 
@@ -129,6 +135,25 @@ For cleartext HTTP/2, select it explicitly on both sides:
 ./build/output/examples/http_exp/server 8084 http2
 ./build/output/examples/http_exp/client http://127.0.0.1:8084 http2
 ```
+
+Exercise the file-specific API in a separate pair. The server exposes the first
+file for download and saves uploads to the third argument:
+
+```sh
+./build/output/examples/http_exp/server_file README.md 8083 \
+  /tmp/riwo-http-exp-uploaded.md auto
+./build/output/examples/http_exp/client_file README.md \
+  /tmp/riwo-http-exp-downloaded.md http://127.0.0.1:8083 auto
+```
+
+`client_file` also performs an `If-None-Match` request and a `Range` request,
+so the output demonstrates `304` and `206` handling in addition to full file
+transfer. Run `transport` without a server or arguments; it injects an
+in-memory scripted byte stream into `http_exp::client`.
+
+The file pair serves and writes only command-line configured paths. If you
+extend those routes to use request-derived filenames, normalize and constrain
+the paths before opening them; `resource_root` is not a sandbox.
 
 `http2` is accepted only when nghttp2 was detected at configure time. `auto`
 uses normal scheme policy; for a plain `http://` client URL that means HTTP/1.1.
