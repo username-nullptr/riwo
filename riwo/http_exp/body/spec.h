@@ -20,6 +20,11 @@ public:
 
 	enum class mode { empty, known_length, streaming, head };
 
+	body_spec(const body_spec &) = default;
+	body_spec &operator=(const body_spec &) = default;
+	body_spec(body_spec &&other) noexcept;
+	body_spec &operator=(body_spec &&other) noexcept;
+
 	[[nodiscard]] static body_spec empty();
 	[[nodiscard]] static body_spec known(uint64_t size, trailer_spec trailers = {});
 	[[nodiscard]] static body_spec streaming(trailer_spec trailers = {});

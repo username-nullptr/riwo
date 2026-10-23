@@ -80,9 +80,20 @@ file_body_source::file_body_source(std::filesystem::path path,
 
 file_body_source::~file_body_source() = default;
 
-file_body_source::file_body_source(file_body_source &&) noexcept = default;
+file_body_source::file_body_source(file_body_source &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(nullptr);
+}
 
-file_body_source &file_body_source::operator=(file_body_source &&) noexcept = default;
+file_body_source &file_body_source::operator=(file_body_source &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(nullptr);
+	return *this;
+}
 
 void file_body_source::read_some
 (mutable_buffer buffer, asio::any_completion_handler<void(error_code,size_t)> handler)
@@ -101,6 +112,11 @@ size_t file_body_source::read_some(mutable_buffer buffer,
 		error = aborted_error();
 		return 0;
 	}
+	if( not m_impl->m_backend )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return 0;
+	}
 	try {
 		return m_impl->m_backend->read(buffer, error);
 	}
@@ -114,6 +130,11 @@ void file_body_source::rewind(
 	asio::any_completion_handler<void(error_code)> handler)
 {
 	error_code error;
+	if( not m_impl->m_backend )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return std::move(handler)(error);
+	}
 	try {
 		m_impl->m_backend->rewind(error);
 		if( not error )
@@ -128,6 +149,11 @@ void file_body_source::rewind(
 void file_body_source::finish(error_code &error) noexcept
 {
 	error.clear();
+	if( not m_impl->m_backend )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return ;
+	}
 	try { m_impl->m_backend->finish(error); }
 	catch(...) {
 		error = exception_error(std::current_exception());
@@ -144,6 +170,11 @@ void file_body_source::finish(
 
 void file_body_source::cancel() noexcept
 {
+	if( not m_impl->m_backend )
+	{
+		m_impl->m_cancelled = true;
+		return ;
+	}
 	error_code ignored;
 	try { m_impl->m_backend->finish(ignored); }
 	catch(...) {
@@ -153,12 +184,12 @@ void file_body_source::cancel() noexcept
 
 optional<uint64_t> file_body_source::size() const noexcept
 {
-	return m_impl->m_backend->size();
+	return m_impl->m_backend ? m_impl->m_backend->size() : optional<uint64_t>{};
 }
 
 bool file_body_source::replayable() const noexcept
 {
-	return m_impl->m_backend->replayable();
+	return m_impl->m_backend and m_impl->m_backend->replayable();
 }
 
 } //namespace riwo::http_exp

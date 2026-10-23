@@ -23,6 +23,11 @@ class fields;
 class RIWO_HTTP_EXP_API field_range
 {
 public:
+	field_range(const field_range &) = default;
+	field_range &operator=(const field_range &) = default;
+	field_range(field_range &&other) noexcept;
+	field_range &operator=(field_range &&other) noexcept;
+
 	class RIWO_HTTP_EXP_API const_iterator
 	{
 	public:

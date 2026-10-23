@@ -541,6 +541,31 @@ public:
 };
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+basic_server<Exec,ServiceExec>::basic_server(basic_server &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	auto executor = m_impl->m_acceptor_wrap.get_executor();
+	other.m_impl = std::make_shared<impl>(
+		acceptor_wrap_t(acceptor_t(std::move(executor))),
+		m_impl->m_service_executor, config_t{});
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::operator=(basic_server &&other) noexcept
+	-> basic_server&
+{
+	if( this == &other )
+		return *this;
+	auto executor = other.m_impl->m_acceptor_wrap.get_executor();
+	auto replacement = std::make_shared<impl>(
+		acceptor_wrap_t(acceptor_t(std::move(executor))),
+		other.m_impl->m_service_executor, config_t{});
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 basic_server<Exec,ServiceExec>::basic_server(config_t config)
 	requires (
 		core_concepts::match_sched<io_executor_t,executor_t> and

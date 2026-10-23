@@ -244,6 +244,26 @@ void byte_stream_erasure()
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_supported));
 
+	auto moved_stream = std::move(stream);
+	RIWO_TEST_CHECK(stream.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK(!stream.is_open());
+	RIWO_TEST_CHECK(moved_stream.is_open());
+	bool empty_read_completed = false;
+	stream.read_some(riwo::buffer(input),
+	[&](riwo::error_code empty_error, size_t size) {
+		RIWO_TEST_CHECK_EQ(empty_error,
+			http::make_error_code(http::errc::operation_not_permitted));
+		RIWO_TEST_CHECK_EQ(size, 0U);
+		empty_read_completed = true;
+	});
+	RIWO_TEST_CHECK(empty_read_completed);
+	auto assigned_stream = http::make_byte_stream(memory_stream{
+		context.get_executor(), std::make_shared<memory_state>()});
+	assigned_stream = std::move(moved_stream);
+	RIWO_TEST_CHECK(moved_stream.get_executor() == context.get_executor());
+	RIWO_TEST_CHECK(!moved_stream.is_open());
+	RIWO_TEST_CHECK(assigned_stream.is_open());
+
 	http::transport_metadata metadata;
 	metadata.attributes.emplace("http.absolute_form", true);
 	RIWO_TEST_CHECK_EQ(metadata.attributes.at(

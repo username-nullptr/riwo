@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include "client.h"
-#include "detail/connector.h"
-#include "detail/session_pool.h"
+#include <riwo/http_exp/client/client.h>
+#include "connector.h"
+#include "session_pool.h"
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <riwo/http_exp/protocol/v1/detail/session.h>

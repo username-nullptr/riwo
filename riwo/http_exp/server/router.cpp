@@ -96,8 +96,17 @@ route_pattern::route_pattern(std::string pattern) :
 route_pattern::~route_pattern() = default;
 route_pattern::route_pattern(const route_pattern&) = default;
 route_pattern &route_pattern::operator=(const route_pattern&) = default;
-route_pattern::route_pattern(route_pattern&&) noexcept = default;
-route_pattern &route_pattern::operator=(route_pattern&&) noexcept = default;
+route_pattern::route_pattern(route_pattern &&other) noexcept :
+	m_impl(other.m_impl)
+{
+}
+
+route_pattern &route_pattern::operator=(route_pattern &&other) noexcept
+{
+	if( this != &other )
+		m_impl = other.m_impl;
+	return *this;
+}
 
 std::string_view route_pattern::text() const noexcept { return m_impl->text; }
 bool route_pattern::exact() const noexcept { return m_impl->exact; }

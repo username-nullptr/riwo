@@ -134,6 +134,15 @@ field_range::field_range(const std::vector<field> &values, std::string name) :
 {
 }
 
+field_range::field_range(field_range &&other) noexcept : m_impl(other.m_impl) {}
+
+field_range &field_range::operator=(field_range &&other) noexcept
+{
+	if( this != &other )
+		m_impl = other.m_impl;
+	return *this;
+}
+
 field_range::const_iterator field_range::begin() const noexcept {
 	return {m_impl->m_values->begin(), m_impl->m_values->end(), m_impl->m_name};
 }
@@ -171,8 +180,19 @@ fields &fields::operator=(const fields &other)
 	return *this;
 }
 
-fields::fields(fields &&other) noexcept = default;
-fields &fields::operator=(fields &&other) noexcept = default;
+fields::fields(fields &&other) noexcept : m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>();
+}
+
+fields &fields::operator=(fields &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>();
+	return *this;
+}
 
 fields &fields::add(std::string name, riwo::value value)
 {

@@ -459,11 +459,73 @@ void h2_pause_resume()
 }
 #endif
 
+void moved_from_protocol_objects_are_safe()
+{
+	http::v1::request_parser request_parser;
+	auto moved_request_parser = std::move(request_parser);
+	const std::string request_wire =
+		"GET / HTTP/1.1\r\nHost: example.test\r\n\r\n";
+	auto request = request_parser.ingest(riwo::buffer(request_wire));
+	RIWO_TEST_CHECK(request.has_value());
+	RIWO_TEST_CHECK(request->head.has_value());
+	RIWO_TEST_CHECK(!moved_request_parser.complete());
+	http::v1::request_parser assigned_request_parser;
+	assigned_request_parser = std::move(moved_request_parser);
+	RIWO_TEST_CHECK(!moved_request_parser.complete());
+
+	http::v1::response_parser response_parser;
+	auto moved_response_parser = std::move(response_parser);
+	const std::string response_wire = "HTTP/1.1 204 No Content\r\n\r\n";
+	auto response = response_parser.ingest(riwo::buffer(response_wire));
+	RIWO_TEST_CHECK(response.has_value());
+	RIWO_TEST_CHECK(response->head.has_value());
+	RIWO_TEST_CHECK(!moved_response_parser.complete());
+
+	http::v1::chunk_decoder chunks;
+	auto moved_chunks = std::move(chunks);
+	const std::string chunk_wire = "0\r\n\r\n";
+	auto chunk = chunks.ingest(riwo::buffer(chunk_wire));
+	RIWO_TEST_CHECK(chunk.has_value());
+	RIWO_TEST_CHECK(chunk->message_end);
+	RIWO_TEST_CHECK(!moved_chunks.complete());
+
+	http::v1::connection_engine h1({
+		.role = http::protocol_role::server,
+		.version = http::protocol::v1_1
+	});
+	auto moved_h1 = std::move(h1);
+	RIWO_TEST_CHECK(h1.selected_protocol() == http::protocol::v1_1);
+	RIWO_TEST_CHECK(!h1.wants_write());
+	RIWO_TEST_CHECK(moved_h1.selected_protocol() == http::protocol::v1_1);
+	http::v1::connection_engine assigned_h1({
+		.role = http::protocol_role::client,
+		.version = http::protocol::v1_1
+	});
+	assigned_h1 = std::move(moved_h1);
+	RIWO_TEST_CHECK(moved_h1.selected_protocol() == http::protocol::v1_1);
+	RIWO_TEST_CHECK(assigned_h1.selected_protocol() == http::protocol::v1_1);
+
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	http::v2::connection_engine h2({.role = http::protocol_role::server});
+	auto moved_h2 = std::move(h2);
+	RIWO_TEST_CHECK(h2.selected_protocol() == http::protocol::v2);
+	(void)h2.wants_write();
+	RIWO_TEST_CHECK(moved_h2.selected_protocol() == http::protocol::v2);
+	http::v2::connection_engine assigned_h2({
+		.role = http::protocol_role::client});
+	assigned_h2 = std::move(moved_h2);
+	RIWO_TEST_CHECK(moved_h2.selected_protocol() == http::protocol::v2);
+	RIWO_TEST_CHECK(assigned_h2.selected_protocol() == http::protocol::v2);
+#endif
+}
+
 } //namespace
 
 int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
+		{"moved-from protocol objects are safe",
+			moved_from_protocol_objects_are_safe},
 		{"HTTP/1 codec fragmentation", h1_codec_fragmentation},
 		{"HTTP/1 manual engine loop", h1_manual_engine_loop},
 		{"HTTP/1 pause resume and EOF", h1_pause_resume_and_eof},

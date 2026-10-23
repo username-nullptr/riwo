@@ -97,6 +97,8 @@ basic_duplex_channel<Exec>::basic_duplex_channel(
 	basic_duplex_channel &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
+	other.m_impl = std::make_shared<impl>(m_impl->m_executor,
+		std::shared_ptr<detail::duplex_state>{});
 }
 
 template <core_concepts::exec Exec>
@@ -105,9 +107,12 @@ auto basic_duplex_channel<Exec>::operator=(basic_duplex_channel &&other) noexcep
 {
 	if( this == &other )
 		return *this;
+	auto replacement = std::make_shared<impl>(other.m_impl->m_executor,
+		std::shared_ptr<detail::duplex_state>{});
 	if( m_impl and m_impl->m_state and m_impl->m_state->is_open() )
 		m_impl->m_state->cancel();
 	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
 	return *this;
 }
 

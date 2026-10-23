@@ -182,8 +182,20 @@ public:
 gzip_encoder::gzip_encoder(int level) noexcept :
 	m_impl(std::make_unique<impl>(level)) {}
 gzip_encoder::~gzip_encoder() = default;
-gzip_encoder::gzip_encoder(gzip_encoder&&) noexcept = default;
-gzip_encoder &gzip_encoder::operator=(gzip_encoder&&) noexcept = default;
+gzip_encoder::gzip_encoder(gzip_encoder &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(-1);
+}
+
+gzip_encoder &gzip_encoder::operator=(gzip_encoder &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(-1);
+	return *this;
+}
 
 sys_expected<std::string> gzip_encoder::append(std::string_view data,
 	bool finish) noexcept
@@ -267,8 +279,20 @@ public:
 gzip_decoder::gzip_decoder(size_t max_output_size) noexcept :
 	m_impl(std::make_unique<impl>(max_output_size)) {}
 gzip_decoder::~gzip_decoder() = default;
-gzip_decoder::gzip_decoder(gzip_decoder&&) noexcept = default;
-gzip_decoder &gzip_decoder::operator=(gzip_decoder&&) noexcept = default;
+gzip_decoder::gzip_decoder(gzip_decoder &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(default_max_decoded_body_size_v);
+}
+
+gzip_decoder &gzip_decoder::operator=(gzip_decoder &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(default_max_decoded_body_size_v);
+	return *this;
+}
 
 sys_expected<std::string> gzip_decoder::append(std::string_view data,
 	bool finish) noexcept

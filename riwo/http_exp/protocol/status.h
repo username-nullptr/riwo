@@ -90,6 +90,10 @@ public:
 public:
 	status(well_known value) noexcept;
 	explicit status(uint16_t code);
+	status(const status &) = default;
+	status &operator=(const status &) = default;
+	status(status &&other) noexcept;
+	status &operator=(status &&other) noexcept;
 
 	[[nodiscard]] uint16_t code() const noexcept;
 	[[nodiscard]] std::string_view text() const noexcept;

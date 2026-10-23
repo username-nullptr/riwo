@@ -135,8 +135,20 @@ connection_engine::connection_engine(connection_config config) :
 		throw std::invalid_argument("v1::connection_engine output limit is zero");
 }
 
-connection_engine::connection_engine(connection_engine &&) noexcept = default;
-connection_engine &connection_engine::operator=(connection_engine &&) noexcept = default;
+connection_engine::connection_engine(connection_engine &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(connection_config{});
+}
+
+connection_engine &connection_engine::operator=(connection_engine &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(connection_config{});
+	return *this;
+}
 connection_engine::~connection_engine() = default;
 
 protocol connection_engine::selected_protocol() const noexcept {

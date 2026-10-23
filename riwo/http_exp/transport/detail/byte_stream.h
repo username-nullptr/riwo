@@ -115,16 +115,27 @@ template<core_concepts::exec Exec>
 template<concepts::byte_stream_model Stream>
 basic_byte_stream<Exec>::basic_byte_stream(Stream stream)
 	requires std::convertible_to<typename Stream::executor_type,executor_t> :
+	m_executor(stream.get_executor()),
 	m_impl(std::make_unique<model<Stream>>(std::move(stream)))
 {
 }
 
 template<core_concepts::exec Exec>
-basic_byte_stream<Exec>::basic_byte_stream(basic_byte_stream &&) noexcept = default;
+basic_byte_stream<Exec>::basic_byte_stream(basic_byte_stream &&other) noexcept :
+	m_executor(other.m_executor), m_impl(std::move(other.m_impl))
+{
+}
 
 template<core_concepts::exec Exec>
 basic_byte_stream<Exec> &basic_byte_stream<Exec>::operator=(
-	basic_byte_stream &&) noexcept = default;
+	basic_byte_stream &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_executor = other.m_executor;
+	m_impl = std::move(other.m_impl);
+	return *this;
+}
 
 template<core_concepts::exec Exec>
 basic_byte_stream<Exec>::~basic_byte_stream() = default;
@@ -132,8 +143,8 @@ basic_byte_stream<Exec>::~basic_byte_stream() = default;
 template<core_concepts::exec Exec>
 auto basic_byte_stream<Exec>::get_executor() const noexcept -> executor_t
 {
-	if( m_impl )
-		return m_impl->get_executor();
+	if( m_executor )
+		return *m_executor;
 	std::terminate();
 }
 

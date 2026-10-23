@@ -32,8 +32,8 @@ public:
 	using exchange_t = basic_client_exchange<executor_t>;
 	using reply_t = basic_reply<executor_t>;
 
-	basic_client(basic_client &&) noexcept = default;
-	basic_client &operator=(basic_client &&) noexcept = default;
+	basic_client(basic_client &&other) noexcept;
+	basic_client &operator=(basic_client &&other) noexcept;
 
 	explicit basic_client(config_t config = {})
 		requires core_concepts::match_sched<io_executor_t,executor_t>;

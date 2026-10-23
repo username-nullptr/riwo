@@ -353,15 +353,32 @@ void built_in_sources()
 	}
 	{
 		http::file_body_source file(path);
-		RIWO_TEST_CHECK_EQ(file.size().value(), 9U);
+		auto moved_file = std::move(file);
+		RIWO_TEST_CHECK(!file.size().has_value());
+		RIWO_TEST_CHECK(!file.replayable());
 		std::array<char,16> file_data{};
-		file.read_some(riwo::buffer(file_data),
+		RIWO_TEST_CHECK_EQ(file.read_some(riwo::buffer(file_data), error), 0U);
+		RIWO_TEST_CHECK_EQ(error,
+			http::make_error_code(http::errc::operation_not_permitted));
+		RIWO_TEST_CHECK_EQ(moved_file.size().value(), 9U);
+		moved_file.read_some(riwo::buffer(file_data),
 		[&](riwo::error_code value, size_t count) {
 			error = value;
 			size = count;
 		});
 		RIWO_TEST_CHECK(!error);
 		RIWO_TEST_CHECK_EQ(std::string_view(file_data.data(), size), "file-data");
+	}
+	{
+		http::file_response_source response(path, http::request_head{});
+		auto moved_response = std::move(response);
+		RIWO_TEST_CHECK(!response.has_body());
+		RIWO_TEST_CHECK_EQ(response.size().value(), 0U);
+		RIWO_TEST_CHECK_EQ(moved_response.size().value(), 9U);
+		std::array<char,4> file_data {};
+		RIWO_TEST_CHECK_EQ(response.read_some(
+			riwo::buffer(file_data), error), 0U);
+		RIWO_TEST_CHECK(!error);
 	}
 	{
 		std::ifstream input(path, std::ios::binary);
@@ -461,16 +478,22 @@ void file_sinks()
 		output.seekp(2);
 		{
 			http::file_sink sink(http::borrowed_file(output));
-			RIWO_TEST_CHECK(sink.random_access());
+			auto moved_sink = std::move(sink);
+			RIWO_TEST_CHECK(!sink.random_access());
 			RIWO_TEST_CHECK_EQ(sink.write(
+				riwo::buffer(std::string_view("ignored")), error), 0U);
+			RIWO_TEST_CHECK_EQ(error,
+				http::make_error_code(http::errc::operation_not_permitted));
+			RIWO_TEST_CHECK(moved_sink.random_access());
+			RIWO_TEST_CHECK_EQ(moved_sink.write(
 				riwo::buffer(std::string_view("abc")), error), 3U);
 			RIWO_TEST_CHECK(!error);
-			RIWO_TEST_CHECK_EQ(sink.write_at(6,
+			RIWO_TEST_CHECK_EQ(moved_sink.write_at(6,
 				riwo::buffer(std::string_view("XY")), error), 2U);
 			RIWO_TEST_CHECK(!error);
-			sink.finish(error);
+			moved_sink.finish(error);
 			RIWO_TEST_CHECK(!error);
-			RIWO_TEST_CHECK_EQ(sink.write_at(0,
+			RIWO_TEST_CHECK_EQ(moved_sink.write_at(0,
 				riwo::buffer(std::string_view("!")), error), 0U);
 			RIWO_TEST_CHECK_EQ(error,
 				http::make_error_code(http::errc::operation_not_permitted));

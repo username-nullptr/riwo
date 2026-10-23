@@ -53,8 +53,8 @@ public:
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_reply();
-	basic_reply(basic_reply &&) noexcept = default;
-	basic_reply &operator=(basic_reply &&) noexcept = default;
+	basic_reply(basic_reply &&other) noexcept;
+	basic_reply &operator=(basic_reply &&other) noexcept;
 
 	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;

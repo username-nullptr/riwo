@@ -113,6 +113,15 @@ method::method(std::string token, method_properties properties) :
 {
 }
 
+method::method(method &&other) noexcept : m_impl(other.m_impl) {}
+
+method &method::operator=(method &&other) noexcept
+{
+	if( this != &other )
+		m_impl = other.m_impl;
+	return *this;
+}
+
 std::string_view method::text() const noexcept {
 	return m_impl->m_token;
 }

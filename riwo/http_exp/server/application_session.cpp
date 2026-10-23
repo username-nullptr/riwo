@@ -182,9 +182,20 @@ application_session_manager::application_session_manager(
 
 application_session_manager::~application_session_manager() = default;
 application_session_manager::application_session_manager(
-	application_session_manager&&) noexcept = default;
+	application_session_manager &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(application_session_config{});
+}
 application_session_manager &application_session_manager::operator=(
-	application_session_manager&&) noexcept = default;
+	application_session_manager &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(application_session_config{});
+	return *this;
+}
 
 application_session_config application_session_manager::config() const
 {

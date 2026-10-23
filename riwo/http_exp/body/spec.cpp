@@ -55,6 +55,15 @@ body_spec::body_spec(mode type, optional<uint64_t> length,
 {
 }
 
+body_spec::body_spec(body_spec &&other) noexcept : m_impl(other.m_impl) {}
+
+body_spec &body_spec::operator=(body_spec &&other) noexcept
+{
+	if( this != &other )
+		m_impl = other.m_impl;
+	return *this;
+}
+
 body_spec body_spec::empty() {
 	return {mode::empty, nullopt, {}};
 }

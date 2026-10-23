@@ -116,11 +116,24 @@ basic_acceptor_wrap<Exec>::basic_acceptor_wrap(Acceptor acceptor)
 
 template <core_concepts::exec Exec>
 basic_acceptor_wrap<Exec>::basic_acceptor_wrap(
-	basic_acceptor_wrap &&) noexcept = default;
+	basic_acceptor_wrap &&other) noexcept : m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<model<tcp_acceptor>>(
+		tcp_acceptor(acceptor_t(m_impl->get_executor())));
+}
 
 template <core_concepts::exec Exec>
 basic_acceptor_wrap<Exec> &basic_acceptor_wrap<Exec>::operator=(
-	basic_acceptor_wrap &&) noexcept = default;
+	basic_acceptor_wrap &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	auto replacement = std::make_unique<model<tcp_acceptor>>(
+		tcp_acceptor(acceptor_t(other.m_impl->get_executor())));
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
+	return *this;
+}
 
 template <core_concepts::exec Exec>
 basic_acceptor_wrap<Exec>::~basic_acceptor_wrap() = default;

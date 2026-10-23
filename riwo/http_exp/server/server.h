@@ -54,8 +54,8 @@ public:
 	using service_error_handler_t =
 		std::function<bool(context_t&, const std::exception&)>;
 
-	basic_server(basic_server &&) noexcept = default;
-	basic_server &operator=(basic_server &&) noexcept = default;
+	basic_server(basic_server &&other) noexcept;
+	basic_server &operator=(basic_server &&other) noexcept;
 
 	explicit basic_server(config_t config = {})
 		requires (

@@ -144,8 +144,19 @@ public:
 
 request_parser::request_parser(message_limits limits) :
 	m_impl(std::make_unique<impl>(std::move(limits))) {}
-request_parser::request_parser(request_parser &&) noexcept = default;
-request_parser &request_parser::operator=(request_parser &&) noexcept = default;
+request_parser::request_parser(request_parser &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(message_limits{});
+}
+request_parser &request_parser::operator=(request_parser &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(message_limits{});
+	return *this;
+}
 request_parser::~request_parser() = default;
 
 sys_expected<head_parse_result<parsed_request_head>>
@@ -223,8 +234,19 @@ public:
 
 response_parser::response_parser(message_limits limits, bool head_request) :
 	m_impl(std::make_unique<impl>(std::move(limits), head_request)) {}
-response_parser::response_parser(response_parser &&) noexcept = default;
-response_parser &response_parser::operator=(response_parser &&) noexcept = default;
+response_parser::response_parser(response_parser &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(message_limits{}, false);
+}
+response_parser &response_parser::operator=(response_parser &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(message_limits{}, false);
+	return *this;
+}
 response_parser::~response_parser() = default;
 
 sys_expected<head_parse_result<parsed_response_head>>
@@ -292,8 +314,19 @@ public:
 
 chunk_decoder::chunk_decoder(message_limits limits) :
 	m_impl(std::make_unique<impl>(std::move(limits))) {}
-chunk_decoder::chunk_decoder(chunk_decoder &&) noexcept = default;
-chunk_decoder &chunk_decoder::operator=(chunk_decoder &&) noexcept = default;
+chunk_decoder::chunk_decoder(chunk_decoder &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(message_limits{});
+}
+chunk_decoder &chunk_decoder::operator=(chunk_decoder &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(message_limits{});
+	return *this;
+}
 chunk_decoder::~chunk_decoder() = default;
 
 sys_expected<chunk_decode_result> chunk_decoder::ingest(

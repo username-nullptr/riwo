@@ -7,13 +7,9 @@
 #include <riwo/http_exp/body/spec.h>
 #include <riwo/http_exp/protocol/fields.h>
 
-namespace riwo::http_exp::detail
-{
+namespace riwo::http_exp { namespace detail  {
 class body_writer_state;
-}
-
-namespace riwo::http_exp
-{
+} //namespace detail
 
 template <core_concepts::exec Exec = asio::any_io_executor>
 class RIWO_HTTP_EXP_TAPI basic_body_writer
@@ -28,31 +24,26 @@ public:
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	explicit basic_body_writer(Exec0 &&executor)
+	explicit basic_body_writer(Exec0 &&exec)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	explicit basic_body_writer(
-		std::shared_ptr<detail::body_writer_state> state)
+	explicit basic_body_writer(std::shared_ptr<detail::body_writer_state> state)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	basic_body_writer(Exec0 &&executor,
-		std::shared_ptr<detail::body_writer_state> state)
+	basic_body_writer(Exec0 &&exec, std::shared_ptr<detail::body_writer_state> state)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_writer();
-
 	[[nodiscard]] executor_t get_executor() const noexcept;
 
 	// Asynchronous writes borrow the buffer until completion. Detached writes
 	// make an owned copy because the caller has no completion lifetime barrier.
-	template <typename Token = use_sync_t>
-	[[nodiscard]] auto write(const_buffer buffer, Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code,size_t>;
+	template <core_concepts::tf_opt_token<error_code,size_t> Token = use_sync_t>
+	[[nodiscard]] auto write(const_buffer buffer, Token &&token = {});
 
-	template <typename Token = use_sync_t>
-	auto finish(fields trailers = {}, Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code>;
+	template <core_concepts::tf_opt_token<error_code> Token = use_sync_t>
+	auto finish(fields trailers = {}, Token &&token = {});
 
 	void cancel() noexcept;
 	// Releases this facade without cancelling the shared body state. Used when

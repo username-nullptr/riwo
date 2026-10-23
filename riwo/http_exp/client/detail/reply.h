@@ -37,6 +37,30 @@ public:
 };
 
 template <core_concepts::exec Exec>
+basic_reply<Exec>::basic_reply(basic_reply &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_shared<impl>(m_impl->m_executor,
+		protocol::v1_1, protocol::v1_1, reply_head{},
+		detail::make_body_reader_state(), std::vector<std::byte>{},
+		std::shared_ptr<void>{}, 8U * 1024U * 1024U);
+}
+
+template <core_concepts::exec Exec>
+auto basic_reply<Exec>::operator=(basic_reply &&other) noexcept -> basic_reply&
+{
+	if( this == &other )
+		return *this;
+	auto replacement = std::make_shared<impl>(other.m_impl->m_executor,
+		protocol::v1_1, protocol::v1_1, reply_head{},
+		detail::make_body_reader_state(), std::vector<std::byte>{},
+		std::shared_ptr<void>{}, 8U * 1024U * 1024U);
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
+	return *this;
+}
+
+template <core_concepts::exec Exec>
 basic_reply<Exec>::basic_reply()
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_reply(executor_t(riwo::get_executor()))

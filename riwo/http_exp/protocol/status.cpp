@@ -26,6 +26,15 @@ status::status(uint16_t code)
 	m_impl = std::make_shared<impl>(code);
 }
 
+status::status(status &&other) noexcept : m_impl(other.m_impl) {}
+
+status &status::operator=(status &&other) noexcept
+{
+	if( this != &other )
+		m_impl = other.m_impl;
+	return *this;
+}
+
 uint16_t status::code() const noexcept {
 	return m_impl->m_code;
 }

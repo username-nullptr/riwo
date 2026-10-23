@@ -26,6 +26,10 @@ public:
 	method(well_known value) noexcept;
 	explicit method(std::string token);
 	method(std::string token, method_properties properties);
+	method(const method &) = default;
+	method &operator=(const method &) = default;
+	method(method &&other) noexcept;
+	method &operator=(method &&other) noexcept;
 
 	[[nodiscard]] std::string_view text() const noexcept;
 	[[nodiscard]] optional<well_known> known() const noexcept;

@@ -73,8 +73,20 @@ file_sink::file_sink(borrowed_c_file file) :
 }
 
 file_sink::~file_sink() = default;
-file_sink::file_sink(file_sink &&) noexcept = default;
-file_sink &file_sink::operator=(file_sink &&) noexcept = default;
+file_sink::file_sink(file_sink &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(nullptr);
+}
+
+file_sink &file_sink::operator=(file_sink &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(nullptr);
+	return *this;
+}
 
 void file_sink::prepare(error_code &error) const noexcept
 {
@@ -89,12 +101,17 @@ void file_sink::prepare(error_code &error) const noexcept
 		error = http_exp::make_error_code(errc::operation_not_permitted);
 		return ;
 	}
+	if( not m_impl->m_backend )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return ;
+	}
 	m_impl->m_backend->prepare(error);
 }
 
 bool file_sink::random_access() const noexcept
 {
-	return m_impl->m_backend->random_access();
+	return m_impl->m_backend and m_impl->m_backend->random_access();
 }
 
 void file_sink::write
@@ -114,6 +131,11 @@ size_t file_sink::write(const_buffer buffer, error_code &error) noexcept
 		return 0;
 	}
 	if( m_impl->m_finished )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return 0;
+	}
+	if( not m_impl->m_backend )
 	{
 		error = http_exp::make_error_code(errc::operation_not_permitted);
 		return 0;
@@ -149,6 +171,11 @@ size_t file_sink::write_at
 		error = http_exp::make_error_code(errc::operation_not_permitted);
 		return 0;
 	}
+	if( not m_impl->m_backend )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return 0;
+	}
 	try {
 		return m_impl->m_backend->write_at(offset, buffer, error);
 	}
@@ -168,6 +195,11 @@ void file_sink::finish(error_code &error) noexcept
 	}
 	if( m_impl->m_finished )
 		return ;
+	if( not m_impl->m_backend )
+	{
+		error = http_exp::make_error_code(errc::operation_not_permitted);
+		return ;
+	}
 	try { m_impl->m_backend->finish(error); }
 	catch(...) {
 		error = exception_error(std::current_exception());
@@ -187,6 +219,12 @@ void file_sink::cancel() noexcept
 {
 	if( m_impl->m_finished )
 		return ;
+	if( not m_impl->m_backend )
+	{
+		m_impl->m_cancelled = true;
+		m_impl->m_finished = true;
+		return ;
+	}
 	error_code ignored;
 	try { m_impl->m_backend->finish(ignored); }
 	catch(...) {

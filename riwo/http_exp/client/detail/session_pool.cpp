@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include "detail/session_pool.h"
+#include "session_pool.h"
 
 namespace riwo::http_exp::detail { namespace
 {

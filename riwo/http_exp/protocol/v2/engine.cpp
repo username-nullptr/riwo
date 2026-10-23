@@ -624,8 +624,26 @@ connection_engine::connection_engine(connection_config config) :
 	if( auto error = m_impl->initialize() )
 		throw std::system_error(std::error_code(error));
 }
-connection_engine::connection_engine(connection_engine &&) noexcept = default;
-connection_engine &connection_engine::operator=(connection_engine &&) noexcept = default;
+connection_engine::connection_engine(connection_engine &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	auto replacement = std::make_unique<impl>(connection_config{});
+	if( replacement->initialize() )
+		std::terminate();
+	other.m_impl = std::move(replacement);
+}
+
+connection_engine &connection_engine::operator=(connection_engine &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	auto replacement = std::make_unique<impl>(connection_config{});
+	if( replacement->initialize() )
+		std::terminate();
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
+	return *this;
+}
 connection_engine::~connection_engine() = default;
 
 protocol connection_engine::selected_protocol() const noexcept {

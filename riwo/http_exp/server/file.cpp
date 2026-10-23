@@ -122,6 +122,8 @@ public:
 		std::string suffix;
 	};
 
+	impl() : body(false) {}
+
 	impl(std::filesystem::path source_path, const request_head &request,
 		file_response_options options) : path(std::move(source_path))
 	{
@@ -293,9 +295,20 @@ file_response_source::file_response_source(std::filesystem::path path,
 }
 
 file_response_source::~file_response_source() = default;
-file_response_source::file_response_source(file_response_source&&) noexcept = default;
+file_response_source::file_response_source(file_response_source &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>();
+}
 file_response_source &file_response_source::operator=(
-	file_response_source&&) noexcept = default;
+	file_response_source &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>();
+	return *this;
+}
 
 const response_head &file_response_source::response() const noexcept {
 	return m_impl->head;
@@ -398,6 +411,11 @@ void file_response_source::read_some(mutable_buffer buffer,
 void file_response_source::rewind(
 	asio::any_completion_handler<void(error_code)> handler)
 {
+	if( not m_impl->body )
+	{
+		m_impl->cancelled = false;
+		return std::move(handler)(error_code{});
+	}
 	try { m_impl->open(); std::move(handler)(error_code{}); }
 	catch(...) {
 		std::move(handler)(exception_error(std::current_exception()));

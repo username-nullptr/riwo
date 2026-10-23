@@ -71,6 +71,32 @@ public:
 };
 
 template <core_concepts::exec Exec>
+basic_client_exchange<Exec>::basic_client_exchange(
+	basic_client_exchange &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_shared<impl>(m_impl->m_executor,
+		std::shared_ptr<detail::stream>{}, std::shared_ptr<cookie_jar>{},
+		riwo::url{});
+}
+
+template <core_concepts::exec Exec>
+auto basic_client_exchange<Exec>::operator=(
+	basic_client_exchange &&other) noexcept -> basic_client_exchange&
+{
+	if( this == &other )
+		return *this;
+	auto replacement = std::make_shared<impl>(other.m_impl->m_executor,
+		std::shared_ptr<detail::stream>{}, std::shared_ptr<cookie_jar>{},
+		riwo::url{});
+	if( m_impl and m_impl->m_state )
+		m_impl->m_state->cancel();
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
+	return *this;
+}
+
+template <core_concepts::exec Exec>
 basic_client_exchange<Exec>::basic_client_exchange()
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_client_exchange(executor_t(riwo::get_executor()))

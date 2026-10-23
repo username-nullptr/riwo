@@ -53,8 +53,8 @@ public:
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_client_exchange();
-	basic_client_exchange(basic_client_exchange &&) noexcept = default;
-	basic_client_exchange &operator=(basic_client_exchange &&) noexcept = default;
+	basic_client_exchange(basic_client_exchange &&other) noexcept;
+	basic_client_exchange &operator=(basic_client_exchange &&other) noexcept;
 
 	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] protocol selected_protocol() const noexcept;

@@ -503,6 +503,134 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_EQ(custom_source.body_description().length().value(), 3U);
 }
 
+void moved_from_objects_are_safe()
+{
+	http::method request_method(http::method::post);
+	const auto moved_method = std::move(request_method);
+	RIWO_TEST_CHECK(request_method.known() == http::method::post);
+	RIWO_TEST_CHECK(moved_method.known() == http::method::post);
+
+	http::status response_status(http::status::created);
+	const auto moved_status = std::move(response_status);
+	RIWO_TEST_CHECK(response_status == http::status::created);
+	RIWO_TEST_CHECK(moved_status == http::status::created);
+
+	auto spec = http::body_spec::known(7);
+	const auto moved_spec = std::move(spec);
+	RIWO_TEST_CHECK_EQ(spec.length().value(), 7U);
+	RIWO_TEST_CHECK_EQ(moved_spec.length().value(), 7U);
+
+	http::fields source_fields;
+	source_fields.add("X-Test", "source");
+	auto moved_fields = std::move(source_fields);
+	RIWO_TEST_CHECK(source_fields.empty());
+	source_fields.add("X-Reused", "true");
+	RIWO_TEST_CHECK_EQ(source_fields.size(), 1U);
+	RIWO_TEST_CHECK_EQ(moved_fields.find_first("x-test").value(), "source");
+
+	http::route_pattern pattern("/items/{id}");
+	const auto moved_pattern = std::move(pattern);
+	RIWO_TEST_CHECK_EQ(pattern.text(), "/items/{id}");
+	RIWO_TEST_CHECK(moved_pattern.match("/items/42").has_value());
+
+	http::request source_request(http::method::post,
+		"http://example.test/resource");
+	source_request.body("body");
+	auto moved_request = std::move(source_request);
+	RIWO_TEST_CHECK(source_request.method().known() == http::method::get);
+	RIWO_TEST_CHECK(!source_request.has_body_source());
+	source_request.headers().set("X-Reused", "true");
+	RIWO_TEST_CHECK(moved_request.method().known() == http::method::post);
+
+	http::memory_body_source memory(riwo::buffer("body"));
+	auto moved_memory = std::move(memory);
+	RIWO_TEST_CHECK_EQ(memory.size().value(), 0U);
+	RIWO_TEST_CHECK_EQ(moved_memory.size().value(), 5U);
+	std::array<std::byte,8> bytes {};
+	riwo::error_code error;
+	RIWO_TEST_CHECK_EQ(memory.read_some(riwo::buffer(bytes), error), 0U);
+	RIWO_TEST_CHECK_EQ(error, asio::error::make_error_code(asio::error::eof));
+
+	http::gzip_encoder encoder;
+	auto moved_encoder = std::move(encoder);
+	RIWO_TEST_CHECK(!encoder.finished());
+	RIWO_TEST_CHECK(!moved_encoder.finished());
+	(void)encoder.append({}, false);
+	http::gzip_decoder decoder;
+	auto moved_decoder = std::move(decoder);
+	RIWO_TEST_CHECK(!decoder.finished());
+	RIWO_TEST_CHECK_EQ(decoder.output_size(), 0U);
+	RIWO_TEST_CHECK(!moved_decoder.finished());
+	(void)decoder.append({}, false);
+
+	http::application_session_manager sessions;
+	auto moved_sessions = std::move(sessions);
+	RIWO_TEST_CHECK_EQ(sessions.size(), 0U);
+	RIWO_TEST_CHECK(sessions.create());
+	RIWO_TEST_CHECK_EQ(moved_sessions.size(), 0U);
+
+	riwo::io_context_t context;
+	auto executor = asio::any_io_executor(context.get_executor());
+	http::client client(executor);
+	auto moved_client = std::move(client);
+	RIWO_TEST_CHECK(client.get_executor() == executor);
+	RIWO_TEST_CHECK(moved_client.get_executor() == executor);
+	http::client assigned_client(executor);
+	assigned_client = std::move(moved_client);
+	RIWO_TEST_CHECK(moved_client.get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_client.get_executor() == executor);
+
+	http::client_exchange exchange(executor);
+	auto moved_exchange = std::move(exchange);
+	RIWO_TEST_CHECK(exchange.get_executor() == executor);
+	RIWO_TEST_CHECK(moved_exchange.get_executor() == executor);
+	exchange.cancel();
+	http::client_exchange assigned_exchange(executor);
+	assigned_exchange = std::move(moved_exchange);
+	RIWO_TEST_CHECK(moved_exchange.get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_exchange.get_executor() == executor);
+
+	http::reply reply(executor);
+	auto moved_reply = std::move(reply);
+	RIWO_TEST_CHECK(reply.get_executor() == executor);
+	RIWO_TEST_CHECK(reply.status() == http::status::ok);
+	RIWO_TEST_CHECK(moved_reply.get_executor() == executor);
+	http::reply assigned_reply(executor);
+	assigned_reply = std::move(moved_reply);
+	RIWO_TEST_CHECK(moved_reply.get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_reply.get_executor() == executor);
+
+	http::duplex_channel channel(executor);
+	auto moved_channel = std::move(channel);
+	RIWO_TEST_CHECK(channel.get_executor() == executor);
+	RIWO_TEST_CHECK(!channel.is_open());
+	RIWO_TEST_CHECK(moved_channel.get_executor() == executor);
+	http::duplex_channel assigned_channel(executor);
+	assigned_channel = std::move(moved_channel);
+	RIWO_TEST_CHECK(moved_channel.get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_channel.get_executor() == executor);
+
+	http::acceptor_wrap acceptor{asio::ip::tcp::acceptor(context)};
+	auto moved_acceptor = std::move(acceptor);
+	RIWO_TEST_CHECK(acceptor.get_executor() == executor);
+	RIWO_TEST_CHECK(!acceptor.acceptor().is_open());
+	RIWO_TEST_CHECK(moved_acceptor.get_executor() == executor);
+	http::acceptor_wrap assigned_acceptor{asio::ip::tcp::acceptor(context)};
+	assigned_acceptor = std::move(moved_acceptor);
+	RIWO_TEST_CHECK(moved_acceptor.get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_acceptor.get_executor() == executor);
+
+	http::server server(executor);
+	auto moved_server = std::move(server);
+	RIWO_TEST_CHECK(server.get_executor() == executor);
+	RIWO_TEST_CHECK(server.get_service_executor() == executor);
+	RIWO_TEST_CHECK(moved_server.get_executor() == executor);
+	http::server assigned_server(executor);
+	assigned_server = std::move(moved_server);
+	RIWO_TEST_CHECK(moved_server.get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_server.get_executor() == executor);
+}
+
 void head_convenience_contracts()
 {
 	http::request_head request {
@@ -882,6 +1010,7 @@ int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
 		{"semantic value contracts", semantic_value_contracts},
+		{"moved-from objects are safe", moved_from_objects_are_safe},
 		{"head convenience contracts", head_convenience_contracts},
 		{"cookie value contracts", cookie_value_contracts},
 		{"fake boundaries and unsupported entry points",

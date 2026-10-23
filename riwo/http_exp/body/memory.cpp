@@ -65,9 +65,21 @@ memory_body_source &memory_body_source::operator=(const memory_body_source &othe
 	return *this;
 }
 
-memory_body_source::memory_body_source(memory_body_source &&) noexcept = default;
+memory_body_source::memory_body_source(memory_body_source &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>();
+}
 
-memory_body_source &memory_body_source::operator=(memory_body_source &&) noexcept = default;
+memory_body_source &memory_body_source::operator=(
+	memory_body_source &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>();
+	return *this;
+}
 
 size_t memory_body_source::read_some(mutable_buffer buffer, error_code &error) noexcept
 {

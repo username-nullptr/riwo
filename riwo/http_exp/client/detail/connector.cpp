@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include "detail/connector.h"
-#include "detail/factory.h"
+#include "connector.h"
+#include "factory.h"
 #include <riwo/http_exp/protocol/v1/detail/session.h>
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 # include <riwo/http_exp/protocol/v2/detail/session.h>

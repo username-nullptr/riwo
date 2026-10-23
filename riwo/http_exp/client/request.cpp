@@ -14,8 +14,19 @@ request::request(http_exp::method request_method, riwo::url request_url) :
 }
 
 request::~request() = default;
-request::request(request &&) noexcept = default;
-request &request::operator=(request &&) noexcept = default;
+request::request(request &&other) noexcept : m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_unique<impl>(http_exp::method::get, riwo::url{});
+}
+
+request &request::operator=(request &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+	m_impl = std::move(other.m_impl);
+	other.m_impl = std::make_unique<impl>(http_exp::method::get, riwo::url{});
+	return *this;
+}
 
 http_exp::method request::method() const noexcept {
 	return m_impl->m_head.method;

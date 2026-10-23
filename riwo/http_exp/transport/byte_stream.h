@@ -78,6 +78,7 @@ private:
 	template<concepts::byte_stream_model Stream>
 	class model;
 
+	optional<executor_t> m_executor;
 	std::unique_ptr<interface> m_impl;
 };
 
