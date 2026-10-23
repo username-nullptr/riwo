@@ -108,14 +108,27 @@ public:
 				Token,error_code,uint64_t>;
 
 	template <typename Token = use_sync_t>
+	auto respond(body_spec, Token &&token = {})
+		requires core_concepts::tf_opt_token<Token,error_code>;
+
+	template <typename Token = use_sync_t>
 	auto respond(response_head, body_spec, Token &&token = {})
 		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	// Asynchronous responses borrow body until completion, except detached,
 	// which owns a copy.
 	template <typename Token = use_sync_t>
+	auto respond(const const_buffer &body, Token &&token = {})
+		requires core_concepts::tf_opt_token<Token,error_code>;
+
+	template <typename Token = use_sync_t>
 	auto respond(response_head head, const const_buffer &body, Token &&token = {})
 		requires core_concepts::tf_opt_token<Token,error_code>;
+
+	template <typename Source, typename Token = use_sync_t>
+	auto respond(Source &&source, Token &&token = {})
+		requires concepts::body_source_model<std::remove_cvref_t<Source>>
+			and core_concepts::tf_opt_token<Token,error_code>;
 
 	template <typename Source, typename Token = use_sync_t>
 	auto respond(response_head head, Source &&source, Token &&token = {})
@@ -124,7 +137,12 @@ public:
 
 	template <typename Token = use_sync_t>
 	auto respond_file(std::filesystem::path path,
-		file_response_options options = {}, Token &&token = {})
+		Token &&token = {})
+		requires core_concepts::tf_opt_token<Token,error_code>;
+
+	template <typename Token = use_sync_t>
+	auto respond_file(std::filesystem::path path,
+		file_response_options options, Token &&token = {})
 		requires core_concepts::tf_opt_token<Token,error_code>;
 
 	template <typename Token = use_sync_t>

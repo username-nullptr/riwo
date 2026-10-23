@@ -106,34 +106,56 @@ application; `resource_root` is not a sandbox.
 
 ## Experimental HTTP
 
-Requires `RIWO_BUILD_HTTP_EXP=ON`. These examples intentionally cover more
-ground than the stable HTTP programs. The high-level client and server use the
-same routing, request, response, body, cookie, session, and file code for
-HTTP/1.x and, when `RIWO_HTTP_EXP_HTTP2_SUPPORT=1`, cleartext HTTP/2 prior
-knowledge. Lower-level examples show the public protocol engine and transport
-extension without going through the stable HTTP implementation.
+Requires `RIWO_BUILD_HTTP_EXP=ON`. Like the stable HTTP examples, each program
+focuses on one capability. The first programs show the everyday client/server
+API; later programs cover streaming, files, protocol engines, and custom
+transports. The same high-level API works with HTTP/1.x and, when
+`RIWO_HTTP_EXP_HTTP2_SUPPORT=1`, HTTP/2.
 
 | Program | Demonstrates | Arguments / default |
 | --- | --- | --- |
-| [`server_file`](http_exp/server_file.cpp) | File response, ETag and Range handling, streamed upload to disk | `<download-file> [port] [upload-file] [auto\|http1\|http2]`; 8083 |
+| [`client_sync`](http_exp/client_sync.cpp) | Minimal synchronous GET with explicit error-code handling | `[url]`; local server |
+| [`client_awaitable`](http_exp/client_awaitable.cpp) | Minimal coroutine GET using `use_awaitable` | `[url]`; local server |
+| [`client_cookies`](http_exp/client_cookies.cpp) | Cookie capture and resend while following a redirect | `[base-url]`; local server |
+| [`server`](http_exp/server.cpp) | Routing, path/query parameters, cookies, redirects, buffered and streaming bodies, trailers, and optional gzip | `[port] [auto\|http1\|http2]`; 8080, auto |
+| [`client`](http_exp/client.cpp) | Runtime client configuration, buffered upload, streamed download, trailers, optional decompression, and selected protocol | `[base-url] [auto\|http1\|http2]`; local server, auto |
+| [`server_aop`](http_exp/server_aop.cpp) | Route middleware, controller objects, and an explicit executor | `[port]`; 8081 |
+| [`server_session`](http_exp/server_session.cpp) | Application sessions, attributes, visit count, and session cookie | `[port]`; 8082 |
 | [`client_file`](http_exp/client_file.cpp) | File upload/download, progress, conditional GET, Range GET | `<upload-file> [download-file] [base-url] [auto\|http1\|http2]`; local server |
-| [`server`](http_exp/server.cpp) | Route parameters, duplicate query values, middleware, application sessions, Cookie redirect, buffered/streaming bodies, trailers, optional gzip | `[port] [auto\|http1\|http2]`; 8084, auto |
-| [`client`](http_exp/client.cpp) | Every server workflow through one protocol-neutral client, including Cookie persistence and redirect following | `[base-url] [auto\|http1\|http2]`; local server, auto |
-| [`protocol`](http_exp/protocol.cpp) | Socket-free, bidirectional HTTP/1 engine loop with chunked bodies and request/response trailers | none |
-| [`transport`](http_exp/transport.cpp) | User-defined byte stream and connector injected into the high-level client | none; no socket is opened |
+| [`proxy_client`](http_exp/proxy_client.cpp) | HTTP/SOCKS5 proxy, CONNECT for TLS, and optional Basic auth | `[target-url] [proxy-url] [user] [password]` |
+| [`server_file`](http_exp/server_file.cpp) | File response, ETag and Range handling, streamed upload to disk | `<download-file> [port] [upload-file] [auto\|http1\|http2]`; 8083 |
+| [`https_server`](http_exp/https_server.cpp) | TLS acceptor with ALPN-based HTTP/1.1 or HTTP/2 selection | `<certificate.pem> <private-key.pem> [port] [auto\|http1\|http2]`; 8443 |
+| [`server_acceptor`](http_exp/server_acceptor.cpp) | User-defined acceptor injected into the high-level server | `[port]`; 8086 |
+| [`transport`](http_exp/transport.cpp) | User-defined asynchronous byte stream and connector injected into the high-level client | none; no socket is opened |
+| [`protocol`](http_exp/protocol.cpp) | Socket-free request/response loop over the public HTTP/1 and optional HTTP/2 engines | none |
 
 Run the pair in separate terminals:
 
 ```sh
-./build/output/examples/http_exp/server 8084 auto
-./build/output/examples/http_exp/client http://127.0.0.1:8084 auto
+./build/output/examples/http_exp/server 8080 auto
+./build/output/examples/http_exp/client http://127.0.0.1:8080 auto
+```
+
+The focused client examples use the same server:
+
+```sh
+./build/output/examples/http_exp/client_sync
+./build/output/examples/http_exp/client_awaitable
+./build/output/examples/http_exp/client_cookies
+```
+
+Middleware and session behavior run as small, isolated servers:
+
+```sh
+./build/output/examples/http_exp/server_aop 8081
+./build/output/examples/http_exp/server_session 8082
 ```
 
 For cleartext HTTP/2, select it explicitly on both sides:
 
 ```sh
-./build/output/examples/http_exp/server 8084 http2
-./build/output/examples/http_exp/client http://127.0.0.1:8084 http2
+./build/output/examples/http_exp/server 8080 http2
+./build/output/examples/http_exp/client http://127.0.0.1:8080 http2
 ```
 
 Exercise the file-specific API in a separate pair. The server exposes the first
@@ -148,8 +170,8 @@ file for download and saves uploads to the third argument:
 
 `client_file` also performs an `If-None-Match` request and a `Range` request,
 so the output demonstrates `304` and `206` handling in addition to full file
-transfer. Run `transport` without a server or arguments; it injects an
-in-memory scripted byte stream into `http_exp::client`.
+transfer. Run `transport` or `protocol` without a server. `server_acceptor`
+uses a real TCP socket but replaces the server's default acceptor adapter.
 
 The file pair serves and writes only command-line configured paths. If you
 extend those routes to use request-derived filenames, normalize and constrain
@@ -157,6 +179,8 @@ the paths before opening them; `resource_root` is not a sandbox.
 
 `http2` is accepted only when nghttp2 was detected at configure time. `auto`
 uses normal scheme policy; for a plain `http://` client URL that means HTTP/1.1.
+`https_server` is built only with OpenSSL support. `proxy_client` requires an
+external HTTP or SOCKS5 proxy.
 
 ## Experimental WebSocket
 

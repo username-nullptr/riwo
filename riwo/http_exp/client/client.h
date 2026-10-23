@@ -71,7 +71,8 @@ public:
 			core_concepts::match_sched<Exec0,executor_t>);
 
 	[[nodiscard]] executor_t get_executor() const noexcept;
-	[[nodiscard]] const config_t &config() const noexcept;
+	basic_client &set_config(config_t config);
+	[[nodiscard]] config_t config() const;
 	[[nodiscard]] std::shared_ptr<cookie_jar> cookie_store() const noexcept;
 
 	template <typename Token = use_sync_t>

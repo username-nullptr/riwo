@@ -9,6 +9,5 @@
 #include <riwo/http_exp/transport/byte_stream.h>
 #include <riwo/http_exp/transport/connector.h>
 #include <riwo/http_exp/transport/metadata.h>
-#include <riwo/http_exp/transport/listener.h>
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_H

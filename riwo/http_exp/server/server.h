@@ -8,8 +8,7 @@
 #include <riwo/http_exp/server/config.h>
 #include <riwo/http_exp/server/exchange.h>
 #include <riwo/http_exp/server/middleware.h>
-#include <riwo/http_exp/server/router.h>
-#include <riwo/http_exp/transport/listener.h>
+#include <riwo/http_exp/server/tls.h>
 #include <riwo/core/utils/utils.h>
 
 namespace riwo::http_exp
@@ -58,29 +57,33 @@ public:
 	basic_server(basic_server &&) noexcept = default;
 	basic_server &operator=(basic_server &&) noexcept = default;
 
-	basic_server()
+	explicit basic_server(config_t config = {})
 		requires (
 			core_concepts::match_sched<io_executor_t,executor_t> and
 			core_concepts::match_sched<executor_t,service_executor_t>);
 
-	explicit basic_server(acceptor_wrap_t &&acceptor,
+#if RIWO_OPENSSL_SUPPORT
+	explicit basic_server(std::shared_ptr<server_tls_context> tls_context,
 		config_t config = {})
+		requires (
+			std::same_as<executor_t,asio::any_io_executor> and
+			core_concepts::match_sched<io_executor_t,executor_t> and
+			core_concepts::match_sched<executor_t,service_executor_t>);
+#endif
+
+	template <typename Exec0>
+	explicit basic_server(Exec0 &&executor, config_t config = {})
+		requires (
+			not std::same_as<std::remove_cvref_t<Exec0>,basic_server> and
+			core_concepts::match_sched<Exec0,executor_t> and
+			core_concepts::match_sched<executor_t,service_executor_t>);
+
+	explicit basic_server(acceptor_wrap_t &&acceptor, config_t config = {})
 		requires core_concepts::match_sched<executor_t,service_executor_t>;
 
 	template <typename ServiceExec0>
 	basic_server(acceptor_wrap_t &&acceptor, ServiceExec0 &&service_executor,
 		config_t config = {})
-		requires core_concepts::match_sched<ServiceExec0,service_executor_t>;
-
-	explicit basic_server(
-		std::shared_ptr<basic_transport_listener<executor_t>> listener,
-		config_t config = {})
-		requires core_concepts::match_sched<executor_t,service_executor_t>;
-
-	template <typename ServiceExec0>
-	basic_server(
-		std::shared_ptr<basic_transport_listener<executor_t>> listener,
-		ServiceExec0 &&service_executor, config_t config = {})
 		requires core_concepts::match_sched<ServiceExec0,service_executor_t>;
 
 	[[nodiscard]] executor_t get_executor() noexcept;

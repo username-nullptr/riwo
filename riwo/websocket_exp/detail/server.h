@@ -476,16 +476,6 @@ public:
 		m_config(detail::validate_server_config(std::move(config))),
 		m_http_server(std::move(acceptor), m_config.http) {}
 
-	impl(std::shared_ptr<transport_listener_t> listener,
-		service_executor_t service_executor, config_t config) :
-		m_config(detail::validate_server_config(std::move(config))),
-		m_http_server(std::move(listener), std::move(service_executor),
-			m_config.http) {}
-
-	impl(std::shared_ptr<transport_listener_t> listener, config_t config) :
-		m_config(detail::validate_server_config(std::move(config))),
-		m_http_server(std::move(listener), m_config.http) {}
-
 	[[nodiscard]] accept_result_t idle_result() const noexcept {
 		return accept_result_t(m_http_server.get_service_executor());
 	}
@@ -949,26 +939,6 @@ basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_t &&acceptor,
 	ServiceExec0 &&service_executor, config_t config)
 	requires core_concepts::match_sched<ServiceExec0,service_executor_t> :
 	m_impl(std::make_shared<impl>(std::move(acceptor),
-		get_executor_helper(std::forward<ServiceExec0>(service_executor)),
-		std::move(config)))
-{
-}
-
-template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-basic_server<Exec,ServiceExec>::basic_server(
-	std::shared_ptr<transport_listener_t> listener, config_t config)
-	requires core_concepts::match_sched<executor_t,service_executor_t> :
-	m_impl(std::make_shared<impl>(std::move(listener), std::move(config)))
-{
-}
-
-template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <typename ServiceExec0>
-basic_server<Exec,ServiceExec>::basic_server(
-	std::shared_ptr<transport_listener_t> listener,
-	ServiceExec0 &&service_executor, config_t config)
-	requires core_concepts::match_sched<ServiceExec0,service_executor_t> :
-	m_impl(std::make_shared<impl>(std::move(listener),
 		get_executor_helper(std::forward<ServiceExec0>(service_executor)),
 		std::move(config)))
 {

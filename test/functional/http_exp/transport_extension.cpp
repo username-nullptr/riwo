@@ -140,18 +140,29 @@ private:
 	std::optional<http::connect_request> last_request_;
 };
 
-class fake_listener final : public http::basic_transport_listener<executor_type>
+class fake_acceptor
 {
 public:
-	explicit fake_listener(executor_type executor,
+	using executor_type = riwo::io_context_t::executor_type;
+	using acceptor_wrap_t = http::basic_acceptor_wrap<executor_type>;
+	using acceptor_t = typename acceptor_wrap_t::acceptor_t;
+	using accepted_t = typename acceptor_wrap_t::accepted_t;
+	using transport_t = typename acceptor_wrap_t::transport_t;
+	using accept_handler_t = typename acceptor_wrap_t::accept_handler_t;
+
+	explicit fake_acceptor(executor_type executor,
 		std::shared_ptr<memory_state> state = {},
 		std::vector<std::byte> initial_input = {}) :
-		executor_(executor), state_(std::move(state)),
-		initial_input_(std::move(initial_input)) {}
-	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return executor_;
+		acceptor_(executor), state_(std::move(state)),
+		initial_input_(std::move(initial_input))
+	{
+		acceptor_.open(asio::ip::tcp::v4());
+		acceptor_.bind({asio::ip::tcp::v4(), 0});
 	}
-	void accept(accept_handler_t handler) override
+	[[nodiscard]] executor_type get_executor() noexcept {
+		return acceptor_.get_executor();
+	}
+	void accept(accept_handler_t handler)
 	{
 		if( not state_ or delivered_ )
 		{
@@ -159,18 +170,29 @@ public:
 			return;
 		}
 		delivered_ = true;
-		asio::post(executor_, [executor = executor_, state = state_,
+		auto executor = get_executor();
+		asio::post(executor, [executor, state = state_,
 			initial = std::move(initial_input_), handler = std::move(handler)]() mutable {
-			std::move(handler)(riwo::error_code{}, result_t {
+			transport_t transport {
 				http::make_byte_stream(memory_stream{executor, std::move(state)}),
-				http::protocol::v1_1, {}, std::move(initial)
-			});
+				http::protocol::v1_1, {}, std::move(initial)};
+			std::move(handler)(riwo::error_code{}, accepted_t(
+				std::in_place_type<transport_t>, std::move(transport)));
 		});
 	}
-	void cancel() noexcept override { pending_.reset(); }
+	void cancel() noexcept {
+		pending_.reset();
+		riwo::error_code ignored;
+		acceptor_.cancel(ignored);
+		acceptor_.close(ignored);
+	}
+	[[nodiscard]] const acceptor_t &acceptor() const noexcept {
+		return acceptor_;
+	}
+	[[nodiscard]] acceptor_t &acceptor() noexcept { return acceptor_; }
 
 private:
-	executor_type executor_;
+	acceptor_t acceptor_;
 	std::shared_ptr<memory_state> state_;
 	std::vector<std::byte> initial_input_;
 	bool delivered_ = false;
@@ -186,8 +208,10 @@ private:
 
 static_assert(std::constructible_from<http::basic_client<executor_type>,
 	executor_type,std::shared_ptr<http::basic_transport_connector<executor_type>>>);
+static_assert(std::constructible_from<http::basic_acceptor_wrap<executor_type>,
+	fake_acceptor>);
 static_assert(std::constructible_from<http::basic_server<executor_type>,
-	std::shared_ptr<http::basic_transport_listener<executor_type>>>);
+	http::basic_acceptor_wrap<executor_type>&&>);
 
 void byte_stream_erasure()
 {
@@ -226,15 +250,16 @@ void byte_stream_erasure()
 		"http.absolute_form").to_bool().value(), true);
 }
 
-void injected_connector_and_listener_compile()
+void injected_connector_and_acceptor_compile()
 {
 	riwo::io_context_t context;
 	auto state = std::make_shared<memory_state>();
 	auto connector = std::make_shared<fake_connector>(context.get_executor(), state);
 	http::basic_client<executor_type> client(context.get_executor(), connector);
 	RIWO_TEST_CHECK(client.get_executor() == context.get_executor());
-	auto listener = std::make_shared<fake_listener>(context.get_executor());
-	http::basic_server<executor_type> server(listener);
+	auto acceptor = http::basic_acceptor_wrap<executor_type>(
+		fake_acceptor(context.get_executor()));
+	http::basic_server<executor_type> server(std::move(acceptor));
 	riwo::error_code error;
 	server.start(error);
 	RIWO_TEST_CHECK(!error);
@@ -358,14 +383,15 @@ void request_proxy_override_reaches_connector()
 	RIWO_TEST_CHECK(!bypass_observed->proxy.forward_proxy.has_value());
 }
 
-void injected_listener_replays_initial_input()
+void injected_acceptor_replays_initial_input()
 {
 	riwo::io_context_t context;
 	auto state = std::make_shared<memory_state>();
 	state->deferred = true;
-	auto listener = std::make_shared<fake_listener>(context.get_executor(), state,
-		bytes("GET /custom HTTP/1.1\r\nHost: example.test\r\n\r\n"));
-	http::basic_server<executor_type> server(listener);
+	auto acceptor = http::basic_acceptor_wrap<executor_type>(fake_acceptor(
+		context.get_executor(), state,
+		bytes("GET /custom HTTP/1.1\r\nHost: example.test\r\n\r\n")));
+	http::basic_server<executor_type> server(std::move(acceptor));
 	server.on_request<http::method::get>("/custom",
 	[&context](http::basic_server_exchange<executor_type> &exchange)
 		-> riwo::awaitable<void>
@@ -390,11 +416,11 @@ int main(int argc, const char *const argv[])
 	return riwo::test::run(argc, argv, {
 		{"byte stream type erasure", byte_stream_erasure},
 		{"byte stream failure injection", byte_stream_failure_injection},
-		{"connector and listener injection", injected_connector_and_listener_compile},
+		{"connector and acceptor injection", injected_connector_and_acceptor_compile},
 		{"custom connector drives client", injected_connector_drives_client},
 		{"request proxy override reaches connector",
 			request_proxy_override_reaches_connector},
-		{"custom listener replays initial input",
-			injected_listener_replays_initial_input}
+		{"custom acceptor replays initial input",
+			injected_acceptor_replays_initial_input}
 	});
 }

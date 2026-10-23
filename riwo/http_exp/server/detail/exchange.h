@@ -279,6 +279,15 @@ auto basic_server_exchange<Exec>::save_file(File &&file, Token &&token)
 
 template <core_concepts::exec Exec>
 template <typename Token>
+auto basic_server_exchange<Exec>::respond(body_spec spec, Token &&token)
+	requires core_concepts::tf_opt_token<Token,error_code>
+{
+	return respond(response_head{}, std::move(spec),
+		std::forward<Token>(token));
+}
+
+template <core_concepts::exec Exec>
+template <typename Token>
 auto basic_server_exchange<Exec>::respond(response_head head, body_spec spec,
 	Token &&token)
 	requires core_concepts::tf_opt_token<Token,error_code>
@@ -304,6 +313,15 @@ auto basic_server_exchange<Exec>::respond(response_head head, body_spec spec,
 					std::move(handler)));
 		}, std::forward<Token>(token));
 	}
+}
+
+template <core_concepts::exec Exec>
+template <typename Token>
+auto basic_server_exchange<Exec>::respond(const const_buffer &body,
+	Token &&token)
+	requires core_concepts::tf_opt_token<Token,error_code>
+{
+	return respond(response_head{}, body, std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec>
@@ -424,6 +442,16 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			}, std::forward<Token>(token));
 		}
 	}
+}
+
+template <core_concepts::exec Exec>
+template <typename Source, typename Token>
+auto basic_server_exchange<Exec>::respond(Source &&source, Token &&token)
+	requires concepts::body_source_model<std::remove_cvref_t<Source>>
+		and core_concepts::tf_opt_token<Token,error_code>
+{
+	return respond(response_head{}, std::forward<Source>(source),
+		std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec>
@@ -693,6 +721,16 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			value->start();
 		}, std::forward<Token>(token));
 	}
+}
+
+template <core_concepts::exec Exec>
+template <typename Token>
+auto basic_server_exchange<Exec>::respond_file(std::filesystem::path path,
+	Token &&token)
+	requires core_concepts::tf_opt_token<Token,error_code>
+{
+	return respond_file(std::move(path), file_response_options{},
+		std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec>

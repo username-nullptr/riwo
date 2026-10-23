@@ -78,18 +78,27 @@ public:
 	impl(executor_t executor_value, config_t config_value,
 		std::shared_ptr<detail::client_session> session,
 		detail::connector_ptr_t connector = {}) :
-		m_executor(std::move(executor_value)), m_config(std::move(config_value))
+		m_executor(std::move(executor_value)), m_session(std::move(session)),
+		m_connector(std::move(connector))
 	{
+		set_config(std::move(config_value));
+	}
+
+	void set_config(config_t config)
+	{
+		m_config = std::move(config);
 		if( m_config.cookies.enabled and not m_config.cookies.jar )
 			m_config.cookies.jar = std::make_shared<cookie_jar>();
 		else if( not m_config.cookies.enabled )
 			m_config.cookies.jar.reset();
 		m_state = detail::make_client_state(asio::any_io_executor(m_executor),
-			m_config, std::move(session), std::move(connector));
+			m_config, m_session, m_connector);
 	}
 
 	executor_t m_executor;
 	config_t m_config;
+	std::shared_ptr<detail::client_session> m_session;
+	detail::connector_ptr_t m_connector;
 	std::shared_ptr<detail::client_state> m_state;
 };
 
@@ -170,7 +179,13 @@ auto basic_client<Exec>::get_executor() const noexcept -> executor_t {
 }
 
 template <core_concepts::exec Exec>
-auto basic_client<Exec>::config() const noexcept -> const config_t& {
+auto basic_client<Exec>::set_config(config_t config) -> basic_client& {
+	m_impl->set_config(std::move(config));
+	return *this;
+}
+
+template <core_concepts::exec Exec>
+auto basic_client<Exec>::config() const -> config_t {
 	return m_impl->m_config;
 }
 

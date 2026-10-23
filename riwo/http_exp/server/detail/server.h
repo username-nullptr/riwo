@@ -4,9 +4,9 @@
 #ifndef RIWO_HTTP_EXP_SERVER_DETAIL_SERVER_H
 #define RIWO_HTTP_EXP_SERVER_DETAIL_SERVER_H
 
-#include <riwo/http_exp/server/detail/session.h>
 #include <riwo/http_exp/transport/detail/byte_stream_connection.h>
-#include <mutex>
+#include <riwo/http_exp/server/detail/session.h>
+#include <riwo/http_exp/server/router.h>
 
 namespace riwo::http_exp
 {
@@ -33,15 +33,6 @@ public:
 		request_handler_t default_handler;
 	};
 
-	[[nodiscard]] static executor_t listener_executor(
-		const std::shared_ptr<basic_transport_listener<executor_t>> &listener)
-	{
-		if( not listener )
-			throw std::invalid_argument(
-			"riwo::http_exp::basic_server: listener is null");
-		return listener->get_executor();
-	}
-
 	impl(acceptor_wrap_t &&acceptor_value,
 		service_executor_t service_executor_value, config_t config_value) :
 		m_acceptor_wrap(std::move(acceptor_value)),
@@ -63,30 +54,6 @@ public:
 	{
 	}
 
-	impl(std::shared_ptr<basic_transport_listener<executor_t>> listener,
-		service_executor_t service_executor_value, config_t config_value) :
-		m_acceptor_wrap(acceptor_t(listener_executor(listener))),
-		m_service_executor(std::move(service_executor_value)),
-		m_config(std::move(config_value)),
-		m_sessions(std::make_shared<application_session_manager>(
-			m_config.sessions)),
-		m_routes(std::make_shared<const route_table>()),
-		m_listener(std::move(listener))
-	{
-	}
-
-	impl(std::shared_ptr<basic_transport_listener<executor_t>> listener,
-		config_t config_value) :
-		m_acceptor_wrap(acceptor_t(listener_executor(listener))),
-		m_service_executor(listener_executor(listener)),
-		m_config(std::move(config_value)),
-		m_sessions(std::make_shared<application_session_manager>(
-			m_config.sessions)),
-		m_routes(std::make_shared<const route_table>()),
-		m_listener(std::move(listener))
-	{
-	}
-
 	void start(size_t maximum, error_code &error) noexcept
 	{
 		error.clear();
@@ -95,12 +62,6 @@ public:
 		error = detail::validate_server_config(m_config);
 		if( error )
 			return ;
-		if( m_listener )
-		{
-			m_running = true;
-			accept_next_transport();
-			return ;
-		}
 		m_acceptor_wrap.acceptor().listen(static_cast<int>(std::min<size_t>(
 			maximum, static_cast<size_t>(std::numeric_limits<int>::max()))), error);
 		if( error )
@@ -112,11 +73,7 @@ public:
 	void stop() noexcept
 	{
 		m_running = false;
-		if( m_listener )
-			m_listener->cancel();
-		error_code ignored;
-		m_acceptor_wrap.acceptor().cancel(ignored);
-		m_acceptor_wrap.acceptor().close(ignored);
+		m_acceptor_wrap.cancel();
 		for( auto &value : m_connections )
 			if( value )
 				value->cancel();
@@ -341,46 +298,38 @@ private:
 			riwo::use_awaitable);
 	}
 
-	void accept_next_transport()
-	{
-		if( not m_running or not m_listener )
-			return ;
-		auto self = this->shared_from_this();
-		m_listener->accept(
-		[self](error_code error,
-			basic_negotiated_transport<executor_t> transport) mutable
-		{
-			if( not self->m_running )
-				return ;
-			self->accept_next_transport();
-			if( error )
-			{
-				self->report_server_error(error);
-				return ;
-			}
-			error_code serve_error;
-			self->serve_transport(std::move(transport), serve_error);
-			if( serve_error )
-				self->report_server_error(serve_error);
-		});
-	}
-
 	void accept_next()
 	{
 		if( not m_running )
 			return ;
-		auto socket = std::make_shared<asio::ip::tcp::socket>(
-			asio::any_io_executor(m_acceptor_wrap.acceptor().get_executor()));
 		auto self = this->shared_from_this();
-		m_acceptor_wrap.acceptor().async_accept(*socket,
-		[self, socket]
-		(error_code error) mutable {
+		m_acceptor_wrap.accept(
+		[self](error_code error, typename acceptor_wrap_t::accepted_t accepted)
+			mutable
+		{
 			if( not self->m_running )
 				return ;
 			self->accept_next();
 			if( error )
 			{
 				self->report_server_error(error);
+				return ;
+			}
+			if( auto *transport = std::get_if<
+				typename acceptor_wrap_t::transport_t>(&accepted) )
+			{
+				error_code serve_error;
+				self->serve_transport(std::move(*transport), serve_error);
+				if( serve_error )
+					self->report_server_error(serve_error);
+				return ;
+			}
+			auto *socket = std::get_if<typename acceptor_wrap_t::socket_t>(
+				&accepted);
+			if( not socket )
+			{
+				self->report_server_error(make_error_code(
+					errc::negotiation_failed));
 				return ;
 			}
 			auto connection = detail::accept_server(std::move(*socket),
@@ -588,16 +537,43 @@ public:
 	server_error_handler_t m_server_error_handler;
 	service_error_handler_t m_service_error_handler;
 	std::vector<detail::server_connection_ptr_t> m_connections;
-	std::shared_ptr<basic_transport_listener<executor_t>> m_listener;
 	bool m_running = false;
 };
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-basic_server<Exec,ServiceExec>::basic_server()
+basic_server<Exec,ServiceExec>::basic_server(config_t config)
 	requires (
 		core_concepts::match_sched<io_executor_t,executor_t> and
 		core_concepts::match_sched<executor_t,service_executor_t>) :
-	basic_server(acceptor_wrap_t(acceptor_t(riwo::get_executor())))
+	basic_server(executor_t(riwo::get_executor()), std::move(config))
+{
+}
+
+#if RIWO_OPENSSL_SUPPORT
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+basic_server<Exec,ServiceExec>::basic_server(
+	std::shared_ptr<server_tls_context> tls_context, config_t config)
+	requires (
+		std::same_as<executor_t,asio::any_io_executor> and
+		core_concepts::match_sched<io_executor_t,executor_t> and
+		core_concepts::match_sched<executor_t,service_executor_t>) :
+	basic_server(make_tls_acceptor(acceptor_wrap_t(), std::move(tls_context)),
+		std::move(config))
+{
+}
+
+#endif
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+template <typename Exec0>
+basic_server<Exec,ServiceExec>::basic_server(Exec0 &&executor, config_t config)
+	requires (
+		not std::same_as<std::remove_cvref_t<Exec0>,basic_server> and
+		core_concepts::match_sched<Exec0,executor_t> and
+		core_concepts::match_sched<executor_t,service_executor_t>) :
+	basic_server(acceptor_wrap_t(acceptor_t(
+		get_executor_helper(std::forward<Exec0>(executor)))), std::move(config))
 {
 }
 
@@ -606,27 +582,6 @@ basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_t &&acceptor,
 	config_t config)
 	requires core_concepts::match_sched<executor_t,service_executor_t> :
 	m_impl(std::make_shared<impl>(std::move(acceptor), std::move(config)))
-{
-}
-
-template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-basic_server<Exec,ServiceExec>::basic_server(
-	std::shared_ptr<basic_transport_listener<executor_t>> listener,
-	config_t config)
-	requires core_concepts::match_sched<executor_t,service_executor_t> :
-	m_impl(std::make_shared<impl>(std::move(listener), std::move(config)))
-{
-}
-
-template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <typename ServiceExec0>
-basic_server<Exec,ServiceExec>::basic_server(
-	std::shared_ptr<basic_transport_listener<executor_t>> listener,
-	ServiceExec0 &&service_executor, config_t config)
-	requires core_concepts::match_sched<ServiceExec0,service_executor_t> :
-	m_impl(std::make_shared<impl>(std::move(listener),
-		get_executor_helper(std::forward<ServiceExec0>(service_executor)),
-		std::move(config)))
 {
 }
 
@@ -667,11 +622,6 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint,
 	error_code &error) noexcept -> basic_server&
 {
-	if( m_impl->m_listener )
-	{
-		error = make_error_code(errc::operation_not_supported);
-		return *this;
-	}
 	auto &value = m_impl->m_acceptor_wrap.acceptor();
 	if( not value.is_open() )
 	{

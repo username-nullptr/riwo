@@ -181,10 +181,19 @@ int server_tls_context::select_alpn(void *, const unsigned char **out,
 		SSL_TLSEXT_ERR_NOACK : SSL_TLSEXT_ERR_ALERT_FATAL;
 }
 
-class tls_listener::impl : public std::enable_shared_from_this<impl>
+namespace
+{
+
+class tls_acceptor_state :
+	public std::enable_shared_from_this<tls_acceptor_state>
 {
 public:
-	impl(http_exp::acceptor_wrap acceptor,
+	using acceptor_wrap_t = http_exp::acceptor_wrap;
+	using accepted_t = acceptor_wrap_t::accepted_t;
+	using accept_handler_t = acceptor_wrap_t::accept_handler_t;
+	using result_t = acceptor_wrap_t::transport_t;
+
+	tls_acceptor_state(http_exp::acceptor_wrap acceptor,
 		std::shared_ptr<server_tls_context> context) :
 		m_acceptor(std::move(acceptor)), m_context(std::move(context))
 	{
@@ -201,7 +210,7 @@ public:
 				asio::post(m_acceptor.get_executor(),
 					[handler = std::move(handler)]() mutable {
 						std::move(handler)(asio::error::make_error_code(
-							asio::error::operation_aborted), result_t{});
+								asio::error::operation_aborted), accepted_t{});
 					});
 				return ;
 			}
@@ -214,10 +223,10 @@ public:
 			(error_code error) mutable
 			{
 				if( error )
-					return std::move(handler)(error, result_t{});
+					return std::move(handler)(error, accepted_t{});
 				if( not self->track(socket) )
 					return std::move(handler)(asio::error::make_error_code(
-						asio::error::operation_aborted), result_t{});
+							asio::error::operation_aborted), accepted_t{});
 				auto timer = std::make_shared<asio::steady_timer>(
 					self->m_acceptor.get_executor());
 				auto expired = std::make_shared<std::atomic_bool>(false);
@@ -243,7 +252,7 @@ public:
 							handshake_error =
 							asio::error::make_error_code(asio::error::timed_out);
 						if( handshake_error )
-							return std::move(handler)(handshake_error, result_t{});
+							return std::move(handler)(handshake_error, accepted_t{});
 						const unsigned char *data = nullptr;
 						unsigned int size = 0;
 						::SSL_get0_alpn_selected(socket->native_handle(), &data, &size);
@@ -264,18 +273,18 @@ public:
 									protocol_requirement::automatic or
 								not contains_protocol(policy, protocol::v1_1)) )
 								return std::move(handler)(make_error_code(
-									errc::negotiation_failed), result_t{});
+									errc::negotiation_failed), accepted_t{});
 							selected = protocol::v1_1;
 						}
 						error_code endpoint_error;
 						auto remote = socket->next_layer().remote_endpoint(endpoint_error);
 						if( endpoint_error )
 							return std::move(handler)(
-							endpoint_error, result_t{});
+								endpoint_error, accepted_t{});
 						auto local = socket->next_layer().local_endpoint(endpoint_error);
 						if( endpoint_error )
 							return std::move(handler)(
-							endpoint_error, result_t{});
+								endpoint_error, accepted_t{});
 						transport_metadata metadata {
 							.local_endpoint = endpoint_text(local),
 							.remote_endpoint = endpoint_text(remote),
@@ -290,7 +299,8 @@ public:
 							.selected_protocol = *selected,
 							.metadata = std::move(metadata)
 						};
-						std::move(handler)(error_code{}, std::move(result));
+						std::move(handler)(error_code{}, accepted_t(
+							std::in_place_type<result_t>, std::move(result)));
 					});
 			});
 	}
@@ -337,33 +347,45 @@ public:
 	bool m_cancelled = false;
 };
 
-tls_listener::tls_listener(http_exp::acceptor_wrap acceptor,
-	std::shared_ptr<server_tls_context> context) :
-	m_impl(std::make_shared<impl>(std::move(acceptor), std::move(context))) {}
+class tls_acceptor_model
+{
+public:
+	using executor_type = asio::any_io_executor;
+	using acceptor_t = http_exp::acceptor_wrap::acceptor_t;
+	using accept_handler_t = http_exp::acceptor_wrap::accept_handler_t;
 
-tls_listener::~tls_listener() = default;
+	tls_acceptor_model(http_exp::acceptor_wrap acceptor,
+		std::shared_ptr<server_tls_context> context) :
+		m_state(std::make_shared<tls_acceptor_state>(std::move(acceptor),
+			std::move(context)))
+	{
+	}
 
-auto tls_listener::get_executor() const noexcept -> executor_t {
-	return m_impl->m_acceptor.get_executor();
-}
+	[[nodiscard]] executor_type get_executor() noexcept {
+		return m_state->m_acceptor.get_executor();
+	}
+	void accept(accept_handler_t handler) {
+		m_state->accept(std::move(handler));
+	}
+	void cancel() noexcept { m_state->cancel(); }
+	[[nodiscard]] const acceptor_t &acceptor() const noexcept {
+		return m_state->m_acceptor.acceptor();
+	}
+	[[nodiscard]] acceptor_t &acceptor() noexcept {
+		return m_state->m_acceptor.acceptor();
+	}
 
-void tls_listener::accept(accept_handler_t handler) {
-	m_impl->accept(std::move(handler));
-}
+private:
+	std::shared_ptr<tls_acceptor_state> m_state;
+};
 
-void tls_listener::cancel() noexcept {
-	m_impl->cancel();
-}
+} //namespace
 
-http_exp::acceptor_wrap &tls_listener::acceptor_wrap() noexcept {
-	return m_impl->m_acceptor;
-}
-
-std::shared_ptr<tls_listener> make_tls_listener(http_exp::acceptor_wrap acceptor,
+http_exp::acceptor_wrap make_tls_acceptor(http_exp::acceptor_wrap acceptor,
 	std::shared_ptr<server_tls_context> context)
 {
-	return std::make_shared<tls_listener>(std::move(acceptor),
-		std::move(context));
+	return http_exp::acceptor_wrap(tls_acceptor_model(
+		std::move(acceptor), std::move(context)));
 }
 
 } //namespace riwo::http_exp

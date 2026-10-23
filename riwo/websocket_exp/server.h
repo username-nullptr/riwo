@@ -132,8 +132,6 @@ public:
 	using context_t = typename http_server_t::context_t;
 	using server_error_handler_t = typename http_server_t::server_error_handler_t;
 	using service_error_handler_t = typename http_server_t::service_error_handler_t;
-	using transport_listener_t = http_exp::basic_transport_listener<executor_t>;
-
 	template <typename Token>
 	static constexpr bool accept_token_v =
 		core_concepts::dis_detached_tf_opt_token<
@@ -157,15 +155,6 @@ public:
 	template <typename ServiceExec0>
 	basic_server(acceptor_wrap_t &&acceptor, ServiceExec0 &&service_executor,
 		config_t config = {}) requires
-		core_concepts::match_sched<ServiceExec0,service_executor_t>;
-
-	explicit basic_server(std::shared_ptr<transport_listener_t> listener,
-		config_t config = {}) requires
-		core_concepts::match_sched<executor_t,service_executor_t>;
-
-	template <typename ServiceExec0>
-	basic_server(std::shared_ptr<transport_listener_t> listener,
-		ServiceExec0 &&service_executor, config_t config = {}) requires
 		core_concepts::match_sched<ServiceExec0,service_executor_t>;
 
 	~basic_server();

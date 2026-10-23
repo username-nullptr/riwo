@@ -65,7 +65,8 @@ void reject_upgrade(server_upgrade_plan &plan, upgrade_rejection rejection,
 	plan.error = error;
 	plan.response = {};
 	plan.response.status = valid_rejection_status(rejection.status) ?
-		rejection.status : http_exp::status::internal_server_error;
+		rejection.status : http_exp::status{
+			http_exp::status::internal_server_error};
 	plan.response.headers = std::move(rejection.headers);
 	erase_protocol_response_headers(plan.response.headers);
 	plan.body = std::move(rejection.body);

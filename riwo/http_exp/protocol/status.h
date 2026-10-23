@@ -102,6 +102,8 @@ public:
 		well_known lhs, status rhs) noexcept;
 	friend RIWO_HTTP_EXP_API bool operator==(
 		status lhs, status rhs) noexcept;
+
+	operator well_known() const noexcept;
 	operator uint16_t() const noexcept;
 
 private:

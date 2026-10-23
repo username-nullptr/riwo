@@ -174,13 +174,14 @@ fields &fields::operator=(const fields &other)
 fields::fields(fields &&other) noexcept = default;
 fields &fields::operator=(fields &&other) noexcept = default;
 
-void fields::add(std::string name, riwo::value value)
+fields &fields::add(std::string name, riwo::value value)
 {
 	validate(name, value.to_string());
 	m_impl->m_values.push_back({std::move(name), std::move(value)});
+	return *this;
 }
 
-void fields::set(std::string name, riwo::value value)
+fields &fields::set(std::string name, riwo::value value)
 {
 	validate(name, value.to_string());
 	auto &values = m_impl->m_values;
@@ -190,21 +191,23 @@ void fields::set(std::string name, riwo::value value)
 	if( first == values.end() )
 	{
 		values.push_back({std::move(name), std::move(value)});
-		return ;
+		return *this;
 	}
 	first->name = std::move(name);
 	first->value = std::move(value);
 	values.erase(std::remove_if(std::next(first), values.end(), [&](const field &item) {
 		return equal_name(item.name, first->name);
 	}), values.end());
+	return *this;
 }
 
-void fields::erase(std::string_view name)
+fields &fields::erase(std::string_view name)
 {
 	auto &values = m_impl->m_values;
 	values.erase(std::remove_if(values.begin(), values.end(), [&](const field &item) {
 		return equal_name(item.name, name);
 	}), values.end());
+	return *this;
 }
 
 field_range fields::find_all(std::string_view name) const {

@@ -79,9 +79,9 @@ public:
 	fields(fields &&other) noexcept;
 	fields &operator=(fields &&other) noexcept;
 
-	void add(std::string name, riwo::value value);
-	void set(std::string name, riwo::value value);
-	void erase(std::string_view name);
+	fields &add(std::string name, riwo::value value);
+	fields &set(std::string name, riwo::value value);
+	fields &erase(std::string_view name);
 
 	[[nodiscard]] field_range find_all(std::string_view name) const;
 	[[nodiscard]] optional<std::string_view> find_first(std::string_view name) const;

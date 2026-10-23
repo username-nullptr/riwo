@@ -119,7 +119,12 @@ bool operator==(status lhs, status rhs) noexcept {
 	return lhs.code() == rhs.code();
 }
 
-status::operator unsigned short() const noexcept
+status::operator well_known() const noexcept
+{
+	return static_cast<well_known>(code());
+}
+
+status::operator uint16_t() const noexcept
 {
 	return code();
 }
