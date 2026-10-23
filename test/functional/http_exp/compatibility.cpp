@@ -3,6 +3,7 @@
 
 #include "test.h"
 #include <riwo/http_exp.h>
+#include <asio/steady_timer.hpp>
 #include <fstream>
 
 namespace
@@ -232,6 +233,14 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		auto second = co_await client.fetch(http::request(http::method::get,
 			base + "/users/alice"), riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(body_text(second), "alice:0:2");
+		// The client can receive the response before the server coroutine resumes
+		// from respond() and unwinds the middleware chain.
+		asio::steady_timer trace_timer(context);
+		for(size_t attempt = 0; attempt < 100 and trace.size() < 4U; ++attempt)
+		{
+			trace_timer.expires_after(std::chrono::milliseconds(1));
+			co_await trace_timer.async_wait(riwo::use_awaitable);
+		}
 		RIWO_TEST_CHECK_EQ(trace, (std::vector<std::string>{
 			"before", "after", "before", "after"}));
 
