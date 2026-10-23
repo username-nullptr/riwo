@@ -133,7 +133,8 @@ basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 basic_server_exchange<Exec>::~basic_server_exchange() {
-	if( m_impl->m_state ) m_impl->m_state->cancel();
+	if( m_impl->m_state )
+		m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -321,15 +322,18 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 	if constexpr( is_error_code_token_v<Token> )
 	{
 		respond(std::move(head), std::move(spec), token);
-		if( token or head_only ) return;
+		if( token or head_only )
+			return ;
 		(void)response_body().write(body, token);
-		if( token ) return;
+		if( token )
+			return ;
 		response_body().finish({}, token);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		respond(std::move(head), std::move(spec));
-		if( head_only ) return;
+		if( head_only )
+			return ;
 		(void)response_body().write(body);
 		response_body().finish();
 	}
@@ -353,17 +357,17 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 					if( error )
 					{
 						std::move(handler)(error);
-						return;
+						return ;
 					}
 					if( head_only )
 					{
 						std::move(handler)(error_code{});
-						return;
+						return ;
 					}
 					if( owned->empty() )
 					{
 						response_body().finish({}, std::move(handler));
-						return;
+						return ;
 					}
 					response_body().write(riwo::buffer(*owned),
 					[this, owned, handler = std::move(handler)]
@@ -372,7 +376,7 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 						if( write_error )
 						{
 							std::move(handler)(write_error);
-							return;
+							return ;
 						}
 						response_body().finish({}, std::move(handler));
 					});
@@ -393,17 +397,17 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 					if( error )
 					{
 						std::move(handler)(error);
-						return;
+						return ;
 					}
 					if( head_only )
 					{
 						std::move(handler)(error_code{});
-						return;
+						return ;
 					}
 					if( body.size() == 0 )
 					{
 						response_body().finish({}, std::move(handler));
-						return;
+						return ;
 					}
 					response_body().write(body,
 					[this, handler = std::move(handler)]
@@ -412,7 +416,7 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 						if( write_error )
 						{
 							std::move(handler)(write_error);
-							return;
+							return ;
 						}
 						response_body().finish({}, std::move(handler));
 					});
@@ -449,7 +453,8 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 		uint64_t total = 0;
 		while( not error and not head_only )
 		{
-			if( length and total == *length ) break;
+			if( length and total == *length )
+				break;
 			auto target = riwo::buffer(buffer);
 			if( length )
 				target = mutable_buffer(target.data(), static_cast<size_t>(
@@ -457,11 +462,14 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			const auto read = source->read_some_sync(target, error);
 			if( error == asio::error::make_error_code(asio::error::eof) )
 			{
-				if( length ) error = make_error_code(errc::body_length_mismatch);
-				else error.clear();
+				if( length )
+					error = make_error_code(errc::body_length_mismatch);
+				else
+					error.clear();
 				break;
 			}
-			if( error ) break;
+			if( error )
+				break;
 			if( read == 0 or read > target.size() )
 			{
 				error = read == 0 ?
@@ -496,7 +504,8 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 				}
 			}
 		}
-		if( not error ) source->finish_sync(error);
+		if( not error )
+			source->finish_sync(error);
 		if( not error and not head_only )
 			m_impl->m_response_body->finish({}, error);
 		if( error )
@@ -504,7 +513,8 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			source->cancel();
 			m_impl->m_state->cancel();
 		}
-		if constexpr( is_error_code_token_v<Token> ) token = error;
+		if constexpr( is_error_code_token_v<Token> )
+			token = error;
 		else if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
@@ -530,9 +540,12 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 				auto self = this->shared_from_this();
 				owner->m_state->respond(std::move(head), spec,
 				[self = std::move(self)](error_code error) mutable {
-					if( error ) self->fail(error);
-					else if( self->head_only ) self->finish_source();
-					else self->read_next();
+					if( error )
+						self->fail(error);
+					else if( self->head_only )
+						self->finish_source();
+					else
+						self->read_next();
 				});
 			}
 
@@ -541,7 +554,7 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 				if( length and total == *length )
 				{
 					finish_source();
-					return;
+					return ;
 				}
 				auto target = riwo::buffer(buffer);
 				if( length )
@@ -560,21 +573,23 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			{
 				if( error == asio::error::make_error_code(asio::error::eof) )
 				{
-					if( length ) fail(make_error_code(errc::body_length_mismatch));
-					else finish_source();
-					return;
+					if( length )
+						fail(make_error_code(errc::body_length_mismatch));
+					else
+						finish_source();
+					return ;
 				}
 				if( error )
 				{
 					fail(error);
-					return;
+					return ;
 				}
 				if( size == 0 or size > target.size() )
 				{
 					fail(size == 0 ?
 						make_error_code(errc::body_length_mismatch) :
 						make_system_error_code(std::errc::io_error));
-					return;
+					return ;
 				}
 				chunk_size = size;
 				chunk_offset = 0;
@@ -598,27 +613,29 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 				if( written > remaining )
 				{
 					fail(make_system_error_code(std::errc::io_error));
-					return;
+					return ;
 				}
 				if( written > std::numeric_limits<uint64_t>::max() - total )
 				{
 					fail(make_system_error_code(std::errc::value_too_large));
-					return;
+					return ;
 				}
 				chunk_offset += written;
 				total += written;
 				if( error )
 				{
 					fail(error);
-					return;
+					return ;
 				}
 				if( written == 0 )
 				{
 					fail(make_system_error_code(std::errc::io_error));
-					return;
+					return ;
 				}
-				if( chunk_offset != chunk_size ) write_next();
-				else read_next();
+				if( chunk_offset != chunk_size )
+					write_next();
+				else
+					read_next();
 			}
 
 			void finish_source()
@@ -629,10 +646,12 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 					if( error )
 					{
 						self->fail(error);
-						return;
+						return ;
 					}
-					if( self->head_only ) self->complete({});
-					else self->finish_response();
+					if( self->head_only )
+						self->complete({});
+					else
+						self->finish_response();
 				});
 			}
 
@@ -641,8 +660,10 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 				auto self = this->shared_from_this();
 				owner->m_response_body->finish({},
 				[self = std::move(self)](error_code error) mutable {
-					if( error ) self->fail(error);
-					else self->complete({});
+					if( error )
+						self->fail(error);
+					else
+						self->complete({});
 				});
 			}
 

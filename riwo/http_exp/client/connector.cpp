@@ -16,21 +16,12 @@
 # include <openssl/ssl.h>
 #endif
 
-#include <atomic>
-#include <array>
 #include <asio/as_tuple.hpp>
 #include <asio/connect.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/read_until.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
-#include <cerrno>
-#include <charconv>
-#include <cctype>
-#include <chrono>
-#include <cstdlib>
-#include <thread>
-#include <vector>
 
 #if !defined(_WIN32)
 # include <poll.h>
@@ -53,7 +44,8 @@ constexpr bool h2_client_session_available =
 		asio::ip::tcp::resolver resolver(std::move(executor));
 		auto results = resolver.resolve(host, std::to_string(port), error);
 		std::vector<asio::ip::tcp::endpoint> endpoints;
-		if( error ) return endpoints;
+		if( error )
+			return endpoints;
 		for( const auto &value : results )
 			endpoints.push_back(value.endpoint());
 		return endpoints;
@@ -91,7 +83,7 @@ void connect_with_timeout(Socket &socket,
 	if( timeout.count() <= 0 )
 	{
 		asio::connect(socket, endpoints, error);
-		return;
+		return ;
 	}
 
 #if !defined(_WIN32)
@@ -103,12 +95,14 @@ void connect_with_timeout(Socket &socket,
 		if( remaining.count() <= 0 )
 		{
 			error = asio::error::make_error_code(asio::error::timed_out);
-			return;
+			return ;
 		}
 		socket.open(endpoint.protocol(), error);
-		if( error ) return;
+		if( error )
+			return ;
 		socket.non_blocking(true, error);
-		if( error ) return;
+		if( error )
+			return ;
 		const auto native_result = ::connect(socket.native_handle(),
 			endpoint.data(), static_cast<socklen_t>(endpoint.size()));
 		if( native_result != 0 and errno != EINPROGRESS and errno != EWOULDBLOCK )
@@ -132,7 +126,7 @@ void connect_with_timeout(Socket &socket,
 				error = asio::error::make_error_code(asio::error::timed_out);
 				error_code ignored;
 				socket.close(ignored);
-				return;
+				return ;
 			}
 			if( result < 0 )
 			{
@@ -140,7 +134,7 @@ void connect_with_timeout(Socket &socket,
 					asio::error::try_again);
 				error_code ignored;
 				socket.close(ignored);
-				return;
+				return ;
 			}
 			int value = 0;
 			socklen_t size = sizeof(value);
@@ -159,9 +153,9 @@ void connect_with_timeout(Socket &socket,
 		{
 			error_code ignored;
 			socket.close(ignored);
-			return;
+			return ;
 		}
-		return;
+		return ;
 	}
 	if( not error )
 		error = asio::error::make_error_code(asio::error::host_unreachable);
@@ -173,7 +167,8 @@ void connect_with_timeout(Socket &socket,
 		const auto deadline = std::chrono::steady_clock::now() + timeout;
 		while( not finished and std::chrono::steady_clock::now() < deadline )
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		if( finished ) return;
+		if( finished )
+			return ;
 		timed_out = true;
 		error_code ignored;
 		socket.close(ignored);
@@ -194,7 +189,7 @@ void tls_handshake_with_timeout(tls_socket_t &socket,
 	if( timeout.count() <= 0 )
 	{
 		socket.handshake(asio::ssl::stream_base::client, error);
-		return;
+		return ;
 	}
 	std::atomic<bool> finished {false};
 	std::atomic<bool> timed_out {false};
@@ -203,7 +198,8 @@ void tls_handshake_with_timeout(tls_socket_t &socket,
 		const auto deadline = std::chrono::steady_clock::now() + timeout;
 		while( not finished and std::chrono::steady_clock::now() < deadline )
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		if( finished ) return;
+		if( finished )
+			return ;
 		timed_out = true;
 		error_code ignored;
 		socket.next_layer().close(ignored);
@@ -233,7 +229,8 @@ struct proxy_target
 
 [[nodiscard]] optional<proxy_target> parse_proxy(const session_key &key)
 {
-	if( not key.proxy.endpoint ) return std::nullopt;
+	if( not key.proxy.endpoint )
+		return std::nullopt;
 	riwo::url value(*key.proxy.endpoint);
 	auto scheme = lower(value.protocol());
 	auto type = key.proxy.type;
@@ -273,9 +270,11 @@ struct proxy_target
 	std::array<unsigned char,4> greeting {5, 1,
 		static_cast<unsigned char>(credentials ? 2 : 0), 0};
 	asio::write(socket, asio::buffer(greeting.data(), 3), error);
-	if( error ) return error;
+	if( error )
+		return error;
 	asio::read(socket, asio::buffer(greeting.data(), 2), error);
-	if( error ) return error;
+	if( error )
+		return error;
 	if( greeting[0] != 5 or greeting[1] == 0xff )
 		return make_error_code(errc::negotiation_failed);
 	if( greeting[1] == 2 )
@@ -290,34 +289,41 @@ struct proxy_target
 		auth.push_back(static_cast<unsigned char>(password.size()));
 		auth.insert(auth.end(), password.begin(), password.end());
 		asio::write(socket, asio::buffer(auth), error);
-		if( error ) return error;
+		if( error )
+			return error;
 		asio::read(socket, asio::buffer(greeting.data(), 2), error);
-		if( error ) return error;
+		if( error )
+			return error;
 		if( greeting[0] != 1 or greeting[1] != 0 )
 			return make_error_code(errc::negotiation_failed);
 	}
 	else if( greeting[1] != 0 )
 		return make_error_code(errc::negotiation_failed);
-	if( key.host.size() > 255 ) return make_error_code(errc::invalid_target);
+	if( key.host.size() > 255 )
+		return make_error_code(errc::invalid_target);
 	std::vector<unsigned char> request {5, 1, 0, 3,
 		static_cast<unsigned char>(key.host.size())};
 	request.insert(request.end(), key.host.begin(), key.host.end());
 	request.push_back(static_cast<unsigned char>(key.port >> 8));
 	request.push_back(static_cast<unsigned char>(key.port & 0xff));
 	asio::write(socket, asio::buffer(request), error);
-	if( error ) return error;
+	if( error )
+		return error;
 	asio::read(socket, asio::buffer(greeting), error);
-	if( error ) return error;
+	if( error )
+		return error;
 	if( greeting[0] != 5 or greeting[1] != 0 )
 		return make_error_code(errc::negotiation_failed);
 	size_t remaining = greeting[3] == 1 ? 4 : greeting[3] == 4 ? 16 : 0;
 	if( greeting[3] == 3 )
 	{
 		asio::read(socket, asio::buffer(greeting.data(), 1), error);
-		if( error ) return error;
+		if( error )
+			return error;
 		remaining = greeting[0];
 	}
-	if( remaining == 0 ) return make_error_code(errc::negotiation_failed);
+	if( remaining == 0 )
+		return make_error_code(errc::negotiation_failed);
 	std::vector<unsigned char> tail(remaining + 2);
 	asio::read(socket, asio::buffer(tail), error);
 	return error;
@@ -332,10 +338,12 @@ struct proxy_target
 	auto [error, size] = co_await asio::async_write(socket,
 		asio::buffer(reply.data(), 3), asio::as_tuple(asio::use_awaitable));
 	ignore_unused(size);
-	if( error ) co_return error;
+	if( error )
+		co_return error;
 	std::tie(error, size) = co_await asio::async_read(socket,
 		asio::buffer(reply.data(), 2), asio::as_tuple(asio::use_awaitable));
-	if( error ) co_return error;
+	if( error )
+		co_return error;
 	if( reply[0] != 5 or reply[1] == 0xff )
 		co_return make_error_code(errc::negotiation_failed);
 	if( reply[1] == 2 )
@@ -351,10 +359,12 @@ struct proxy_target
 		auth.insert(auth.end(), password.begin(), password.end());
 		std::tie(error, size) = co_await asio::async_write(socket,
 			asio::buffer(auth), asio::as_tuple(asio::use_awaitable));
-		if( error ) co_return error;
+		if( error )
+			co_return error;
 		std::tie(error, size) = co_await asio::async_read(socket,
 			asio::buffer(reply.data(), 2), asio::as_tuple(asio::use_awaitable));
-		if( error ) co_return error;
+		if( error )
+			co_return error;
 		if( reply[0] != 1 or reply[1] != 0 )
 			co_return make_error_code(errc::negotiation_failed);
 	}
@@ -369,10 +379,12 @@ struct proxy_target
 	request.push_back(static_cast<unsigned char>(key.port & 0xff));
 	std::tie(error, size) = co_await asio::async_write(socket,
 		asio::buffer(request), asio::as_tuple(asio::use_awaitable));
-	if( error ) co_return error;
+	if( error )
+		co_return error;
 	std::tie(error, size) = co_await asio::async_read(socket,
 		asio::buffer(reply), asio::as_tuple(asio::use_awaitable));
-	if( error ) co_return error;
+	if( error )
+		co_return error;
 	if( reply[0] != 5 or reply[1] != 0 )
 		co_return make_error_code(errc::negotiation_failed);
 	size_t remaining = reply[3] == 1 ? 4 : reply[3] == 4 ? 16 : 0;
@@ -380,7 +392,8 @@ struct proxy_target
 	{
 		std::tie(error, size) = co_await asio::async_read(socket,
 			asio::buffer(reply.data(), 1), asio::as_tuple(asio::use_awaitable));
-		if( error ) co_return error;
+		if( error )
+			co_return error;
 		remaining = reply[0];
 	}
 	if( remaining == 0 )
@@ -398,15 +411,19 @@ struct proxy_target
 		static_cast<unsigned char>(rule.front())) ) rule.remove_prefix(1);
 	while( not rule.empty() and std::isspace(
 		static_cast<unsigned char>(rule.back())) ) rule.remove_suffix(1);
-	if( rule.empty() ) return false;
-	if( rule == "*" ) return true;
+	if( rule.empty() )
+		return false;
+	if( rule == "*" )
+		return true;
 	if( rule.starts_with('[') )
 	{
 		const auto close = rule.find(']');
-		if( close == std::string_view::npos ) return false;
+		if( close == std::string_view::npos )
+			return false;
 		if( close + 1 < rule.size() )
 		{
-			if( rule[close + 1] != ':' ) return false;
+			if( rule[close + 1] != ':' )
+				return false;
 			uint16_t rule_port = 0;
 			auto parsed = std::from_chars(rule.data() + close + 2,
 				rule.data() + rule.size(), rule_port);
@@ -425,11 +442,13 @@ struct proxy_target
 		if( parsed.ec == std::errc{} and
 			parsed.ptr == rule.data() + rule.size() )
 		{
-			if( rule_port != port ) return false;
+			if( rule_port != port )
+				return false;
 			rule = rule.substr(0, colon);
 		}
 	}
-	if( rule.starts_with('.') ) rule.remove_prefix(1);
+	if( rule.starts_with('.') )
+		rule.remove_prefix(1);
 	auto host_lower = lower(host);
 	auto rule_lower = lower(rule);
 	return host_lower == rule_lower or
@@ -441,14 +460,17 @@ struct proxy_target
 void append_no_proxy_environment(std::vector<std::string> &rules)
 {
 	const char *value = std::getenv("NO_PROXY");
-	if( not value ) value = std::getenv("no_proxy");
-	if( not value ) return;
+	if( not value )
+		value = std::getenv("no_proxy");
+	if( not value )
+		return ;
 	std::string_view text(value);
 	while( not text.empty() )
 	{
 		auto comma = text.find(',');
 		rules.emplace_back(text.substr(0, comma));
-		if( comma == std::string_view::npos ) break;
+		if( comma == std::string_view::npos )
+			break;
 		text.remove_prefix(comma + 1);
 	}
 }
@@ -459,15 +481,22 @@ void append_no_proxy_environment(std::vector<std::string> &rules)
 	if( scheme == "https" )
 	{
 		value = std::getenv("HTTPS_PROXY");
-		if( not value ) value = std::getenv("https_proxy");
+		if( not value )
+			value = std::getenv("https_proxy");
 	}
-	if( not value ) value = std::getenv("HTTP_PROXY");
-	if( not value ) value = std::getenv("http_proxy");
-	if( not value ) value = std::getenv("ALL_PROXY");
-	if( not value ) value = std::getenv("all_proxy");
-	if( not value or *value == '\0' ) return {};
+	if( not value )
+		value = std::getenv("HTTP_PROXY");
+	if( not value )
+		value = std::getenv("http_proxy");
+	if( not value )
+		value = std::getenv("ALL_PROXY");
+	if( not value )
+		value = std::getenv("all_proxy");
+	if( not value or *value == '\0' )
+		return {};
 	std::string text(value);
-	if( text.find("://") == std::string::npos ) text = "http://" + text;
+	if( text.find("://") == std::string::npos )
+		text = "http://" + text;
 	return riwo::url(std::move(text));
 }
 
@@ -482,7 +511,8 @@ void append_no_proxy_environment(std::vector<std::string> &rules)
 
 [[nodiscard]] bool valid_policy(const protocol_policy_identity &policy) noexcept
 {
-	if( policy.preference.empty() ) return false;
+	if( policy.preference.empty() )
+		return false;
 	for( size_t index = 0; index < policy.preference.size(); ++index )
 		for( size_t other = index + 1; other < policy.preference.size(); ++other )
 			if( policy.preference[index] == policy.preference[other] )
@@ -516,11 +546,14 @@ void mix(size_t &seed, size_t value) noexcept
 	for( const auto value : preference )
 	{
 		std::string_view name;
-		if( value == protocol::v1_1 ) name = "http/1.1";
+		if( value == protocol::v1_1 )
+			name = "http/1.1";
 # if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		else if( value == protocol::v2 ) name = "h2";
+		else if( value == protocol::v2 )
+			name = "h2";
 # endif
-		else continue;
+		else
+			continue;
 		result.push_back(static_cast<unsigned char>(name.size()));
 		result.insert(result.end(), name.begin(), name.end());
 	}
@@ -532,9 +565,11 @@ void mix(size_t &seed, size_t value) noexcept
 	std::vector<protocol> result;
 	for( const auto value : key.protocols.preference )
 	{
-		if( value == protocol::v1_0 ) continue;
+		if( value == protocol::v1_0 )
+			continue;
 	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		if( value == protocol::v2 and not h2_client_session_available ) continue;
+		if( value == protocol::v2 and not h2_client_session_available )
+			continue;
 	#endif
 		if( key.protocols.requirement == protocol_requirement::require_http1 and
 			value != protocol::v1_1 )
@@ -551,9 +586,11 @@ void mix(size_t &seed, size_t value) noexcept
 
 [[nodiscard]] optional<protocol> protocol_from_alpn(std::string_view value)
 {
-	if( value == "http/1.1" ) return protocol::v1_1;
+	if( value == "http/1.1" )
+		return protocol::v1_1;
 # if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( value == "h2" ) return protocol::v2;
+	if( value == "h2" )
+		return protocol::v2;
 # endif
 	return {};
 }
@@ -566,12 +603,15 @@ void mix(size_t &seed, size_t value) noexcept
 		asio::ssl::context::no_tlsv1_1 |
 		asio::ssl::context::no_sslv2 |
 		asio::ssl::context::no_sslv3, error);
-	if( error ) return error;
+	if( error )
+		return error;
 
 	context.set_verify_mode(identity.verify_peer ?
 		asio::ssl::verify_peer : asio::ssl::verify_none, error);
-	if( error ) return error;
-	if( not identity.verify_peer ) return {};
+	if( error )
+		return error;
+	if( not identity.verify_peer )
+		return {};
 
 	if( identity.certificate_authority_file.empty() )
 		context.set_default_verify_paths(error);
@@ -586,12 +626,13 @@ void arm_async_timeout(asio::steady_timer &timer,
 	std::chrono::milliseconds timeout, bool &expired, Cancel &&cancel)
 {
 	if( timeout.count() <= 0 )
-		return;
+		return ;
 	timer.expires_after(timeout);
 	timer.async_wait(
 	[&expired, cancel = std::forward<Cancel>(cancel)](error_code error) mutable
 	{
-		if( error ) return;
+		if( error )
+			return ;
 		expired = true;
 		cancel();
 	});
@@ -656,7 +697,8 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 			co_return sys_unexpected(connect_error);
 
 		tcp->socket().set_option(asio::ip::tcp::no_delay(true), error);
-		if( error ) co_return sys_unexpected(error);
+		if( error )
+			co_return sys_unexpected(error);
 		if( proxy and proxy->type == proxy_type::socks5 )
 		{
 			asio::steady_timer proxy_timer(executor);
@@ -668,17 +710,21 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 				});
 			error = co_await socks5_connect_async(tcp->socket(), key);
 			proxy_timer.cancel();
-			if( proxy_expired ) error = asio::error::make_error_code(
+			if( proxy_expired )
+				error = asio::error::make_error_code(
 				asio::error::timed_out);
-			if( error ) co_return sys_unexpected(error);
+			if( error )
+				co_return sys_unexpected(error);
 		}
 
 		if( key.scheme != "https" )
 		{
 			auto remote = tcp->remote_endpoint(error);
-			if( error ) co_return sys_unexpected(error);
+			if( error )
+				co_return sys_unexpected(error);
 			auto local = tcp->local_endpoint(error);
-			if( error ) co_return sys_unexpected(error);
+			if( error )
+				co_return sys_unexpected(error);
 			co_return negotiated_transport {
 				.stream = std::move(tcp),
 				.selected_protocol = *selected,
@@ -719,8 +765,10 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 			if( proxy_expired )
 				co_return sys_unexpected(asio::error::make_error_code(
 					asio::error::timed_out));
-			if( write_error ) co_return sys_unexpected(write_error);
-			if( read_error ) co_return sys_unexpected(read_error);
+			if( write_error )
+				co_return sys_unexpected(write_error);
+			if( read_error )
+				co_return sys_unexpected(read_error);
 			(void)read_size;
 
 			const auto first = reply.find(' ');
@@ -759,7 +807,8 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 		{
 			socket.set_verify_callback(
 				asio::ssl::host_name_verification(key.host), error);
-			if( error ) co_return sys_unexpected(error);
+			if( error )
+				co_return sys_unexpected(error);
 		}
 
 		auto offered = alpn_wire(alpn_preference(key));
@@ -836,9 +885,11 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 # endif
 
 		auto remote = socket.next_layer().remote_endpoint(error);
-		if( error ) co_return sys_unexpected(error);
+		if( error )
+			co_return sys_unexpected(error);
 		auto local = socket.next_layer().local_endpoint(error);
-		if( error ) co_return sys_unexpected(error);
+		if( error )
+			co_return sys_unexpected(error);
 		auto transport = std::make_shared<tls_connection>(std::move(socket));
 		co_return negotiated_transport {
 			.stream = std::move(transport),
@@ -874,7 +925,8 @@ public:
 	{
 		try {
 			auto selected = negotiate_protocol(make_policy(key), key);
-			if( not selected ) return sys_unexpected(selected.error());
+			if( not selected )
+				return sys_unexpected(selected.error());
 
 			error_code error;
 			auto proxy = parse_proxy(key);
@@ -885,7 +937,8 @@ public:
 			const auto connect_port = proxy ? proxy->port : key.port;
 			auto endpoints = resolve_with_timeout(m_executor, connect_host,
 				connect_port, config.timeout.connect, error);
-			if( error ) return sys_unexpected(error);
+			if( error )
+				return sys_unexpected(error);
 			if( endpoints.empty() )
 				return sys_unexpected(asio::error::make_error_code(
 					asio::error::host_not_found));
@@ -893,9 +946,11 @@ public:
 			auto tcp = std::make_shared<tcp_connection>(m_executor);
 			connect_with_timeout(tcp->socket(), endpoints,
 				config.timeout.connect, error);
-			if( error ) return sys_unexpected(error);
+			if( error )
+				return sys_unexpected(error);
 			tcp->socket().set_option(asio::ip::tcp::no_delay(true), error);
-			if( error ) return sys_unexpected(error);
+			if( error )
+				return sys_unexpected(error);
 			if( proxy and proxy->type == proxy_type::socks5 )
 			{
 				tcp->set_read_timeout(config.timeout.connect);
@@ -903,15 +958,18 @@ public:
 				error = socks5_connect_sync(tcp->socket(), key);
 				tcp->set_read_timeout(std::nullopt);
 				tcp->set_write_timeout(std::nullopt);
-				if( error ) return sys_unexpected(error);
+				if( error )
+					return sys_unexpected(error);
 			}
 
 			if( key.scheme != "https" )
 			{
 				auto remote = tcp->remote_endpoint(error);
-				if( error ) return sys_unexpected(error);
+				if( error )
+					return sys_unexpected(error);
 				auto local = tcp->local_endpoint(error);
-				if( error ) return sys_unexpected(error);
+				if( error )
+					return sys_unexpected(error);
 				return negotiated_transport {
 					.stream = std::move(tcp),
 					.selected_protocol = *selected,
@@ -928,7 +986,8 @@ public:
 				tcp->set_read_timeout(config.timeout.connect);
 				tcp->set_write_timeout(config.timeout.connect);
 				(void)tcp->write_sync(asio::buffer(request), error);
-				if( error ) return sys_unexpected(error);
+				if( error )
+					return sys_unexpected(error);
 
 				std::string reply;
 				std::array<char,4096> buffer {};
@@ -936,7 +995,8 @@ public:
 				{
 					const auto read = tcp->read_some_sync(riwo::buffer(buffer),
 						error);
-					if( error ) return sys_unexpected(error);
+					if( error )
+						return sys_unexpected(error);
 					if( read == 0 )
 						return sys_unexpected(make_error_code(
 							errc::negotiation_failed));
@@ -984,7 +1044,8 @@ public:
 			{
 				socket.set_verify_callback(
 					asio::ssl::host_name_verification(key.host), error);
-				if( error ) return sys_unexpected(error);
+				if( error )
+					return sys_unexpected(error);
 			}
 
 			auto offered = alpn_wire(alpn_preference(key));
@@ -995,7 +1056,8 @@ public:
 					errc::negotiation_failed));
 
 			tls_handshake_with_timeout(socket, config.timeout.connect, error);
-			if( error ) return sys_unexpected(error);
+			if( error )
+				return sys_unexpected(error);
 
 			const unsigned char *alpn_data = nullptr;
 			unsigned int alpn_size = 0;
@@ -1024,7 +1086,8 @@ public:
 				fallback_policy.requirement =
 					protocol_requirement::require_http1;
 				auto fallback = negotiate_protocol(fallback_policy, key);
-				if( not fallback ) return sys_unexpected(fallback.error());
+				if( not fallback )
+					return sys_unexpected(fallback.error());
 				selected = *fallback;
 			}
 
@@ -1045,9 +1108,11 @@ public:
 # endif
 
 			auto remote = socket.next_layer().remote_endpoint(error);
-			if( error ) return sys_unexpected(error);
+			if( error )
+				return sys_unexpected(error);
 			auto local = socket.next_layer().local_endpoint(error);
-			if( error ) return sys_unexpected(error);
+			if( error )
+				return sys_unexpected(error);
 			auto transport = std::make_shared<tls_connection>(
 				std::move(socket));
 			return negotiated_transport {
@@ -1083,7 +1148,7 @@ public:
 			{
 				std::move(handler)(exception_error(exception),
 					negotiated_transport{});
-				return;
+				return ;
 			}
 			if( result )
 				std::move(handler)(error_code{}, std::move(*result));
@@ -1171,7 +1236,8 @@ session_key make_session_key(const request_head &head,
 	if( not proxy_url and config.proxy.use_environment )
 		proxy_url = environment_proxy(scheme);
 	auto bypass = config.proxy.no_proxy;
-	if( config.proxy.use_environment ) append_no_proxy_environment(bypass);
+	if( config.proxy.use_environment )
+		append_no_proxy_environment(bypass);
 	const bool bypassed = std::ranges::any_of(bypass,
 		[&](const std::string &rule) {
 			return no_proxy_match(result.host, result.port, rule);
@@ -1233,8 +1299,10 @@ void connector::connect_async(const session_key &key,
 	auto executor = this->get_executor();
 	asio::post(executor,
 	[result = std::move(result), handler = std::move(handler)]() mutable {
-		if( result ) std::move(handler)(error_code{}, std::move(*result));
-		else std::move(handler)(result.error(), negotiated_transport{});
+		if( result )
+			std::move(handler)(error_code{}, std::move(*result));
+		else
+			std::move(handler)(result.error(), negotiated_transport{});
 	});
 }
 
@@ -1268,7 +1336,8 @@ sys_expected<protocol> negotiate_protocol(const protocol_policy &policy,
 	{
 		if( value == protocol::v1_0 )
 		{
-			if( key.scheme == "http" ) eligible.push_back(value);
+			if( key.scheme == "http" )
+				eligible.push_back(value);
 			continue;
 		}
 		if( value == protocol::v1_1 )

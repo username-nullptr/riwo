@@ -5,16 +5,11 @@
 #define RIWO_HTTP_EXP_GLOBAL_H
 
 #include <riwo/http_exp/cxx/attributes.h>
+#include <riwo/http_exp/cxx/concepts.h>
 #include <riwo/http_exp/cxx/configs.h>
+
 #include <riwo/core/async_expected.h>
 #include <riwo/core/url.h>
-
-namespace riwo::http_exp
-{
-
-namespace core_concepts = riwo::concepts;
-
-} //namespace riwo::http_exp
 
 
 #endif //RIWO_HTTP_EXP_GLOBAL_H

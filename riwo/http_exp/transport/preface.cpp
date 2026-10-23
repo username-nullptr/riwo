@@ -100,7 +100,7 @@ void http2_preface_detector::detect(
 	if( not stream or m_impl->m_result != preface_result::need_more )
 	{
 		std::move(handler)(error_code{}, m_impl->m_result, take_buffer());
-		return;
+		return ;
 	}
 
 	struct operation final : std::enable_shared_from_this<operation>
@@ -128,14 +128,14 @@ void http2_preface_detector::detect(
 				{
 					std::move(self->handler)(error, preface_result::http1,
 						self->detector->take_buffer());
-					return;
+					return ;
 				}
 				auto result = self->detector->feed(
 					const_buffer(self->buffer.data(), size));
 				if( result == preface_result::need_more )
 				{
 					self->start();
-					return;
+					return ;
 				}
 				std::move(self->handler)(error_code{}, result,
 					self->detector->take_buffer());

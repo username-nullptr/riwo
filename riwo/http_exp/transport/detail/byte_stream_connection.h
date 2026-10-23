@@ -53,7 +53,8 @@ public:
 		error_code &error) noexcept override
 	{
 		error.clear();
-		if( m_initial_offset != m_initial.size() ) return copy_initial(buffer);
+		if( m_initial_offset != m_initial.size() )
+			return copy_initial(buffer);
 		return m_stream.read_some_sync(buffer, error);
 	}
 	[[nodiscard]] size_t write_sync(const_buffer buffer,
@@ -75,7 +76,8 @@ private:
 	{
 		const auto count = std::min(buffer.size(),
 			m_initial.size() - m_initial_offset);
-		if( count != 0 ) std::memcpy(buffer.data(),
+		if( count != 0 )
+			std::memcpy(buffer.data(),
 			m_initial.data() + m_initial_offset, count);
 		m_initial_offset += count;
 		return count;
@@ -99,7 +101,8 @@ private:
 			{
 				const auto end = value.find(']');
 				if( end == std::string_view::npos or end + 1 >= value.size() or
-					value[end + 1] != ':' ) throw std::invalid_argument("endpoint");
+					value[end + 1] != ':' )
+					throw std::invalid_argument("endpoint");
 				address = value.substr(1, end - 1);
 				port = value.substr(end + 2);
 			}
@@ -117,7 +120,8 @@ private:
 			if( parsed.ec != std::errc{} or parsed.ptr != port.data() + port.size() )
 				throw std::invalid_argument("endpoint");
 			auto ip = asio::ip::make_address(address, error);
-			if( error ) return {};
+			if( error )
+				return {};
 			return {ip, port_value};
 		}
 		catch(...) {

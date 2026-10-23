@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "file.h"
-#include <fstream>
 #include <random>
 
 namespace riwo::http_exp
@@ -32,8 +31,10 @@ namespace
 	std::chrono::system_clock::time_point last_modified) noexcept
 {
 	const auto condition = request.headers.find_first("if-range");
-	if( not condition ) return true;
-	if( condition->starts_with("W/") ) return false;
+	if( not condition )
+		return true;
+	if( condition->starts_with("W/") )
+		return false;
 	if( condition->starts_with('"') )
 		return strong_entity_tag_equal(*condition, etag);
 	const auto date = parse_http_date(*condition);
@@ -54,7 +55,8 @@ namespace
 	auto current = path.begin();
 	for( auto expected = prefix.begin(); expected != prefix.end();
 		++expected, ++current )
-		if( current == path.end() or *current != *expected ) return false;
+		if( current == path.end() or *current != *expected )
+			return false;
 	return true;
 }
 
@@ -105,7 +107,9 @@ sys_expected<std::filesystem::path> resolve_resource_path(
 	catch(const std::filesystem::filesystem_error &error) {
 		return sys_unexpected(error.code());
 	}
-	catch(...) { return sys_unexpected(exception_error(std::current_exception())); }
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
 }
 
 class file_response_source::impl
@@ -124,17 +128,20 @@ public:
 		std::error_code std_error;
 		if( not std::filesystem::is_regular_file(path, std_error) )
 		{
-			if( not std_error ) std_error = std::make_error_code(
+			if( not std_error )
+				std_error = std::make_error_code(
 				std::errc::no_such_file_or_directory);
 			throw std::filesystem::filesystem_error(
 				"HTTP file response", path, std_error);
 		}
 		const auto file_size = std::filesystem::file_size(path, std_error);
-		if( std_error ) throw std::filesystem::filesystem_error(
+		if( std_error )
+			throw std::filesystem::filesystem_error(
 			"HTTP file response size", path, std_error);
 		const auto modified_file_time =
 			std::filesystem::last_write_time(path, std_error);
-		if( std_error ) throw std::filesystem::filesystem_error(
+		if( std_error )
+			throw std::filesystem::filesystem_error(
 			"HTTP file response last write", path, std_error);
 		const auto modified = system_time(modified_file_time);
 		const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
@@ -157,14 +164,14 @@ public:
 			head.status = status::not_modified;
 			body = false;
 			total_size = 0;
-			return;
+			return ;
 		}
 		if( precondition == precondition_result::precondition_failed )
 		{
 			head.status = status::precondition_failed;
 			body = false;
 			total_size = 0;
-			return;
+			return ;
 		}
 
 		const auto range_header = request.headers.find_first("range");
@@ -175,7 +182,7 @@ public:
 			segments.push_back({{}, {0, file_size}, {}});
 			total_size = file_size;
 			open();
-			return;
+			return ;
 		}
 		auto parsed = parse_range_header(*range_header);
 		if( not parsed or parsed->unit != "bytes" or
@@ -184,7 +191,7 @@ public:
 			segments.push_back({{}, {0, file_size}, {}});
 			total_size = file_size;
 			open();
-			return;
+			return ;
 		}
 		auto ranges = resolve_byte_ranges(*parsed, file_size);
 		if( ranges.empty() )
@@ -194,13 +201,14 @@ public:
 				format_unsatisfied_content_range(file_size));
 			body = false;
 			total_size = 0;
-			return;
+			return ;
 		}
 		uint64_t selected_bytes = 0;
 		for( const auto &range : ranges )
 		{
 			if( range.length > std::numeric_limits<uint64_t>::max() -
-				selected_bytes ) { ranges.clear(); break; }
+				selected_bytes )
+			{ ranges.clear(); break; }
 			selected_bytes += range.length;
 		}
 		if( ranges.empty() or (selected_bytes > file_size and
@@ -209,7 +217,7 @@ public:
 			segments.push_back({{}, {0, file_size}, {}});
 			total_size = file_size;
 			open();
-			return;
+			return ;
 		}
 		head.status = status::partial_content;
 		if( ranges.size() == 1 )
@@ -219,7 +227,7 @@ public:
 			segments.push_back({{}, ranges.front(), {}});
 			total_size = ranges.front().length;
 			open();
-			return;
+			return ;
 		}
 
 		const auto boundary = make_boundary();
@@ -251,7 +259,8 @@ public:
 		file.close();
 		file.clear();
 		file.open(path, std::ios::binary);
-		if( not file ) throw std::filesystem::filesystem_error(
+		if( not file )
+			throw std::filesystem::filesystem_error(
 			"HTTP file response open", path,
 			std::make_error_code(std::errc::io_error));
 		segment_index = 0;
@@ -308,7 +317,8 @@ size_t file_response_source::read_some(mutable_buffer buffer,
 			error = asio::error::make_error_code(asio::error::operation_aborted);
 			return 0;
 		}
-		if( buffer.size() == 0 or not m_impl->body ) return 0;
+		if( buffer.size() == 0 or not m_impl->body )
+			return 0;
 		auto *output = static_cast<char*>(buffer.data());
 		while( m_impl->segment_index < m_impl->segments.size() )
 		{
@@ -389,7 +399,9 @@ void file_response_source::rewind(
 	asio::any_completion_handler<void(error_code)> handler)
 {
 	try { m_impl->open(); std::move(handler)(error_code{}); }
-	catch(...) { std::move(handler)(exception_error(std::current_exception())); }
+	catch(...) {
+		std::move(handler)(exception_error(std::current_exception()));
+	}
 }
 
 void file_response_source::finish(error_code &error) noexcept {

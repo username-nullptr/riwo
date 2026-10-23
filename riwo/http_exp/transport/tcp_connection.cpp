@@ -3,9 +3,6 @@
 
 #include "tcp_connection.h"
 #include <asio/steady_timer.hpp>
-#include <atomic>
-#include <chrono>
-#include <thread>
 
 namespace riwo::http_exp
 {
@@ -93,7 +90,7 @@ void tcp_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 		[handler = std::move(handler)](error_code error, size_t size) mutable {
 			std::move(handler)(error, size);
 		});
-		return;
+		return ;
 	}
 
 	struct timeout_state
@@ -111,7 +108,8 @@ void tcp_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 	state->timer.expires_after(*m_impl->m_read_timeout);
 	state->timer.async_wait([self, state](error_code error)
 	{
-		if( error or state->expired.exchange(true) ) return;
+		if( error or state->expired.exchange(true) )
+			return ;
 		self->cancel();
 	});
 	m_impl->m_socket.async_read_some(buffer,
@@ -134,7 +132,7 @@ void tcp_connection::write(const_buffer buffer, io_handler_t handler)
 		[handler = std::move(handler)](error_code error, size_t size) mutable {
 			std::move(handler)(error, size);
 		});
-		return;
+		return ;
 	}
 
 	struct timeout_state
@@ -152,7 +150,8 @@ void tcp_connection::write(const_buffer buffer, io_handler_t handler)
 	state->timer.expires_after(*m_impl->m_write_timeout);
 	state->timer.async_wait([self, state](error_code error)
 	{
-		if( error or state->expired.exchange(true) ) return;
+		if( error or state->expired.exchange(true) )
+			return ;
 		self->cancel();
 	});
 	asio::async_write(m_impl->m_socket, buffer,
@@ -227,7 +226,8 @@ size_t tcp_connection::read_some_sync(mutable_buffer buffer,
 				while( not finished and
 					std::chrono::steady_clock::now() < deadline )
 					std::this_thread::sleep_for(std::chrono::milliseconds(5));
-				if( finished ) return;
+				if( finished )
+					return ;
 				timed_out = true;
 				error_code ignored;
 				m_impl->m_socket.close(ignored);
@@ -235,7 +235,8 @@ size_t tcp_connection::read_some_sync(mutable_buffer buffer,
 		}
 		auto size = m_impl->m_socket.read_some(buffer, error);
 		finished = true;
-		if( watchdog.joinable() ) watchdog.request_stop();
+		if( watchdog.joinable() )
+			watchdog.request_stop();
 		if( timed_out )
 			error = asio::error::make_error_code(asio::error::timed_out);
 		if( timeout_error(error) )
@@ -265,7 +266,8 @@ size_t tcp_connection::write_sync(const_buffer buffer,
 				while( not finished and
 					std::chrono::steady_clock::now() < deadline )
 					std::this_thread::sleep_for(std::chrono::milliseconds(5));
-				if( finished ) return;
+				if( finished )
+					return ;
 				timed_out = true;
 				error_code ignored;
 				m_impl->m_socket.close(ignored);
@@ -273,7 +275,8 @@ size_t tcp_connection::write_sync(const_buffer buffer,
 		}
 		auto size = asio::write(m_impl->m_socket, buffer, error);
 		finished = true;
-		if( watchdog.joinable() ) watchdog.request_stop();
+		if( watchdog.joinable() )
+			watchdog.request_stop();
 		if( timed_out )
 			error = asio::error::make_error_code(asio::error::timed_out);
 		if( timeout_error(error) )
@@ -293,7 +296,8 @@ void tcp_connection::connect_sync(std::string_view host, uint16_t port,
 	try {
 		asio::ip::tcp::resolver resolver(m_impl->m_socket.get_executor());
 		auto endpoints = resolver.resolve(host, std::to_string(port), error);
-		if( error ) return;
+		if( error )
+			return ;
 		asio::connect(m_impl->m_socket, endpoints, error);
 	}
 	catch(...) {
@@ -329,7 +333,8 @@ void tcp_connection::connect_async(std::string_view host, uint16_t port,
 			resolver.async_resolve(host, std::to_string(port),
 			[self = std::move(self)](error_code error,
 				asio::ip::tcp::resolver::results_type endpoints) mutable {
-				if( error ) return self->finish(error);
+				if( error )
+					return self->finish(error);
 				asio::async_connect(*self->socket, endpoints,
 				[self = std::move(self)](error_code connect_error,
 					const asio::ip::tcp::endpoint&) mutable {

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "multipart.h"
-#include <atomic>
 #include <random>
 
 namespace riwo::http_exp
@@ -41,7 +40,8 @@ namespace
 	std::string result = "\"";
 	for( const auto current : value )
 	{
-		if( current == '\\' or current == '"' ) result.push_back('\\');
+		if( current == '\\' or current == '"' )
+			result.push_back('\\');
 		result.push_back(current);
 	}
 	result.push_back('"');
@@ -79,12 +79,15 @@ namespace
 				}
 				return std::string(parameter);
 			}
-			if( semicolon == std::string_view::npos ) break;
+			if( semicolon == std::string_view::npos )
+				break;
 			rest.remove_prefix(semicolon + 1);
 		}
 		return {};
 	}
-	catch(...) { return {}; }
+	catch(...) {
+		return {};
+	}
 }
 
 [[nodiscard]] std::string make_boundary()
@@ -172,7 +175,8 @@ optional<std::string> multipart_boundary(std::string_view content_type) noexcept
 	{
 		const auto semicolon = content_type.find(';');
 		if( lower(trim(content_type.substr(0, semicolon))) !=
-			"multipart/form-data" ) return {};
+			"multipart/form-data" )
+			return {};
 		auto rest = semicolon == std::string_view::npos ? std::string_view{} :
 			content_type.substr(semicolon + 1);
 		while( not rest.empty() )
@@ -185,16 +189,21 @@ optional<std::string> multipart_boundary(std::string_view content_type) noexcept
 			{
 				auto value = trim(item.substr(equal + 1));
 				if( value.size() >= 2 and value.front() == '"' and
-					value.back() == '"' ) value = value.substr(1, value.size() - 2);
-				if( not valid_boundary(value) ) return {};
+					value.back() == '"' )
+					value = value.substr(1, value.size() - 2);
+				if( not valid_boundary(value) )
+					return {};
 				return std::string(value);
 			}
-			if( next == std::string_view::npos ) break;
+			if( next == std::string_view::npos )
+				break;
 			rest.remove_prefix(next + 1);
 		}
 		return {};
 	}
-	catch(...) { return {}; }
+	catch(...) {
+		return {};
+	}
 }
 
 sys_expected<std::vector<multipart_part>> parse_multipart_form(
@@ -203,21 +212,25 @@ sys_expected<std::vector<multipart_part>> parse_multipart_form(
 	try
 	{
 		auto boundary = multipart_boundary(content_type);
-		if( not boundary ) return sys_unexpected(
+		if( not boundary )
+			return sys_unexpected(
 			make_system_error_code(std::errc::invalid_argument));
 		const auto delimiter = "--" + *boundary;
-		if( not body.starts_with(delimiter) ) return sys_unexpected(
+		if( not body.starts_with(delimiter) )
+			return sys_unexpected(
 			make_system_error_code(std::errc::protocol_error));
 		std::vector<multipart_part> result;
 		size_t cursor = delimiter.size();
 		for(;;)
 		{
-			if( body.substr(cursor).starts_with("--") ) return result;
+			if( body.substr(cursor).starts_with("--") )
+				return result;
 			if( not body.substr(cursor).starts_with("\r\n") )
 				return sys_unexpected(make_system_error_code(std::errc::protocol_error));
 			cursor += 2;
 			const auto header_end = body.find("\r\n\r\n", cursor);
-			if( header_end == std::string_view::npos ) return sys_unexpected(
+			if( header_end == std::string_view::npos )
+				return sys_unexpected(
 				make_system_error_code(std::errc::protocol_error));
 			multipart_part part;
 			auto header_text = body.substr(cursor, header_end - cursor);
@@ -226,11 +239,13 @@ sys_expected<std::vector<multipart_part>> parse_multipart_form(
 				const auto line_end = header_text.find("\r\n");
 				const auto line = header_text.substr(0, line_end);
 				const auto colon = line.find(':');
-				if( colon == std::string_view::npos ) return sys_unexpected(
+				if( colon == std::string_view::npos )
+					return sys_unexpected(
 					make_system_error_code(std::errc::protocol_error));
 				part.headers.add(std::string(trim(line.substr(0, colon))),
 					std::string(trim(line.substr(colon + 1))));
-				if( line_end == std::string_view::npos ) break;
+				if( line_end == std::string_view::npos )
+					break;
 				header_text.remove_prefix(line_end + 2);
 			}
 			const auto disposition =
@@ -241,18 +256,22 @@ sys_expected<std::vector<multipart_part>> parse_multipart_form(
 			part.name = disposition_parameter(*disposition, "name").value_or("");
 			part.filename = disposition_parameter(*disposition,
 				"filename").value_or("");
-			if( part.name.empty() ) return sys_unexpected(
+			if( part.name.empty() )
+				return sys_unexpected(
 				make_system_error_code(std::errc::protocol_error));
 			cursor = header_end + 4;
 			const auto next = body.find("\r\n" + delimiter, cursor);
-			if( next == std::string_view::npos ) return sys_unexpected(
+			if( next == std::string_view::npos )
+				return sys_unexpected(
 				make_system_error_code(std::errc::protocol_error));
 			part.data = body.substr(cursor, next - cursor);
 			result.emplace_back(std::move(part));
 			cursor = next + 2 + delimiter.size();
 		}
 	}
-	catch(...) { return sys_unexpected(exception_error(std::current_exception())); }
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
 }
 
 } //namespace riwo::http_exp

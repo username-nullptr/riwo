@@ -121,7 +121,8 @@ basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 basic_body_reader<Exec>::~basic_body_reader() {
-	if( m_impl->m_state and not m_impl->m_state->is_finished() ) m_impl->m_state->cancel();
+	if( m_impl->m_state and not m_impl->m_state->is_finished() )
+		m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>

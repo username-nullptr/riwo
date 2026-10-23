@@ -127,7 +127,8 @@ auto basic_reply<Exec>::read_all(Token &&token)
 		for(;;)
 		{
 			auto read = body().read_some(riwo::buffer(buffer), error);
-			if( error ) break;
+			if( error )
+				break;
 			if( read.bytes > limit - result.size() )
 			{
 				error = make_error_code(errc::buffer_limit_exceeded);
@@ -135,7 +136,8 @@ auto basic_reply<Exec>::read_all(Token &&token)
 			}
 			result.insert(result.end(), buffer.begin(), buffer.begin() +
 				static_cast<std::ptrdiff_t>(read.bytes));
-			if( read.eof ) break;
+			if( read.eof )
+				break;
 		}
 		if constexpr( is_error_code_token_v<Token> )
 		{
@@ -170,14 +172,14 @@ auto basic_reply<Exec>::read_all(Token &&token)
 					if( error )
 					{
 						std::move(self->handler)(error, std::vector<std::byte>{});
-						return;
+						return ;
 					}
 					if( read.bytes > self->limit - self->result.size() )
 					{
 						std::move(self->handler)(
 							make_error_code(errc::buffer_limit_exceeded),
 							std::vector<std::byte>{});
-						return;
+						return ;
 					}
 					self->result.insert(self->result.end(), self->buffer.begin(),
 						self->buffer.begin() +
@@ -186,7 +188,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 					{
 						std::move(self->handler)(error_code{},
 							std::move(self->result));
-						return;
+						return ;
 					}
 					self->start();
 				});
@@ -233,7 +235,8 @@ basic_reply<Exec>::buffered_body() const noexcept {
 
 template <core_concepts::exec Exec>
 void basic_reply<Exec>::cancel() noexcept {
-	if( m_impl->m_body ) m_impl->m_body->cancel();
+	if( m_impl->m_body )
+		m_impl->m_body->cancel();
 }
 
 } //namespace riwo::http_exp

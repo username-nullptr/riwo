@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_BODY_PIPE_H
 #define RIWO_HTTP_EXP_BODY_PIPE_H
 
-#include <riwo/http_exp/body/file.h>
+#include <riwo/http_exp/body/file_sink.h>
 #include <riwo/http_exp/body/reader.h>
 
 namespace riwo::http_exp

@@ -152,7 +152,8 @@ basic_client<Exec>::basic_client(Exec0 &&executor,
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_t>)
 {
-	if( not connector ) throw std::invalid_argument(
+	if( not connector )
+		throw std::invalid_argument(
 		"riwo::http_exp::basic_client: connector is null");
 	auto selected_executor = get_executor_helper(
 		std::forward<Exec0>(executor));
@@ -219,7 +220,7 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 				if( error )
 				{
 					std::move(handler)(error, reply_t(executor));
-					return;
+					return ;
 				}
 				std::move(handler)(error_code{}, reply_t(executor,
 					result.selected_protocol, std::move(result.head),
@@ -239,12 +240,14 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 	if constexpr( is_error_code_token_v<Token> )
 	{
 		auto result = m_impl->m_state->send(std::move(request_value), token);
-		if( token ) return reply_t(m_impl->m_executor);
+		if( token )
+			return reply_t(m_impl->m_executor);
 		reply_t active(m_impl->m_executor, result.selected_protocol,
 			result.head, result.body, {}, result.owner,
 			result.max_buffered_body, result.reply_protocol);
 		auto bytes = active.read_all(token);
-		if( token ) return reply_t(m_impl->m_executor);
+		if( token )
+			return reply_t(m_impl->m_executor);
 		return reply_t(m_impl->m_executor, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner), result.max_buffered_body,
@@ -281,7 +284,7 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 				if( error )
 				{
 					std::move(handler)(error, reply_t(executor));
-					return;
+					return ;
 				}
 				auto active = std::make_shared<reply_t>(executor,
 					result.selected_protocol, result.head, result.body,
@@ -295,7 +298,7 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 					if( read_error )
 					{
 						std::move(handler)(read_error, reply_t(executor));
-						return;
+						return ;
 					}
 					std::move(handler)(error_code{}, reply_t(executor,
 						result.selected_protocol, std::move(result.head),

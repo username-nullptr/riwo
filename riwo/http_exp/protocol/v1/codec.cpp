@@ -3,7 +3,6 @@
 
 #include "codec.h"
 #include <riwo/http_exp/protocol/v1/detail/wire.h>
-#include <charconv>
 
 namespace riwo::http_exp::v1 { namespace
 {
@@ -68,7 +67,8 @@ namespace riwo::http_exp::v1 { namespace
 					errc::connection_protocol_error));
 			const auto line = block.substr(0, end);
 			block.remove_prefix(end + 2);
-			if( line.empty() ) break;
+			if( line.empty() )
+				break;
 			if( ++count > limits.max_field_count or
 				total + line.size() > limits.max_header_list_size )
 				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
@@ -100,10 +100,13 @@ sys_expected<serialized_head> serialize_request_head(const request_head &value,
 	{
 		auto head = value;
 		bool absolute = form == request_target_form::absolute;
-		if( form == request_target_form::authority ) head.target = head.authority;
-		else if( form == request_target_form::asterisk ) head.target = "*";
+		if( form == request_target_form::authority )
+			head.target = head.authority;
+		else if( form == request_target_form::asterisk )
+			head.target = "*";
 		auto wire = detail::serialize_request(head, spec, version, absolute);
-		if( not wire ) return sys_unexpected(wire.error());
+		if( not wire )
+			return sys_unexpected(wire.error());
 		return serialized_head {
 			.wire = std::move(*wire),
 			.framing = framing_for(spec),
@@ -121,7 +124,8 @@ sys_expected<serialized_head> serialize_response_head(const response_head &head,
 {
 	auto wire = detail::serialize_response(head, spec, version,
 		disposition == connection_disposition::close);
-	if( not wire ) return sys_unexpected(wire.error());
+	if( not wire )
+		return sys_unexpected(wire.error());
 	return serialized_head {
 		.wire = std::move(*wire),
 		.framing = framing_for(spec),
@@ -175,10 +179,13 @@ request_parser::ingest(const_buffer input) noexcept
 			m_impl->pending.resize(marker + 4);
 		}
 		std::string complete;
-		if( old_size == 0 ) complete.assign(text.substr(0, take));
-		else complete = m_impl->pending;
+		if( old_size == 0 )
+			complete.assign(text.substr(0, take));
+		else
+			complete = m_impl->pending;
 		auto parsed = detail::parse_request(complete, m_impl->limits);
-		if( not parsed ) return sys_unexpected(parsed.error());
+		if( not parsed )
+			return sys_unexpected(parsed.error());
 		m_impl->done = true;
 		m_impl->pending.clear();
 		return head_parse_result<parsed_request_head> {
@@ -245,7 +252,8 @@ response_parser::ingest(const_buffer input) noexcept
 		m_impl->pending.resize(total);
 		auto parsed = detail::parse_response(m_impl->pending,
 			m_impl->limits, m_impl->head_request);
-		if( not parsed ) return sys_unexpected(parsed.error());
+		if( not parsed )
+			return sys_unexpected(parsed.error());
 		m_impl->done = true;
 		m_impl->pending.clear();
 		return head_parse_result<parsed_response_head> {
@@ -298,13 +306,15 @@ sys_expected<chunk_decode_result> chunk_decoder::ingest(
 		size_t offset = 0;
 		while( offset < text.size() )
 		{
-			if( m_impl->current == impl::state::done ) break;
+			if( m_impl->current == impl::state::done )
+				break;
 			if( m_impl->current == impl::state::data )
 			{
 				const auto count = static_cast<size_t>(std::min<uint64_t>(
 					m_impl->remaining, text.size() - offset));
 				result.data.resize(count);
-				if( count != 0 ) std::memcpy(result.data.data(),
+				if( count != 0 )
+					std::memcpy(result.data.data(),
 					text.data() + offset, count);
 				offset += count;
 				m_impl->remaining -= count;
@@ -316,7 +326,8 @@ sys_expected<chunk_decode_result> chunk_decoder::ingest(
 					m_impl->current = impl::state::data_crlf;
 				result.consumed = offset;
 				result.needs_input = m_impl->remaining != 0;
-				if( count != 0 ) return result;
+				if( count != 0 )
+					return result;
 				continue;
 			}
 
@@ -324,7 +335,8 @@ sys_expected<chunk_decode_result> chunk_decoder::ingest(
 			result.consumed = offset;
 			if( m_impl->current == impl::state::data_crlf )
 			{
-				if( m_impl->pending.size() < 2 ) continue;
+				if( m_impl->pending.size() < 2 )
+					continue;
 				if( m_impl->pending != "\r\n" )
 					return sys_unexpected(make_error_code(
 						errc::connection_protocol_error));
@@ -343,7 +355,8 @@ sys_expected<chunk_decode_result> chunk_decoder::ingest(
 			{
 				auto parsed = detail::parse_chunk_size(
 					std::string_view(m_impl->pending).substr(0, marker));
-				if( not parsed ) return sys_unexpected(parsed.error());
+				if( not parsed )
+					return sys_unexpected(parsed.error());
 				m_impl->pending.clear();
 				m_impl->remaining = *parsed;
 				m_impl->current = *parsed == 0 ? impl::state::trailers :
@@ -355,7 +368,8 @@ sys_expected<chunk_decode_result> chunk_decoder::ingest(
 				 m_impl->pending.ends_with("\r\n\r\n")) )
 			{
 				auto trailers = parse_trailers(m_impl->pending, m_impl->limits);
-				if( not trailers ) return sys_unexpected(trailers.error());
+				if( not trailers )
+					return sys_unexpected(trailers.error());
 				result.trailers = std::move(*trailers);
 				result.message_end = true;
 				m_impl->pending.clear();
@@ -374,7 +388,8 @@ sys_expected<chunk_decode_result> chunk_decoder::ingest(
 
 sys_expected<void> chunk_decoder::finish_input() noexcept
 {
-	if( complete() ) return {};
+	if( complete() )
+		return {};
 	return sys_unexpected(make_error_code(errc::unexpected_eof));
 }
 

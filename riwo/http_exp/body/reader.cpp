@@ -58,15 +58,18 @@ body_read_result body_reader_state::read_some(mutable_buffer buffer,
 		error = operation_error(errc::operation_not_permitted);
 		return {};
 	}
-	if( state->m_finished ) return {0, true};
-	if( buffer.size() == 0 ) return {};
+	if( state->m_finished )
+		return {0, true};
+	if( buffer.size() == 0 )
+		return {};
 
 	state->m_pending = true;
 	auto result = state->m_adapter->read_some_sync(buffer, error);
 	state->m_pending = false;
 	if( not error and result.bytes == 0 and not result.eof )
 		error = operation_error(errc::body_length_mismatch);
-	if( not error and result.eof ) state->m_finished = true;
+	if( not error and result.eof )
+		state->m_finished = true;
 	return result;
 }
 
@@ -77,23 +80,23 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler_t handler)
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress),
 			body_read_result{});
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted),
 			body_read_result{});
-		return;
+		return ;
 	}
 	if( state->m_finished )
 	{
 		std::move(handler)(error_code{}, body_read_result{0, true});
-		return;
+		return ;
 	}
 	if( buffer.size() == 0 )
 	{
 		std::move(handler)(error_code{}, body_read_result{});
-		return;
+		return ;
 	}
 
 	state->m_pending = true;
@@ -105,7 +108,8 @@ void body_reader_state::read_some(mutable_buffer buffer, read_handler_t handler)
 			state->m_pending = false;
 			if( not error and result.bytes == 0 and not result.eof )
 				error = operation_error(errc::body_length_mismatch);
-			if( not error and result.eof ) state->m_finished = true;
+			if( not error and result.eof )
+				state->m_finished = true;
 			std::move(handler)(error, result);
 		});
 	}
@@ -123,15 +127,15 @@ void body_reader_state::discard(error_code &error) noexcept
 	if( state->m_pending )
 	{
 		error = operation_error(errc::operation_in_progress);
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
 	{
 		error = operation_error(errc::operation_not_permitted);
-		return;
+		return ;
 	}
 	if( state->m_finished )
-		return;
+		return ;
 
 	state->m_pending = true;
 	std::array<std::byte,8192> buffer;
@@ -169,17 +173,17 @@ void body_reader_state::discard(operation_handler_t handler)
 	if( state->m_pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress));
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted));
-		return;
+		return ;
 	}
 	if( state->m_finished )
 	{
 		std::move(handler)(error_code{});
-		return;
+		return ;
 	}
 
 	struct operation : std::enable_shared_from_this<operation>
@@ -215,26 +219,26 @@ void body_reader_state::discard(operation_handler_t handler)
 			if( error )
 			{
 				finish(error);
-				return;
+				return ;
 			}
 			if( result.bytes == 0 and not result.eof )
 			{
 				finish(operation_error(errc::body_length_mismatch));
-				return;
+				return ;
 			}
 			if( result.bytes > state->m_max_discard -
 				std::min(state->m_max_discard, discarded) )
 			{
 				state->m_adapter->cancel();
 				finish(operation_error(errc::buffer_limit_exceeded));
-				return;
+				return ;
 			}
 			discarded += result.bytes;
 			if( result.eof )
 			{
 				state->m_finished = true;
 				finish({});
-				return;
+				return ;
 			}
 			start();
 		}
@@ -281,17 +285,17 @@ void body_reader_state::trailers(trailers_handler_t handler)
 	if( state->m_pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress), fields{});
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_cancelled or not state->m_finished )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted), fields{});
-		return;
+		return ;
 	}
 	if( state->m_trailer_cache )
 	{
 		std::move(handler)(error_code{}, *state->m_trailer_cache);
-		return;
+		return ;
 	}
 
 	state->m_pending = true;

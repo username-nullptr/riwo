@@ -103,7 +103,8 @@ template <core_concepts::exec Exec>
 auto basic_duplex_channel<Exec>::operator=(basic_duplex_channel &&other) noexcept
 	-> basic_duplex_channel&
 {
-	if( this == &other ) return *this;
+	if( this == &other )
+		return *this;
 	if( m_impl and m_impl->m_state and m_impl->m_state->is_open() )
 		m_impl->m_state->cancel();
 	m_impl = std::move(other.m_impl);
@@ -252,14 +253,18 @@ auto basic_duplex_channel<Exec>::close(Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		if( m_impl->m_state ) m_impl->m_state->close_sync(token);
-		else token = make_error_code(errc::operation_not_permitted);
+		if( m_impl->m_state )
+			m_impl->m_state->close_sync(token);
+		else
+			token = make_error_code(errc::operation_not_permitted);
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		if( m_impl->m_state ) m_impl->m_state->close_sync(error);
-		else error = make_error_code(errc::operation_not_permitted);
+		if( m_impl->m_state )
+			m_impl->m_state->close_sync(error);
+		else
+			error = make_error_code(errc::operation_not_permitted);
 		if( error )
 			(void)expected_value_or_throw(sys_expected<std::monostate>(
 				sys_unexpected(error)));
@@ -280,14 +285,16 @@ auto basic_duplex_channel<Exec>::close(Token &&token)
 
 template <core_concepts::exec Exec>
 void basic_duplex_channel<Exec>::cancel() noexcept {
-	if( m_impl->m_state ) m_impl->m_state->cancel();
+	if( m_impl->m_state )
+		m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
 auto basic_duplex_channel<Exec>::remote_endpoint(error_code &error) const noexcept
 	-> endpoint_t
 {
-	if( m_impl->m_state ) return m_impl->m_state->remote_endpoint(error);
+	if( m_impl->m_state )
+		return m_impl->m_state->remote_endpoint(error);
 	error = make_error_code(errc::operation_not_permitted);
 	return {};
 }
@@ -296,7 +303,8 @@ template <core_concepts::exec Exec>
 auto basic_duplex_channel<Exec>::local_endpoint(error_code &error) const noexcept
 	-> endpoint_t
 {
-	if( m_impl->m_state ) return m_impl->m_state->local_endpoint(error);
+	if( m_impl->m_state )
+		return m_impl->m_state->local_endpoint(error);
 	error = make_error_code(errc::operation_not_permitted);
 	return {};
 }

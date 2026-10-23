@@ -97,7 +97,8 @@ basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 basic_client_exchange<Exec>::~basic_client_exchange() {
-	if( m_impl and m_impl->m_state ) m_impl->m_state->cancel();
+	if( m_impl and m_impl->m_state )
+		m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>

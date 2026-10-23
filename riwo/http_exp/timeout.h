@@ -11,13 +11,15 @@ namespace riwo::http_exp
 
 struct timeout_policy
 {
-	milliseconds connect {30000};
-	milliseconds header {30000};
+	milliseconds connect   {30000};
+	milliseconds header    {30000};
 	milliseconds body_idle {30000};
+
 	optional<milliseconds> overall {};
 	milliseconds pool_wait {30000};
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_TIMEOUT_H

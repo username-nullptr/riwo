@@ -38,10 +38,13 @@ namespace
 		return {};
 	const auto whole = value.front();
 	value.remove_prefix(1);
-	if( value.empty() ) return whole == '1' ? 1. : 0.;
-	if( value.front() != '.' ) return {};
+	if( value.empty() )
+		return whole == '1' ? 1. : 0.;
+	if( value.front() != '.' )
+		return {};
 	value.remove_prefix(1);
-	if( value.size() > 3 ) return {};
+	if( value.size() > 3 )
+		return {};
 	double fraction = 0;
 	double divisor = 1;
 	for( const auto digit : value )
@@ -89,20 +92,28 @@ double content_coding_quality(std::string_view value,
 				auto parameter = trim(item.substr(semicolon + 1));
 				const auto equal = parameter.find('=');
 				if( equal == std::string_view::npos or
-					lower(trim(parameter.substr(0, equal))) != "q" ) valid = false;
+					lower(trim(parameter.substr(0, equal))) != "q" )
+					valid = false;
 				else if( auto parsed = quality(parameter.substr(equal + 1)) )
 					result = *parsed;
-				else valid = false;
+				else
+					valid = false;
 			}
-			if( not valid ) result = 0.;
-			if( name == wanted ) explicit_value = result;
-			else if( name == "*" ) wildcard = result;
-			if( comma == std::string_view::npos ) break;
+			if( not valid )
+				result = 0.;
+			if( name == wanted )
+				explicit_value = result;
+			else if( name == "*" )
+				wildcard = result;
+			if( comma == std::string_view::npos )
+				break;
 			begin = comma + 1;
 		}
 		return explicit_value.value_or(wildcard.value_or(0.));
 	}
-	catch(...) { return 0.; }
+	catch(...) {
+		return 0.;
+	}
 }
 
 bool is_precompressed_mime_type(std::string_view value) noexcept
@@ -110,14 +121,18 @@ bool is_precompressed_mime_type(std::string_view value) noexcept
 	try
 	{
 		const auto type = lower(trim(value.substr(0, value.find(';'))));
-		if( type.empty() or type == "application/octet-stream" ) return true;
+		if( type.empty() or type == "application/octet-stream" )
+			return true;
 		if( (type.starts_with("image/") and type != "image/svg+xml") or
-			type.starts_with("audio/") or type.starts_with("video/") ) return true;
+			type.starts_with("audio/") or type.starts_with("video/") )
+			return true;
 		return type == "application/gzip" or type == "application/zip" or
 			type == "application/pdf" or type == "font/woff" or
 			type == "font/woff2" or type.ends_with("+zip");
 	}
-	catch(...) { return true; }
+	catch(...) {
+		return true;
+	}
 }
 
 bool is_compressible_mime_type(std::string_view value) noexcept
@@ -125,14 +140,17 @@ bool is_compressible_mime_type(std::string_view value) noexcept
 	try
 	{
 		const auto type = lower(trim(value.substr(0, value.find(';'))));
-		if( is_precompressed_mime_type(type) ) return false;
+		if( is_precompressed_mime_type(type) )
+			return false;
 		return type.starts_with("text/") or type == "image/svg+xml" or
 			type == "application/json" or type.ends_with("+json") or
 			type == "application/xml" or type.ends_with("+xml") or
 			type == "application/javascript" or type == "application/wasm" or
 			type == "application/x-www-form-urlencoded";
 	}
-	catch(...) { return false; }
+	catch(...) {
+		return false;
+	}
 }
 
 class gzip_encoder::impl
@@ -150,7 +168,8 @@ public:
 	~impl()
 	{
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
-		if( initialized ) deflateEnd(&stream);
+		if( initialized )
+			deflateEnd(&stream);
 #endif
 	}
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
@@ -173,8 +192,10 @@ sys_expected<std::string> gzip_encoder::append(std::string_view data,
 	ignore_unused(data, finish);
 	return sys_unexpected(unsupported_error());
 #else
-	if( not m_impl->initialized ) return sys_unexpected(codec_error());
-	if( m_impl->ended ) return data.empty() ? sys_expected<std::string>("") :
+	if( not m_impl->initialized )
+		return sys_unexpected(codec_error());
+	if( m_impl->ended )
+		return data.empty() ? sys_expected<std::string>("") :
 		sys_expected<std::string>(sys_unexpected(
 			make_system_error_code(std::errc::operation_not_permitted)));
 	std::string output;
@@ -205,10 +226,12 @@ sys_expected<std::string> gzip_encoder::append(std::string_view data,
 		while( result != Z_STREAM_END and (m_impl->stream.avail_in != 0 or
 			m_impl->stream.avail_out == 0 or flush == Z_FINISH) );
 		offset += input_size;
-		if( result == Z_STREAM_END ) m_impl->ended = true;
+		if( result == Z_STREAM_END )
+			m_impl->ended = true;
 	}
 	while( offset < data.size() or (first and data.empty()) );
-	if( finish and not m_impl->ended ) return sys_unexpected(codec_error());
+	if( finish and not m_impl->ended )
+		return sys_unexpected(codec_error());
 	return output;
 #endif
 }
@@ -227,7 +250,8 @@ public:
 	~impl()
 	{
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
-		if( initialized ) inflateEnd(&stream);
+		if( initialized )
+			inflateEnd(&stream);
 #endif
 	}
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
@@ -311,11 +335,13 @@ sys_expected<std::string> gzip_decoder::append(std::string_view data,
 				m_impl->member_ended = false;
 			}
 		}
-		else if( consumed == 0 ) return sys_unexpected(codec_error());
+		else if( consumed == 0 )
+			return sys_unexpected(codec_error());
 	}
 	if( finish )
 	{
-		if( not m_impl->member_ended ) return sys_unexpected(codec_error());
+		if( not m_impl->member_ended )
+			return sys_unexpected(codec_error());
 		m_impl->ended = true;
 	}
 	return output;

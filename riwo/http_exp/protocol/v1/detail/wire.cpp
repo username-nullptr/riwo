@@ -3,7 +3,6 @@
 
 #include "wire.h"
 #include <riwo/core/utils/string_tools.h>
-#include <charconv>
 
 namespace riwo::http_exp::v1::detail { namespace
 {
@@ -30,8 +29,10 @@ namespace riwo::http_exp::v1::detail { namespace
 	{
 		auto comma = value.find(',');
 		auto item = trim(value.substr(0, comma));
-		if( equal_ci(item, token) ) return true;
-		if( comma == std::string_view::npos ) break;
+		if( equal_ci(item, token) )
+			return true;
+		if( comma == std::string_view::npos )
+			break;
 		value.remove_prefix(comma + 1);
 	}
 	return false;
@@ -39,7 +40,8 @@ namespace riwo::http_exp::v1::detail { namespace
 
 [[nodiscard]] bool valid_host_value(std::string_view value) noexcept
 {
-	if( value.empty() ) return false;
+	if( value.empty() )
+		return false;
 	return std::ranges::none_of(value, [](unsigned char byte) {
 		return byte <= 0x20U or byte == 0x7fU or byte == '/' or
 			byte == '?' or byte == '#' or byte == '@';
@@ -61,8 +63,10 @@ namespace riwo::http_exp::v1::detail { namespace
 [[nodiscard]] sys_expected<protocol> parse_version(
 	std::string_view value) noexcept
 {
-	if( value == "HTTP/1.1" ) return protocol::v1_1;
-	if( value == "HTTP/1.0" ) return protocol::v1_0;
+	if( value == "HTTP/1.1" )
+		return protocol::v1_1;
+	if( value == "HTTP/1.0" )
+		return protocol::v1_0;
 	return sys_unexpected(make_error_code(errc::connection_protocol_error));
 }
 
@@ -82,7 +86,8 @@ void append_fields(std::string &result, const fields &values,
 {
 	for( const auto &value : values )
 	{
-		if( skip_framing and framing_header(value.name) ) continue;
+		if( skip_framing and framing_header(value.name) )
+			continue;
 		result += value.name;
 		result += ": ";
 		result += value.value.to_string();
@@ -93,11 +98,13 @@ void append_fields(std::string &result, const fields &values,
 void append_trailer_declaration(std::string &result,
 	const body_spec::trailer_spec &trailers)
 {
-	if( trailers.names.empty() ) return;
+	if( trailers.names.empty() )
+		return ;
 	result += "Trailer: ";
 	for( size_t index = 0; index < trailers.names.size(); ++index )
 	{
-		if( index != 0 ) result += ", ";
+		if( index != 0 )
+			result += ", ";
 		result += trailers.names[index];
 	}
 	result += "\r\n";
@@ -126,7 +133,8 @@ struct parsed_fields
 					errc::connection_protocol_error));
 			auto line = block.substr(0, end);
 			block.remove_prefix(end + 2);
-			if( line.empty() ) break;
+			if( line.empty() )
+				break;
 			if( ++count > limits.max_field_count or
 				total + line.size() > limits.max_header_list_size )
 				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
@@ -262,7 +270,8 @@ sys_expected<std::string> serialize_response(const response_head &head,
 		else if( body_allowed and spec.type() == body_spec::mode::streaming )
 			result += "Transfer-Encoding: chunked\r\n";
 		append_trailer_declaration(result, spec.trailers());
-		if( close ) result += "Connection: close\r\n";
+		if( close )
+			result += "Connection: close\r\n";
 		result += "\r\n";
 		return result;
 	}
@@ -286,9 +295,11 @@ sys_expected<parsed_request> parse_request(std::string_view wire,
 			last == std::string_view::npos )
 			return sys_unexpected(make_error_code(errc::connection_protocol_error));
 		auto parsed_version = parse_version(line.substr(last + 1));
-		if( not parsed_version ) return sys_unexpected(parsed_version.error());
+		if( not parsed_version )
+			return sys_unexpected(parsed_version.error());
 		auto parsed = parse_fields(wire.substr(line_end + 2), limits);
-		if( not parsed ) return sys_unexpected(parsed.error());
+		if( not parsed )
+			return sys_unexpected(parsed.error());
 		parsed_request result;
 		result.head.method = http_exp::method(std::string(line.substr(0, first)));
 		const auto raw_target = line.substr(first + 1, last - first - 1);
@@ -331,7 +342,8 @@ sys_expected<parsed_request> parse_request(std::string_view wire,
 			result.head.scheme = std::string(target_url.protocol());
 			result.head.authority = authority_from_url(target_url);
 			std::string origin(target_url.encoded_path());
-			if( origin.empty() ) origin = "/";
+			if( origin.empty() )
+				origin = "/";
 			if( target_url.has_query() )
 				origin += '?' + target_url.encoded_query();
 			result.head.target = std::move(origin);
@@ -343,7 +355,8 @@ sys_expected<parsed_request> parse_request(std::string_view wire,
 				result.head.authority = std::string(host_value);
 		}
 		result.close = parsed->close or result.version == protocol::v1_0;
-		if( parsed->chunked ) result.framing = body_framing::chunked;
+		if( parsed->chunked )
+			result.framing = body_framing::chunked;
 		else if( parsed->content_length )
 		{
 			result.framing = *parsed->content_length == 0 ?
@@ -371,7 +384,8 @@ sys_expected<parsed_response> parse_response(std::string_view wire,
 			return sys_unexpected(make_error_code(errc::connection_protocol_error));
 		auto second = line.find(' ', first + 1);
 		auto parsed_version = parse_version(line.substr(0, first));
-		if( not parsed_version ) return sys_unexpected(parsed_version.error());
+		if( not parsed_version )
+			return sys_unexpected(parsed_version.error());
 		auto code_text = line.substr(first + 1,
 			(second == std::string_view::npos ? line.size() : second) - first - 1);
 		if( code_text.size() != 3 )
@@ -383,7 +397,8 @@ sys_expected<parsed_response> parse_response(std::string_view wire,
 			code_result.ptr != code_text.data() + code_text.size() )
 			return sys_unexpected(make_error_code(errc::invalid_status));
 		auto parsed = parse_fields(wire.substr(line_end + 2), limits);
-		if( not parsed ) return sys_unexpected(parsed.error());
+		if( not parsed )
+			return sys_unexpected(parsed.error());
 		parsed_response result;
 		result.head.status = http_exp::status(code);
 		result.head.headers = std::move(parsed->values);
@@ -391,7 +406,8 @@ sys_expected<parsed_response> parse_response(std::string_view wire,
 		result.close = parsed->close or result.version == protocol::v1_0;
 		if( head_request or not result.head.status.allows_body() )
 			result.framing = body_framing::none;
-		else if( parsed->chunked ) result.framing = body_framing::chunked;
+		else if( parsed->chunked )
+			result.framing = body_framing::chunked;
 		else if( parsed->content_length )
 		{
 			result.framing = *parsed->content_length == 0 ?

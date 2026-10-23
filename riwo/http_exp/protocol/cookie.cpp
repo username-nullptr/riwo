@@ -4,11 +4,6 @@
 #include "cookie.h"
 #include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/error.h>
-#include <charconv>
-#include <cstdio>
-#include <ctime>
-#include <iomanip>
-#include <sstream>
 
 namespace riwo::http_exp { namespace
 {
@@ -66,7 +61,8 @@ namespace riwo::http_exp { namespace
 
 [[nodiscard]] bool valid_domain(std::string_view value) noexcept
 {
-	if( value.starts_with('.') ) value.remove_prefix(1);
+	if( value.starts_with('.') )
+		value.remove_prefix(1);
 	if( value.empty() or value.size() > 253 or value.ends_with('.') )
 		return false;
 	size_t begin = 0;
@@ -83,7 +79,8 @@ namespace riwo::http_exp { namespace
 					(byte >= 'a' and byte <= 'z') or byte == '-';
 			}) )
 			return false;
-		if( end == std::string_view::npos ) break;
+		if( end == std::string_view::npos )
+			break;
 		begin = end + 1;
 	}
 	return true;
@@ -130,16 +127,19 @@ parse_http_date(std::string_view value) noexcept
 		result = {};
 		parsed = parse_date_format(value,
 			"%A, %d-%b-%y %H:%M:%S GMT", result);
-		if( parsed and result.tm_year < 70 ) result.tm_year += 100;
+		if( parsed and result.tm_year < 70 )
+			result.tm_year += 100;
 	}
 	if( not parsed )
 	{
 		result = {};
 		parsed = parse_date_format(value, "%a %b %d %H:%M:%S %Y", result);
 	}
-	if( not parsed ) return {};
+	if( not parsed )
+		return {};
 	const auto seconds = utc_time(&result);
-	if( seconds == static_cast<std::time_t>(-1) ) return {};
+	if( seconds == static_cast<std::time_t>(-1) )
+		return {};
 	return std::chrono::system_clock::from_time_t(seconds);
 }
 
@@ -182,7 +182,8 @@ parse_http_date(std::string_view value) noexcept
 parse_max_age(std::string_view value) noexcept
 {
 	value = trim_ows(value);
-	if( value.empty() ) return {};
+	if( value.empty() )
+		return {};
 	int64_t seconds = 0;
 	const auto parsed = std::from_chars(value.data(),
 		value.data() + value.size(), seconds);
@@ -239,7 +240,8 @@ sys_expected<std::vector<cookie_pair>> parse_cookie_fields(
 				if( not parsed )
 					return sys_unexpected(parsed.error());
 				result.emplace_back(std::move(*parsed));
-				if( end == std::string::npos ) break;
+				if( end == std::string::npos )
+					break;
 				begin = end + 1;
 			}
 		}
@@ -256,7 +258,8 @@ sys_expected<response_cookie> parse_set_cookie(std::string_view value) noexcept
 	{
 		const auto first_end = value.find(';');
 		auto first = parse_cookie_pair(value.substr(0, first_end));
-		if( not first ) return sys_unexpected(first.error());
+		if( not first )
+			return sys_unexpected(first.error());
 		response_cookie result {
 			.name = std::move(first->name), .value = std::move(first->value)
 		};
@@ -268,21 +271,27 @@ sys_expected<response_cookie> parse_set_cookie(std::string_view value) noexcept
 			auto statement = trim_ows(value.substr(begin,
 				end == std::string_view::npos ? std::string_view::npos : end - begin));
 			begin = end == std::string_view::npos ? value.size() : end + 1;
-			if( statement.empty() ) continue;
+			if( statement.empty() )
+				continue;
 			const auto separator = statement.find('=');
 			const auto attribute_name = trim_ows(statement.substr(0, separator));
 			const auto attribute_value = separator == std::string_view::npos ?
 				std::string_view{} : trim_ows(statement.substr(separator + 1));
-			if( not valid_token(attribute_name) ) continue;
+			if( not valid_token(attribute_name) )
+				continue;
 			const auto name = lower(attribute_name);
-			if( name == "secure" ) result.secure = true;
-			else if( name == "httponly" ) result.http_only = true;
+			if( name == "secure" )
+				result.secure = true;
+			else if( name == "httponly" )
+				result.http_only = true;
 			else if( name == "domain" )
 			{
-				if( attribute_value.empty() ) continue;
+				if( attribute_value.empty() )
+					continue;
 				auto domain = lower(attribute_value);
 				while( domain.starts_with('.') ) domain.erase(domain.begin());
-				if( not domain.empty() ) result.domain = std::move(domain);
+				if( not domain.empty() )
+					result.domain = std::move(domain);
 			}
 			else if( name == "path" )
 			{
@@ -302,9 +311,12 @@ sys_expected<response_cookie> parse_set_cookie(std::string_view value) noexcept
 			else if( name == "samesite" )
 			{
 				const auto mode = lower(attribute_value);
-				if( mode == "strict" ) result.same_site = cookie_same_site::strict;
-				else if( mode == "lax" ) result.same_site = cookie_same_site::lax;
-				else if( mode == "none" ) result.same_site = cookie_same_site::none;
+				if( mode == "strict" )
+					result.same_site = cookie_same_site::strict;
+				else if( mode == "lax" )
+					result.same_site = cookie_same_site::lax;
+				else if( mode == "none" )
+					result.same_site = cookie_same_site::none;
 			}
 			else if( valid_attribute_value(attribute_value) )
 			{
@@ -329,7 +341,8 @@ std::string serialize_cookie(std::span<const cookie_pair> values)
 		const auto &value = item.value.to_string();
 		if( not valid_token(item.name) or not valid_cookie_value(value) )
 			throw std::invalid_argument("Invalid HTTP Cookie pair");
-		if( not result.empty() ) result += "; ";
+		if( not result.empty() )
+			result += "; ";
 		result += item.name;
 		result += '=';
 		result += value;
@@ -341,8 +354,10 @@ std::string serialize_set_cookie(const response_cookie &value)
 {
 	std::array<cookie_pair,1> pair {{cookie_pair {value.name, value.value}}};
 	auto result = serialize_cookie(pair);
-	if( value.expires ) result += "; Expires=" + format_http_date(*value.expires);
-	if( value.max_age ) result += "; Max-Age=" + std::to_string(value.max_age->count());
+	if( value.expires )
+		result += "; Expires=" + format_http_date(*value.expires);
+	if( value.max_age )
+		result += "; Max-Age=" + std::to_string(value.max_age->count());
 	if( value.domain )
 	{
 		if( not valid_domain(*value.domain) )
@@ -356,8 +371,10 @@ std::string serialize_set_cookie(const response_cookie &value)
 			throw std::invalid_argument("Invalid Cookie Path");
 		result += "; Path=" + *value.path;
 	}
-	if( value.secure ) result += "; Secure";
-	if( value.http_only ) result += "; HttpOnly";
+	if( value.secure )
+		result += "; Secure";
+	if( value.http_only )
+		result += "; HttpOnly";
 	switch(value.same_site)
 	{
 	case cookie_same_site::strict: result += "; SameSite=Strict"; break;

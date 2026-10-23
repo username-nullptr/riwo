@@ -55,7 +55,8 @@ public:
 	{
 		if constexpr( requires(Stream &stream) {
 			{ stream.read_some_sync(buffer, error) } -> std::same_as<size_t>;
-		}) return m_stream.read_some_sync(buffer, error);
+		})
+			return m_stream.read_some_sync(buffer, error);
 		else
 		{
 			error = make_error_code(errc::operation_not_supported);
@@ -67,7 +68,8 @@ public:
 	{
 		if constexpr( requires(Stream &stream) {
 			{ stream.write_sync(buffer, error) } -> std::same_as<size_t>;
-		}) return m_stream.write_sync(buffer, error);
+		})
+			return m_stream.write_sync(buffer, error);
 		else
 		{
 			error = make_error_code(errc::operation_not_supported);
@@ -80,8 +82,10 @@ public:
 		if constexpr( requires(const Stream &stream) {
 			{ stream.capabilities() } ->
 				std::same_as<transport_capabilities>;
-		}) return m_stream.capabilities();
-		else return {.synchronous = requires(Stream &stream,
+		})
+			return m_stream.capabilities();
+		else
+			return {.synchronous = requires(Stream &stream,
 			mutable_buffer read_buffer, const_buffer write_buffer,
 			error_code &error) {
 				{ stream.read_some_sync(read_buffer, error) } ->
@@ -94,8 +98,10 @@ public:
 	{
 		if constexpr( requires(const Stream &stream) {
 			{ stream.metadata() } -> std::same_as<transport_metadata>;
-		}) return m_stream.metadata();
-		else return {};
+		})
+			return m_stream.metadata();
+		else
+			return {};
 	}
 
 private:
@@ -126,7 +132,8 @@ basic_byte_stream<Exec>::~basic_byte_stream() = default;
 template<core_concepts::exec Exec>
 auto basic_byte_stream<Exec>::get_executor() const noexcept -> executor_t
 {
-	if( m_impl ) return m_impl->get_executor();
+	if( m_impl )
+		return m_impl->get_executor();
 	std::terminate();
 }
 
@@ -134,7 +141,8 @@ template<core_concepts::exec Exec>
 void basic_byte_stream<Exec>::read_some(
 	mutable_buffer buffer, io_handler_t handler)
 {
-	if( not m_impl ) return std::move(handler)(
+	if( not m_impl )
+		return std::move(handler)(
 		make_error_code(errc::operation_not_permitted), 0);
 	m_impl->read_some(buffer, std::move(handler));
 }
@@ -142,7 +150,8 @@ void basic_byte_stream<Exec>::read_some(
 template<core_concepts::exec Exec>
 void basic_byte_stream<Exec>::write(const_buffer buffer, io_handler_t handler)
 {
-	if( not m_impl ) return std::move(handler)(
+	if( not m_impl )
+		return std::move(handler)(
 		make_error_code(errc::operation_not_permitted), 0);
 	m_impl->write(buffer, std::move(handler));
 }
@@ -150,13 +159,15 @@ void basic_byte_stream<Exec>::write(const_buffer buffer, io_handler_t handler)
 template<core_concepts::exec Exec>
 void basic_byte_stream<Exec>::close(close_handler_t handler)
 {
-	if( not m_impl ) return std::move(handler)(error_code{});
+	if( not m_impl )
+		return std::move(handler)(error_code{});
 	m_impl->close(std::move(handler));
 }
 
 template<core_concepts::exec Exec>
 void basic_byte_stream<Exec>::cancel() noexcept {
-	if( m_impl ) m_impl->cancel();
+	if( m_impl )
+		m_impl->cancel();
 }
 
 template<core_concepts::exec Exec>
@@ -168,7 +179,8 @@ template<core_concepts::exec Exec>
 size_t basic_byte_stream<Exec>::read_some_sync(
 	mutable_buffer buffer, error_code &error) noexcept
 {
-	if( m_impl ) return m_impl->read_some_sync(buffer, error);
+	if( m_impl )
+		return m_impl->read_some_sync(buffer, error);
 	error = make_error_code(errc::operation_not_permitted);
 	return 0;
 }
@@ -177,7 +189,8 @@ template<core_concepts::exec Exec>
 size_t basic_byte_stream<Exec>::write_sync(
 	const_buffer buffer, error_code &error) noexcept
 {
-	if( m_impl ) return m_impl->write_sync(buffer, error);
+	if( m_impl )
+		return m_impl->write_sync(buffer, error);
 	error = make_error_code(errc::operation_not_permitted);
 	return 0;
 }

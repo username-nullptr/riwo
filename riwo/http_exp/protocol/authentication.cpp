@@ -25,24 +25,32 @@ split_scheme(std::string_view value) noexcept
 	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
 		value.remove_prefix(1);
 	const auto space = value.find_first_of(" \t");
-	if( space == std::string_view::npos ) return {};
+	if( space == std::string_view::npos )
+		return {};
 	auto scheme = value.substr(0, space);
 	value.remove_prefix(space);
 	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
 		value.remove_prefix(1);
-	if( value.empty() ) return {};
+	if( value.empty() )
+		return {};
 	return std::pair(scheme, value);
 }
 
 [[nodiscard]] optional<std::string> decode_base64(std::string_view value)
 {
-	if( value.empty() or value.size() % 4 != 0 ) return {};
+	if( value.empty() or value.size() % 4 != 0 )
+		return {};
 	auto digit = [](unsigned char ch) -> int {
-		if( ch >= 'A' and ch <= 'Z' ) return ch - 'A';
-		if( ch >= 'a' and ch <= 'z' ) return ch - 'a' + 26;
-		if( ch >= '0' and ch <= '9' ) return ch - '0' + 52;
-		if( ch == '+' ) return 62;
-		if( ch == '/' ) return 63;
+		if( ch >= 'A' and ch <= 'Z' )
+			return ch - 'A';
+		if( ch >= 'a' and ch <= 'z' )
+			return ch - 'a' + 26;
+		if( ch >= '0' and ch <= '9' )
+			return ch - '0' + 52;
+		if( ch == '+' )
+			return 62;
+		if( ch == '/' )
+			return 63;
 		return -1;
 	};
 	std::string result;
@@ -55,8 +63,10 @@ split_scheme(std::string_view value) noexcept
 			digit(static_cast<unsigned char>(value[offset + 2]));
 		const auto fourth = value[offset + 3] == '=' ? -2 :
 			digit(static_cast<unsigned char>(value[offset + 3]));
-		if( first < 0 or second < 0 or third == -1 or fourth == -1 ) return {};
-		if( third == -2 and fourth != -2 ) return {};
+		if( first < 0 or second < 0 or third == -1 or fourth == -1 )
+			return {};
+		if( third == -2 and fourth != -2 )
+			return {};
 		if( (third == -2 or fourth == -2) and offset + 4 != value.size() )
 			return {};
 		const uint32_t bits = (static_cast<uint32_t>(first) << 18U) |
@@ -64,8 +74,10 @@ split_scheme(std::string_view value) noexcept
 			(static_cast<uint32_t>(std::max(third, 0)) << 6U) |
 			static_cast<uint32_t>(std::max(fourth, 0));
 		result.push_back(static_cast<char>(bits >> 16U));
-		if( third != -2 ) result.push_back(static_cast<char>(bits >> 8U));
-		if( fourth != -2 ) result.push_back(static_cast<char>(bits));
+		if( third != -2 )
+			result.push_back(static_cast<char>(bits >> 8U));
+		if( fourth != -2 )
+			result.push_back(static_cast<char>(bits));
 	}
 	return result;
 }
@@ -94,15 +106,20 @@ optional<basic_credentials> parse_basic_authorization(
 	try
 	{
 		const auto split = split_scheme(value);
-		if( not split or not ascii_iequal(split->first, "Basic") ) return {};
+		if( not split or not ascii_iequal(split->first, "Basic") )
+			return {};
 		auto decoded = decode_base64(split->second);
-		if( not decoded ) return {};
+		if( not decoded )
+			return {};
 		const auto colon = decoded->find(':');
-		if( colon == std::string::npos ) return {};
+		if( colon == std::string::npos )
+			return {};
 		return basic_credentials {decoded->substr(0, colon),
 			decoded->substr(colon + 1)};
 	}
-	catch(...) { return {}; }
+	catch(...) {
+		return {};
+	}
 }
 
 optional<std::string> parse_bearer_authorization(
@@ -111,12 +128,15 @@ optional<std::string> parse_bearer_authorization(
 	try
 	{
 		const auto split = split_scheme(value);
-		if( not split or not ascii_iequal(split->first, "Bearer") ) return {};
+		if( not split or not ascii_iequal(split->first, "Bearer") )
+			return {};
 		if( split->second.find_first_of("\r\n") != std::string_view::npos )
 			return {};
 		return std::string(split->second);
 	}
-	catch(...) { return {}; }
+	catch(...) {
+		return {};
+	}
 }
 
 void set_basic_authorization(fields &headers, std::string_view username,

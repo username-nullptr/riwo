@@ -40,7 +40,7 @@ concept finalizable_body_source_model = requires(
 
 } //namespace riwo::http_exp
 
-#include <riwo/http_exp/body/file.h>
+#include <riwo/http_exp/body/file_source.h>
 #include <riwo/http_exp/body/memory.h>
 
 namespace riwo::http_exp

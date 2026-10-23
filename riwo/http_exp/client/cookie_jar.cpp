@@ -21,7 +21,8 @@ namespace riwo::http_exp { namespace
 
 [[nodiscard]] bool ip_address(std::string_view host) noexcept
 {
-	if( host.find(':') != std::string_view::npos ) return true;
+	if( host.find(':') != std::string_view::npos )
+		return true;
 	return not host.empty() and std::ranges::all_of(host, [](unsigned char byte) {
 		return std::isdigit(byte) != 0 or byte == '.';
 	});
@@ -30,7 +31,8 @@ namespace riwo::http_exp { namespace
 [[nodiscard]] bool domain_match(std::string_view host,
 	std::string_view domain) noexcept
 {
-	if( host == domain ) return true;
+	if( host == domain )
+		return true;
 	return not ip_address(host) and host.size() > domain.size() and
 		host.ends_with(domain) and
 		host[host.size() - domain.size() - 1] == '.';
@@ -38,17 +40,21 @@ namespace riwo::http_exp { namespace
 
 [[nodiscard]] std::string default_path(std::string_view request_path)
 {
-	if( request_path.empty() or request_path.front() != '/' ) return "/";
+	if( request_path.empty() or request_path.front() != '/' )
+		return "/";
 	const auto slash = request_path.rfind('/');
-	if( slash == 0 ) return "/";
+	if( slash == 0 )
+		return "/";
 	return std::string(request_path.substr(0, slash));
 }
 
 [[nodiscard]] bool path_match(std::string_view request_path,
 	std::string_view cookie_path) noexcept
 {
-	if( request_path == cookie_path ) return true;
-	if( not request_path.starts_with(cookie_path) ) return false;
+	if( request_path == cookie_path )
+		return true;
+	if( not request_path.starts_with(cookie_path) )
+		return false;
 	return cookie_path.ends_with('/') or
 		(request_path.size() > cookie_path.size() and
 		 request_path[cookie_path.size()] == '/');
@@ -67,9 +73,12 @@ namespace riwo::http_exp { namespace
 [[nodiscard]] bool applicable_same_site(const cookie_entry &item,
 	const cookie_request_context &context) noexcept
 {
-	if( context.site != cookie_site_context::cross_site ) return true;
-	if( item.same_site == cookie_same_site::none ) return true;
-	if( item.same_site == cookie_same_site::strict ) return false;
+	if( context.site != cookie_site_context::cross_site )
+		return true;
+	if( item.same_site == cookie_same_site::none )
+		return true;
+	if( item.same_site == cookie_same_site::strict )
+		return false;
 	return context.http_api and context.top_level_navigation and
 		context.request_method.is_safe();
 }
@@ -79,10 +88,12 @@ namespace riwo::http_exp { namespace
 	std::chrono::seconds age) noexcept
 {
 	using system_clock_t = std::chrono::system_clock;
-	if( age.count() <= 0 ) return now;
+	if( age.count() <= 0 )
+		return now;
 	const auto available = std::chrono::duration_cast<std::chrono::seconds>(
 		system_clock_t::time_point::max() - now);
-	if( age >= available ) return system_clock_t::time_point::max();
+	if( age >= available )
+		return system_clock_t::time_point::max();
 	return now + age;
 }
 
@@ -119,11 +130,13 @@ public:
 			auto candidate = values.end();
 			for( auto iterator = values.begin(); iterator != values.end(); ++iterator )
 			{
-				if( iterator->domain != domain ) continue;
+				if( iterator->domain != domain )
+					continue;
 				if( candidate == values.end() or earlier_access(*iterator, *candidate) )
 					candidate = iterator;
 			}
-			if( candidate == values.end() ) break;
+			if( candidate == values.end() )
+				break;
 			values.erase(candidate);
 		}
 	}
@@ -134,7 +147,8 @@ public:
 		{
 			auto candidate = std::min_element(values.begin(), values.end(),
 				earlier_access);
-			if( candidate == values.end() ) break;
+			if( candidate == values.end() )
+				break;
 			values.erase(candidate);
 		}
 	}
@@ -162,13 +176,16 @@ bool cookie_jar::store(const riwo::url &origin,
 	catch(const std::invalid_argument&) {
 		return false;
 	}
-	if( value.name.empty() ) return false;
+	if( value.name.empty() )
+		return false;
 	if( serialized.size() > m_impl->config.max_cookie_size )
 		return false;
 	const auto host = canonical_host(origin.host());
-	if( host.empty() ) return false;
+	if( host.empty() )
+		return false;
 	const auto secure_origin = secure_scheme(origin);
-	if( value.secure and not secure_origin ) return false;
+	if( value.secure and not secure_origin )
+		return false;
 	if( value.same_site == cookie_same_site::none and not value.secure )
 		return false;
 	if( value.name.starts_with("__Secure-") and
@@ -190,14 +207,17 @@ bool cookie_jar::store(const riwo::url &origin,
 	};
 	if( value.domain )
 	{
-		if( value.domain->empty() or value.domain->back() == '.' ) return false;
+		if( value.domain->empty() or value.domain->back() == '.' )
+			return false;
 		auto candidate = canonical_host(*value.domain);
 		while( candidate.starts_with('.') ) candidate.erase(candidate.begin());
-		if( candidate.empty() or not domain_match(host, candidate) ) return false;
+		if( candidate.empty() or not domain_match(host, candidate) )
+			return false;
 		if( m_impl->config.public_suffix and
 			m_impl->config.public_suffix(candidate) )
 		{
-			if( candidate != host ) return false;
+			if( candidate != host )
+				return false;
 		}
 		else
 		{
@@ -217,15 +237,18 @@ bool cookie_jar::store(const riwo::url &origin,
 	if( value.max_age )
 	{
 		item.persistent = true;
-		if( value.max_age->count() <= 0 ) remove = true;
+		if( value.max_age->count() <= 0 )
+			remove = true;
 		else
 		{
 			auto age = *value.max_age;
 			if( m_impl->config.max_persistent_age and
 				age > *m_impl->config.max_persistent_age )
 				age = *m_impl->config.max_persistent_age;
-			if( age.count() <= 0 ) remove = true;
-			else item.expires = expiry_after(now, age);
+			if( age.count() <= 0 )
+				remove = true;
+			else
+				item.expires = expiry_after(now, age);
 		}
 	}
 	else if( value.expires )
@@ -236,7 +259,8 @@ bool cookie_jar::store(const riwo::url &origin,
 		{
 			const auto limit = expiry_after(now,
 				*m_impl->config.max_persistent_age);
-			if( *item.expires > limit ) item.expires = limit;
+			if( *item.expires > limit )
+				item.expires = limit;
 		}
 		remove = *item.expires <= now;
 	}
@@ -259,7 +283,8 @@ bool cookie_jar::store(const riwo::url &origin,
 		});
 	if( remove )
 	{
-		if( existing != m_impl->values.end() ) m_impl->values.erase(existing);
+		if( existing != m_impl->values.end() )
+			m_impl->values.erase(existing);
 		return true;
 	}
 	if( existing != m_impl->values.end() )
@@ -286,7 +311,8 @@ size_t cookie_jar::store(const riwo::url &origin,
 	for( const auto &header : response_headers.find_all("Set-Cookie") )
 	{
 		auto parsed = parse_set_cookie(header.value.to_string());
-		if( parsed and store(origin, *parsed) ) ++result;
+		if( parsed and store(origin, *parsed) )
+			++result;
 	}
 	return result;
 }
@@ -295,9 +321,11 @@ std::vector<cookie_pair> cookie_jar::select(const riwo::url &target,
 	const cookie_request_context &context)
 {
 	const auto host = canonical_host(target.host());
-	if( host.empty() ) return {};
+	if( host.empty() )
+		return {};
 	auto path = std::string(target.encoded_path());
-	if( path.empty() or path.front() != '/' ) path = "/";
+	if( path.empty() or path.front() != '/' )
+		path = "/";
 	const auto secure = secure_scheme(target);
 	const auto now = std::chrono::system_clock::now();
 	std::scoped_lock lock(m_impl->mutex);
@@ -310,8 +338,10 @@ std::vector<cookie_pair> cookie_jar::select(const riwo::url &target,
 			continue;
 		if( not path_match(path, item.path) or (item.secure and not secure) )
 			continue;
-		if( item.http_only and not context.http_api ) continue;
-		if( not applicable_same_site(item, context) ) continue;
+		if( item.http_only and not context.http_api )
+			continue;
+		if( not applicable_same_site(item, context) )
+			continue;
 		item.last_access_index = ++m_impl->sequence;
 		matches.emplace_back(std::addressof(item));
 	}

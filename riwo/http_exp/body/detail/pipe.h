@@ -27,9 +27,11 @@ requires concepts::body_sink_model<std::remove_cvref_t<Sink>> and
 			output.prepare(error);
 		for(;;)
 		{
-			if( error ) break;
+			if( error )
+				break;
 			auto read = reader.read_some(riwo::buffer(buffer), error);
-			if( error ) break;
+			if( error )
+				break;
 			size_t offset = 0;
 			while( offset != read.bytes )
 			{
@@ -54,15 +56,18 @@ requires concepts::body_sink_model<std::remove_cvref_t<Sink>> and
 					break;
 				}
 			}
-			if( error or read.eof ) break;
+			if( error or read.eof )
+				break;
 			if( read.bytes == 0 )
 			{
 				error = make_system_error_code(std::errc::io_error);
 				break;
 			}
 		}
-		if( error ) output.cancel();
-		else output.finish(error);
+		if( error )
+			output.cancel();
+		else
+			output.finish(error);
 		if constexpr( is_error_code_token_v<Token> )
 		{
 			token = error;
@@ -102,7 +107,7 @@ requires concepts::body_sink_model<std::remove_cvref_t<Sink>> and
 					if( error )
 					{
 						fail(error);
-						return;
+						return ;
 					}
 				}
 				start_read();
@@ -118,16 +123,18 @@ requires concepts::body_sink_model<std::remove_cvref_t<Sink>> and
 					if( error )
 					{
 						self->fail(error);
-						return;
+						return ;
 					}
 					self->chunk_size = read.bytes;
 					self->chunk_offset = 0;
 					self->eof = read.eof;
 					if( read.bytes == 0 )
 					{
-						if( read.eof ) self->start_finish();
-						else self->fail(make_system_error_code(std::errc::io_error));
-						return;
+						if( read.eof )
+							self->start_finish();
+						else
+							self->fail(make_system_error_code(std::errc::io_error));
+						return ;
 					}
 					self->start_write();
 				});
@@ -150,32 +157,34 @@ requires concepts::body_sink_model<std::remove_cvref_t<Sink>> and
 				if( size > remaining )
 				{
 					fail(make_system_error_code(std::errc::io_error));
-					return;
+					return ;
 				}
 				if( size > std::numeric_limits<uint64_t>::max() - total )
 				{
 					fail(make_system_error_code(std::errc::value_too_large));
-					return;
+					return ;
 				}
 				chunk_offset += size;
 				total += size;
 				if( error )
 				{
 					fail(error);
-					return;
+					return ;
 				}
 				if( size == 0 )
 				{
 					fail(make_system_error_code(std::errc::io_error));
-					return;
+					return ;
 				}
 				if( chunk_offset != chunk_size )
 				{
 					start_write();
-					return;
+					return ;
 				}
-				if( eof ) start_finish();
-				else start_read();
+				if( eof )
+					start_finish();
+				else
+					start_read();
 			}
 
 			void start_finish()

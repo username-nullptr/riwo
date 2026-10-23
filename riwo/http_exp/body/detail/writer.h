@@ -117,7 +117,8 @@ basic_body_writer<Exec>::basic_body_writer(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 basic_body_writer<Exec>::~basic_body_writer() {
-	if( m_impl->m_state and not m_impl->m_state->ended() ) m_impl->m_state->cancel();
+	if( m_impl->m_state and not m_impl->m_state->ended() )
+		m_impl->m_state->cancel();
 }
 
 template <core_concepts::exec Exec>

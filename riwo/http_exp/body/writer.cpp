@@ -125,17 +125,17 @@ void body_writer_state::write(const_buffer buffer, write_handler_t handler)
 	if( state->m_pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress), 0);
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_ended or state->m_terminated )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted), 0);
-		return;
+		return ;
 	}
 	if( buffer.size() == 0 )
 	{
 		std::move(handler)(error_code{}, 0);
-		return;
+		return ;
 	}
 
 	auto accepted_buffer = buffer;
@@ -156,7 +156,7 @@ void body_writer_state::write(const_buffer buffer, write_handler_t handler)
 		state->m_terminated = true;
 		state->m_adapter->cancel();
 		std::move(handler)(operation_error(errc::body_length_mismatch), 0);
-		return;
+		return ;
 	}
 
 	state->m_pending = true;
@@ -195,12 +195,12 @@ void body_writer_state::finish(fields trailers, error_code &error) noexcept
 	if( state->m_pending )
 	{
 		error = operation_error(errc::operation_in_progress);
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_ended or state->m_terminated )
 	{
 		error = operation_error(errc::operation_not_permitted);
-		return;
+		return ;
 	}
 	if( auto length = state->m_spec.length();
 		length and state->m_accepted != *length )
@@ -208,14 +208,14 @@ void body_writer_state::finish(fields trailers, error_code &error) noexcept
 		state->m_terminated = true;
 		state->m_adapter->cancel();
 		error = operation_error(errc::body_length_mismatch);
-		return;
+		return ;
 	}
 	if( not valid_trailers(state->m_spec, trailers) )
 	{
 		state->m_terminated = true;
 		state->m_adapter->cancel();
 		error = operation_error(errc::invalid_trailer);
-		return;
+		return ;
 	}
 
 	state->m_pending = true;
@@ -233,12 +233,12 @@ void body_writer_state::finish(fields trailers, finish_handler_t handler)
 	if( state->m_pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress));
-		return;
+		return ;
 	}
 	if( not state->m_ready or not state->m_adapter or state->m_ended or state->m_terminated )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted));
-		return;
+		return ;
 	}
 	if( auto length = state->m_spec.length();
 		length and state->m_accepted != *length )
@@ -246,14 +246,14 @@ void body_writer_state::finish(fields trailers, finish_handler_t handler)
 		state->m_terminated = true;
 		state->m_adapter->cancel();
 		std::move(handler)(operation_error(errc::body_length_mismatch));
-		return;
+		return ;
 	}
 	if( not valid_trailers(state->m_spec, trailers) )
 	{
 		state->m_terminated = true;
 		state->m_adapter->cancel();
 		std::move(handler)(operation_error(errc::invalid_trailer));
-		return;
+		return ;
 	}
 
 	state->m_pending = true;
@@ -290,7 +290,7 @@ void body_writer_state::configure(body_spec spec, bool ready) noexcept
 {
 	auto state = m_impl;
 	if( state->m_pending or state->m_accepted != 0 or state->m_ended or state->m_terminated )
-		return;
+		return ;
 	state->m_spec = std::move(spec);
 	state->m_ready = ready;
 	state->m_ended = ready and (state->m_spec.type() == body_spec::mode::empty or

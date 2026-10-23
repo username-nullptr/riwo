@@ -87,7 +87,8 @@ struct connection final
 
 	void cancel() noexcept
 	{
-		if( closed or detached ) return;
+		if( closed or detached )
+			return ;
 		closed = true;
 		transport->cancel();
 	}
@@ -141,7 +142,7 @@ public:
 				std::memcpy(buffer.data(), m_connection->pending.data(), size);
 			m_connection->pending.erase(0, size);
 			std::move(handler)(error_code{}, size);
-			return;
+			return ;
 		}
 		m_connection->transport->read_some(buffer, std::move(handler));
 	}
@@ -154,7 +155,8 @@ public:
 		{
 			auto size = m_connection->transport->write_sync(buffer, error);
 			total += size;
-			if( error or size != buffer.size() ) break;
+			if( error or size != buffer.size() )
+				break;
 		}
 		return total;
 	}
@@ -179,7 +181,8 @@ public:
 	void close_sync(error_code &error) noexcept override
 	{
 		error.clear();
-		if( m_connection->closed ) return;
+		if( m_connection->closed )
+			return ;
 		m_connection->closed = true;
 		m_connection->transport->cancel();
 	}
@@ -188,14 +191,15 @@ public:
 		if( m_connection->closed )
 		{
 			std::move(handler)(error_code{});
-			return;
+			return ;
 		}
 		m_connection->closed = true;
 		m_connection->transport->close(std::move(handler));
 	}
 	void cancel() noexcept override
 	{
-		if( m_connection->closed ) return;
+		if( m_connection->closed )
+			return ;
 		m_connection->closed = true;
 		m_connection->transport->cancel();
 	}
@@ -250,7 +254,8 @@ private:
 				item.remove_suffix(1);
 			if( strtls::ascii_equal(item, token, false) )
 				return true;
-			if( comma == std::string_view::npos ) break;
+			if( comma == std::string_view::npos )
+				break;
 			text.remove_prefix(comma + 1);
 		}
 	}
@@ -276,7 +281,8 @@ private:
 			if( item.empty() or
 				not strtls::ascii_equal(item, "100-continue", false) )
 				return true;
-			if( comma == std::string_view::npos ) break;
+			if( comma == std::string_view::npos )
+				break;
 			text.remove_prefix(comma + 1);
 		}
 	}
@@ -294,8 +300,10 @@ private:
 [[nodiscard]] bool reusable_response(const response_head &head,
 	protocol version)
 {
-	if( head.status.code() == 101 ) return false;
-	if( has_token(head.headers, "connection", "close") ) return false;
+	if( head.status.code() == 101 )
+		return false;
+	if( has_token(head.headers, "connection", "close") )
+		return false;
 	if( version == protocol::v1_0 )
 		return has_token(head.headers, "connection", "keep-alive");
 	return true;
@@ -327,14 +335,16 @@ private:
 		for(;;)
 		{
 			auto head = take_head(value, limit);
-			if( head ) return std::move(*head);
+			if( head )
+				return std::move(*head);
 			if( head.error() != make_error_code(errc::operation_in_progress) )
 			{
 				error = head.error();
 				return {};
 			}
 			auto size = value.read_some_sync(asio::buffer(buffer), error);
-			if( error ) return {};
+			if( error )
+				return {};
 			value.pending.append(buffer.data(), size);
 		}
 	}
@@ -362,12 +372,12 @@ public:
 		if( head )
 		{
 			std::move(m_handler)(error_code{}, std::move(*head));
-			return;
+			return ;
 		}
 		if( head.error() != make_error_code(errc::operation_in_progress) )
 		{
 			std::move(m_handler)(head.error(), std::string{});
-			return;
+			return ;
 		}
 		auto self = shared_from_this();
 		m_connection->read_some(asio::buffer(m_buffer),
@@ -375,7 +385,7 @@ public:
 			if( error )
 			{
 				std::move(self->m_handler)(error, std::string{});
-				return;
+				return ;
 			}
 			self->m_connection->pending.append(self->m_buffer.data(), size);
 			self->start();
@@ -425,11 +435,13 @@ public:
 	{
 		error.clear();
 		try {
-			if( not apply_read_timeout(error) ) return {};
+			if( not apply_read_timeout(error) )
+				return {};
 			auto result = read_sync(buffer, error);
 			if( is_eof(error) )
 				error = make_error_code(errc::body_length_mismatch);
-			if( error or result.eof ) notify_end(error);
+			if( error or result.eof )
+				notify_end(error);
 			return result;
 		}
 		catch(...) {
@@ -465,7 +477,8 @@ public:
 	[[nodiscard]] fields trailers_sync(error_code &error) noexcept override
 	{
 		error.clear();
-		if( not m_ended ) error = make_error_code(errc::operation_not_permitted);
+		if( not m_ended )
+			error = make_error_code(errc::operation_not_permitted);
 		return m_trailers;
 	}
 
@@ -475,7 +488,7 @@ public:
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
 				fields{});
-			return;
+			return ;
 		}
 		std::move(handler)(error_code{}, m_trailers);
 	}
@@ -492,10 +505,12 @@ public:
 private:
 	void notify_end(error_code error) noexcept
 	{
-		if( m_end_notified ) return;
+		if( m_end_notified )
+			return ;
 		m_end_notified = true;
 		try {
-			if( m_end_handler ) m_end_handler(error);
+			if( m_end_handler )
+				m_end_handler(error);
 		}
 		catch(...) {
 		}
@@ -520,10 +535,12 @@ private:
 	{
 		const auto size = std::min({buffer.size(), maximum,
 			m_connection->pending.size()});
-		if( size == 0 ) return 0;
+		if( size == 0 )
+			return 0;
 		std::memcpy(buffer.data(), m_connection->pending.data(), size);
 		m_connection->pending.erase(0, size);
-		if( not account(size, error) ) return 0;
+		if( not account(size, error) )
+			return 0;
 		return size;
 	}
 
@@ -531,7 +548,8 @@ private:
 	{
 		std::array<char,8192> data {};
 		auto size = m_connection->read_some_sync(asio::buffer(data), error);
-		if( error ) return false;
+		if( error )
+			return false;
 		m_connection->pending.append(data.data(), size);
 		return true;
 	}
@@ -539,7 +557,8 @@ private:
 	[[nodiscard]] bool consume_chunk_crlf_sync(error_code &error)
 	{
 		while( m_connection->pending.size() < 2 )
-			if( not fill_sync(error) ) return false;
+			if( not fill_sync(error) )
+				return false;
 		if( not m_connection->pending.starts_with("\r\n") )
 		{
 			error = protocol_error();
@@ -574,7 +593,8 @@ private:
 				error = make_error_code(errc::header_limit_exceeded);
 				return false;
 			}
-			if( not fill_sync(error) ) return false;
+			if( not fill_sync(error) )
+				return false;
 		}
 	}
 
@@ -590,7 +610,8 @@ private:
 					error = make_error_code(errc::header_limit_exceeded);
 					return false;
 				}
-				if( not fill_sync(error) ) return false;
+				if( not fill_sync(error) )
+					return false;
 				continue;
 			}
 			if( end == 0 )
@@ -641,17 +662,21 @@ private:
 				if( is_eof(error) )
 					error = m_remaining == 0 ? error_code{} :
 						make_error_code(errc::body_length_mismatch);
-				if( not error and size != 0 and not account(size, error) ) return {};
+				if( not error and size != 0 and not account(size, error) )
+					return {};
 			}
-			else m_remaining -= std::min<uint64_t>(m_remaining, size);
+			else
+				m_remaining -= std::min<uint64_t>(m_remaining, size);
 			const bool eof = not error and m_remaining == 0;
-			if( eof ) m_ended = true;
+			if( eof )
+				m_ended = true;
 			return {size, eof};
 		}
 		if( m_framing == body_framing::until_eof )
 		{
 			auto size = copy_pending(buffer, SIZE_MAX, error);
-			if( size != 0 or error ) return {size, false};
+			if( size != 0 or error )
+				return {size, false};
 			size = m_connection->read_some_sync(buffer, error);
 			const bool eof = is_eof(error);
 			if( eof )
@@ -659,19 +684,24 @@ private:
 				error.clear();
 				m_ended = true;
 			}
-			if( not error and size != 0 and not account(size, error) ) return {};
+			if( not error and size != 0 and not account(size, error) )
+				return {};
 			return {size, eof and not error};
 		}
 		for(;;)
 		{
 			if( m_reading_trailers )
 			{
-				if( not read_trailers_sync(error) ) return {};
+				if( not read_trailers_sync(error) )
+					return {};
 				return {0, true};
 			}
-			if( m_need_chunk_crlf and not consume_chunk_crlf_sync(error) ) return {};
-			if( m_chunk_remaining == 0 and not read_chunk_line_sync(error) ) return {};
-			if( m_reading_trailers ) continue;
+			if( m_need_chunk_crlf and not consume_chunk_crlf_sync(error) )
+				return {};
+			if( m_chunk_remaining == 0 and not read_chunk_line_sync(error) )
+				return {};
+			if( m_reading_trailers )
+				continue;
 			auto size = copy_pending(buffer, static_cast<size_t>(
 				std::min<uint64_t>(m_chunk_remaining, SIZE_MAX)), error);
 			if( size == 0 and not error )
@@ -679,10 +709,12 @@ private:
 				auto target = mutable_buffer(buffer.data(), static_cast<size_t>(
 					std::min<uint64_t>(buffer.size(), m_chunk_remaining)));
 				size = m_connection->read_some_sync(target, error);
-				if( not error and not account(size, error) ) return {};
+				if( not error and not account(size, error) )
+					return {};
 			}
 			m_chunk_remaining -= std::min<uint64_t>(m_chunk_remaining, size);
-			if( m_chunk_remaining == 0 ) m_need_chunk_crlf = true;
+			if( m_chunk_remaining == 0 )
+				m_need_chunk_crlf = true;
 			return {size, false};
 		}
 	}
@@ -725,13 +757,13 @@ public:
 		{
 			m_owner->m_ended = true;
 			finish(error, {});
-			return;
+			return ;
 		}
 		if( m_owner->m_ended or m_owner->m_framing == body_framing::none )
 		{
 			m_owner->m_ended = true;
 			finish({}, {0, true});
-			return;
+			return ;
 		}
 		if( m_owner->m_framing == body_framing::content_length )
 		{
@@ -739,7 +771,7 @@ public:
 			{
 				m_owner->m_ended = true;
 				finish({}, {0, true});
-				return;
+				return ;
 			}
 			auto size = m_owner->copy_pending(m_target, static_cast<size_t>(
 				std::min<uint64_t>(m_owner->m_remaining, SIZE_MAX)), error);
@@ -747,13 +779,14 @@ public:
 			{
 				m_owner->m_remaining -= std::min<uint64_t>(m_owner->m_remaining, size);
 				const bool eof = not error and m_owner->m_remaining == 0;
-				if( eof ) m_owner->m_ended = true;
+				if( eof )
+					m_owner->m_ended = true;
 				finish(error, {size, eof});
-				return;
+				return ;
 			}
 			direct_read(static_cast<size_t>(std::min<uint64_t>(
 				m_target.size(), m_owner->m_remaining)), true);
-			return;
+			return ;
 		}
 		if( m_owner->m_framing == body_framing::until_eof )
 		{
@@ -761,10 +794,10 @@ public:
 			if( size != 0 or error )
 			{
 				finish(error, {size, false});
-				return;
+				return ;
 			}
 			direct_read(m_target.size(), false);
-			return;
+			return ;
 		}
 		chunk_step();
 	}
@@ -777,18 +810,22 @@ private:
 			mutable_buffer(m_target.data(), size),
 		[self = std::move(self), fixed](error_code error, size_t count) mutable {
 			const bool transport_eof = is_eof(error);
-			if( fixed ) self->m_owner->m_remaining -=
+			if( fixed )
+				self->m_owner->m_remaining -=
 				std::min<uint64_t>(self->m_owner->m_remaining, count);
 			if( transport_eof )
 				error = not fixed or self->m_owner->m_remaining == 0 ? error_code{} :
 					make_error_code(errc::body_length_mismatch);
 			if( not error and count != 0 and
-				not self->m_owner->account(count, error) ) count = 0;
+				not self->m_owner->account(count, error) )
+				count = 0;
 			bool eof = false;
 			if( fixed )
 				eof = not error and self->m_owner->m_remaining == 0;
-			else eof = transport_eof and not error;
-			if( eof ) self->m_owner->m_ended = true;
+			else
+				eof = transport_eof and not error;
+			if( eof )
+				self->m_owner->m_ended = true;
 			self->finish(error, {count, eof});
 		});
 	}
@@ -801,7 +838,7 @@ private:
 			if( error )
 			{
 				self->finish(error, {});
-				return;
+				return ;
 			}
 			self->m_owner->m_connection->pending.append(
 				self->m_buffer.data(), size);
@@ -823,17 +860,17 @@ private:
 							m_owner->m_limits.max_header_list_size )
 						{
 							finish(make_error_code(errc::header_limit_exceeded), {});
-							return;
+							return ;
 						}
 						fill();
-						return;
+						return ;
 					}
 					if( end == 0 )
 					{
 						m_owner->m_connection->pending.erase(0, 2);
 						m_owner->m_ended = true;
 						finish({}, {0, true});
-						return;
+						return ;
 					}
 					auto line = std::string_view(m_owner->m_connection->pending)
 						.substr(0, end);
@@ -842,7 +879,7 @@ private:
 						m_owner->m_limits.max_field_count )
 					{
 						finish(protocol_error(), {});
-						return;
+						return ;
 					}
 					auto value = line.substr(colon + 1);
 					while( not value.empty() and
@@ -858,12 +895,12 @@ private:
 					if( m_owner->m_connection->pending.size() < 2 )
 					{
 						fill();
-						return;
+						return ;
 					}
 					if( not m_owner->m_connection->pending.starts_with("\r\n") )
 					{
 						finish(protocol_error(), {});
-						return;
+						return ;
 					}
 					m_owner->m_connection->pending.erase(0, 2);
 					m_owner->m_need_chunk_crlf = false;
@@ -877,10 +914,10 @@ private:
 							m_owner->m_limits.max_start_line_size )
 						{
 							finish(make_error_code(errc::header_limit_exceeded), {});
-							return;
+							return ;
 						}
 						fill();
-						return;
+						return ;
 					}
 					auto line = std::string_view(m_owner->m_connection->pending)
 						.substr(0, end);
@@ -888,7 +925,7 @@ private:
 					if( not chunk )
 					{
 						finish(chunk.error(), {});
-						return;
+						return ;
 					}
 					m_owner->m_connection->pending.erase(0, end + 2);
 					m_owner->m_chunk_remaining = *chunk;
@@ -905,10 +942,10 @@ private:
 					if( m_owner->m_chunk_remaining == 0 )
 						m_owner->m_need_chunk_crlf = true;
 					finish(error, {size, false});
-					return;
+					return ;
 				}
 				direct_chunk_read();
-				return;
+				return ;
 			}
 		}
 		catch(...) {
@@ -924,7 +961,8 @@ private:
 		m_owner->m_connection->read_some(
 			mutable_buffer(m_target.data(), count),
 		[self = std::move(self)](error_code error, size_t size) mutable {
-			if( not error and not self->m_owner->account(size, error) ) size = 0;
+			if( not error and not self->m_owner->account(size, error) )
+				size = 0;
 			self->m_owner->m_chunk_remaining -=
 				std::min<uint64_t>(self->m_owner->m_chunk_remaining, size);
 			if( self->m_owner->m_chunk_remaining == 0 )
@@ -937,7 +975,8 @@ private:
 	{
 		if( is_eof(error) )
 			error = make_error_code(errc::body_length_mismatch);
-		if( error or result.eof ) m_owner->notify_end(error);
+		if( error or result.eof )
+			m_owner->notify_end(error);
 		std::move(m_handler)(error, result);
 	}
 
@@ -976,15 +1015,19 @@ public:
 	{
 		error.clear();
 		try {
-			if( not apply_write_timeout(error) ) return 0;
-			if( m_suppress_body ) return buffer.size();
+			if( not apply_write_timeout(error) )
+				return 0;
+			if( m_suppress_body )
+				return buffer.size();
 			if( m_chunked )
 			{
 				auto header = serialize_chunk_header(buffer.size());
 				(void)m_connection->write_sync(asio::buffer(header), error);
-				if( error ) return 0;
+				if( error )
+					return 0;
 				auto size = m_connection->write_sync(buffer, error);
-				if( error or size != buffer.size() ) return size;
+				if( error or size != buffer.size() )
+					return size;
 				constexpr std::string_view ending = "\r\n";
 				(void)m_connection->write_sync(asio::buffer(ending), error);
 				return size;
@@ -1003,17 +1046,17 @@ public:
 		if( not apply_write_timeout(timeout) )
 		{
 			std::move(handler)(timeout, 0);
-			return;
+			return ;
 		}
 		if( m_suppress_body )
 		{
 			std::move(handler)(error_code{}, buffer.size());
-			return;
+			return ;
 		}
 		if( not m_chunked )
 		{
 			m_connection->write(buffer, std::move(handler));
-			return;
+			return ;
 		}
 
 		auto connection = m_connection;
@@ -1025,7 +1068,7 @@ public:
 			if( error )
 			{
 				std::move(handler)(error, 0);
-				return;
+				return ;
 			}
 			connection->write(buffer,
 			[connection = std::move(connection), buffer,
@@ -1034,7 +1077,7 @@ public:
 				if( body_error or size != buffer.size() )
 				{
 					std::move(handler)(body_error, size);
-					return;
+					return ;
 				}
 				constexpr std::string_view ending = "\r\n";
 				connection->write(asio::buffer(ending),
@@ -1059,16 +1102,18 @@ public:
 				error = exception_error(std::current_exception());
 			}
 		}
-		if( m_finish_handler ) m_finish_handler(error);
+		if( m_finish_handler )
+			m_finish_handler(error);
 	}
 
 	void finish(fields trailers, finish_handler_t handler) override
 	{
 		if( not m_chunked or m_suppress_body )
 		{
-			if( m_finish_handler ) m_finish_handler(error_code{});
+			if( m_finish_handler )
+				m_finish_handler(error_code{});
 			std::move(handler)(error_code{});
-			return;
+			return ;
 		}
 		auto wire = std::make_shared<std::string>(
 			serialize_last_chunk(trailers));
@@ -1076,7 +1121,8 @@ public:
 		m_connection->write(asio::buffer(*wire),
 		[finish = std::move(finish), wire, handler = std::move(handler)]
 		(error_code error, size_t) mutable {
-			if( finish ) finish(error);
+			if( finish )
+				finish(error);
 			std::move(handler)(error);
 		});
 	}
@@ -1159,7 +1205,8 @@ public:
 		auto weak = weak_from_this();
 		m_reader->set_end_handler(
 		[weak](error_code error) {
-			if( auto self = weak.lock() ) self->body_finished(error);
+			if( auto self = weak.lock() )
+				self->body_finished(error);
 		});
 		if( not m_client )
 			m_writer->set_finish_handler(
@@ -1209,7 +1256,8 @@ public:
 		{
 			auto wire = read_head_sync(*m_connection,
 				m_limits.max_header_list_size + m_limits.max_start_line_size, error);
-			if( error ) return {};
+			if( error )
+				return {};
 			auto parsed = parse_response(wire, m_limits, m_head_request);
 			if( not parsed )
 			{
@@ -1244,12 +1292,12 @@ public:
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
 				response_head{});
-			return;
+			return ;
 		}
 		if( m_response_ready )
 		{
 			std::move(handler)(error_code{}, m_response);
-			return;
+			return ;
 		}
 		read_response(std::move(handler));
 	}
@@ -1260,18 +1308,18 @@ public:
 		if( m_client )
 		{
 			error = make_error_code(errc::operation_not_permitted);
-			return;
+			return ;
 		}
 		if( spec.type() == body_spec::mode::head and not m_head_request )
 		{
 			error = make_error_code(errc::operation_not_permitted);
-			return;
+			return ;
 		}
 		auto wire = serialize_response(head, spec, m_version, not m_keep_alive);
 		if( not wire )
 		{
 			error = wire.error();
-			return;
+			return ;
 		}
 		const bool empty = spec.type() == body_spec::mode::empty or
 			spec.type() == body_spec::mode::head;
@@ -1287,20 +1335,20 @@ public:
 		if( m_client )
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted));
-			return;
+			return ;
 		}
 		if( spec.type() == body_spec::mode::head and not m_head_request )
 		{
 			std::move(handler)(
 				make_error_code(errc::operation_not_permitted));
-			return;
+			return ;
 		}
 		auto wire_value = serialize_response(head, spec, m_version,
 			not m_keep_alive);
 		if( not wire_value )
 		{
 			std::move(handler)(wire_value.error());
-			return;
+			return ;
 		}
 		const bool empty = spec.type() == body_spec::mode::empty or
 			spec.type() == body_spec::mode::head;
@@ -1312,7 +1360,8 @@ public:
 		(error_code error, size_t) mutable {
 			if( empty )
 				if( auto self = weak.lock() )
-					if( not self->m_client ) self->response_finished(error);
+					if( not self->m_client )
+						self->response_finished(error);
 			std::move(handler)(error);
 		});
 	}
@@ -1323,7 +1372,7 @@ public:
 		if( not wire )
 		{
 			error = wire.error();
-			return;
+			return ;
 		}
 		(void)m_connection->write_sync(asio::buffer(*wire), error);
 	}
@@ -1335,7 +1384,7 @@ public:
 		if( not wire_value )
 		{
 			std::move(handler)(wire_value.error());
-			return;
+			return ;
 		}
 		auto wire = std::make_shared<std::string>(std::move(*wire_value));
 		m_connection->write(asio::buffer(*wire),
@@ -1344,7 +1393,8 @@ public:
 	}
 
 	void cancel() noexcept override {
-		if( m_released and m_reusable ) return;
+		if( m_released and m_reusable )
+			return ;
 		release(false);
 	}
 
@@ -1363,19 +1413,19 @@ private:
 			if( error )
 			{
 				std::move(handler)(error, response_head{});
-				return;
+				return ;
 			}
 			auto parsed = parse_response(wire, self->m_limits, self->m_head_request);
 			if( not parsed )
 			{
 				std::move(handler)(parsed.error(), response_head{});
-				return;
+				return ;
 			}
 			if( parsed->head.status.code() < 200 and
 				parsed->head.status.code() != status::switching_protocols )
 			{
 				self->read_response(std::move(handler));
-				return;
+				return ;
 			}
 			self->m_response = parsed->head;
 			self->m_response_protocol = parsed->version;
@@ -1441,7 +1491,8 @@ private:
 				return {};
 			}
 			(void)m_connection->write_sync(asio::buffer(*wire), error);
-			if( error ) return {};
+			if( error )
+				return {};
 		}
 		m_duplex_opened = true;
 		m_keep_alive = false;
@@ -1455,20 +1506,20 @@ private:
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
 				std::shared_ptr<duplex_state>{});
-			return;
+			return ;
 		}
 		if( m_client )
 		{
 			error_code error;
 			auto channel = open_duplex_sync({}, error);
 			std::move(handler)(error, std::move(channel));
-			return;
+			return ;
 		}
 		if( not response )
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
 				std::shared_ptr<duplex_state>{});
-			return;
+			return ;
 		}
 		const auto code = response->status.code();
 		if( code != status::switching_protocols and
@@ -1477,7 +1528,7 @@ private:
 		{
 			std::move(handler)(make_error_code(errc::invalid_status),
 				std::shared_ptr<duplex_state>{});
-			return;
+			return ;
 		}
 		auto wire_value = serialize_response(*response, body_spec::empty(),
 			m_version, false);
@@ -1485,7 +1536,7 @@ private:
 		{
 			std::move(handler)(wire_value.error(),
 				std::shared_ptr<duplex_state>{});
-			return;
+			return ;
 		}
 		auto wire = std::make_shared<std::string>(std::move(*wire_value));
 		auto self = shared_from_this();
@@ -1495,7 +1546,7 @@ private:
 			if( error )
 			{
 				std::move(handler)(error, std::shared_ptr<duplex_state>{});
-				return;
+				return ;
 			}
 			self->m_duplex_opened = true;
 			self->m_keep_alive = false;
@@ -1507,25 +1558,30 @@ private:
 
 	void body_finished(error_code error)
 	{
-		if( not m_client ) return;
+		if( not m_client )
+			return ;
 		release(not error and m_keep_alive and
 			m_reader->framing() != body_framing::until_eof);
 	}
 
 	void response_finished(error_code error)
 	{
-		if( m_client or m_released ) return;
+		if( m_client or m_released )
+			return ;
 		release(not error and m_keep_alive and m_reader->request_complete());
 	}
 
 	void release(bool reusable)
 	{
-		if( m_released ) return;
+		if( m_released )
+			return ;
 		m_released = true;
 		m_reusable = reusable;
-		if( not reusable ) m_connection->cancel();
+		if( not reusable )
+			m_connection->cancel();
 		try {
-			if( m_release_handler ) m_release_handler(reusable);
+			if( m_release_handler )
+				m_release_handler(reusable);
 		}
 		catch(...) {
 		}
@@ -1601,14 +1657,16 @@ public:
 	}
 	[[nodiscard]] bool try_reserve_stream() noexcept override
 	{
-		if( m_in_use or m_draining or closed() ) return false;
+		if( m_in_use or m_draining or closed() )
+			return false;
 		m_in_use = true;
 		m_reserved = true;
 		return true;
 	}
 	void release_stream(bool reusable) noexcept override
 	{
-		if( not m_in_use ) return;
+		if( not m_in_use )
+			return ;
 		m_in_use = false;
 		m_reserved = false;
 		if( not reusable or m_draining )
@@ -1617,7 +1675,8 @@ public:
 			m_connection->cancel();
 		}
 		try {
-			if( m_release_handler ) m_release_handler(reusable);
+			if( m_release_handler )
+				m_release_handler(reusable);
 		}
 		catch(...) {
 		}
@@ -1630,7 +1689,8 @@ public:
 		body_spec spec, error_code &error) noexcept override
 	{
 		error.clear();
-		if( not begin_open(error) ) return {};
+		if( not begin_open(error) )
+			return {};
 		auto wire = serialize_request(head, spec, m_version, m_absolute_form);
 		if( not wire )
 		{
@@ -1671,14 +1731,14 @@ public:
 		if( not begin_open(begin_error) )
 		{
 			std::move(handler)(begin_error, std::shared_ptr<stream>{});
-			return;
+			return ;
 		}
 		auto wire_value = serialize_request(head, spec, m_version, m_absolute_form);
 		if( not wire_value )
 		{
 			std::move(handler)(wire_value.error(), std::shared_ptr<stream>{});
 			release_stream(false);
-			return;
+			return ;
 		}
 		struct operation final : std::enable_shared_from_this<operation>
 		{
@@ -1693,14 +1753,15 @@ public:
 				if( session->m_preconnected )
 				{
 					write_head();
-					return;
+					return ;
 				}
 				auto self = shared_from_this();
 				const auto port = static_cast<uint16_t>(
 					head.url.port() == 0 ? 80 : head.url.port());
 				session->m_connection->connect_async(head.url.host(), port,
 				[self = std::move(self)](error_code error) mutable {
-					if( error ) return self->finish(error);
+					if( error )
+						return self->finish(error);
 					self->write_head();
 				});
 			}
@@ -1720,7 +1781,7 @@ public:
 				{
 					session->release_stream(false);
 					std::move(handler)(error, std::shared_ptr<stream>{});
-					return;
+					return ;
 				}
 				auto result = session->make_stream(std::move(head),
 					std::move(spec));
@@ -1739,7 +1800,8 @@ public:
 	void graceful_shutdown(shutdown_handler_t handler) override
 	{
 		m_draining = true;
-		if( not m_in_use ) m_connection->cancel();
+		if( not m_in_use )
+			m_connection->cancel();
 		std::move(handler)(error_code{});
 	}
 
@@ -1825,17 +1887,21 @@ public:
 		return not m_connection->is_open();
 	}
 	[[nodiscard]] bool try_reserve_stream() noexcept {
-		if( m_in_use or m_draining or closed() ) return false;
+		if( m_in_use or m_draining or closed() )
+			return false;
 		m_in_use = true;
 		return true;
 	}
 	void release_stream(bool reusable) noexcept
 	{
-		if( not m_in_use ) return;
+		if( not m_in_use )
+			return ;
 		m_in_use = false;
-		if( not reusable ) m_draining = true;
+		if( not reusable )
+			m_draining = true;
 		try {
-			if( m_release_handler ) m_release_handler(reusable);
+			if( m_release_handler )
+				m_release_handler(reusable);
 		}
 		catch(...) {
 		}
@@ -1850,13 +1916,13 @@ public:
 		{
 			std::move(handler)(make_error_code(errc::operation_in_progress),
 				std::shared_ptr<stream>{});
-			return;
+			return ;
 		}
 		if( m_draining or closed() )
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
 				std::shared_ptr<stream>{});
-			return;
+			return ;
 		}
 		m_in_use = true;
 		m_connection->transport->set_read_timeout(m_timeouts.header);
@@ -1870,7 +1936,7 @@ public:
 			{
 				self->release_stream(false);
 				std::move(handler)(error, std::shared_ptr<stream>{});
-				return;
+				return ;
 			}
 			auto parsed = parse_request(wire, self->m_limits);
 			if( not parsed )
@@ -1885,7 +1951,7 @@ public:
 					ignored);
 				self->release_stream(false);
 				std::move(handler)(parsed.error(), std::shared_ptr<stream>{});
-				return;
+				return ;
 			}
 			self->m_version = parsed->version;
 			if( parsed->head.headers.find_first("Expect") )
@@ -1898,7 +1964,7 @@ public:
 					self->release_stream(false);
 					std::move(handler)(make_error_code(errc::invalid_field_value),
 						std::shared_ptr<stream>{});
-					return;
+					return ;
 				}
 				if( parsed->version == protocol::v1_1 )
 				{
@@ -1911,7 +1977,7 @@ public:
 						self->release_stream(false);
 						std::move(handler)(expect_error,
 							std::shared_ptr<stream>{});
-						return;
+						return ;
 					}
 				}
 			}
@@ -2028,7 +2094,7 @@ public:
 			{
 				if( not self->served )
 					self->handler(error, {}, {});
-				return;
+				return ;
 			}
 			self->served = true;
 			auto request = value ? value->request() : request_head{};
@@ -2081,8 +2147,10 @@ server_connection_ptr_t accept_h1(
 	std::weak_ptr<h1_server_loop> weak = value;
 	session->set_release_handler(
 	[weak](bool reusable) {
-		if( not reusable ) return;
-		if( auto self = weak.lock() ) self->start();
+		if( not reusable )
+			return ;
+		if( auto self = weak.lock() )
+			self->start();
 	});
 	value->start();
 	return std::make_shared<h1_server_connection>(std::move(value));

@@ -34,7 +34,8 @@ public:
 		if( not m_value )
 			return sys_unexpected(make_error_code(errc::operation_not_permitted));
 		auto result = m_value->connect_sync(make_request(key, config));
-		if( not result ) return sys_unexpected(result.error());
+		if( not result )
+			return sys_unexpected(result.error());
 		return convert(std::move(*result));
 	}
 
@@ -45,7 +46,7 @@ public:
 		{
 			std::move(handler)(make_error_code(errc::operation_not_permitted),
 				detail::negotiated_transport{});
-			return;
+			return ;
 		}
 		m_value->connect(make_request(key, config),
 			[handler = std::move(handler)](error_code error,
@@ -54,7 +55,7 @@ public:
 				if( error )
 				{
 					std::move(handler)(error, detail::negotiated_transport{});
-					return;
+					return ;
 				}
 				try { std::move(handler)(error_code{}, convert(std::move(result))); }
 				catch(...) { std::move(handler)(exception_error(
@@ -63,7 +64,8 @@ public:
 	}
 
 	~connector_adapter() override {
-		if( m_value ) m_value->cancel();
+		if( m_value )
+			m_value->cancel();
 	}
 
 private:
@@ -87,7 +89,8 @@ private:
 		result.proxy.password = key.proxy.password;
 		result.tls = config.tls;
 		result.deadline = config.timeout.connect;
-		if( key.local_bind ) result.local_bind =
+		if( key.local_bind )
+			result.local_bind =
 			key.local_bind->address().to_string() + ':' +
 			std::to_string(key.local_bind->port());
 		return result;

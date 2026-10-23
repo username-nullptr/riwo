@@ -3,7 +3,6 @@
 
 #include "router.h"
 #include <regex>
-#include <unordered_set>
 
 namespace riwo::http_exp
 {
@@ -74,14 +73,16 @@ route_pattern::compile(std::string pattern)
 			if( current == '}' )
 				throw std::invalid_argument(
 					"riwo::http_exp::route_pattern: unmatched '}'");
-			if( regex_special(current) ) expression.push_back('\\');
+			if( regex_special(current) )
+				expression.push_back('\\');
 			expression.push_back(current);
 			result->specificity += 4;
 		}
 	}
 	expression += '$';
 	result->specificity += result->argument_names.size();
-	if( result->exact ) result->specificity += size_t(1) << 30U;
+	if( result->exact )
+		result->specificity += size_t(1) << 30U;
 	result->expression = std::regex(expression,
 		std::regex_constants::ECMAScript | std::regex_constants::optimize);
 	return result;
@@ -107,14 +108,16 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 	{
 		std::match_results<std::string_view::const_iterator> matches;
 		if( not std::regex_match(path.begin(), path.end(), matches,
-			m_impl->expression) ) return {};
+			m_impl->expression) )
+			return {};
 		parameter_view::container_t parameters;
 		parameters.reserve(m_impl->argument_names.size());
 		for( size_t index = 0; index < m_impl->argument_names.size(); ++index )
 		{
 			auto decoded = decode_uri_component(std::string_view(
 				matches[index + 1].first, matches[index + 1].second), false);
-			if( not decoded ) return {};
+			if( not decoded )
+				return {};
 			parameters.push_back({m_impl->argument_names[index],
 				std::move(*decoded)});
 		}
@@ -123,7 +126,9 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 			.specificity = m_impl->specificity
 		};
 	}
-	catch(...) { return {}; }
+	catch(...) {
+		return {};
+	}
 }
 
 } //namespace riwo::http_exp

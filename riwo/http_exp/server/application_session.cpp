@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "application_session.h"
-#include <atomic>
 #include <random>
 
 namespace riwo::http_exp
@@ -74,7 +73,8 @@ optional<std::any> application_session::attribute(std::string_view key) const
 {
 	std::lock_guard lock(m_mutex);
 	const auto found = m_attributes.find(std::string(key));
-	if( found == m_attributes.end() ) return {};
+	if( found == m_attributes.end() )
+		return {};
 	return found->second;
 }
 
@@ -116,14 +116,16 @@ application_session &application_session::set_lifecycle(
 application_session &application_session::refresh()
 {
 	std::lock_guard lock(m_mutex);
-	if( m_valid ) m_expires = clock_t::now() + m_lifetime;
+	if( m_valid )
+		m_expires = clock_t::now() + m_lifetime;
 	return *this;
 }
 
 application_session &application_session::expand(std::chrono::seconds value)
 {
 	std::lock_guard lock(m_mutex);
-	if( m_valid ) m_expires += std::max(value, std::chrono::seconds::zero());
+	if( m_valid )
+		m_expires += std::max(value, std::chrono::seconds::zero());
 	return *this;
 }
 
@@ -151,12 +153,14 @@ void application_session::notify_timeout() noexcept
 	timeout_handler_t handler;
 	{
 		std::lock_guard lock(m_mutex);
-		if( m_timeout_notified ) return;
+		if( m_timeout_notified )
+			return ;
 		m_timeout_notified = true;
 		m_valid = false;
 		handler = m_timeout_handler;
 	}
-	try { if( handler ) handler(*this); }
+	try { if( handler )
+		handler(*this); }
 	catch(...) {
 	}
 }
@@ -196,7 +200,8 @@ void application_session_manager::set_config(application_session_config config)
 
 void application_session_manager::insert(application_session_ptr value)
 {
-	if( not value ) throw std::invalid_argument(
+	if( not value )
+		throw std::invalid_argument(
 		"riwo::http_exp::application_session_manager: null session");
 	std::lock_guard lock(m_impl->mutex);
 	m_impl->sessions.insert_or_assign(std::string(value->id()), std::move(value));
@@ -216,13 +221,16 @@ application_session_ptr application_session_manager::create()
 
 application_session_ptr application_session_manager::get(std::string_view id)
 {
-	if( id.empty() ) return {};
+	if( id.empty() )
+		return {};
 	application_session_ptr expired;
 	{
 		std::lock_guard lock(m_impl->mutex);
 		const auto found = m_impl->sessions.find(std::string(id));
-		if( found == m_impl->sessions.end() ) return {};
-		if( found->second->valid() ) return found->second;
+		if( found == m_impl->sessions.end() )
+			return {};
+		if( found->second->valid() )
+			return found->second;
 		expired = found->second;
 		m_impl->sessions.erase(found);
 	}
@@ -248,7 +256,9 @@ bool application_session_manager::erase(std::string_view id) noexcept
 		std::lock_guard lock(m_impl->mutex);
 		return m_impl->sessions.erase(std::string(id)) != 0;
 	}
-	catch(...) { return false; }
+	catch(...) {
+		return false;
+	}
 }
 
 size_t application_session_manager::purge_expired() noexcept
@@ -259,7 +269,8 @@ size_t application_session_manager::purge_expired() noexcept
 		for( auto iterator = m_impl->sessions.begin();
 			iterator != m_impl->sessions.end(); )
 		{
-			if( iterator->second->valid() ) ++iterator;
+			if( iterator->second->valid() )
+				++iterator;
 			else
 			{
 				expired.emplace_back(iterator->second);

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "range.h"
-#include <charconv>
 
 namespace riwo::http_exp
 {
@@ -32,7 +31,8 @@ namespace
 
 [[nodiscard]] sys_expected<uint64_t> decimal(std::string_view value) noexcept
 {
-	if( value.empty() ) return sys_unexpected(invalid());
+	if( value.empty() )
+		return sys_unexpected(invalid());
 	uint64_t result = 0;
 	const auto parsed = std::from_chars(value.data(), value.data() + value.size(),
 		result);
@@ -63,7 +63,8 @@ sys_expected<range_specifier> parse_range_header(std::string_view value) noexcep
 	{
 		value = trim(value);
 		const auto equal = value.find('=');
-		if( equal == std::string_view::npos ) return sys_unexpected(invalid());
+		if( equal == std::string_view::npos )
+			return sys_unexpected(invalid());
 		const auto unit = trim(value.substr(0, equal));
 		if( unit.empty() or std::ranges::any_of(unit,
 			[](unsigned char ch) { return not token_char(ch); }) )
@@ -84,40 +85,48 @@ sys_expected<range_specifier> parse_range_header(std::string_view value) noexcep
 			if( first.empty() )
 			{
 				auto parsed = decimal(last);
-				if( not parsed ) return sys_unexpected(parsed.error());
+				if( not parsed )
+					return sys_unexpected(parsed.error());
 				spec.type = byte_range_spec::form::suffix;
 				spec.first = *parsed;
 			}
 			else
 			{
 				auto parsed_first = decimal(first);
-				if( not parsed_first ) return sys_unexpected(parsed_first.error());
+				if( not parsed_first )
+					return sys_unexpected(parsed_first.error());
 				spec.first = *parsed_first;
-				if( last.empty() ) spec.type = byte_range_spec::form::open_ended;
+				if( last.empty() )
+					spec.type = byte_range_spec::form::open_ended;
 				else
 				{
 					auto parsed_last = decimal(last);
 					if( not parsed_last )
 						return sys_unexpected(parsed_last.error());
-					if( *parsed_last < spec.first ) return sys_unexpected(invalid());
+					if( *parsed_last < spec.first )
+						return sys_unexpected(invalid());
 					spec.type = byte_range_spec::form::closed;
 					spec.last = *parsed_last;
 				}
 			}
 			result.ranges.push_back(spec);
-			if( comma == std::string_view::npos ) break;
+			if( comma == std::string_view::npos )
+				break;
 			value.remove_prefix(comma + 1);
 		}
 		return result;
 	}
-	catch(...) { return sys_unexpected(exception_error(std::current_exception())); }
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
 }
 
 std::vector<resolved_byte_range> resolve_byte_ranges(
 	const range_specifier &specifier, uint64_t complete_length) noexcept
 {
 	std::vector<resolved_byte_range> result;
-	if( specifier.unit != "bytes" or complete_length == 0 ) return result;
+	if( specifier.unit != "bytes" or complete_length == 0 )
+		return result;
 	try
 	{
 		for( const auto &spec : specifier.ranges )
@@ -125,13 +134,15 @@ std::vector<resolved_byte_range> resolve_byte_ranges(
 			resolved_byte_range range;
 			if( spec.type == byte_range_spec::form::suffix )
 			{
-				if( spec.first == 0 ) continue;
+				if( spec.first == 0 )
+					continue;
 				range.length = std::min(spec.first, complete_length);
 				range.offset = complete_length - range.length;
 			}
 			else
 			{
-				if( spec.first >= complete_length ) continue;
+				if( spec.first >= complete_length )
+					continue;
 				range.offset = spec.first;
 				const auto last = spec.type ==
 					byte_range_spec::form::open_ended ? complete_length - 1 :
@@ -141,7 +152,9 @@ std::vector<resolved_byte_range> resolve_byte_ranges(
 			result.push_back(range);
 		}
 	}
-	catch(...) { result.clear(); }
+	catch(...) {
+		result.clear();
+	}
 	return result;
 }
 
@@ -151,7 +164,8 @@ sys_expected<content_range> parse_content_range(std::string_view value) noexcept
 	{
 		value = trim(value);
 		const auto space = value.find_first_of(" \t");
-		if( space == std::string_view::npos ) return sys_unexpected(invalid());
+		if( space == std::string_view::npos )
+			return sys_unexpected(invalid());
 		const auto unit = value.substr(0, space);
 		if( unit.empty() or std::ranges::any_of(unit,
 			[](unsigned char ch) { return not token_char(ch); }) )
@@ -162,7 +176,8 @@ sys_expected<content_range> parse_content_range(std::string_view value) noexcept
 		if( value.starts_with("*/") )
 		{
 			auto complete = decimal(value.substr(2));
-			if( not complete ) return sys_unexpected(complete.error());
+			if( not complete )
+				return sys_unexpected(complete.error());
 			result.complete_length = *complete;
 			return result;
 		}
@@ -173,9 +188,12 @@ sys_expected<content_range> parse_content_range(std::string_view value) noexcept
 			return sys_unexpected(invalid());
 		auto first = decimal(value.substr(0, dash));
 		auto last = decimal(value.substr(dash + 1, slash - dash - 1));
-		if( not first ) return sys_unexpected(first.error());
-		if( not last ) return sys_unexpected(last.error());
-		if( *last < *first ) return sys_unexpected(invalid());
+		if( not first )
+			return sys_unexpected(first.error());
+		if( not last )
+			return sys_unexpected(last.error());
+		if( *last < *first )
+			return sys_unexpected(invalid());
 		result.satisfied = true;
 		result.first = *first;
 		result.last = *last;
@@ -183,20 +201,25 @@ sys_expected<content_range> parse_content_range(std::string_view value) noexcept
 		if( complete_text != "*" )
 		{
 			auto complete = decimal(complete_text);
-			if( not complete ) return sys_unexpected(complete.error());
-			if( *complete <= result.last ) return sys_unexpected(invalid());
+			if( not complete )
+				return sys_unexpected(complete.error());
+			if( *complete <= result.last )
+				return sys_unexpected(invalid());
 			result.complete_length = *complete;
 		}
 		return result;
 	}
-	catch(...) { return sys_unexpected(exception_error(std::current_exception())); }
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
 }
 
 std::string format_content_range(const resolved_byte_range &range,
 	uint64_t complete_length)
 {
 	if( range.length == 0 or range.offset >= complete_length or
-		range.length > complete_length - range.offset ) return {};
+		range.length > complete_length - range.offset )
+		return {};
 	return std::format("bytes {}-{}/{}", range.offset,
 		range.offset + range.length - 1, complete_length);
 }
@@ -212,7 +235,8 @@ sys_expected<std::string> parse_multipart_byte_ranges_boundary(
 	{
 		const auto semicolon = content_type.find(';');
 		if( lower(trim(content_type.substr(0, semicolon))) !=
-			"multipart/byteranges" ) return sys_unexpected(invalid());
+			"multipart/byteranges" )
+			return sys_unexpected(invalid());
 		auto rest = semicolon == std::string_view::npos ? std::string_view{} :
 			content_type.substr(semicolon + 1);
 		while( not rest.empty() )
@@ -232,12 +256,15 @@ sys_expected<std::string> parse_multipart_byte_ranges_boundary(
 					return sys_unexpected(invalid());
 				return std::string(value);
 			}
-			if( next == std::string_view::npos ) break;
+			if( next == std::string_view::npos )
+				break;
 			rest.remove_prefix(next + 1);
 		}
 		return sys_unexpected(invalid());
 	}
-	catch(...) { return sys_unexpected(exception_error(std::current_exception())); }
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
 }
 
 } //namespace riwo::http_exp

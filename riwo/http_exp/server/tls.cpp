@@ -17,16 +17,19 @@ namespace
 	const asio::ip::tcp::endpoint &value)
 {
 	auto address = value.address().to_string();
-	if( address.find(':') != std::string::npos ) address = '[' + address + ']';
+	if( address.find(':') != std::string::npos )
+		address = '[' + address + ']';
 	return address + ':' + std::to_string(value.port());
 }
 
 [[nodiscard]] optional<protocol> alpn_protocol(std::string_view value)
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( value == "h2" ) return protocol::v2;
+	if( value == "h2" )
+		return protocol::v2;
 #endif
-	if( value == "http/1.1" ) return protocol::v1_1;
+	if( value == "http/1.1" )
+		return protocol::v1_1;
 	return {};
 }
 
@@ -39,11 +42,13 @@ namespace
 
 [[nodiscard]] bool valid_tls_policy(const protocol_policy &policy) noexcept
 {
-	if( policy.preference.empty() ) return false;
+	if( policy.preference.empty() )
+		return false;
 	for( auto current = policy.preference.begin();
 		current != policy.preference.end(); ++current )
 		if( std::ranges::find(policy.preference.begin(), current, *current) !=
-			current ) return false;
+			current )
+			return false;
 	if( policy.requirement == protocol_requirement::require_http1 )
 		return contains_protocol(policy, protocol::v1_1);
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
@@ -146,10 +151,12 @@ int server_tls_context::select_alpn(void *, const unsigned char **out,
 	for( auto preferred : policy.preference )
 	{
 		if( policy.requirement == protocol_requirement::require_http1 and
-			preferred != protocol::v1_1 ) continue;
+			preferred != protocol::v1_1 )
+			continue;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		if( policy.requirement == protocol_requirement::require_http2 and
-			preferred != protocol::v2 ) continue;
+			preferred != protocol::v2 )
+			continue;
 		const std::string_view wanted = preferred == protocol::v2 ?
 			std::string_view("h2") : std::string_view("http/1.1");
 #else
@@ -181,7 +188,8 @@ public:
 		std::shared_ptr<server_tls_context> context) :
 		m_acceptor(std::move(acceptor)), m_context(std::move(context))
 	{
-		if( not m_context ) throw std::invalid_argument("TLS context is null");
+		if( not m_context )
+			throw std::invalid_argument("TLS context is null");
 	}
 
 	void accept(accept_handler_t handler)
@@ -195,7 +203,7 @@ public:
 						std::move(handler)(asio::error::make_error_code(
 							asio::error::operation_aborted), result_t{});
 					});
-				return;
+				return ;
 			}
 		}
 		auto socket = std::make_shared<tls_socket_t>(
@@ -205,7 +213,8 @@ public:
 			[self, socket, handler = std::move(handler)]
 			(error_code error) mutable
 			{
-				if( error ) return std::move(handler)(error, result_t{});
+				if( error )
+					return std::move(handler)(error, result_t{});
 				if( not self->track(socket) )
 					return std::move(handler)(asio::error::make_error_code(
 						asio::error::operation_aborted), result_t{});
@@ -217,7 +226,8 @@ public:
 				{
 					timer->expires_after(timeout);
 					timer->async_wait([socket, expired](error_code timer_error) {
-						if( timer_error ) return;
+						if( timer_error )
+							return ;
 						expired->store(true, std::memory_order_relaxed);
 						error_code ignored;
 						socket->next_layer().close(ignored);
@@ -229,7 +239,8 @@ public:
 					{
 						timer->cancel();
 						self->untrack(socket);
-						if( expired->load(std::memory_order_relaxed) ) handshake_error =
+						if( expired->load(std::memory_order_relaxed) )
+							handshake_error =
 							asio::error::make_error_code(asio::error::timed_out);
 						if( handshake_error )
 							return std::move(handler)(handshake_error, result_t{});
@@ -258,10 +269,12 @@ public:
 						}
 						error_code endpoint_error;
 						auto remote = socket->next_layer().remote_endpoint(endpoint_error);
-						if( endpoint_error ) return std::move(handler)(
+						if( endpoint_error )
+							return std::move(handler)(
 							endpoint_error, result_t{});
 						auto local = socket->next_layer().local_endpoint(endpoint_error);
-						if( endpoint_error ) return std::move(handler)(
+						if( endpoint_error )
+							return std::move(handler)(
 							endpoint_error, result_t{});
 						transport_metadata metadata {
 							.local_endpoint = endpoint_text(local),

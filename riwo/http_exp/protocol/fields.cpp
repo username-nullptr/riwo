@@ -70,7 +70,8 @@ field_range::const_iterator::const_iterator(const const_iterator &other) :
 field_range::const_iterator &field_range::const_iterator::operator=(
 	const const_iterator &other)
 {
-	if( this == &other ) return *this;
+	if( this == &other )
+		return *this;
 	auto value = other.m_impl ? std::make_unique<impl>(*other.m_impl) : nullptr;
 	m_impl = std::move(value);
 	return *this;
@@ -163,7 +164,8 @@ fields::fields(const fields &other) :
 
 fields &fields::operator=(const fields &other)
 {
-	if( this == &other ) return *this;
+	if( this == &other )
+		return *this;
 	auto value = std::make_unique<impl>(other.m_impl->m_values);
 	m_impl = std::move(value);
 	return *this;
@@ -188,7 +190,7 @@ void fields::set(std::string name, riwo::value value)
 	if( first == values.end() )
 	{
 		values.push_back({std::move(name), std::move(value)});
-		return;
+		return ;
 	}
 	first->name = std::move(name);
 	first->value = std::move(value);

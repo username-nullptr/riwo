@@ -11,8 +11,10 @@ template <typename Value>
 optional<Value> application_session::attribute_as(std::string_view key) const
 {
 	auto value = attribute(key);
-	if( not value ) return {};
-	if( const auto *result = std::any_cast<Value>(&*value) ) return *result;
+	if( not value )
+		return {};
+	if( const auto *result = std::any_cast<Value>(&*value) )
+		return *result;
 	return {};
 }
 

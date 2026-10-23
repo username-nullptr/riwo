@@ -7,11 +7,6 @@
 
 #include <zlib.h>
 
-#include <array>
-#include <cstring>
-#include <limits>
-#include <stdexcept>
-
 namespace riwo::http_exp::detail
 {
 
@@ -32,7 +27,8 @@ struct decoding_body_reader_adapter::impl
 
 	~impl()
 	{
-		if( m_initialized ) inflateEnd(&m_stream);
+		if( m_initialized )
+			inflateEnd(&m_stream);
 	}
 
 	std::shared_ptr<body_reader_state> m_source;
@@ -71,7 +67,8 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	{
 		const auto read = state.m_source->read_some(riwo::buffer(state.m_input),
 			error);
-		if( error ) return false;
+		if( error )
+			return false;
 		state.m_input_begin = 0;
 		state.m_input_end = read.bytes;
 		if( read.bytes == 0 )
@@ -84,7 +81,8 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 			}
 			continue;
 		}
-		if( read.eof ) state.m_source_eof = true;
+		if( read.eof )
+			state.m_source_eof = true;
 		return true;
 	}
 	if( state.m_input_begin == state.m_input_end )
@@ -136,9 +134,12 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	while( not state.m_source_eof )
 	{
 		const auto read = state.m_source->read_some(riwo::buffer(buffer), error);
-		if( error ) return false;
-		if( read.eof ) state.m_source_eof = true;
-		if( read.bytes == 0 and not read.eof ) return false;
+		if( error )
+			return false;
+		if( read.eof )
+			state.m_source_eof = true;
+		if( read.bytes == 0 and not read.eof )
+			return false;
 	}
 	return true;
 }
@@ -149,10 +150,12 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 	auto &state = *m_impl;
 	if( state.m_ended )
 	{
-		if( not drain_source_sync(error) ) return {};
+		if( not drain_source_sync(error) )
+			return {};
 		return {0, true};
 	}
-	if( buffer.size() == 0 ) return {0, false};
+	if( buffer.size() == 0 )
+		return {0, false};
 
 	std::size_t produced = 0;
 	for(;;)
@@ -160,16 +163,21 @@ decoding_body_reader_adapter::~decoding_body_reader_adapter() = default;
 		if( state.m_input_begin == state.m_input_end and not fill_input_sync(error) )
 			return {};
 		bool ended = false;
-		if( not inflate_step(buffer, produced, ended, error) ) return {};
+		if( not inflate_step(buffer, produced, ended, error) )
+			return {};
 		if( ended )
 		{
 			state.m_ended = true;
-			if( not drain_source_sync(error) ) return {};
+			if( not drain_source_sync(error) )
+				return {};
 			return {produced, true};
 		}
-		if( produced == buffer.size() ) return {produced, false};
-		if( state.m_input_begin == state.m_input_end ) continue;
-		if( produced == 0 and state.m_stream.avail_in == 0 ) continue;
+		if( produced == buffer.size() )
+			return {produced, false};
+		if( state.m_input_begin == state.m_input_end )
+			continue;
+		if( produced == 0 and state.m_stream.avail_in == 0 )
+			continue;
 	}
 }
 
@@ -212,7 +220,7 @@ private:
 			{
 				self->finish(error, self->m_produced, true);
 			});
-			return;
+			return ;
 		}
 		if( state.m_input_begin == state.m_input_end )
 		{
@@ -224,7 +232,7 @@ private:
 				if( error )
 				{
 					self->finish(error, self->m_produced, false);
-					return;
+					return ;
 				}
 				state.m_input_begin = 0;
 				state.m_input_end = read.bytes;
@@ -232,12 +240,13 @@ private:
 				{
 					self->finish(make_error_code(errc::body_length_mismatch),
 						self->m_produced, false);
-					return;
+					return ;
 				}
-				if( read.eof ) state.m_source_eof = true;
+				if( read.eof )
+					state.m_source_eof = true;
 				self->pump();
 			});
-			return;
+			return ;
 		}
 		pump();
 	}
@@ -250,7 +259,7 @@ private:
 		if( not m_owner->inflate_step(m_target, m_produced, ended, error) )
 		{
 			finish(error, m_produced, false);
-			return;
+			return ;
 		}
 		if( ended )
 		{
@@ -259,12 +268,12 @@ private:
 			{
 				self->finish(drain_error, self->m_produced, true);
 			});
-			return;
+			return ;
 		}
 		if( m_produced == m_target.size() )
 		{
 			finish(error_code{}, m_produced, false);
-			return;
+			return ;
 		}
 		step();
 	}
@@ -275,7 +284,7 @@ private:
 		if( state.m_source_eof )
 		{
 			completion(error_code{});
-			return;
+			return ;
 		}
 		auto buffer = std::make_shared<std::array<std::byte,4096>>();
 		auto self = shared_from_this();
@@ -294,14 +303,15 @@ private:
 					if( error )
 					{
 						std::move(self->completion)(error);
-						return;
+						return ;
 					}
 					auto &state = *self->owner->m_owner->m_impl;
-					if( read.eof ) state.m_source_eof = true;
+					if( read.eof )
+						state.m_source_eof = true;
 					if( read.eof or read.bytes == 0 )
 					{
 						std::move(self->completion)(error_code{});
-						return;
+						return ;
 					}
 					self->step();
 				});
@@ -316,7 +326,8 @@ private:
 
 	void finish(error_code error, std::size_t size, bool eof)
 	{
-		if( m_finished ) return;
+		if( m_finished )
+			return ;
 		m_finished = true;
 		std::move(m_handler)(error, body_read_result {size, eof});
 	}
@@ -353,7 +364,7 @@ void decoding_body_reader_adapter::trailers(trailers_handler_t handler)
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			fields{});
-		return;
+		return ;
 	}
 	m_impl->m_source->trailers(std::move(handler));
 }
@@ -365,7 +376,8 @@ void decoding_body_reader_adapter::cancel() noexcept {
 std::shared_ptr<body_reader_state> make_decoding_body_reader(
 	std::shared_ptr<body_reader_state> source, std::string encoding)
 {
-	if( not source or encoding.empty() ) return source;
+	if( not source or encoding.empty() )
+		return source;
 	auto adapter = std::make_shared<decoding_body_reader_adapter>(
 		std::move(source), std::move(encoding));
 	return make_body_reader_state(adapter, true);

@@ -19,7 +19,8 @@ namespace riwo::http_exp::detail { namespace
 [[nodiscard]] bool permits_http1(const protocol_policy &policy) noexcept
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( policy.requirement == protocol_requirement::require_http2 ) return false;
+	if( policy.requirement == protocol_requirement::require_http2 )
+		return false;
 #endif
 	return contains(policy, protocol::v1_0) or
 		contains(policy, protocol::v1_1);
@@ -28,7 +29,8 @@ namespace riwo::http_exp::detail { namespace
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 [[nodiscard]] bool permits_http2(const protocol_policy &policy) noexcept
 {
-	if( policy.requirement == protocol_requirement::require_http1 ) return false;
+	if( policy.requirement == protocol_requirement::require_http1 )
+		return false;
 	return contains(policy, protocol::v2);
 }
 #endif
@@ -59,7 +61,8 @@ public:
 		error_code &error) noexcept override
 	{
 		error.clear();
-		if( m_offset != m_prefix.size() ) return copy_prefix(buffer);
+		if( m_offset != m_prefix.size() )
+			return copy_prefix(buffer);
 		return m_next->read_some_sync(buffer, error);
 	}
 
@@ -132,14 +135,15 @@ public:
 			[self = std::move(self), h1]
 			(error_code error, preface_result result,
 				std::string prefix) mutable {
-				if( error ) return self->finish_error(error);
+				if( error )
+					return self->finish_error(error);
 				if( result == preface_result::http2 )
 				{
 					self->m_selected =
 						::riwo::http_exp::v2::detail::accept_h2(self->m_transport,
 						self->m_config, std::move(prefix),
 						std::move(self->m_handler));
-					return;
+					return ;
 				}
 				if( not h1 )
 					return self->finish_error(
@@ -150,22 +154,24 @@ public:
 					self->m_config.request_limits, self->m_config.timeout,
 					std::move(self->m_handler));
 			});
-			return;
+			return ;
 		}
 #endif
 		if( h1 )
 		{
 			m_selected = accept_h1(m_transport, m_config.request_limits,
 				m_config.timeout, std::move(m_handler));
-			return;
+			return ;
 		}
 		finish_error(make_error_code(errc::negotiation_failed));
 	}
 
 	void cancel() noexcept override
 	{
-		if( m_selected ) m_selected->cancel();
-		else m_transport->cancel();
+		if( m_selected )
+			m_selected->cancel();
+		else
+			m_transport->cancel();
 	}
 
 	[[nodiscard]] bool closed() const noexcept override
@@ -177,7 +183,8 @@ private:
 	void finish_error(error_code error)
 	{
 		m_transport->cancel();
-		if( m_handler ) std::move(m_handler)(error, {}, {});
+		if( m_handler )
+			std::move(m_handler)(error, {}, {});
 	}
 
 	std::shared_ptr<::riwo::http_exp::connection> m_transport;
@@ -205,7 +212,8 @@ error_code validate_server_config(const server_config &config) noexcept
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		and not permits_http2(config.protocols)
 #endif
-	) return make_error_code(errc::negotiation_failed);
+	)
+		return make_error_code(errc::negotiation_failed);
 	const auto &limits = config.request_limits;
 	if( limits.max_start_line_size == 0 or
 		limits.max_field_name_size == 0 or
@@ -265,12 +273,14 @@ server_connection_ptr_t accept_server(
 {
 	if( not transport )
 	{
-		if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+		if( handler )
+			handler(make_error_code(errc::negotiation_failed), {}, {});
 		return {};
 	}
 	if( auto error = validate_server_config(config) )
 	{
-		if( handler ) handler(error, {}, {});
+		if( handler )
+			handler(error, {}, {});
 		return {};
 	}
 	if( selected_protocol == protocol::v1_0 or
@@ -278,7 +288,8 @@ server_connection_ptr_t accept_server(
 	{
 		if( not permits_http1(config.protocols) )
 		{
-			if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+			if( handler )
+				handler(make_error_code(errc::negotiation_failed), {}, {});
 			return {};
 		}
 		return accept_h1(std::move(transport), config.request_limits,
@@ -289,7 +300,8 @@ server_connection_ptr_t accept_server(
 	{
 		if( not permits_http2(config.protocols) )
 		{
-			if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+			if( handler )
+				handler(make_error_code(errc::negotiation_failed), {}, {});
 			return {};
 		}
 		return ::riwo::http_exp::v2::detail::accept_h2(
@@ -297,7 +309,8 @@ server_connection_ptr_t accept_server(
 			std::move(handler));
 	}
 #endif
-	if( handler ) handler(make_error_code(errc::negotiation_failed), {}, {});
+	if( handler )
+		handler(make_error_code(errc::negotiation_failed), {}, {});
 	return {};
 }
 

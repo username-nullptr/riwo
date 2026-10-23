@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "conditional.h"
-#include <ctime>
-#include <iomanip>
-#include <sstream>
 
 namespace riwo::http_exp
 {
@@ -30,15 +27,19 @@ template <typename Func>
 [[nodiscard]] bool any_entity_tag(std::string_view value, Func &&func) noexcept
 {
 	value = trim(value);
-	if( value == "*" ) return func(value);
+	if( value == "*" )
+		return func(value);
 	size_t begin = 0;
 	bool quoted = false;
 	for( size_t index = 0; index <= value.size(); ++index )
 	{
-		if( index < value.size() and value[index] == '"' ) quoted = not quoted;
-		if( index != value.size() and (quoted or value[index] != ',') ) continue;
+		if( index < value.size() and value[index] == '"' )
+			quoted = not quoted;
+		if( index != value.size() and (quoted or value[index] != ',') )
+			continue;
 		const auto item = trim(value.substr(begin, index - begin));
-		if( not item.empty() and func(item) ) return true;
+		if( not item.empty() and func(item) )
+			return true;
 		begin = index + 1;
 	}
 	return false;
@@ -64,7 +65,9 @@ template <typename Func>
 		return not stream.fail() and
 			stream.peek() == std::char_traits<char>::eof();
 	}
-	catch(...) { return false; }
+	catch(...) {
+		return false;
+	}
 }
 
 } //namespace
@@ -86,7 +89,8 @@ optional<entity_tag> parse_entity_tag(std::string_view value) noexcept
 	{
 		const auto byte = static_cast<unsigned char>(ch);
 		if( not (byte == 0x21 or (byte >= 0x23 and byte <= 0x7e) or
-			byte >= 0x80) ) return {};
+			byte >= 0x80) )
+			return {};
 	}
 	result.opaque = value;
 	return result;
@@ -119,16 +123,19 @@ optional<std::chrono::system_clock::time_point> parse_http_date(
 	{
 		result = {};
 		parsed = parse_date_format(value, "%A, %d-%b-%y %H:%M:%S GMT", result);
-		if( parsed and result.tm_year < 70 ) result.tm_year += 100;
+		if( parsed and result.tm_year < 70 )
+			result.tm_year += 100;
 	}
 	if( not parsed )
 	{
 		result = {};
 		parsed = parse_date_format(value, "%a %b %d %H:%M:%S %Y", result);
 	}
-	if( not parsed ) return {};
+	if( not parsed )
+		return {};
 	const auto seconds = utc_time(&result);
-	if( seconds == static_cast<std::time_t>(-1) ) return {};
+	if( seconds == static_cast<std::time_t>(-1) )
+		return {};
 	return std::chrono::system_clock::from_time_t(seconds);
 }
 
@@ -148,14 +155,16 @@ std::string format_http_date(
 	gmtime_r(&seconds, &utc);
 #endif
 	if( utc.tm_wday < 0 or utc.tm_wday >= 7 or utc.tm_mon < 0 or
-		utc.tm_mon >= 12 ) return {};
+		utc.tm_mon >= 12 )
+		return {};
 	std::array<char,64> output {};
 	const auto size = std::snprintf(output.data(), output.size(),
 		"%.*s, %02d %.*s %04d %02d:%02d:%02d GMT",
 		3, weekdays[static_cast<size_t>(utc.tm_wday)].data(), utc.tm_mday,
 		3, months[static_cast<size_t>(utc.tm_mon)].data(), utc.tm_year + 1900,
 		utc.tm_hour, utc.tm_min, utc.tm_sec);
-	if( size < 0 or static_cast<size_t>(size) >= output.size() ) return {};
+	if( size < 0 or static_cast<size_t>(size) >= output.size() )
+		return {};
 	return output.data();
 }
 
@@ -174,7 +183,8 @@ precondition_result evaluate_preconditions(const http_exp::method &request_metho
 				representation_exists and current_etag and
 				strong_entity_tag_equal(candidate, *current_etag);
 		});
-		if( not matched ) return precondition_result::precondition_failed;
+		if( not matched )
+			return precondition_result::precondition_failed;
 	}
 	else if( const auto unmodified_since = field_value(request_headers,
 		"if-unmodified-since"); unmodified_since and representation_exists and

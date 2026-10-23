@@ -7,9 +7,6 @@
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
 #include <riwo/http_exp/protocol/v2/detail/nghttp2_compat.h>
-#include <charconv>
-#include <deque>
-#include <unordered_map>
 
 namespace riwo::http_exp::v2 { namespace
 {
@@ -78,7 +75,8 @@ struct header_block
 		for( const auto &field : head.headers )
 		{
 			auto name = lower(field.name);
-			if( name == "host" ) continue;
+			if( name == "host" )
+				continue;
 			if( forbidden(name) or (name == "te" and
 				lower(field.value.to_string()) != "trailers") )
 				return sys_unexpected(protocol_error());
@@ -177,9 +175,12 @@ public:
 	explicit impl(connection_config value) : config(std::move(value)) {}
 	~impl()
 	{
-		if( session ) nghttp2_session_del(session);
-		if( callbacks ) nghttp2_session_callbacks_del(callbacks);
-		if( option ) nghttp2_option_del(option);
+		if( session )
+			nghttp2_session_del(session);
+		if( callbacks )
+			nghttp2_session_callbacks_del(callbacks);
+		if( option )
+			nghttp2_option_del(option);
 	}
 
 	[[nodiscard]] error_code initialize() noexcept
@@ -208,7 +209,8 @@ public:
 		const int created = config.role == protocol_role::client ?
 			nghttp2_session_client_new2(&session, callbacks, this, option) :
 			nghttp2_session_server_new2(&session, callbacks, this, option);
-		if( created != 0 ) return make_error_code(errc::operation_not_supported);
+		if( created != 0 )
+			return make_error_code(errc::operation_not_supported);
 		std::array<nghttp2_settings_entry,5> settings {{
 			{NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, config.initial_stream_window},
 			{NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, config.max_concurrent_streams},
@@ -224,7 +226,8 @@ public:
 			return protocol_error();
 		if( config.initial_connection_window > 65'535 and
 			nghttp2_submit_window_update(session, NGHTTP2_FLAG_NONE, 0,
-				static_cast<int32_t>(config.initial_connection_window - 65'535)) != 0 )
+				static_cast<int32_t>(config.initial_connection_window - 65'535)
+			) != 0 )
 			return protocol_error();
 		return {};
 	}
@@ -232,14 +235,16 @@ public:
 	[[nodiscard]] stream_state *by_wire(int32_t id) noexcept
 	{
 		auto found = wire_to_token.find(id);
-		if( found == wire_to_token.end() ) return nullptr;
+		if( found == wire_to_token.end() )
+			return nullptr;
 		auto value = streams.find(found->second);
 		return value == streams.end() ? nullptr : value->second.get();
 	}
 
 	[[nodiscard]] stream_state &ensure_inbound(int32_t id)
 	{
-		if( auto *value = by_wire(id) ) return *value;
+		if( auto *value = by_wire(id) )
+			return *value;
 		auto value = std::make_unique<stream_state>();
 		value->owner = this;
 		value->token = next_stream++;
@@ -257,7 +262,8 @@ public:
 			pending_events.push_back({std::move(event), {}});
 			return event_flow::continue_;
 		}
-		if( not event_handler ) return event_flow::continue_;
+		if( not event_handler )
+			return event_flow::continue_;
 		return event_handler(event);
 	}
 
@@ -269,7 +275,8 @@ public:
 	void defer_body(stream_token_t token, const uint8_t *data, size_t size)
 	{
 		auto body = std::make_shared<std::vector<std::byte>>(size);
-		if( size != 0 ) std::memcpy(body->data(), data, size);
+		if( size != 0 )
+			std::memcpy(body->data(), data, size);
 		pending_events.push_back({body_data_event {token,
 			const_buffer(body->data(), body->size())}, std::move(body)});
 	}
@@ -277,7 +284,8 @@ public:
 	[[nodiscard]] body_spec inbound_spec(const stream_state &value,
 		bool end_stream) const
 	{
-		if( end_stream ) return body_spec::empty();
+		if( end_stream )
+			return body_spec::empty();
 		if( auto length = value.headers.find_first("content-length") )
 		{
 			uint64_t size = 0;
@@ -294,12 +302,14 @@ public:
 		void *user_data)
 	{
 		auto &self = *static_cast<impl *>(user_data);
-		if( frame->hd.type != NGHTTP2_HEADERS ) return 0;
+		if( frame->hd.type != NGHTTP2_HEADERS )
+			return 0;
 		stream_state *value = self.by_wire(frame->hd.stream_id);
 		if( not value and self.config.role == protocol_role::server and
 			frame->headers.cat == NGHTTP2_HCAT_REQUEST )
 			value = &self.ensure_inbound(frame->hd.stream_id);
-		if( not value ) return 0;
+		if( not value )
+			return 0;
 		value->collecting_trailers = value->head_delivered;
 		value->headers = {};
 		value->method.clear();
@@ -319,7 +329,8 @@ public:
 	{
 		auto &self = *static_cast<impl *>(user_data);
 		auto *stream = self.by_wire(frame->hd.stream_id);
-		if( not stream ) return 0;
+		if( not stream )
+			return 0;
 		stream->header_bytes += name_size + value_size + 32;
 		++stream->header_count;
 		if( stream->header_bytes > self.config.limits.max_header_list_size or
@@ -333,11 +344,16 @@ public:
 			reinterpret_cast<const char *>(field_value), value_size);
 		try
 		{
-			if( header_name == ":method" ) stream->method = header_value;
-			else if( header_name == ":scheme" ) stream->scheme = header_value;
-			else if( header_name == ":authority" ) stream->authority = header_value;
-			else if( header_name == ":path" ) stream->path = header_value;
-			else if( header_name == ":protocol" ) stream->protocol_name = header_value;
+			if( header_name == ":method" )
+				stream->method = header_value;
+			else if( header_name == ":scheme" )
+				stream->scheme = header_value;
+			else if( header_name == ":authority" )
+				stream->authority = header_value;
+			else if( header_name == ":path" )
+				stream->path = header_value;
+			else if( header_name == ":protocol" )
+				stream->protocol_name = header_value;
 			else if( header_name == ":status" )
 			{
 				uint16_t status = 0;
@@ -358,7 +374,9 @@ public:
 					std::string(header_value));
 			}
 		}
-		catch(...) { return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE; }
+		catch(...) {
+			return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+		}
 		return 0;
 	}
 
@@ -371,7 +389,8 @@ public:
 			if( not (frame->hd.flags & NGHTTP2_FLAG_ACK) )
 			{
 				connection_event event {connection_event_kind::settings, {}, {}};
-				if( self.emit(event) == event_flow::pause ) self.defer_event(event);
+				if( self.emit(event) == event_flow::pause )
+					self.defer_event(event);
 			}
 			return 0;
 		}
@@ -380,18 +399,22 @@ public:
 			self.draining = true;
 			connection_event event {connection_event_kind::goaway, {}, {}};
 			if( auto found = self.wire_to_token.find(frame->goaway.last_stream_id);
-				found != self.wire_to_token.end() ) event.last_stream = found->second;
-			if( self.emit(event) == event_flow::pause ) self.defer_event(event);
+				found != self.wire_to_token.end() )
+				event.last_stream = found->second;
+			if( self.emit(event) == event_flow::pause )
+				self.defer_event(event);
 			return 0;
 		}
 		auto *stream = self.by_wire(frame->hd.stream_id);
-		if( not stream ) return 0;
+		if( not stream )
+			return 0;
 		if( frame->hd.type == NGHTTP2_HEADERS )
 		{
 			if( stream->collecting_trailers )
 			{
 				trailers_event event {stream->token, std::move(stream->headers)};
-				if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
+				if( self.emit(event) == event_flow::pause )
+					self.defer_event(std::move(event));
 			}
 			else if( self.config.role == protocol_role::server )
 			{
@@ -399,7 +422,9 @@ public:
 					return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 				request_head head;
 				try { head.method = http_exp::method(stream->method); }
-				catch(...) { return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE; }
+				catch(...) {
+					return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+				}
 				head.scheme = stream->scheme;
 				head.authority = stream->authority;
 				head.target = stream->path.empty() ? "/" : stream->path;
@@ -415,7 +440,8 @@ public:
 					std::move(body),
 					protocol::v2};
 				stream->head_delivered = true;
-				if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
+				if( self.emit(event) == event_flow::pause )
+					self.defer_event(std::move(event));
 			}
 			else
 			{
@@ -429,7 +455,8 @@ public:
 					std::move(body),
 					protocol::v2};
 				stream->head_delivered = true;
-				if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
+				if( self.emit(event) == event_flow::pause )
+					self.defer_event(std::move(event));
 			}
 		}
 		if( frame->hd.type == NGHTTP2_RST_STREAM )
@@ -442,13 +469,15 @@ public:
 				.wire_error_code = frame->rst_stream.error_code
 			};
 			stream_reset_event event {stream->token, std::move(error)};
-			if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
+			if( self.emit(event) == event_flow::pause )
+				self.defer_event(std::move(event));
 		}
 		if( frame->hd.flags & NGHTTP2_FLAG_END_STREAM and not stream->remote_end )
 		{
 			stream->remote_end = true;
 			stream_end_event event {stream->token};
-			if( self.emit(event) == event_flow::pause ) self.defer_event(event);
+			if( self.emit(event) == event_flow::pause )
+				self.defer_event(event);
 		}
 		return 0;
 	}
@@ -458,7 +487,8 @@ public:
 	{
 		auto &self = *static_cast<impl *>(user_data);
 		auto *stream = self.by_wire(stream_id);
-		if( not stream ) return 0;
+		if( not stream )
+			return 0;
 		if( self.paused )
 		{
 			self.defer_body(stream->token, data, size);
@@ -480,7 +510,8 @@ public:
 	{
 		auto &self = *static_cast<impl *>(user_data);
 		auto found = self.wire_to_token.find(stream_id);
-		if( found == self.wire_to_token.end() ) return 0;
+		if( found == self.wire_to_token.end() )
+			return 0;
 		auto token = found->second;
 		if( error_code_value != NGHTTP2_NO_ERROR )
 		{
@@ -492,7 +523,8 @@ public:
 				.wire_error_code = error_code_value
 			};
 			stream_reset_event event {token, std::move(error)};
-			if( self.emit(event) == event_flow::pause ) self.defer_event(std::move(event));
+			if( self.emit(event) == event_flow::pause )
+				self.defer_event(std::move(event));
 		}
 		if( auto stream = self.streams.find(token);
 			stream != self.streams.end() )
@@ -509,13 +541,15 @@ public:
 		auto &value = *static_cast<stream_state *>(source->ptr);
 		if( value.outbound.empty() )
 		{
-			if( not value.outbound_finished ) return NGHTTP2_ERR_DEFERRED;
+			if( not value.outbound_finished )
+				return NGHTTP2_ERR_DEFERRED;
 			*flags |= NGHTTP2_DATA_FLAG_EOF;
 			if( not value.outbound_trailers.empty() and
 				not value.trailers_submitted )
 			{
 				auto trailers = trailer_headers(value.outbound_trailers);
-				if( not trailers ) return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+				if( not trailers )
+					return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
 				*flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
 				if( nghttp2_submit_trailer(session, value.wire_id,
 					trailers->native.data(), trailers->native.size()) != 0 )
@@ -680,7 +714,8 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 					m_impl->streams.size() >= m_impl->config.max_concurrent_streams )
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				auto headers = request_headers(value.head);
-				if( not headers ) return sys_unexpected(headers.error());
+				if( not headers )
+					return sys_unexpected(headers.error());
 				auto state = std::make_unique<impl::stream_state>();
 				state->owner = m_impl.get();
 				state->token = value.stream;
@@ -700,7 +735,8 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 				const auto id = api::submit_request(m_impl->session, nullptr,
 					headers->native.data(), headers->native.size(), provider_ptr,
 					state.get());
-				if( id < 0 ) return sys_unexpected(make_error_code(
+				if( id < 0 )
+					return sys_unexpected(make_error_code(
 					errc::stream_protocol_error));
 				state->wire_id = id;
 				m_impl->wire_to_token[id] = value.stream;
@@ -715,7 +751,8 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 				if( found == m_impl->streams.end() )
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				auto headers = response_headers(value.head);
-				if( not headers ) return sys_unexpected(headers.error());
+				if( not headers )
+					return sys_unexpected(headers.error());
 				auto &state = *found->second;
 				state.outbound_finished = value.body.type() == body_spec::mode::empty or
 					value.body.type() == body_spec::mode::head or
@@ -814,7 +851,8 @@ sys_expected<produce_result> connection_engine::produce(
 			m_impl->pending_output_offset = 0;
 			const uint8_t *data = nullptr;
 			const auto size = api::session_mem_send(m_impl->session, &data);
-			if( size < 0 ) return sys_unexpected(protocol_error());
+			if( size < 0 )
+				return sys_unexpected(protocol_error());
 			if( size != 0 )
 			{
 				if( static_cast<size_t>(size) > m_impl->config.max_pending_output )
@@ -827,7 +865,8 @@ sys_expected<produce_result> connection_engine::produce(
 		const auto available = m_impl->pending_output.size() -
 			m_impl->pending_output_offset;
 		const auto count = std::min(output.size(), available);
-		if( count != 0 ) std::memcpy(output.data(),
+		if( count != 0 )
+			std::memcpy(output.data(),
 			m_impl->pending_output.data() + m_impl->pending_output_offset, count);
 		m_impl->pending_output_offset += count;
 		return produce_result {count, wants_write()};
@@ -846,7 +885,8 @@ optional<int32_t> connection_engine::wire_stream_id(
 	stream_token_t stream) const noexcept
 {
 	auto found = m_impl->streams.find(stream);
-	if( found == m_impl->streams.end() ) return {};
+	if( found == m_impl->streams.end() )
+		return {};
 	return found->second->wire_id;
 }
 
@@ -854,7 +894,8 @@ optional<stream_token_t> connection_engine::stream_from_wire_id(
 	int32_t stream_id) const noexcept
 {
 	auto found = m_impl->wire_to_token.find(stream_id);
-	if( found == m_impl->wire_to_token.end() ) return {};
+	if( found == m_impl->wire_to_token.end() )
+		return {};
 	return found->second;
 }
 
@@ -872,7 +913,8 @@ connection_diagnostics connection_engine::diagnostics() const noexcept
 void *connection_engine::protocol_extension(
 	const std::type_info &type) noexcept
 {
-	if( type != typeid(connection_extension) ) return nullptr;
+	if( type != typeid(connection_extension) )
+		return nullptr;
 	m_impl->extension = connection_extension(diagnostics());
 	return std::addressof(m_impl->extension);
 }

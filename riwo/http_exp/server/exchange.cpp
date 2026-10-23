@@ -69,14 +69,16 @@ protocol server_exchange_state::selected_protocol() const noexcept {
 }
 
 std::string server_exchange_state::remote_address() const {
-	if( not m_impl->m_stream ) return {};
+	if( not m_impl->m_stream )
+		return {};
 	error_code error;
 	auto endpoint = m_impl->m_stream->remote_endpoint(error);
 	return error ? std::string{} : endpoint.address().to_string();
 }
 
 uint16_t server_exchange_state::remote_port() const noexcept {
-	if( not m_impl->m_stream ) return 0;
+	if( not m_impl->m_stream )
+		return 0;
 	error_code error;
 	auto endpoint = m_impl->m_stream->remote_endpoint(error);
 	return error ? 0 : endpoint.port();
@@ -129,13 +131,16 @@ application_session_ptr server_exchange_state::find_session()
 	if( m_impl->m_application_session and
 		m_impl->m_application_session->valid() )
 		return m_impl->m_application_session;
-	if( not m_impl->m_sessions ) return {};
+	if( not m_impl->m_sessions )
+		return {};
 	const auto config = m_impl->m_sessions->config();
 	auto cookies = parse_cookie_fields(m_impl->m_request.headers);
-	if( not cookies ) return {};
+	if( not cookies )
+		return {};
 	for( const auto &cookie : *cookies )
 	{
-		if( cookie.name != config.cookie_name ) continue;
+		if( cookie.name != config.cookie_name )
+			continue;
 		m_impl->m_application_session =
 			m_impl->m_sessions->get(cookie.value.to_string());
 		break;
@@ -150,7 +155,8 @@ application_session_ptr server_exchange_state::session()
 		current->refresh();
 		return current;
 	}
-	if( not m_impl->m_sessions ) return {};
+	if( not m_impl->m_sessions )
+		return {};
 	m_impl->m_application_session = m_impl->m_sessions->create();
 	m_impl->m_set_session_cookie = true;
 	return m_impl->m_application_session;
@@ -169,7 +175,8 @@ bool server_exchange_state::should_compress(const response_head &head,
 	if( not m_impl->m_compression_enabled or not head.status.allows_body() or
 		(length and *length < m_impl->m_compression_minimum) or
 		head.headers.find_first("content-encoding") or
-		m_impl->m_request.headers.find_first("range") ) return false;
+		m_impl->m_request.headers.find_first("range") )
+		return false;
 	const auto accepts = m_impl->m_request.headers.find_first("accept-encoding");
 	if( not accepts or content_coding_quality(*accepts, "gzip") <= 0. )
 		return false;
@@ -181,7 +188,8 @@ bool server_exchange_state::should_compress(const response_head &head,
 bool server_exchange_state::prepare_compression(response_head &head,
 	optional<uint64_t> length)
 {
-	if( not should_compress(head, length) ) return false;
+	if( not should_compress(head, length) )
+		return false;
 	head.headers.set("Content-Encoding", "gzip");
 	head.headers.erase("Content-Length");
 	if( const auto vary = head.headers.find_first("vary") )
@@ -194,7 +202,8 @@ bool server_exchange_state::prepare_compression(response_head &head,
 		if( lower.find("accept-encoding") == std::string::npos )
 			head.headers.set("Vary", value + ", Accept-Encoding");
 	}
-	else head.headers.add("Vary", "Accept-Encoding");
+	else
+		head.headers.add("Vary", "Accept-Encoding");
 	if( const auto etag_value = head.headers.find_first("etag") )
 	{
 		if( auto etag = parse_entity_tag(*etag_value) )
@@ -210,7 +219,8 @@ void attach_session_cookie(auto &state,
 	response_head &head)
 {
 	if( not state.m_set_session_cookie or not state.m_application_session or
-		not state.m_sessions ) return;
+		not state.m_sessions )
+		return ;
 	const auto config = state.m_sessions->config();
 	add_set_cookie(head.headers, response_cookie {
 		.name = config.cookie_name,
@@ -249,12 +259,12 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 	if( state->m_response_pending )
 	{
 		error = make_error_code(errc::operation_in_progress);
-		return;
+		return ;
 	}
 	if( state->m_response_started or not state->m_stream )
 	{
 		error = make_error_code(errc::operation_not_permitted);
-		return;
+		return ;
 	}
 	state->m_response_pending = true;
 	attach_session_cookie(*state, head);
@@ -275,12 +285,12 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 	if( state->m_response_pending )
 	{
 		std::move(handler)(make_error_code(errc::operation_in_progress));
-		return;
+		return ;
 	}
 	if( state->m_response_started or not state->m_stream )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted));
-		return;
+		return ;
 	}
 	state->m_response_pending = true;
 	attach_session_cookie(*state, head);
@@ -306,12 +316,12 @@ void server_exchange_state::inform(response_head head,
 		head.status.code() == status::switching_protocols )
 	{
 		error = make_error_code(errc::invalid_status);
-		return;
+		return ;
 	}
 	if( not m_impl->m_stream or m_impl->m_response_started )
 	{
 		error = make_error_code(errc::operation_not_permitted);
-		return;
+		return ;
 	}
 	m_impl->m_stream->inform_sync(std::move(head), error);
 }
@@ -323,12 +333,12 @@ void server_exchange_state::inform(response_head head,
 		head.status.code() == status::switching_protocols )
 	{
 		std::move(handler)(make_error_code(errc::invalid_status));
-		return;
+		return ;
 	}
 	if( not m_impl->m_stream or m_impl->m_response_started )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted));
-		return;
+		return ;
 	}
 	m_impl->m_stream->inform(std::move(head), std::move(handler));
 }
@@ -366,7 +376,7 @@ void server_exchange_state::accept_duplex(response_head head,
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			std::shared_ptr<duplex_state>{});
-		return;
+		return ;
 	}
 	state->m_response_pending = true;
 	state->m_response_body->configure(body_spec::streaming());
@@ -386,8 +396,10 @@ void server_exchange_state::accept_duplex(response_head head,
 
 void server_exchange_state::cancel() noexcept
 {
-	if( m_impl->m_duplex_taken ) return;
-	if( m_impl->m_stream and m_impl->m_stream->reusable() ) return;
+	if( m_impl->m_duplex_taken )
+		return ;
+	if( m_impl->m_stream and m_impl->m_stream->reusable() )
+		return ;
 	m_impl->m_request_body->cancel();
 	m_impl->m_response_body->cancel();
 	if( m_impl->m_stream )

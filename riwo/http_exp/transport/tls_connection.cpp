@@ -6,9 +6,6 @@
 #if RIWO_OPENSSL_SUPPORT
 
 #include <asio/steady_timer.hpp>
-#include <atomic>
-#include <chrono>
-#include <thread>
 
 namespace riwo::http_exp
 {
@@ -88,7 +85,7 @@ void tls_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 		[handler = std::move(handler)](error_code error, size_t size) mutable {
 			std::move(handler)(error, size);
 		});
-		return;
+		return ;
 	}
 
 	struct timeout_state
@@ -106,7 +103,8 @@ void tls_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 	state->timer.expires_after(*m_impl->m_read_timeout);
 	state->timer.async_wait([self, state](error_code error)
 	{
-		if( error or state->expired.exchange(true) ) return;
+		if( error or state->expired.exchange(true) )
+			return ;
 		self->cancel();
 	});
 	m_impl->m_socket.async_read_some(buffer,
@@ -129,7 +127,7 @@ void tls_connection::write(const_buffer buffer, io_handler_t handler)
 		[handler = std::move(handler)](error_code error, size_t size) mutable {
 			std::move(handler)(error, size);
 		});
-		return;
+		return ;
 	}
 
 	struct timeout_state
@@ -147,7 +145,8 @@ void tls_connection::write(const_buffer buffer, io_handler_t handler)
 	state->timer.expires_after(*m_impl->m_write_timeout);
 	state->timer.async_wait([self, state](error_code error)
 	{
-		if( error or state->expired.exchange(true) ) return;
+		if( error or state->expired.exchange(true) )
+			return ;
 		self->cancel();
 	});
 	asio::async_write(m_impl->m_socket, buffer,
@@ -182,7 +181,8 @@ void tls_connection::close(close_handler_t handler)
 
 void tls_connection::cancel() noexcept
 {
-	if( not m_impl->m_open ) return;
+	if( not m_impl->m_open )
+		return ;
 	m_impl->m_open = false;
 	error_code ignored;
 	m_impl->m_socket.next_layer().cancel(ignored);
@@ -224,7 +224,8 @@ size_t tls_connection::read_some_sync(mutable_buffer buffer,
 				while( not finished and
 					std::chrono::steady_clock::now() < deadline )
 					std::this_thread::sleep_for(std::chrono::milliseconds(5));
-				if( finished ) return;
+				if( finished )
+					return ;
 				timed_out = true;
 				error_code ignored;
 				m_impl->m_socket.next_layer().close(ignored);
@@ -232,7 +233,8 @@ size_t tls_connection::read_some_sync(mutable_buffer buffer,
 		}
 		auto size = m_impl->m_socket.read_some(buffer, error);
 		finished = true;
-		if( watchdog.joinable() ) watchdog.request_stop();
+		if( watchdog.joinable() )
+			watchdog.request_stop();
 		if( timed_out )
 			error = asio::error::make_error_code(asio::error::timed_out);
 		if( timeout_error(error) )
@@ -263,7 +265,8 @@ size_t tls_connection::write_sync(const_buffer buffer,
 				while( not finished and
 					std::chrono::steady_clock::now() < deadline )
 					std::this_thread::sleep_for(std::chrono::milliseconds(5));
-				if( finished ) return;
+				if( finished )
+					return ;
 				timed_out = true;
 				error_code ignored;
 				m_impl->m_socket.next_layer().close(ignored);
@@ -271,7 +274,8 @@ size_t tls_connection::write_sync(const_buffer buffer,
 		}
 		auto size = asio::write(m_impl->m_socket, buffer, error);
 		finished = true;
-		if( watchdog.joinable() ) watchdog.request_stop();
+		if( watchdog.joinable() )
+			watchdog.request_stop();
 		if( timed_out )
 			error = asio::error::make_error_code(asio::error::timed_out);
 		if( timeout_error(error) )

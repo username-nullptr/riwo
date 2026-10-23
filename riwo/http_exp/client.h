@@ -5,10 +5,10 @@
 #define RIWO_HTTP_EXP_CLIENT_H
 
 #include <riwo/http_exp/client/cookie_jar.h>
-#include <riwo/http_exp/client/config.h>
-#include <riwo/http_exp/client/request.h>
-#include <riwo/http_exp/client/reply.h>
 #include <riwo/http_exp/client/exchange.h>
+#include <riwo/http_exp/client/request.h>
+#include <riwo/http_exp/client/config.h>
 #include <riwo/http_exp/client/client.h>
+#include <riwo/http_exp/client/reply.h>
 
 #endif //RIWO_HTTP_EXP_CLIENT_H

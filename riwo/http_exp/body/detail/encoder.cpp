@@ -24,7 +24,8 @@ public:
 	[[nodiscard]] size_t drain(mutable_buffer target) noexcept
 	{
 		const auto size = std::min(target.size(), pending.size() - pending_offset);
-		if( size != 0 ) std::memcpy(target.data(),
+		if( size != 0 )
+			std::memcpy(target.data(),
 			pending.data() + pending_offset, size);
 		pending_offset += size;
 		if( pending_offset == pending.size() )
@@ -39,8 +40,10 @@ public:
 		error_code &error) noexcept override
 	{
 		error.clear();
-		if( target.size() == 0 ) return 0;
-		if( pending_offset != pending.size() ) return drain(target);
+		if( target.size() == 0 )
+			return 0;
+		if( pending_offset != pending.size() )
+			return drain(target);
 		if( ended )
 		{
 			error = asio::error::make_error_code(asio::error::eof);
@@ -53,7 +56,11 @@ public:
 			{
 				error.clear();
 				auto encoded = encoder.append({}, true);
-				if( not encoded ) { error = encoded.error(); return 0; }
+				if( not encoded )
+				{
+					error = encoded.error();
+					return 0;
+				}
 				pending = std::move(*encoded);
 				ended = true;
 				if( pending.empty() )
@@ -63,7 +70,8 @@ public:
 				}
 				return drain(target);
 			}
-			if( error ) return 0;
+			if( error )
+				return 0;
 			if( read == 0 )
 			{
 				error = make_error_code(errc::body_length_mismatch);
@@ -71,9 +79,14 @@ public:
 			}
 			auto encoded = encoder.append(std::string_view(
 				reinterpret_cast<const char*>(input.data()), read));
-			if( not encoded ) { error = encoded.error(); return 0; }
+			if( not encoded )
+			{
+				error = encoded.error();
+				return 0;
+			}
 			pending = std::move(*encoded);
-			if( not pending.empty() ) return drain(target);
+			if( not pending.empty() )
+				return drain(target);
 		}
 	}
 
@@ -82,17 +95,17 @@ public:
 		if( target.size() == 0 )
 		{
 			std::move(handler)(error_code{}, 0);
-			return;
+			return ;
 		}
 		if( pending_offset != pending.size() )
 		{
 			std::move(handler)(error_code{}, drain(target));
-			return;
+			return ;
 		}
 		if( ended )
 		{
 			std::move(handler)(asio::error::make_error_code(asio::error::eof), 0);
-			return;
+			return ;
 		}
 		auto self = shared_from_this();
 		source->read_some(riwo::buffer(input),
@@ -104,12 +117,12 @@ public:
 			if( error and not eof )
 			{
 				std::move(handler)(error, 0);
-				return;
+				return ;
 			}
 			if( not eof and read == 0 )
 			{
 				std::move(handler)(make_error_code(errc::body_length_mismatch), 0);
-				return;
+				return ;
 			}
 			auto encoded = self->encoder.append(eof ? std::string_view{} :
 				std::string_view(reinterpret_cast<const char*>(self->input.data()),
@@ -117,20 +130,21 @@ public:
 			if( not encoded )
 			{
 				std::move(handler)(encoded.error(), 0);
-				return;
+				return ;
 			}
 			self->pending = std::move(*encoded);
-			if( eof ) self->ended = true;
+			if( eof )
+				self->ended = true;
 			if( not self->pending.empty() )
 			{
 				std::move(handler)(error_code{}, self->drain(target));
-				return;
+				return ;
 			}
 			if( self->ended )
 			{
 				std::move(handler)(
 					asio::error::make_error_code(asio::error::eof), 0);
-				return;
+				return ;
 			}
 			self->read_some(target, std::move(handler));
 		});

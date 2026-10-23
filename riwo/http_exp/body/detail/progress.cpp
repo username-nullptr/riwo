@@ -19,7 +19,8 @@ public:
 		error_code &error) noexcept override
 	{
 		auto result = m_source->read_some(buffer, error);
-		if( not error and result.bytes ) notify(result.bytes);
+		if( not error and result.bytes )
+			notify(result.bytes);
 		return result;
 	}
 
@@ -30,7 +31,8 @@ public:
 			[self = std::move(self), handler = std::move(handler)]
 			(error_code error, body_read_result result) mutable
 			{
-				if( not error and result.bytes ) self->notify(result.bytes);
+				if( not error and result.bytes )
+					self->notify(result.bytes);
 				std::move(handler)(error, result);
 			});
 	}
@@ -50,7 +52,9 @@ private:
 	{
 		m_transferred += bytes;
 		try { m_handler(m_transferred, m_total); }
-		catch(...) { /* Observers cannot break body backpressure. */ }
+		catch(...) {
+			/* Observers cannot break body backpressure. */
+		}
 	}
 
 	std::shared_ptr<body_reader_state> m_source;
@@ -63,7 +67,8 @@ std::shared_ptr<body_reader_state> make_progress_body_reader(
 	std::shared_ptr<body_reader_state> source, uint64_t total,
 	body_progress_handler handler)
 {
-	if( not source or not handler ) return source;
+	if( not source or not handler )
+		return source;
 	return make_body_reader_state(std::make_shared<progress_body_reader_adapter>(
 		std::move(source), total, std::move(handler)), true);
 }

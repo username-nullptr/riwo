@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "detail/session_pool.h"
-#include <condition_variable>
-#include <deque>
-#include <mutex>
 
 namespace riwo::http_exp::detail { namespace
 {
@@ -26,7 +23,8 @@ public:
 	}
 
 	~pooled_stream() override {
-		if( m_inner and not m_inner->reusable() ) m_inner->cancel();
+		if( m_inner and not m_inner->reusable() )
+			m_inner->cancel();
 		abandon(false);
 	}
 
@@ -90,7 +88,8 @@ public:
 		optional<response_head> response, error_code &error) noexcept override
 	{
 		auto result = m_inner->open_duplex_sync(std::move(response), error);
-		if( not error ) abandon(false);
+		if( not error )
+			abandon(false);
 		return result;
 	}
 	void open_duplex(optional<response_head> response,
@@ -100,7 +99,8 @@ public:
 		m_inner->open_duplex(std::move(response),
 		[self = std::move(self), handler = std::move(handler)]
 		(error_code error, std::shared_ptr<duplex_state> state) mutable {
-			if( not error ) self->abandon(false);
+			if( not error )
+				self->abandon(false);
 			std::move(handler)(error, std::move(state));
 		});
 	}
@@ -112,10 +112,12 @@ public:
 private:
 	void abandon(bool reusable) noexcept
 	{
-		if( m_abandoned ) return;
+		if( m_abandoned )
+			return ;
 		m_abandoned = true;
 		try {
-			if( m_on_abandon ) m_on_abandon(reusable);
+			if( m_on_abandon )
+				m_on_abandon(reusable);
 		}
 		catch(...) {
 		}
@@ -179,8 +181,10 @@ public:
 		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
 		m_connector(std::move(connector_value)), m_factory(std::move(factory_value))
 	{
-		if( not m_connector ) m_connector = make_default_connector(m_executor);
-		if( not m_factory ) m_factory = make_default_session_factory();
+		if( not m_connector )
+			m_connector = make_default_connector(m_executor);
+		if( not m_factory )
+			m_factory = make_default_session_factory();
 	}
 
 	~impl() {
@@ -272,7 +276,8 @@ public:
 				{
 					std::lock_guard lock(m_mutex);
 					auto &value = m_buckets[key];
-					if( value.connecting > 0 ) --value.connecting;
+					if( value.connecting > 0 )
+						--value.connecting;
 				}
 				if( error or not session )
 				{
@@ -319,7 +324,7 @@ public:
 			if( immediate )
 			{
 				complete(item, immediate, {});
-				return;
+				return ;
 			}
 			schedule_pump(key);
 		}
@@ -429,10 +434,12 @@ private:
 	{
 		for( auto &item : value.sessions )
 		{
-			if( not usable(item) ) continue;
+			if( not usable(item) )
+				continue;
 		#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 			if( item->session->selected_protocol() == protocol::v2 and
-				not item->session->try_reserve_stream() ) continue;
+				not item->session->try_reserve_stream() )
+				continue;
 		#endif
 			item->busy = true;
 			++item->generation;
@@ -474,13 +481,14 @@ private:
 			std::lock_guard lock(m_mutex);
 			auto iterator = m_buckets.find(key);
 			if( iterator == m_buckets.end() or iterator->second.pump_scheduled )
-				return;
+				return ;
 			iterator->second.pump_scheduled = true;
 		}
 		auto weak = weak_from_this();
 		asio::post(m_executor,
 		[weak, key] {
-			if( auto self = weak.lock() ) self->pump(key);
+			if( auto self = weak.lock() )
+				self->pump(key);
 		});
 	}
 
@@ -496,11 +504,11 @@ private:
 				std::lock_guard lock(m_mutex);
 				auto iterator = m_buckets.find(key);
 				if( iterator == m_buckets.end() )
-					return;
+					return ;
 				auto &value = iterator->second;
 				value.pump_scheduled = false;
 				if( m_stopped or value.waiters.empty() )
-					return;
+					return ;
 				if( m_config.pool.max_sessions_per_origin == 0 )
 				{
 					item = value.waiters.front();
@@ -525,7 +533,7 @@ private:
 						connect = true;
 					}
 					else
-						return;
+						return ;
 				}
 			}
 
@@ -534,15 +542,16 @@ private:
 				complete(rejected,
 					make_error_code(errc::operation_not_permitted), {});
 				schedule_pump(key);
-				return;
+				return ;
 			}
 
 			if( connect )
 			{
 				start_connect(key);
-				return;
+				return ;
 			}
-			if( not item or not selected ) return;
+			if( not item or not selected )
+				return ;
 
 			auto session = selected->session;
 			auto weak = weak_from_this();
@@ -556,7 +565,7 @@ private:
 						self->release_slot(key, selected, false);
 						self->complete(item, error, {});
 						self->schedule_pump(key);
-						return;
+						return ;
 					}
 				#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 					if( selected->session->selected_protocol() == protocol::v2 )
@@ -569,7 +578,7 @@ private:
 				else
 					self_finish_unused(item, error);
 			});
-			return;
+			return ;
 		}
 	}
 
@@ -579,7 +588,8 @@ private:
 		m_connector->connect_async(key, m_config,
 		[weak, key](error_code error, negotiated_transport transport) mutable {
 			auto self = weak.lock();
-			if( not self ) return;
+			if( not self )
+				return ;
 			if( error )
 				return self->connect_failed(key, error);
 
@@ -612,9 +622,11 @@ private:
 		{
 			std::lock_guard lock(m_mutex);
 			auto iterator = m_buckets.find(key);
-			if( iterator == m_buckets.end() ) return;
+			if( iterator == m_buckets.end() )
+				return ;
 			auto &value = iterator->second;
-			if( value.connecting > 0 ) --value.connecting;
+			if( value.connecting > 0 )
+				--value.connecting;
 			if( not value.waiters.empty() )
 			{
 				item = value.waiters.front();
@@ -623,7 +635,8 @@ private:
 			}
 			m_condition.notify_all();
 		}
-		if( item ) complete(item, error, {});
+		if( item )
+			complete(item, error, {});
 		schedule_pump(key);
 	}
 
@@ -634,10 +647,12 @@ private:
 		bool remove = false;
 		{
 			std::lock_guard lock(m_mutex);
-			if( not value or value->removed ) return;
+			if( not value or value->removed )
+				return ;
 			const bool was_busy = value->busy;
 			ignore_unused(was_busy);
-			if( value->busy ) value->busy = false;
+			if( value->busy )
+				value->busy = false;
 			value->idle_since = clock_t::now();
 			session = value->session;
 			if( not reusable or not session or session->closed() or
@@ -654,7 +669,8 @@ private:
 		}
 		if( remove and session )
 			session->graceful_shutdown([](error_code) {});
-		if( remove ) remove_slot(key, value);
+		if( remove )
+			remove_slot(key, value);
 		schedule_pump(key);
 	}
 
@@ -663,7 +679,8 @@ private:
 		{
 			std::lock_guard lock(m_mutex);
 			auto iterator = m_buckets.find(key);
-			if( iterator == m_buckets.end() ) return;
+			if( iterator == m_buckets.end() )
+				return ;
 			auto &values = iterator->second.sessions;
 			std::erase_if(values, [&value](const slot_ptr_t &item) {
 				return item == value;
@@ -674,28 +691,34 @@ private:
 
 	void schedule_idle(const waiter_ptr_t &value)
 	{
-		if( m_config.timeout.pool_wait.count() <= 0 ) return;
+		if( m_config.timeout.pool_wait.count() <= 0 )
+			return ;
 		auto weak = weak_from_this();
 		value->timer = std::make_shared<timer_t>(m_executor);
 		value->timer->expires_after(m_config.timeout.pool_wait);
 		value->timer->async_wait(
 		[weak, value](error_code error) {
-			if( error or value->completed ) return;
-			if( auto self = weak.lock() ) self->wait_timed_out(value);
+			if( error or value->completed )
+				return ;
+			if( auto self = weak.lock() )
+				self->wait_timed_out(value);
 		});
 	}
 
 	void schedule_idle_locked(const session_key &key, const slot_ptr_t &value)
 	{
-		if( m_config.pool.idle_timeout.count() <= 0 ) return;
+		if( m_config.pool.idle_timeout.count() <= 0 )
+			return ;
 		value->idle_timer = std::make_shared<timer_t>(m_executor);
 		value->idle_timer->expires_after(m_config.pool.idle_timeout);
 		auto weak = weak_from_this();
 		auto timer = value->idle_timer;
 		timer->async_wait(
 		[weak, key, value](error_code error) {
-			if( error ) return;
-			if( auto self = weak.lock() ) self->expire_idle(key, value);
+			if( error )
+				return ;
+			if( auto self = weak.lock() )
+				self->expire_idle(key, value);
 		});
 	}
 
@@ -703,9 +726,11 @@ private:
 	{
 		{
 			std::lock_guard lock(m_mutex);
-			if( value->completed or not value->queued ) return;
+			if( value->completed or not value->queued )
+				return ;
 			auto iterator = m_buckets.find(value->key);
-			if( iterator == m_buckets.end() ) return;
+			if( iterator == m_buckets.end() )
+				return ;
 			auto &items = iterator->second.waiters;
 			std::erase(items, value);
 			value->queued = false;
@@ -720,11 +745,13 @@ private:
 		std::shared_ptr<client_session> session;
 		{
 			std::lock_guard lock(m_mutex);
-			if( not value or value->busy or value->removed ) return;
+			if( not value or value->busy or value->removed )
+				return ;
 			value->removed = true;
 			session = value->session;
 		}
-		if( session ) session->graceful_shutdown([](error_code) {});
+		if( session )
+			session->graceful_shutdown([](error_code) {});
 		remove_slot(key, value);
 	}
 
@@ -752,17 +779,19 @@ private:
 		{
 			std::lock_guard lock(m_mutex);
 			if( not value or not value->busy or value->generation != generation )
-				return;
+				return ;
 			session = value->session;
 		}
-		if( session ) session->release_stream(reusable);
+		if( session )
+			session->release_stream(reusable);
 		release_slot(key, value, reusable);
 	}
 
 	void complete(const waiter_ptr_t &value, error_code error,
 		std::shared_ptr<stream> active)
 	{
-		if( not value or value->completed ) return;
+		if( not value or value->completed )
+			return ;
 		value->completed = true;
 		if( value->timer )
 		{
@@ -825,9 +854,12 @@ std::shared_ptr<stream> session_pool::open_sync(const origin &target,
 	request_head head, body_spec spec, error_code &error) noexcept
 {
 	auto key = make_session_key(head, m_impl->m_config);
-	if( not target.scheme.empty() ) key.scheme = target.scheme;
-	if( not target.host.empty() ) key.host = target.host;
-	if( target.port != 0 ) key.port = target.port;
+	if( not target.scheme.empty() )
+		key.scheme = target.scheme;
+	if( not target.host.empty() )
+		key.host = target.host;
+	if( target.port != 0 )
+		key.port = target.port;
 	key.tls.enabled = key.scheme == "https";
 	return m_impl->open_sync(key, std::move(head), std::move(spec), error);
 }
@@ -842,9 +874,12 @@ void session_pool::open(const origin &target, request_head head,
 	body_spec spec, open_handler_t handler)
 {
 	auto key = make_session_key(head, m_impl->m_config);
-	if( not target.scheme.empty() ) key.scheme = target.scheme;
-	if( not target.host.empty() ) key.host = target.host;
-	if( target.port != 0 ) key.port = target.port;
+	if( not target.scheme.empty() )
+		key.scheme = target.scheme;
+	if( not target.host.empty() )
+		key.host = target.host;
+	if( target.port != 0 )
+		key.port = target.port;
 	key.tls.enabled = key.scheme == "https";
 	m_impl->open(key, std::move(head), std::move(spec), std::move(handler));
 }

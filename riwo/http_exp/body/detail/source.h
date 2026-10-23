@@ -75,16 +75,20 @@ public:
 		if constexpr( concepts::finalizable_body_source_model<Source> )
 		{
 			try { m_source.finish(error); }
-			catch(...) { error = exception_error(std::current_exception()); }
+			catch(...) {
+				error = exception_error(std::current_exception());
+			}
 		}
-		else error.clear();
+		else
+			error.clear();
 	}
 
 	void finish(rewind_handler_t handler) override
 	{
 		if constexpr( concepts::finalizable_body_source_model<Source> )
 			m_source.finish(std::move(handler));
-		else std::move(handler)(error_code{});
+		else
+			std::move(handler)(error_code{});
 	}
 
 	void cancel() noexcept override {

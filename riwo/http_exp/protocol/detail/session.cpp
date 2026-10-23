@@ -122,7 +122,8 @@ public:
 		{
 			auto size = m_writer->write(buffer, error);
 			total += size;
-			if( error or size != buffer.size() ) break;
+			if( error or size != buffer.size() )
+				break;
 		}
 		return total;
 	}
@@ -146,31 +147,39 @@ public:
 	}
 	void close_sync(error_code &error) noexcept override
 	{
-		if( m_closed ) { error.clear(); return; }
+		if( m_closed )
+		{
+			error.clear();
+			return ;
+		}
 		m_writer->finish({}, error);
-		if( not error ) m_closed = true;
+		if( not error )
+			m_closed = true;
 	}
 	void close(close_handler_t handler) override
 	{
 		if( m_closed )
 		{
 			std::move(handler)(error_code{});
-			return;
+			return ;
 		}
 		auto self = shared_from_this();
 		m_writer->finish({},
 		[self = std::move(self), owner = m_owner, handler = std::move(handler)]
 		(error_code error) mutable {
 			ignore_unused(owner);
-			if( not error ) self->m_closed = true;
+			if( not error )
+				self->m_closed = true;
 			std::move(handler)(error);
 		});
 	}
 	void cancel() noexcept override
 	{
-		if( m_cancelled ) return;
+		if( m_cancelled )
+			return ;
 		m_cancelled = true;
-		if( m_cancel ) m_cancel();
+		if( m_cancel )
+			m_cancel();
 	}
 	[[nodiscard]] endpoint_t remote_endpoint(
 		error_code &error) const noexcept override { error.clear(); return m_remote; }

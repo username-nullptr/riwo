@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "engine.h"
-#include <cstring>
 
 namespace riwo::http_exp::v1 { namespace
 {
@@ -33,7 +32,8 @@ template<class Event>
 [[nodiscard]] event_flow deliver(const protocol_event_handler_t &handler,
 	Event &&event)
 {
-	if( not handler ) return event_flow::continue_;
+	if( not handler )
+		return event_flow::continue_;
 	return handler(protocol_event_t(std::forward<Event>(event)));
 }
 
@@ -71,7 +71,8 @@ public:
 
 	[[nodiscard]] event_flow emit_end(const protocol_event_handler_t &events)
 	{
-		if( incoming_end_delivered ) return event_flow::continue_;
+		if( incoming_end_delivered )
+			return event_flow::continue_;
 		const auto flow = deliver(events, stream_end_event{incoming_stream});
 		if( flow == event_flow::continue_ )
 		{
@@ -164,7 +165,8 @@ sys_expected<ingest_result> connection_engine::ingest(
 				return ingest_result {0, true, wants_write(), false};
 			m_impl->paused_event.reset();
 			m_impl->paused_body.clear();
-			if( completes_stream ) m_impl->reset_incoming();
+			if( completes_stream )
+				m_impl->reset_incoming();
 			offset = std::min(input.size(), m_impl->paused_replay_bytes);
 			m_impl->paused_replay_bytes -= offset;
 			if( m_impl->paused_replay_bytes != 0 )
@@ -190,14 +192,16 @@ sys_expected<ingest_result> connection_engine::ingest(
 					m_impl->outgoing_stream == 0 )
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				const_buffer tail(bytes + offset, input.size() - offset);
-				if( tail.size() != 0 ) m_impl->pending_head_input = true;
+				if( tail.size() != 0 )
+					m_impl->pending_head_input = true;
 				if( m_impl->config.role == protocol_role::server )
 				{
 					if( m_impl->active_stream != 0 )
 						return sys_unexpected(make_error_code(
 							errc::operation_in_progress));
 					auto parsed = m_impl->request_parse.ingest(tail);
-					if( not parsed ) return sys_unexpected(parsed.error());
+					if( not parsed )
+						return sys_unexpected(parsed.error());
 					offset += parsed->consumed;
 					if( not parsed->head )
 						return ingest_result {offset, false, wants_write(), true};
@@ -224,7 +228,8 @@ sys_expected<ingest_result> connection_engine::ingest(
 				else
 				{
 					auto parsed = m_impl->response_parse.ingest(tail);
-					if( not parsed ) return sys_unexpected(parsed.error());
+					if( not parsed )
+						return sys_unexpected(parsed.error());
 					offset += parsed->consumed;
 					if( not parsed->head )
 						return ingest_result {offset, false, wants_write(), true};
@@ -284,7 +289,8 @@ sys_expected<ingest_result> connection_engine::ingest(
 			{
 				auto decoded = m_impl->chunks.ingest(const_buffer(bytes + offset,
 					input.size() - offset));
-				if( not decoded ) return sys_unexpected(decoded.error());
+				if( not decoded )
+					return sys_unexpected(decoded.error());
 				offset += decoded->consumed;
 				if( not decoded->data.empty() )
 				{
@@ -360,7 +366,8 @@ sys_expected<ingest_result> connection_engine::finish_input(
 				return ingest_result {0, true, wants_write(), false};
 			m_impl->paused_event.reset();
 			m_impl->paused_body.clear();
-			if( completes_stream ) m_impl->reset_incoming();
+			if( completes_stream )
+				m_impl->reset_incoming();
 		}
 		if( m_impl->incoming_stream != 0 and
 			m_impl->incoming_framing == body_framing::until_eof )
@@ -402,9 +409,11 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				auto encoded = serialize_request_head(value.head, value.body,
 					m_impl->config.version, m_impl->config.target_form);
-				if( not encoded ) return sys_unexpected(encoded.error());
+				if( not encoded )
+					return sys_unexpected(encoded.error());
 				auto appended = m_impl->append_output(std::move(encoded->wire));
-				if( not appended ) return appended;
+				if( not appended )
+					return appended;
 				m_impl->outgoing_stream = value.stream;
 				m_impl->active_stream = value.stream;
 				m_impl->outgoing_framing = encoded->framing;
@@ -422,9 +431,11 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				auto encoded = serialize_response_head(value.head, value.body,
 					m_impl->config.version);
-				if( not encoded ) return sys_unexpected(encoded.error());
+				if( not encoded )
+					return sys_unexpected(encoded.error());
 				auto appended = m_impl->append_output(std::move(encoded->wire));
-				if( not appended ) return appended;
+				if( not appended )
+					return appended;
 				m_impl->outgoing_stream = value.stream;
 				m_impl->outgoing_framing = encoded->framing;
 				m_impl->outgoing_remaining = value.body.length().value_or(0);
@@ -455,18 +466,21 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 					{
 						auto chunk = encoder.encode(const_buffer(value.data.data(),
 							value.data.size()));
-						if( not chunk ) return sys_unexpected(chunk.error());
+						if( not chunk )
+							return sys_unexpected(chunk.error());
 						wire = std::move(*chunk);
 					}
 					if( value.end_stream )
 					{
 						auto last = encoder.finish();
-						if( not last ) return sys_unexpected(last.error());
+						if( not last )
+							return sys_unexpected(last.error());
 						wire += *last;
 						m_impl->outgoing_finished = true;
 					}
 				}
-				else return sys_unexpected(make_error_code(errc::invalid_protocol_action));
+				else
+					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				return m_impl->append_output(std::move(wire));
 			}
 			else if constexpr( std::same_as<action_t,send_trailers_action> )
@@ -477,7 +491,8 @@ sys_expected<void> connection_engine::submit(protocol_action_t action) noexcept
 					return sys_unexpected(make_error_code(errc::invalid_protocol_action));
 				chunk_encoder encoder;
 				auto last = encoder.finish(value.trailers);
-				if( not last ) return sys_unexpected(last.error());
+				if( not last )
+					return sys_unexpected(last.error());
 				m_impl->outgoing_finished = true;
 				return m_impl->append_output(std::move(*last));
 			}
@@ -508,7 +523,8 @@ sys_expected<produce_result> connection_engine::produce(
 		return sys_unexpected(make_error_code(errc::operation_not_permitted));
 	const auto available = m_impl->output.size() - m_impl->output_offset;
 	const auto count = std::min(output.size(), available);
-	if( count != 0 ) std::memcpy(output.data(),
+	if( count != 0 )
+		std::memcpy(output.data(),
 		m_impl->output.data() + m_impl->output_offset, count);
 	m_impl->output_offset += count;
 	const bool more = m_impl->output_offset != m_impl->output.size();

@@ -35,7 +35,8 @@ public:
 
 	void capture_cookies(const reply_head &head) noexcept
 	{
-		if( not m_cookie_store ) return;
+		if( not m_cookie_store )
+			return ;
 		try {
 			m_cookie_store->store(m_origin, head.headers);
 		}
@@ -116,18 +117,18 @@ void client_exchange_state::wait_reply(reply_handler_t handler)
 	{
 		std::move(handler)(make_error_code(errc::operation_in_progress),
 			reply_head{});
-		return;
+		return ;
 	}
 	if( state->m_reply_ready )
 	{
 		std::move(handler)(error_code{}, state->m_reply_head);
-		return;
+		return ;
 	}
 	if( not state->m_stream )
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			reply_head{});
-		return;
+		return ;
 	}
 	state->m_wait_pending = true;
 	state->m_stream->wait_response(
@@ -156,7 +157,8 @@ std::shared_ptr<duplex_state> client_exchange_state::release_duplex(
 		return {};
 	}
 	auto result = state->m_stream->open_duplex_sync({}, error);
-	if( not error ) state->m_duplex_taken = true;
+	if( not error )
+		state->m_duplex_taken = true;
 	return result;
 }
 
@@ -167,19 +169,21 @@ void client_exchange_state::release_duplex(duplex_handler_t handler)
 	{
 		std::move(handler)(make_error_code(errc::operation_not_permitted),
 			std::shared_ptr<duplex_state>{});
-		return;
+		return ;
 	}
 	state->m_stream->open_duplex({},
 	[state, handler = std::move(handler)]
 	(error_code error, std::shared_ptr<duplex_state> channel) mutable {
-		if( not error ) state->m_duplex_taken = true;
+		if( not error )
+			state->m_duplex_taken = true;
 		std::move(handler)(error, std::move(channel));
 	});
 }
 
 void client_exchange_state::cancel() noexcept
 {
-	if( m_impl->m_duplex_taken ) return;
+	if( m_impl->m_duplex_taken )
+		return ;
 	m_impl->m_request_body->cancel();
 	m_impl->m_reply_body->cancel();
 	if( m_impl->m_stream )

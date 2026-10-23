@@ -19,7 +19,6 @@ public:
 	[[nodiscard]] const char *name() const noexcept override {
 		return "riwo::http_exp";
 	}
-
 	[[nodiscard]] std::string message(int code) const override
 	{
 		switch(static_cast<errc>(code))
