@@ -102,8 +102,11 @@ endif ()
 # Experimental HTTP API
 if (RIWO_BUILD_HTTP_EXP)
 	riwo_add_example(http_exp client LIBRARIES riwo.http_exp)
+	riwo_add_example(http_exp client_file LIBRARIES riwo.http_exp)
 	riwo_add_example(http_exp protocol LIBRARIES riwo.http_exp)
 	riwo_add_example(http_exp server LIBRARIES riwo.http_exp)
+	riwo_add_example(http_exp server_file LIBRARIES riwo.http_exp)
+	riwo_add_example(http_exp transport LIBRARIES riwo.http_exp)
 endif ()
 
 # Experimental WebSocket API over HTTP_EXP
@@ -177,8 +180,11 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	http/server_file.cpp
 	http/server_session.cpp
 	http_exp/client.cpp
+	http_exp/client_file.cpp
 	http_exp/protocol.cpp
 	http_exp/server.cpp
+	http_exp/server_file.cpp
+	http_exp/transport.cpp
 	websocket_exp/client.cpp
 	websocket_exp/server.cpp
 	websocket/mixed_http_client.cpp
