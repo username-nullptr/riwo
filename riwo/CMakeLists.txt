@@ -48,7 +48,10 @@ if (RIWO_BUILD_HTTP_EXP)
 		PATTERN "v2.md" EXCLUDE
 		REGEX "/protocol/detail/" EXCLUDE
 		REGEX "/protocol/v1/detail/" EXCLUDE
-		REGEX "/protocol/v2/detail/" EXCLUDE
+		# Public HTTP/2 headers include detail/engine.h and
+		# detail/extension.h for template and constexpr definitions.  Only
+		# headers used by the compiled session implementation stay private.
+		REGEX "/protocol/v2/detail/(nghttp2_compat|session)[.]h$" EXCLUDE
 		REGEX "/transport/tcp_connection[.]h$" EXCLUDE
 		REGEX "/transport/tls_connection[.]h$" EXCLUDE
 		REGEX "/transport/preface[.]h$" EXCLUDE

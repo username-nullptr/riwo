@@ -22,7 +22,7 @@ effective_handshake_timeout(std::chrono::milliseconds timeout) noexcept
 
 template <typename Value, typename Exec>
 [[nodiscard]] auto handshake_fallback(const Exec &exec,
-	optional<stream_config> fallback_config)
+	[[maybe_unused]] optional<stream_config> fallback_config)
 {
 	if constexpr( std::constructible_from<Value,const Exec&,stream_config> )
 	{
