@@ -4,8 +4,9 @@
 set(riwo_cmake_test_work_dir "${CMAKE_CURRENT_BINARY_DIR}/work")
 
 function(add_riwo_configure_case name)
-	cmake_parse_arguments(CASE "SUCCESS" "ERROR;HTTP2;ZLIB" "OPTIONS;COMPONENTS" ${ARGN})
-
+	cmake_parse_arguments(CASE "SUCCESS" "ASIO;ERROR;HTTP2;ZLIB"
+		"OPTIONS;COMPONENTS" ${ARGN}
+	)
 	string(MD5 case_work_id "configure-${name}")
 	string(SUBSTRING "${case_work_id}" 0 12 case_work_id)
 
@@ -34,6 +35,7 @@ function(add_riwo_configure_case name)
 			"-DTEST_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
 			"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 			"-DTEST_EXPECT_SUCCESS=${case_expect_success}"
+			"-DTEST_EXPECT_ASIO=${CASE_ASIO}"
 			"-DTEST_EXPECT_ERROR=${CASE_ERROR}"
 			"-DTEST_EXPECT_HTTP2=${CASE_HTTP2}"
 			"-DTEST_EXPECT_ZLIB=${CASE_ZLIB}"
@@ -183,6 +185,21 @@ add_riwo_configure_case(http-exp-coexists-with-http SUCCESS
 		"RIWO_EXP_HTTP2_SUPPORT=OFF"
 	COMPONENTS core coro http http_exp
 )
+
+find_package(Boost CONFIG QUIET)
+if (Boost_FOUND)
+	add_riwo_configure_case(http-exp-boost-asio SUCCESS
+		ASIO BOOST
+		OPTIONS
+			"RIWO_BUILD_CORO=ON"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_HTTP_EXP=ON"
+			"RIWO_ASIO_PROVIDER=BOOST"
+			"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		COMPONENTS core coro http_exp
+	)
+endif ()
+
 add_riwo_configure_case(websocket-exp-without-http-exp
 	ERROR "<WebSocket_EXP> module depends on <HTTP_EXP> module"
 	OPTIONS

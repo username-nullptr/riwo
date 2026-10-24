@@ -4,11 +4,7 @@
 #include "test.h"
 #include <riwo/websocket_exp.h>
 
-#include <asio/ip/tcp.hpp>
-#include <asio/read_until.hpp>
-#include <asio/steady_timer.hpp>
-#include <asio/write.hpp>
-
+#include <riwo/core/cxx/asio.h>
 #include <memory>
 #include <string>
 #include <thread>

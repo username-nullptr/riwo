@@ -118,6 +118,15 @@ if (TEST_EXPECT_SUCCESS)
 		endif ()
 	endforeach()
 
+	if (NOT "${TEST_EXPECT_ASIO}" STREQUAL "")
+		if (NOT package_config_contents MATCHES "set\\(Riwo_ASIO_PROVIDER \"${TEST_EXPECT_ASIO}\"\\)")
+			message(FATAL_ERROR
+				"Configuration '${TEST_NAME}' generated an inconsistent "
+				"Asio provider; expected ${TEST_EXPECT_ASIO}."
+			)
+		endif ()
+	endif ()
+
 	if (NOT "${TEST_EXPECT_HTTP2}" STREQUAL "")
 		set(http_exp_config
 			"${TEST_BINARY_DIR}/output/config_include/riwo/http_exp/cxx/configs.h"

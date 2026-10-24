@@ -5,13 +5,7 @@
 #define RIWO_HTTP_EXP_TRANSPORT_DETAIL_TIMEOUT_H
 
 #include <riwo/http_exp/transport/connection.h>
-#include <asio/bind_allocator.hpp>
-#include <asio/bind_cancellation_slot.hpp>
-#include <asio/bind_executor.hpp>
-#include <asio/steady_timer.hpp>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
+#include <riwo/core/cxx/asio.h>
 
 namespace riwo::http_exp::detail
 {

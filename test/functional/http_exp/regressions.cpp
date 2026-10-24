@@ -4,10 +4,7 @@
 #include "test.h"
 
 #include <riwo/http_exp.h>
-
-#include <asio/ip/tcp.hpp>
-#include <asio/read_until.hpp>
-#include <asio/write.hpp>
+#include <riwo/core/cxx/asio.h>
 
 #include <array>
 #include <string>

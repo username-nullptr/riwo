@@ -3,25 +3,22 @@
 
 #include "connector.h"
 #include "factory.h"
+
 #include <riwo/http_exp/protocol/v1/detail/session.h>
-#if RIWO_HTTP_EXP_HTTP2_SUPPORT
-# include <riwo/http_exp/protocol/v2/detail/session.h>
-#endif
 #include <riwo/http_exp/transport/tcp_connection.h>
 #include <riwo/http_exp/protocol/authentication.h>
 #include <riwo/core/utils/string_tools.h>
+
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+# include <riwo/http_exp/protocol/v2/detail/session.h>
+#endif
 
 #if RIWO_OPENSSL_SUPPORT
 # include <riwo/http_exp/transport/tls_connection.h>
 # include <openssl/ssl.h>
 #endif
 
-#include <asio/as_tuple.hpp>
-#include <asio/connect.hpp>
-#include <asio/co_spawn.hpp>
-#include <asio/read_until.hpp>
-#include <asio/steady_timer.hpp>
-#include <asio/write.hpp>
+#include <riwo/core/cxx/asio.h>
 
 #if !defined(_WIN32)
 # include <poll.h>
@@ -656,16 +653,17 @@ connect_async_impl(asio::any_io_executor executor, session_key key,
 		const auto connect_host = proxy ? proxy->host : key.host;
 		const auto connect_port = proxy ? proxy->port : key.port;
 		const auto connect_timeout = config.timeout.connect;
-		error_code ignored;
 
 		asio::ip::tcp::resolver resolver(executor);
 		asio::steady_timer resolve_timer(executor);
 		bool resolve_expired = false;
 		arm_async_timeout(resolve_timer, connect_timeout, resolve_expired,
 			[&resolver] { resolver.cancel(); });
-		auto [resolve_error, results] = co_await resolver.async_resolve(
+		auto resolve_result = co_await resolver.async_resolve(
 			connect_host, std::to_string(connect_port),
 			asio::as_tuple(asio::use_awaitable));
+		auto resolve_error = std::get<0>(resolve_result);
+		auto results = std::move(std::get<1>(resolve_result));
 		resolve_timer.cancel();
 		if( resolve_expired )
 			co_return sys_unexpected(asio::error::make_error_code(
