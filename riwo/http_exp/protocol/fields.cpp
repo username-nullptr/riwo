@@ -129,21 +129,26 @@ field_range::field_range(const std::vector<field> &values, std::string name) :
 {
 }
 
-field_range::field_range(field_range &&other) noexcept : m_impl(other.m_impl) {}
+field_range::field_range(field_range &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+}
 
 field_range &field_range::operator=(field_range &&other) noexcept
 {
 	if( this != &other )
-		m_impl = other.m_impl;
+		m_impl = std::move(other.m_impl);
 	return *this;
 }
 
 field_range::const_iterator field_range::begin() const noexcept {
-	return {m_impl->m_values->begin(), m_impl->m_values->end(), m_impl->m_name};
+	return m_impl ? const_iterator(m_impl->m_values->begin(),
+		m_impl->m_values->end(), m_impl->m_name) : const_iterator{};
 }
 
 field_range::const_iterator field_range::end() const noexcept {
-	return {m_impl->m_values->end(), m_impl->m_values->end(), m_impl->m_name};
+	return m_impl ? const_iterator(m_impl->m_values->end(),
+		m_impl->m_values->end(), m_impl->m_name) : const_iterator{};
 }
 
 class fields::impl

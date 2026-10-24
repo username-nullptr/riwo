@@ -506,19 +506,43 @@ void semantic_value_contracts()
 void moved_from_objects_are_safe()
 {
 	http::method request_method(http::method::post);
-	const auto moved_method = std::move(request_method);
-	RIWO_TEST_CHECK(request_method.known() == http::method::post);
+	auto moved_method = std::move(request_method);
+	RIWO_TEST_CHECK(request_method.text().empty());
+	RIWO_TEST_CHECK(!request_method.known());
+	RIWO_TEST_CHECK(!request_method.is_safe());
+	RIWO_TEST_CHECK(!request_method.is_idempotent());
 	RIWO_TEST_CHECK(moved_method.known() == http::method::post);
+	request_method = http::method(http::method::get);
+	request_method = std::move(moved_method);
+	RIWO_TEST_CHECK(!moved_method.known());
+	RIWO_TEST_CHECK(request_method.known() == http::method::post);
 
 	http::status response_status(http::status::created);
-	const auto moved_status = std::move(response_status);
-	RIWO_TEST_CHECK(response_status == http::status::created);
+	auto moved_status = std::move(response_status);
+	RIWO_TEST_CHECK_EQ(response_status.code(), 0U);
+	RIWO_TEST_CHECK(!response_status.allows_body());
 	RIWO_TEST_CHECK(moved_status == http::status::created);
+	response_status = http::status(http::status::ok);
+	response_status = std::move(moved_status);
+	RIWO_TEST_CHECK_EQ(moved_status.code(), 0U);
+	RIWO_TEST_CHECK(response_status == http::status::created);
 
 	auto spec = http::body_spec::known(7);
 	const auto moved_spec = std::move(spec);
-	RIWO_TEST_CHECK_EQ(spec.length().value(), 7U);
+	RIWO_TEST_CHECK(spec.type() == http::body_spec::mode::empty);
+	RIWO_TEST_CHECK(!spec.length());
+	RIWO_TEST_CHECK(spec.trailers().names.empty());
 	RIWO_TEST_CHECK_EQ(moved_spec.length().value(), 7U);
+	spec = http::body_spec::streaming({{"X-Trailer"}});
+	RIWO_TEST_CHECK(spec.type() == http::body_spec::mode::streaming);
+	RIWO_TEST_CHECK_EQ(spec.trailers().names.at(0), "X-Trailer");
+	auto assigned_spec = http::body_spec::empty();
+	assigned_spec = std::move(spec);
+	RIWO_TEST_CHECK(spec.type() == http::body_spec::mode::empty);
+	RIWO_TEST_CHECK(!spec.length());
+	RIWO_TEST_CHECK(spec.trailers().names.empty());
+	RIWO_TEST_CHECK(assigned_spec.type() == http::body_spec::mode::streaming);
+	RIWO_TEST_CHECK_EQ(assigned_spec.trailers().names.at(0), "X-Trailer");
 
 	http::fields source_fields;
 	source_fields.add("X-Test", "source");
@@ -527,11 +551,25 @@ void moved_from_objects_are_safe()
 	source_fields.add("X-Reused", "true");
 	RIWO_TEST_CHECK_EQ(source_fields.size(), 1U);
 	RIWO_TEST_CHECK_EQ(moved_fields.find_first("x-test").value(), "source");
+	auto source_range = moved_fields.find_all("X-Test");
+	auto moved_range = std::move(source_range);
+	RIWO_TEST_CHECK(source_range.begin() == source_range.end());
+	RIWO_TEST_CHECK_EQ(std::ranges::distance(moved_range), 1);
+	auto assigned_range = moved_fields.find_all("missing");
+	assigned_range = std::move(moved_range);
+	RIWO_TEST_CHECK(moved_range.begin() == moved_range.end());
+	RIWO_TEST_CHECK_EQ(std::ranges::distance(assigned_range), 1);
 
 	http::route_pattern pattern("/items/{id}");
-	const auto moved_pattern = std::move(pattern);
-	RIWO_TEST_CHECK_EQ(pattern.text(), "/items/{id}");
+	auto moved_pattern = std::move(pattern);
+	RIWO_TEST_CHECK(pattern.text().empty());
+	RIWO_TEST_CHECK(!pattern.exact());
+	RIWO_TEST_CHECK(!pattern.match("/items/42"));
 	RIWO_TEST_CHECK(moved_pattern.match("/items/42").has_value());
+	pattern = http::route_pattern("/other");
+	pattern = std::move(moved_pattern);
+	RIWO_TEST_CHECK(moved_pattern.text().empty());
+	RIWO_TEST_CHECK(pattern.match("/items/42").has_value());
 
 	http::request source_request(http::method::post,
 		"http://example.test/resource");

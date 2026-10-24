@@ -108,29 +108,29 @@ method::method(std::string token, method_properties properties) :
 {
 }
 
-method::method(method &&other) noexcept : m_impl(other.m_impl) {}
+method::method(method &&other) noexcept : m_impl(std::move(other.m_impl)) {}
 
 method &method::operator=(method &&other) noexcept
 {
 	if( this != &other )
-		m_impl = other.m_impl;
+		m_impl = std::move(other.m_impl);
 	return *this;
 }
 
 std::string_view method::text() const noexcept {
-	return m_impl->m_token;
+	return m_impl ? std::string_view(m_impl->m_token) : std::string_view{};
 }
 
 optional<method::well_known> method::known() const noexcept {
-	return m_impl->m_known;
+	return m_impl ? m_impl->m_known : nullopt;
 }
 
 bool method::is_safe() const noexcept {
-	return m_impl->m_properties.safe;
+	return m_impl and m_impl->m_properties.safe;
 }
 
 bool method::is_idempotent() const noexcept {
-	return m_impl->m_properties.idempotent;
+	return m_impl and m_impl->m_properties.idempotent;
 }
 
 bool operator==(const method &lhs, const method &rhs) noexcept {
