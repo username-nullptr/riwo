@@ -228,7 +228,6 @@ void standalone_accept_queue()
 		riwo::error_code ignored;
 		stream.cancel(ignored);
 		service.stop();
-		context.stop();
 	}, asio::use_future);
 
 	riwo::ignore_unused(context.run_for(std::chrono::seconds(10)));
