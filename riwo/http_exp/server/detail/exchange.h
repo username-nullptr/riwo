@@ -89,20 +89,20 @@ public:
 		std::filesystem::path resource_root = {},
 		bool automatic_compression = false,
 		uint64_t compression_minimum_size = 1024) :
-		m_executor(std::move(executor_value)),
+		m_exec(std::move(executor_value)),
 		m_state(detail::make_server_exchange_state(
 			std::move(stream), std::move(request), std::move(path_parameters),
 			std::move(query_parameters), std::move(sessions),
 			std::move(resource_root), automatic_compression,
 			compression_minimum_size)),
 		m_request_body(std::make_unique<body_reader_t>(
-			m_executor, m_state->request_body())),
+			m_exec, m_state->request_body())),
 		m_response_body(std::make_unique<body_writer_t>(
-			m_executor, m_state->response_body()))
+			m_exec, m_state->response_body()))
 	{
 	}
 
-	executor_t m_executor;
+	executor_t m_exec;
 	std::shared_ptr<detail::server_exchange_state> m_state;
 	std::unique_ptr<body_reader_t> m_request_body;
 	std::unique_ptr<body_writer_t> m_response_body;
@@ -169,7 +169,7 @@ basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::get_executor() const noexcept -> executor_t {
-	return m_impl->m_executor;
+	return m_impl->m_exec;
 }
 
 template <core_concepts::exec Exec>
@@ -306,7 +306,7 @@ auto basic_server_exchange<Exec>::respond(response_head head, body_spec spec,
 	else
 	{
 		auto state = m_impl->m_state;
-		return initiate_io_void(m_impl->m_executor,
+		return initiate_io_void(m_impl->m_exec,
 		[state = std::move(state), head = std::move(head), spec = std::move(spec)]
 		(auto handler) mutable {
 			state->respond(std::move(head), std::move(spec),
@@ -364,7 +364,7 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			auto owned = std::make_shared<std::vector<std::byte>>(body.size());
 			if( body.size() != 0 )
 				std::memcpy(owned->data(), body.data(), body.size());
-			return initiate_io_void(m_impl->m_executor,
+			return initiate_io_void(m_impl->m_exec,
 			[this, head = std::move(head), owned, head_only](auto handler) mutable
 			{
 				auto owned_spec = head_only ? body_spec::head(owned->size()) :
@@ -404,7 +404,7 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 		}
 		else
 		{
-			return initiate_io_void(m_impl->m_executor,
+			return initiate_io_void(m_impl->m_exec,
 			[this, head = std::move(head), body, head_only](auto handler) mutable
 			{
 				auto borrowed_spec = head_only ? body_spec::head(body.size()) :
@@ -566,7 +566,7 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			}
 		};
 
-		return initiate_io_void(m_impl->m_executor,
+		return initiate_io_void(m_impl->m_exec,
 		[owner = m_impl, source = std::move(source), head = std::move(head),
 		 spec = std::move(spec), length, head_only](auto handler) mutable {
 			auto value = std::make_shared<operation>();
@@ -632,7 +632,7 @@ auto basic_server_exchange<Exec>::inform(response_head head, Token &&token)
 	else
 	{
 		auto state = m_impl->m_state;
-		return initiate_io_void(m_impl->m_executor,
+		return initiate_io_void(m_impl->m_exec,
 		[state = std::move(state), head = std::move(head)]
 		(auto handler) mutable {
 			state->inform(std::move(head),
@@ -658,7 +658,7 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 			m_impl->m_request_body->detach();
 			m_impl->m_response_body->detach();
 		}
-		return channel_t(m_impl->m_executor, std::move(state));
+		return channel_t(m_impl->m_exec, std::move(state));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
@@ -669,12 +669,12 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 				sys_unexpected(error)));
 		m_impl->m_request_body->detach();
 		m_impl->m_response_body->detach();
-		return channel_t(m_impl->m_executor, std::move(state));
+		return channel_t(m_impl->m_exec, std::move(state));
 	}
 	else
 	{
 		auto owner = m_impl;
-		auto executor = m_impl->m_executor;
+		auto executor = m_impl->m_exec;
 		return initiate_io<channel_t>(executor,
 		[owner = std::move(owner), executor,
 		 head = std::move(head)](auto handler) mutable {

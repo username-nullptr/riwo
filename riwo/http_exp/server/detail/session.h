@@ -39,7 +39,7 @@ using server_connection_ptr_t = std::shared_ptr<server_connection>;
 [[nodiscard]] RIWO_HTTP_EXP_API server_connection_ptr_t accept_h1(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
 	message_limits limits, timeout_policy timeouts,
-	server_accept_handler_t handler);
+	server_accept_handler_t handler, std::string initial_input = {});
 
 // Selects a cleartext HTTP/1.x or HTTP/2 server Session according to the
 // frozen server policy.  The HTTP/2 client preface is inspected without

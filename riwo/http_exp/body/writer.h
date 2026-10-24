@@ -19,7 +19,9 @@ class RIWO_HTTP_EXP_TAPI basic_body_writer
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
+	using writer_state_ptr = std::shared_ptr<detail::body_writer_state>;
 
+public:
 	basic_body_writer()
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
@@ -27,11 +29,11 @@ public:
 	explicit basic_body_writer(Exec0 &&exec)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	explicit basic_body_writer(std::shared_ptr<detail::body_writer_state> state)
+	explicit basic_body_writer(writer_state_ptr state)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	basic_body_writer(Exec0 &&exec, std::shared_ptr<detail::body_writer_state> state)
+	basic_body_writer(Exec0 &&exec, writer_state_ptr state)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_writer();
@@ -53,14 +55,14 @@ public:
 	[[nodiscard]] executor_t get_executor() const noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	writer_state_ptr m_state {};
+	executor_t m_exec {};
 };
 
 using body_writer = basic_body_writer<>;
 
 } //namespace riwo::http_exp
-
 #include <riwo/http_exp/body/detail/writer.h>
+
 
 #endif //RIWO_HTTP_EXP_BODY_WRITER_H

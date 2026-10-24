@@ -13,14 +13,14 @@ class RIWO_DECL_HIDDEN tls_connection::impl
 {
 public:
 	explicit impl(tls_socket_t value) :
-		m_socket(std::move(value)), m_executor(m_socket.get_executor()) {}
+		m_socket(std::move(value)), m_exec(m_socket.get_executor()) {}
 
 	tls_socket_t m_socket;
-	executor_t m_executor;
+	executor_t m_exec {};
 	bool m_open = true;
 
-	optional<std::chrono::milliseconds> m_read_timeout;
-	optional<std::chrono::milliseconds> m_write_timeout;
+	optional<std::chrono::milliseconds> m_read_timeout {};
+	optional<std::chrono::milliseconds> m_write_timeout {};
 };
 
 tls_connection::tls_connection(tls_socket_t socket) :
@@ -42,7 +42,7 @@ void tls_connection::read_some(mutable_buffer buffer, io_handler_t handler)
 		return ;
 	}
 	detail::start_timed_io(shared_from_this(),
-		m_impl->m_executor, *m_impl->m_read_timeout, std::move(handler),
+		m_impl->m_exec, *m_impl->m_read_timeout, std::move(handler),
 		[socket = &m_impl->m_socket, buffer](auto completion) mutable {
 			socket->async_read_some(buffer, std::move(completion));
 		}
@@ -57,14 +57,14 @@ void tls_connection::write(const_buffer buffer, io_handler_t handler)
 		return ;
 	}
 	detail::start_timed_io(shared_from_this(),
-		m_impl->m_executor, *m_impl->m_write_timeout, std::move(handler),
+		m_impl->m_exec, *m_impl->m_write_timeout, std::move(handler),
 		[socket = &m_impl->m_socket, buffer](auto completion) mutable {
 			asio::async_write(*socket, buffer, std::move(completion));
 		}
 	);
 }
 
-size_t tls_connection::read_some_sync(mutable_buffer buffer, error_code &error) noexcept
+size_t tls_connection::read_some_sync(const mutable_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
 	try {
@@ -88,7 +88,7 @@ size_t tls_connection::read_some_sync(mutable_buffer buffer, error_code &error) 
 	return 0;
 }
 
-size_t tls_connection::write_sync(const_buffer buffer, error_code &error) noexcept
+size_t tls_connection::write_sync(const const_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
 	try {
@@ -166,7 +166,7 @@ void tls_connection::set_write_timeout(optional<timeout_t> value)
 
 auto tls_connection::get_executor() const noexcept -> executor_t
 {
-	return m_impl->m_executor;
+	return m_impl->m_exec;
 }
 
 bool tls_connection::is_open() const noexcept

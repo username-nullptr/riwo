@@ -284,7 +284,7 @@ public:
 	v2_session(std::shared_ptr<::riwo::http_exp::connection> transport,
 		client_config config, asio::ip::tcp::endpoint remote,
 		asio::ip::tcp::endpoint local) :
-		m_executor(transport->get_executor()), m_strand(asio::make_strand(m_executor)),
+		m_exec(transport->get_executor()), m_strand(asio::make_strand(m_exec)),
 		m_transport(std::move(transport)), m_config(std::move(config)),
 		m_remote(remote), m_local(local),
 		m_peer_max_streams(m_config.h2.max_concurrent_streams)
@@ -353,7 +353,7 @@ public:
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return protocol::v2;
@@ -1433,7 +1433,7 @@ private:
 		write_pump();
 	}
 
-	executor_type m_executor;
+	executor_type m_exec;
 	asio::strand<asio::any_io_executor> m_strand;
 	std::shared_ptr<::riwo::http_exp::connection> m_transport;
 	client_config m_config;

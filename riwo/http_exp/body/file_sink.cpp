@@ -17,55 +17,44 @@ namespace riwo::http_exp { namespace
 
 } //namespace
 
-class RIWO_DECL_HIDDEN file_sink::impl
-{
-public:
-	explicit impl(detail::output_file_backend_ptr backend) :
-		m_backend(std::move(backend)) {}
-
-	detail::output_file_backend_ptr m_backend;
-	bool m_cancelled = false;
-	bool m_finished = false;
-};
-
 file_sink::file_sink(const std::filesystem::path &path) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(path)))
+	m_backend(detail::make_output_file_backend(path))
 {
 
 }
 
 file_sink::file_sink(std::ofstream &&stream) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(std::move(stream))))
+	m_backend(detail::make_output_file_backend(std::move(stream)))
 {
 
 }
 
 file_sink::file_sink(std::fstream &&stream) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(std::move(stream))))
+	m_backend(detail::make_output_file_backend(std::move(stream)))
 {
 
 }
 
 file_sink::file_sink(const borrowed_file_ref<std::ofstream> &stream) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(stream.get())))
+	m_backend(detail::make_output_file_backend(stream.get()))
 {
 
 }
 
 file_sink::file_sink(const borrowed_file_ref<std::fstream> &stream) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(stream.get())))
+	m_backend(detail::make_output_file_backend(stream.get()))
 {
 
 }
 
 file_sink::file_sink(owned_c_file file) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(std::move(file))))
+	m_backend(detail::make_output_file_backend(std::move(file)))
 {
 
 }
 
 file_sink::file_sink(borrowed_c_file file) :
-	m_impl(std::make_unique<impl>(detail::make_output_file_backend(std::move(file))))
+	m_backend(detail::make_output_file_backend(std::move(file)))
 {
 
 }
@@ -73,44 +62,46 @@ file_sink::file_sink(borrowed_c_file file) :
 file_sink::~file_sink() = default;
 
 file_sink::file_sink(file_sink &&other) noexcept :
-	m_impl(std::move(other.m_impl))
+	m_backend(std::move(other.m_backend)),
+	m_cancelled(std::exchange(other.m_cancelled, false)),
+	m_finished(std::exchange(other.m_finished, false))
 {
-	other.m_impl = std::make_unique<impl>(nullptr);
 }
 
 file_sink &file_sink::operator=(file_sink &&other) noexcept
 {
 	if( this == &other )
 		return *this;
-	m_impl = std::move(other.m_impl);
-	other.m_impl = std::make_unique<impl>(nullptr);
+	m_backend = std::move(other.m_backend);
+	m_cancelled = std::exchange(other.m_cancelled, false);
+	m_finished = std::exchange(other.m_finished, false);
 	return *this;
 }
 
 void file_sink::prepare(error_code &error) const noexcept
 {
 	error.clear();
-	if( m_impl->m_cancelled )
+	if( m_cancelled )
 	{
 		error = aborted_error();
 		return ;
 	}
-	if( m_impl->m_finished )
+	if( m_finished )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return ;
 	}
-	if( not m_impl->m_backend )
+	if( not m_backend )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return ;
 	}
-	m_impl->m_backend->prepare(error);
+	m_backend->prepare(error);
 }
 
 bool file_sink::random_access() const noexcept
 {
-	return m_impl->m_backend and m_impl->m_backend->random_access();
+	return m_backend and m_backend->random_access();
 }
 
 void file_sink::write
@@ -124,23 +115,23 @@ void file_sink::write
 size_t file_sink::write(const const_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
-	if( m_impl->m_cancelled )
+	if( m_cancelled )
 	{
 		error = aborted_error();
 		return 0;
 	}
-	if( m_impl->m_finished )
+	if( m_finished )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return 0;
 	}
-	if( not m_impl->m_backend )
+	if( not m_backend )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return 0;
 	}
 	try {
-		return m_impl->m_backend->write(buffer, error);
+		return m_backend->write(buffer, error);
 	}
 	catch(...) {
 		error = exception_error(std::current_exception());
@@ -160,23 +151,23 @@ size_t file_sink::write_at
 (uint64_t offset, const const_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
-	if( m_impl->m_cancelled )
+	if( m_cancelled )
 	{
 		error = aborted_error();
 		return 0;
 	}
-	if( m_impl->m_finished )
+	if( m_finished )
 	{
 		error = make_error_code(errc::operation_not_permitted);
 		return 0;
 	}
-	if( not m_impl->m_backend )
+	if( not m_backend )
 	{
 		error =make_error_code(errc::operation_not_permitted);
 		return 0;
 	}
 	try {
-		return m_impl->m_backend->write_at(offset, buffer, error);
+		return m_backend->write_at(offset, buffer, error);
 	}
 	catch(...) {
 		error = exception_error(std::current_exception());
@@ -187,23 +178,23 @@ size_t file_sink::write_at
 void file_sink::finish(error_code &error) noexcept
 {
 	error.clear();
-	if( m_impl->m_cancelled )
+	if( m_cancelled )
 	{
 		error = aborted_error();
 		return ;
 	}
-	if( m_impl->m_finished )
+	if( m_finished )
 		return ;
-	if( not m_impl->m_backend )
+	if( not m_backend )
 	{
 		error = http_exp::make_error_code(errc::operation_not_permitted);
 		return ;
 	}
-	try { m_impl->m_backend->finish(error); }
+	try { m_backend->finish(error); }
 	catch(...) {
 		error = exception_error(std::current_exception());
 	}
-	m_impl->m_finished = true;
+	m_finished = true;
 }
 
 void file_sink::finish(asio::any_completion_handler<void(error_code)> handler)
@@ -215,24 +206,24 @@ void file_sink::finish(asio::any_completion_handler<void(error_code)> handler)
 
 void file_sink::cancel() noexcept
 {
-	if( m_impl->m_finished )
+	if( m_finished )
 		return ;
 
-	if( not m_impl->m_backend )
+	if( not m_backend )
 	{
-		m_impl->m_cancelled = true;
-		m_impl->m_finished = true;
+		m_cancelled = true;
+		m_finished = true;
 		return ;
 	}
 	try
 	{
 		error_code ignored;
-		m_impl->m_backend->finish(ignored);
+		m_backend->finish(ignored);
 		RIWO_UNUSED(ignored);
 	}
 	catch(...) {}
-	m_impl->m_cancelled = true;
-	m_impl->m_finished = true;
+	m_cancelled = true;
+	m_finished = true;
 }
 
 } //namespace riwo::http_exp

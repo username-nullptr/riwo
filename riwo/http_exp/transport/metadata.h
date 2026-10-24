@@ -22,11 +22,14 @@ struct transport_metadata
 {
 	optional<std::string> local_endpoint {};
 	optional<std::string> remote_endpoint {};
+
 	bool tls = false;
 	optional<std::string> alpn {};
-	std::unordered_map<std::string,riwo::value> attributes {};
+
+	std::unordered_map<std::string,value> attributes {};
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_METADATA_H

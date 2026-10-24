@@ -603,13 +603,13 @@ public:
 
 	direct_io_handler(Handler handler, const Exec &exec) :
 		m_handler(std::move(handler)),
-		m_executor(asio::get_associated_executor(m_handler, exec)),
+		m_exec(asio::get_associated_executor(m_handler, exec)),
 		m_immediate_executor(asio::get_associated_immediate_executor(m_handler, exec)),
 		m_allocator(asio::get_associated_allocator(m_handler)),
 		m_slot(asio::get_associated_cancellation_slot(m_handler)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] allocator_type get_allocator() const noexcept {
 		return m_allocator;
@@ -629,7 +629,7 @@ public:
 
 private:
 	Handler m_handler;
-	executor_type m_executor;
+	executor_type m_exec;
 	immediate_executor_type m_immediate_executor;
 	allocator_type m_allocator;
 	cancellation_slot_type m_slot;
@@ -646,13 +646,13 @@ public:
 
 	direct_io_void_handler(Handler handler, const Exec &exec) :
 		m_handler(std::move(handler)),
-		m_executor(asio::get_associated_executor(m_handler, exec)),
+		m_exec(asio::get_associated_executor(m_handler, exec)),
 		m_immediate_executor(asio::get_associated_immediate_executor(m_handler, exec)),
 		m_allocator(asio::get_associated_allocator(m_handler)),
 		m_slot(asio::get_associated_cancellation_slot(m_handler)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] allocator_type get_allocator() const noexcept {
 		return m_allocator;
@@ -672,7 +672,7 @@ public:
 
 private:
 	Handler m_handler;
-	executor_type m_executor;
+	executor_type m_exec;
 	immediate_executor_type m_immediate_executor;
 	allocator_type m_allocator;
 	cancellation_slot_type m_slot;
@@ -688,12 +688,12 @@ public:
 
 	co_spawn_io_handler(Handler handler, const Exec &exec) :
 		m_handler(std::move(handler)),
-		m_executor(asio::get_associated_executor(m_handler, exec)),
+		m_exec(asio::get_associated_executor(m_handler, exec)),
 		m_allocator(asio::get_associated_allocator(m_handler)),
 		m_slot(asio::get_associated_cancellation_slot(m_handler)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] allocator_type get_allocator() const noexcept {
 		return m_allocator;
@@ -716,7 +716,7 @@ public:
 
 private:
 	Handler m_handler;
-	executor_type m_executor;
+	executor_type m_exec;
 	allocator_type m_allocator;
 	cancellation_slot_type m_slot;
 };
@@ -731,12 +731,12 @@ public:
 
 	co_spawn_error_handler(Handler handler, const Exec &exec) :
 		m_handler(std::move(handler)),
-		m_executor(asio::get_associated_executor(m_handler, exec)),
+		m_exec(asio::get_associated_executor(m_handler, exec)),
 		m_allocator(asio::get_associated_allocator(m_handler)),
 		m_slot(asio::get_associated_cancellation_slot(m_handler)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] allocator_type get_allocator() const noexcept {
 		return m_allocator;
@@ -755,7 +755,7 @@ public:
 
 private:
 	Handler m_handler;
-	executor_type m_executor;
+	executor_type m_exec;
 	allocator_type m_allocator;
 	cancellation_slot_type m_slot;
 };
@@ -770,13 +770,13 @@ public:
 
 	co_spawn_optional_io_handler(Handler handler, const Exec &exec, Factory factory) :
 		m_handler(std::move(handler)),
-		m_executor(asio::get_associated_executor(m_handler, exec)),
+		m_exec(asio::get_associated_executor(m_handler, exec)),
 		m_allocator(asio::get_associated_allocator(m_handler)),
 		m_slot(asio::get_associated_cancellation_slot(m_handler)),
 		m_factory(std::move(factory)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] allocator_type get_allocator() const noexcept {
 		return m_allocator;
@@ -803,7 +803,7 @@ public:
 
 private:
 	Handler m_handler;
-	executor_type m_executor;
+	executor_type m_exec;
 	allocator_type m_allocator;
 	cancellation_slot_type m_slot;
 	Factory m_factory;
@@ -820,13 +820,13 @@ public:
 	awaitable_optional_tuple_io_handler(Handler handler, const Exec &exec,
 		Factory factory) :
 		m_handler(std::move(handler)),
-		m_executor(asio::get_associated_executor(m_handler, exec)),
+		m_exec(asio::get_associated_executor(m_handler, exec)),
 		m_allocator(asio::get_associated_allocator(m_handler)),
 		m_slot(asio::get_associated_cancellation_slot(m_handler)),
 		m_factory(std::move(factory)) {}
 
 	[[nodiscard]] executor_type get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] allocator_type get_allocator() const noexcept {
 		return m_allocator;
@@ -857,7 +857,7 @@ public:
 
 private:
 	Handler m_handler;
-	executor_type m_executor;
+	executor_type m_exec;
 	allocator_type m_allocator;
 	cancellation_slot_type m_slot;
 	Factory m_factory;

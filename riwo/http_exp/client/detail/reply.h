@@ -16,17 +16,17 @@ public:
 		std::shared_ptr<detail::body_reader_state> state,
 		std::vector<std::byte> buffered_body_value,
 		std::shared_ptr<void> owner_value, uint64_t max_buffered_body_value) :
-		m_executor(std::move(executor_value)), m_protocol_value(protocol_value),
+		m_exec(std::move(executor_value)), m_protocol_value(protocol_value),
 		m_reply_protocol_value(reply_protocol_value),
 		m_head(std::move(head_value)),
-		m_body(std::make_unique<body_reader_t>(m_executor, std::move(state))),
+		m_body(std::make_unique<body_reader_t>(m_exec, std::move(state))),
 		m_buffered_body(std::move(buffered_body_value)),
 		m_owner(std::move(owner_value)),
 		m_max_buffered_body(max_buffered_body_value)
 	{
 	}
 
-	executor_t m_executor;
+	executor_t m_exec;
 	protocol m_protocol_value;
 	protocol m_reply_protocol_value;
 	reply_head m_head;
@@ -40,7 +40,7 @@ template <core_concepts::exec Exec>
 basic_reply<Exec>::basic_reply(basic_reply &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
-	other.m_impl = std::make_shared<impl>(m_impl->m_executor,
+	other.m_impl = std::make_shared<impl>(m_impl->m_exec,
 		protocol::v1_1, protocol::v1_1, reply_head{},
 		detail::make_body_reader_state(), std::vector<std::byte>{},
 		std::shared_ptr<void>{}, 8U * 1024U * 1024U);
@@ -51,7 +51,7 @@ auto basic_reply<Exec>::operator=(basic_reply &&other) noexcept -> basic_reply&
 {
 	if( this == &other )
 		return *this;
-	auto replacement = std::make_shared<impl>(other.m_impl->m_executor,
+	auto replacement = std::make_shared<impl>(other.m_impl->m_exec,
 		protocol::v1_1, protocol::v1_1, reply_head{},
 		detail::make_body_reader_state(), std::vector<std::byte>{},
 		std::shared_ptr<void>{}, 8U * 1024U * 1024U);
@@ -108,7 +108,7 @@ basic_reply<Exec>::~basic_reply() = default;
 
 template <core_concepts::exec Exec>
 auto basic_reply<Exec>::get_executor() const noexcept -> executor_t {
-	return m_impl->m_executor;
+	return m_impl->m_exec;
 }
 
 template <core_concepts::exec Exec>
@@ -218,7 +218,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 				});
 			}
 		};
-		return initiate_io<std::vector<std::byte>>(m_impl->m_executor,
+		return initiate_io<std::vector<std::byte>>(m_impl->m_exec,
 		[state = m_impl](auto handler) mutable {
 			auto value = std::make_shared<operation>();
 			value->reader = state->m_body.get();

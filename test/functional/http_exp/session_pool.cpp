@@ -45,12 +45,12 @@ public:
 	using open_handler_t = detail::client_session::open_handler_t;
 
 	fake_session(executor_type executor, http::protocol version, size_t id) :
-		m_id(id), m_executor(std::move(executor)), m_version(version)
+		m_id(id), m_exec(std::move(executor)), m_version(version)
 	{
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] http::protocol selected_protocol() const noexcept override {
 		return m_version;
@@ -102,7 +102,7 @@ public:
 	{
 		riwo::error_code error;
 		auto result = open_sync(std::move(head), std::move(spec), error);
-		asio::post(m_executor,
+		asio::post(m_exec,
 		[handler = std::move(handler), error, result = std::move(result)]()
 		mutable {
 			std::move(handler)(error, std::move(result));
@@ -128,7 +128,7 @@ public:
 	std::function<void(bool)> release_handler;
 
 private:
-	executor_type m_executor;
+	executor_type m_exec;
 	http::protocol m_version;
 };
 
@@ -161,7 +161,7 @@ class fake_factory final : public detail::session_factory
 {
 public:
 	explicit fake_factory(asio::any_io_executor executor) :
-		m_executor(std::move(executor))
+		m_exec(std::move(executor))
 	{
 	}
 
@@ -172,13 +172,13 @@ public:
 		riwo::ignore_unused(config);
 		keys.push_back(key);
 		protocols.push_back(transport.selected_protocol);
-		auto session = std::make_shared<fake_session>(m_executor,
+		auto session = std::make_shared<fake_session>(m_exec,
 			transport.selected_protocol, sessions.size());
 		sessions.push_back(session);
 		return std::shared_ptr<detail::client_session>(session);
 	}
 
-	asio::any_io_executor m_executor;
+	asio::any_io_executor m_exec;
 	std::vector<detail::session_key> keys;
 	std::vector<http::protocol> protocols;
 	std::vector<std::shared_ptr<fake_session>> sessions;
@@ -480,27 +480,25 @@ void idle_expiry()
 
 void plaintext_preface_detector()
 {
-	http::http2_preface_detector detector;
-	auto preface = std::string(
-		http::http2_preface_detector::http2_preface);
+	http::v2_preface_detector detector;
+	auto preface = std::string(http::v2_preface);
 	auto first = detector.feed(riwo::const_buffer(
 		std::string_view(preface).substr(0, 7)));
 	RIWO_TEST_CHECK(first == http::preface_result::need_more);
 	auto second = detector.feed(riwo::const_buffer(
 		std::string_view(preface).substr(7)));
-	RIWO_TEST_CHECK(second == http::preface_result::http2);
+	RIWO_TEST_CHECK(second == http::preface_result::v2);
 	RIWO_TEST_CHECK_EQ(detector.buffer(), preface);
 
-	http::http2_preface_detector http1;
+	http::v2_preface_detector v1;
 	const std::string request = "GET / HTTP/1.1\r\nHost: example.test\r\n\r\n";
-	auto result = http1.feed(riwo::const_buffer(request));
-	RIWO_TEST_CHECK(result == http::preface_result::http1);
+	auto result = v1.feed(riwo::const_buffer(request));
+	RIWO_TEST_CHECK(result == http::preface_result::v1);
 	const auto inspected = request.substr(0,
-		http::http2_preface_detector::
-			http2_preface.size());
-	RIWO_TEST_CHECK_EQ(http1.buffer(), inspected);
-	RIWO_TEST_CHECK_EQ(http1.take_buffer(), inspected);
-	RIWO_TEST_CHECK(http1.buffer().empty());
+		http::v2_preface.size());
+	RIWO_TEST_CHECK_EQ(v1.buffer(), inspected);
+	RIWO_TEST_CHECK_EQ(v1.take_buffer(), inspected);
+	RIWO_TEST_CHECK(v1.buffer().empty());
 }
 
 void serve_keep_alive(asio::ip::tcp::socket socket, size_t &served,

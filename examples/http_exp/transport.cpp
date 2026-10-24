@@ -24,10 +24,10 @@ public:
 	using executor_type = executor_t;
 
 	scripted_stream(executor_t executor, std::shared_ptr<scripted_state> state) :
-		m_state(std::move(state)), m_executor(std::move(executor)) {}
+		m_state(std::move(state)), m_exec(std::move(executor)) {}
 
 	[[nodiscard]] executor_t get_executor() const noexcept {
-		return m_executor;
+		return m_exec;
 	}
 
 	void read_some(const riwo::mutable_buffer &buffer,
@@ -71,7 +71,7 @@ public:
 	}
 
 private:
-	executor_t m_executor;
+	executor_t m_exec;
 	std::shared_ptr<scripted_state> m_state;
 };
 
@@ -81,15 +81,15 @@ class scripted_connector final : public http::basic_transport_connector<executor
 {
 public:
 	scripted_connector(executor_t executor, std::shared_ptr<scripted_state> state) :
-		m_executor(std::move(executor)), m_state(std::move(state)) {}
+		m_exec(std::move(executor)), m_state(std::move(state)) {}
 
 	[[nodiscard]] executor_t get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	void connect(http::connect_request, connect_handler_t handler) override
 	{
-		asio::post(m_executor,
-		[executor = m_executor, state = m_state, handler = std::move(handler)]() mutable
+		asio::post(m_exec,
+		[executor = m_exec, state = m_state, handler = std::move(handler)]() mutable
 		{
 			state->open = true;
 			state->offset = 0;
@@ -108,7 +108,7 @@ public:
 
 private:
 	std::shared_ptr<scripted_state> m_state {};
-	executor_t m_executor;
+	executor_t m_exec;
 };
 
 } //namespace

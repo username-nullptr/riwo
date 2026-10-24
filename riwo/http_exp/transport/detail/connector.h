@@ -8,12 +8,13 @@ namespace riwo::http_exp
 {
 
 template<core_concepts::exec Exec>
-auto basic_transport_connector<Exec>::connect_sync(
-	const connect_request &) noexcept -> sys_expected<result_t>
+auto basic_transport_connector<Exec>::connect_sync(const connect_request &)
+	noexcept -> sys_expected<result_t>
 {
 	return sys_unexpected(make_error_code(errc::operation_not_supported));
 }
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_DETAIL_CONNECTOR_H

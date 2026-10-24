@@ -6,8 +6,9 @@
 
 #include <riwo/http_exp/body/file_handle.h>
 
-namespace riwo::http_exp
-{
+namespace riwo::http_exp { namespace detail {
+class output_file_backend;
+} //namespace detail
 
 class RIWO_HTTP_EXP_API file_sink
 {
@@ -51,8 +52,9 @@ public:
 	void cancel() noexcept;
 
 private:
-	class impl;
-	std::unique_ptr<impl> m_impl;
+	std::unique_ptr<detail::output_file_backend> m_backend {};
+	bool m_cancelled = false;
+	bool m_finished = false;
 };
 
 namespace concepts

@@ -75,8 +75,8 @@ public:
 	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	executor_t m_exec;
+	std::shared_ptr<detail::duplex_state> m_state;
 };
 
 using duplex_channel = basic_duplex_channel<>;

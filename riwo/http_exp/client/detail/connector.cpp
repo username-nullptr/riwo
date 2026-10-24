@@ -933,7 +933,7 @@ public:
 
 			const auto connect_host = proxy ? proxy->host : key.host;
 			const auto connect_port = proxy ? proxy->port : key.port;
-			auto endpoints = resolve_with_timeout(m_executor, connect_host,
+			auto endpoints = resolve_with_timeout(m_exec, connect_host,
 				connect_port, config.timeout.connect, error);
 			if( error )
 				return sys_unexpected(error);
@@ -941,7 +941,7 @@ public:
 				return sys_unexpected(asio::error::make_error_code(
 					asio::error::host_not_found));
 
-			auto tcp = std::make_shared<tcp_connection>(m_executor);
+			auto tcp = std::make_shared<tcp_connection>(m_exec);
 			connect_with_timeout(tcp->socket(), endpoints,
 				config.timeout.connect, error);
 			if( error )
@@ -1137,7 +1137,7 @@ public:
 	void connect_async(const session_key &key, const client_config &config,
 		connect_handler_t handler) override
 	{
-		auto executor = m_executor;
+		auto executor = m_exec;
 		asio::co_spawn(executor, connect_async_impl(executor, key, config),
 		[handler = std::move(handler)](std::exception_ptr exception,
 			sys_expected<negotiated_transport> result) mutable
@@ -1280,14 +1280,14 @@ connector::connector() :
 }
 
 connector::connector(executor_t executor) :
-	m_executor(std::move(executor))
+	m_exec(std::move(executor))
 {
 }
 
 connector::~connector() = default;
 
 auto connector::get_executor() const noexcept -> executor_t {
-	return m_executor;
+	return m_exec;
 }
 
 void connector::connect_async(const session_key &key,

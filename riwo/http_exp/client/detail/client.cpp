@@ -445,60 +445,43 @@ void notify_progress(const progress_observer &observer,
 
 } //namespace
 
-class client_state::impl
+std::shared_ptr<stream> client_state::open_stream_sync(
+	const request_head &head, body_spec spec,
+	const client_config &config, error_code &error) noexcept
 {
-public:
-	impl(asio::any_io_executor executor_value, client_config config_value,
-		std::shared_ptr<client_session> session_value,
-		connector_ptr_t connector_value) :
-		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
-		m_injected_session(std::move(session_value))
-	{
-		if( not m_injected_session )
-			m_pool = std::make_shared<session_pool>(m_executor, m_config,
-				std::move(connector_value));
-	}
-
-	[[nodiscard]] std::shared_ptr<stream> open_sync(const request_head &head,
-		body_spec spec, const client_config &config, error_code &error) noexcept
-	{
-		error.clear();
-		try {
-			if( m_injected_session )
-				return m_injected_session->open_sync(head, std::move(spec), error);
-			return m_pool->open_sync(make_session_key(head, config), head,
-				std::move(spec), error);
-		}
-		catch(...) {
-			error = exception_error(std::current_exception());
-			return {};
-		}
-	}
-
-	void open(const request_head &head, body_spec spec,
-		const client_config &config,
-		client_session::open_handler_t handler)
-	{
+	error.clear();
+	try {
 		if( m_injected_session )
-		{
-			m_injected_session->open(head, std::move(spec), std::move(handler));
-			return ;
-		}
-		m_pool->open(make_session_key(head, config), head, std::move(spec),
-			std::move(handler));
+			return m_injected_session->open_sync(head, std::move(spec), error);
+		return m_pool->open_sync(make_session_key(head, config), head,
+			std::move(spec), error);
 	}
+	catch(...) {
+		error = exception_error(std::current_exception());
+		return {};
+	}
+}
 
-	asio::any_io_executor m_executor;
-	client_config m_config;
-	std::shared_ptr<client_session> m_injected_session;
-	std::shared_ptr<session_pool> m_pool;
-};
+void client_state::open_stream(const request_head &head, body_spec spec,
+	const client_config &config, open_handler_t handler)
+{
+	if( m_injected_session )
+	{
+		m_injected_session->open(head, std::move(spec), std::move(handler));
+		return ;
+	}
+	m_pool->open(make_session_key(head, config), head, std::move(spec),
+		std::move(handler));
+}
 
 client_state::client_state(asio::any_io_executor executor, client_config config,
 	std::shared_ptr<client_session> session, connector_ptr_t connector) :
-	m_impl(std::make_shared<impl>(std::move(executor), std::move(config),
-		std::move(session), std::move(connector)))
+	m_config(std::move(config)),
+	m_injected_session(std::move(session))
 {
+	if( not m_injected_session )
+		m_pool = std::make_shared<session_pool>(std::move(executor), m_config,
+			std::move(connector));
 }
 
 client_state::client_state(client_config config,
@@ -525,9 +508,9 @@ std::shared_ptr<stream> client_state::open(request request_value,
 		error = cookie_error;
 		return {};
 	}
-	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	auto config = request_access::effective_config(request_value, m_config);
 	add_proxy_authorization(*head, config);
-	return m_impl->open_sync(*head, std::move(spec), config, error);
+	return open_stream_sync(*head, std::move(spec), config, error);
 }
 
 void client_state::open(request request_value, body_spec spec,
@@ -544,13 +527,13 @@ void client_state::open(request request_value, body_spec spec,
 		std::move(handler)(cookie_error, std::shared_ptr<stream>{});
 		return ;
 	}
-	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	auto config = request_access::effective_config(request_value, m_config);
 	add_proxy_authorization(*head, config);
-	m_impl->open(*head, std::move(spec), config, std::move(handler));
+	open_stream(*head, std::move(spec), config, std::move(handler));
 }
 
 std::shared_ptr<cookie_jar> client_state::cookie_store() const noexcept {
-	return m_impl->m_config.cookies.jar;
+	return m_config.cookies.jar;
 }
 
 void client_state::capture_cookies(const riwo::url &origin,
@@ -576,7 +559,7 @@ send_result client_state::send(request request_value,
 		return {};
 	}
 	auto spec = request_value.body_description();
-	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	auto config = request_access::effective_config(request_value, m_config);
 	auto upload_progress = request_access::upload_progress(request_value);
 	auto download_progress = request_access::download_progress(request_value);
 	auto head = freeze_request(request_value, spec, false);
@@ -617,7 +600,7 @@ send_result client_state::send(request request_value,
 		}
 		return true;
 	};
-	auto active_stream = m_impl->open_sync(*head, spec, config, error);
+	auto active_stream = open_stream_sync(*head, spec, config, error);
 	if( error or not active_stream )
 	{
 		if( not error )
@@ -739,7 +722,7 @@ send_result client_state::send(request request_value,
 		.head = std::move(reply_head_value),
 		.body = std::move(body),
 		.owner = std::move(active_stream),
-		.max_buffered_body = m_impl->m_config.reply_limits.max_buffered_body
+		.max_buffered_body = m_config.reply_limits.max_buffered_body
 	};
 }
 
@@ -751,7 +734,7 @@ void client_state::send(request request_value, send_handler_t handler)
 		return ;
 	}
 	auto spec = request_value.body_description();
-	auto config = request_access::effective_config(request_value, m_impl->m_config);
+	auto config = request_access::effective_config(request_value, m_config);
 	auto upload_progress = request_access::upload_progress(request_value);
 	auto download_progress = request_access::download_progress(request_value);
 	auto head = freeze_request(request_value, spec, false);
@@ -1024,11 +1007,11 @@ void client_state::send(request request_value, send_handler_t handler)
 	// move the trailer declaration out before open() copies it.
 	auto operation_spec = spec;
 	auto owner = shared_from_this();
-	m_impl->open(*head, std::move(spec), config,
+	open_stream(*head, std::move(spec), config,
 	[owner, request_value = std::move(request_value), request_body,
 	 source = std::move(source), spec = std::move(operation_spec),
 	 trailers = std::move(trailers),
-	 max_buffered_body = m_impl->m_config.reply_limits.max_buffered_body,
+	 max_buffered_body = m_config.reply_limits.max_buffered_body,
 	 automatic_decompression = config.automatic_decompression,
 	 retries = config.retries, redirects = config.redirects,
 	 upload_progress = std::move(upload_progress),

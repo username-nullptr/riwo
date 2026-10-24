@@ -111,7 +111,7 @@ public:
 		const client_config &config, connect_handler_t handler);
 
 protected:
-	executor_t m_executor;
+	executor_t m_exec;
 };
 
 using connector_ptr_t = std::shared_ptr<connector>;

@@ -35,81 +35,6 @@ namespace riwo::http_exp::detail { namespace
 }
 #endif
 
-class replay_connection final : public ::riwo::http_exp::connection,
-	public std::enable_shared_from_this<replay_connection>
-{
-public:
-	replay_connection(std::shared_ptr<::riwo::http_exp::connection> next,
-		std::string prefix) : m_next(std::move(next)), m_prefix(std::move(prefix)) {}
-
-	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return m_next->get_executor();
-	}
-
-	void read_some(mutable_buffer buffer, io_handler_t handler) override
-	{
-		if( m_offset == m_prefix.size() )
-			return m_next->read_some(buffer, std::move(handler));
-		const auto count = copy_prefix(buffer);
-		asio::post(get_executor(),
-		[handler = std::move(handler), count]() mutable {
-			std::move(handler)(error_code{}, count);
-		});
-	}
-
-	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,
-		error_code &error) noexcept override
-	{
-		error.clear();
-		if( m_offset != m_prefix.size() )
-			return copy_prefix(buffer);
-		return m_next->read_some_sync(buffer, error);
-	}
-
-	void write(const_buffer buffer, io_handler_t handler) override {
-		m_next->write(buffer, std::move(handler));
-	}
-	[[nodiscard]] size_t write_sync(const_buffer buffer,
-		error_code &error) noexcept override {
-		return m_next->write_sync(buffer, error);
-	}
-	void close(close_handler_t handler) override {
-		m_next->close(std::move(handler));
-	}
-	void cancel() noexcept override { m_next->cancel(); }
-	void set_read_timeout(optional<timeout_t> value) override {
-		m_next->set_read_timeout(value);
-	}
-	void set_write_timeout(optional<timeout_t> value) override {
-		m_next->set_write_timeout(value);
-	}
-	[[nodiscard]] bool is_open() const noexcept override {
-		return m_next->is_open();
-	}
-	[[nodiscard]] endpoint_t remote_endpoint(
-		error_code &error) const noexcept override {
-		return m_next->remote_endpoint(error);
-	}
-	[[nodiscard]] endpoint_t local_endpoint(
-		error_code &error) const noexcept override {
-		return m_next->local_endpoint(error);
-	}
-
-private:
-	[[nodiscard]] size_t copy_prefix(mutable_buffer buffer) noexcept
-	{
-		const auto count = std::min(buffer.size(), m_prefix.size() - m_offset);
-		if( count != 0 )
-			std::memcpy(buffer.data(), m_prefix.data() + m_offset, count);
-		m_offset += count;
-		return count;
-	}
-
-	std::shared_ptr<::riwo::http_exp::connection> m_next;
-	std::string m_prefix;
-	size_t m_offset = 0;
-};
-
 class pending_server_connection final : public server_connection,
 	public std::enable_shared_from_this<pending_server_connection>
 {
@@ -137,7 +62,7 @@ public:
 				std::string prefix) mutable {
 				if( error )
 					return self->finish_error(error);
-				if( result == preface_result::http2 )
+				if( result == preface_result::v2 )
 				{
 					self->m_selected =
 						::riwo::http_exp::v2::detail::accept_h2(self->m_transport,
@@ -148,11 +73,9 @@ public:
 				if( not h1 )
 					return self->finish_error(
 						make_error_code(errc::negotiation_failed));
-				auto replay = std::make_shared<replay_connection>(
-					self->m_transport, std::move(prefix));
-				self->m_selected = accept_h1(std::move(replay),
+				self->m_selected = accept_h1(self->m_transport,
 					self->m_config.request_limits, self->m_config.timeout,
-					std::move(self->m_handler));
+					std::move(self->m_handler), std::move(prefix));
 			});
 			return ;
 		}
@@ -190,7 +113,7 @@ private:
 	std::shared_ptr<::riwo::http_exp::connection> m_transport;
 	server_config m_config;
 	server_accept_handler_t m_handler;
-	http2_preface_detector m_detector;
+	v2_preface_detector m_detector;
 	server_connection_ptr_t m_selected;
 };
 

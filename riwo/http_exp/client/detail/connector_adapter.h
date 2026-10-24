@@ -106,9 +106,21 @@ private:
 			absolute = found->second.to_bool().value_or(false);
 		auto selected = value.selected_protocol;
 		auto alpn = metadata.alpn;
+		auto stream = make_connection(std::move(value));
+		endpoint_t remote;
+		endpoint_t local;
+		if( stream )
+		{
+			error_code endpoint_error;
+			remote = stream->remote_endpoint(endpoint_error);
+			endpoint_error.clear();
+			local = stream->local_endpoint(endpoint_error);
+		}
 		return detail::negotiated_transport {
-			.stream = make_connection(std::move(value)),
+			.stream = std::move(stream),
 			.selected_protocol = selected,
+			.remote = remote,
+			.local = local,
 			.alpn = std::move(alpn),
 			.absolute_form = absolute
 		};

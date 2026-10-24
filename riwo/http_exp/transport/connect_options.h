@@ -9,19 +9,18 @@
 namespace riwo::http_exp
 {
 
-enum class proxy_type
-{
-	automatic,
-	http,
-	socks5
+enum class proxy_type {
+	automatic, http, socks5
 };
 
 struct proxy_policy
 {
-	optional<riwo::url> forward_proxy {};
+	optional<url> forward_proxy {};
 	proxy_type type = proxy_type::automatic;
+
 	bool use_environment = false;
 	std::vector<std::string> no_proxy {};
+
 	optional<std::string> username {};
 	optional<std::string> password {};
 	optional<std::string> authorization {};
@@ -29,10 +28,11 @@ struct proxy_policy
 
 struct tls_policy
 {
-	bool verify_peer = true;
 	optional<std::filesystem::path> certificate_authority_file {};
+	bool verify_peer = true;
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_CONNECT_OPTIONS_H

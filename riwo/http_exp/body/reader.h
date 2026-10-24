@@ -24,7 +24,9 @@ class RIWO_HTTP_EXP_TAPI basic_body_reader
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
+	using reader_state_ptr = std::shared_ptr<detail::body_reader_state>;
 
+public:
 	basic_body_reader()
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
@@ -32,11 +34,11 @@ public:
 	explicit basic_body_reader(Exec0 &&executor)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	explicit basic_body_reader(std::shared_ptr<detail::body_reader_state> state)
+	explicit basic_body_reader(reader_state_ptr state)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	basic_body_reader(Exec0 &&executor, std::shared_ptr<detail::body_reader_state> state)
+	basic_body_reader(Exec0 &&executor, reader_state_ptr state)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_reader();
@@ -60,8 +62,8 @@ public:
 	[[nodiscard]] bool is_finished() const noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	reader_state_ptr m_state {};
+	executor_t m_exec {};
 };
 
 using body_reader = basic_body_reader<>;

@@ -293,7 +293,7 @@ public:
 	server_session_impl(
 		std::shared_ptr<::riwo::http_exp::connection> transport,
 		server_config config, std::string initial_input) :
-		m_executor(transport->get_executor()), m_strand(asio::make_strand(m_executor)),
+		m_exec(transport->get_executor()), m_strand(asio::make_strand(m_exec)),
 		m_transport(std::move(transport)), m_config(std::move(config)),
 		m_initial_input(std::move(initial_input))
 	{
@@ -387,7 +387,7 @@ public:
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return protocol::v2;
@@ -1309,7 +1309,7 @@ private:
 		return static_cast<nghttp2_api::ssize_type_t>(copied);
 	}
 
-	executor_type m_executor;
+	executor_type m_exec;
 	asio::strand<asio::any_io_executor> m_strand;
 	std::shared_ptr<::riwo::http_exp::connection> m_transport;
 	server_config m_config;

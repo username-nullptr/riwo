@@ -37,8 +37,8 @@ public:
 	// Synchronous completion is used by the existing synchronous public API and
 	// by the pool's non-waiting fast path. Custom transports may keep the
 	// asynchronous interface only; the default reports that explicitly.
-	[[nodiscard]] virtual size_t read_some_sync(mutable_buffer, error_code &error) noexcept;
-	[[nodiscard]] virtual size_t write_sync(const_buffer, error_code &error) noexcept;
+	[[nodiscard]] virtual size_t read_some_sync(const mutable_buffer&, error_code &error) noexcept;
+	[[nodiscard]] virtual size_t write_sync(const const_buffer&, error_code &error) noexcept;
 
 	virtual void close(close_handler_t handler) = 0;
 	virtual void cancel() noexcept = 0;
@@ -53,6 +53,8 @@ public:
 	[[nodiscard]] virtual endpoint_t remote_endpoint(error_code &error) const noexcept;
 	[[nodiscard]] virtual endpoint_t local_endpoint(error_code &error) const noexcept;
 };
+
+using connection_ptr = std::shared_ptr<connection>;
 
 } //namespace riwo::http_exp
 

@@ -15,6 +15,7 @@ struct basic_negotiated_transport
 {
 	basic_byte_stream<Exec> stream;
 	protocol selected_protocol = protocol::v1_1;
+
 	transport_metadata metadata {};
 	std::vector<std::byte> initial_input {};
 };
@@ -22,5 +23,6 @@ struct basic_negotiated_transport
 using negotiated_transport = basic_negotiated_transport<>;
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_NEGOTIATED_TRANSPORT_H

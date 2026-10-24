@@ -1599,10 +1599,10 @@ public:
 	h1_client_session(asio::any_io_executor executor, protocol version,
 		message_limits limits, timeout_policy timeouts = {},
 		bool absolute_form = false) :
-		m_executor(std::move(executor)), m_version(version),
+		m_exec(std::move(executor)), m_version(version),
 		m_limits(std::move(limits)), m_timeouts(timeouts),
 		m_absolute_form(absolute_form), m_connection(
-			std::make_shared<connection>(m_executor)), m_resolver(m_executor)
+			std::make_shared<connection>(m_exec)), m_resolver(m_exec)
 	{
 		m_connection->transport->set_read_timeout(
 			bounded_timeout(m_timeouts.body_idle, m_timeouts));
@@ -1614,11 +1614,11 @@ public:
 		message_limits limits,
 		std::shared_ptr<::riwo::http_exp::connection> transport,
 		timeout_policy timeouts = {}, bool absolute_form = false) :
-		m_executor(std::move(executor)), m_version(version),
+		m_exec(std::move(executor)), m_version(version),
 		m_limits(std::move(limits)), m_timeouts(timeouts),
 		m_absolute_form(absolute_form),
 		m_connection(std::make_shared<connection>(std::move(transport))),
-		m_resolver(m_executor), m_preconnected(true)
+		m_resolver(m_exec), m_preconnected(true)
 	{
 		m_connection->transport->set_read_timeout(
 			bounded_timeout(m_timeouts.body_idle, m_timeouts));
@@ -1627,7 +1627,7 @@ public:
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return m_version;
@@ -1823,7 +1823,7 @@ private:
 		return result;
 	}
 
-	executor_type m_executor;
+	executor_type m_exec;
 	protocol m_version;
 	message_limits m_limits;
 	timeout_policy m_timeouts;
@@ -1843,23 +1843,25 @@ class h1_server_session final : public server_session,
 public:
 	h1_server_session(asio::ip::tcp::socket socket, message_limits limits,
 		timeout_policy timeouts = {}) :
-		m_executor(socket.get_executor()), m_limits(std::move(limits)),
+		m_exec(socket.get_executor()), m_limits(std::move(limits)),
 		m_timeouts(timeouts),
 		m_connection(std::make_shared<connection>(std::move(socket)))
 	{
 	}
 
 	h1_server_session(std::shared_ptr<::riwo::http_exp::connection> transport,
-		protocol version, message_limits limits, timeout_policy timeouts = {}) :
-		m_executor(transport->get_executor()), m_limits(std::move(limits)),
+		protocol version, message_limits limits, timeout_policy timeouts = {},
+		std::string initial_input = {}) :
+		m_exec(transport->get_executor()), m_limits(std::move(limits)),
 		m_timeouts(timeouts),
 		m_connection(std::make_shared<connection>(std::move(transport))),
 		m_version(version)
 	{
+		m_connection->pending = std::move(initial_input);
 	}
 
 	[[nodiscard]] executor_type get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return m_version;
@@ -1988,7 +1990,7 @@ public:
 	}
 
 private:
-	executor_type m_executor;
+	executor_type m_exec;
 	message_limits m_limits;
 	timeout_policy m_timeouts;
 	std::shared_ptr<connection> m_connection;
@@ -2120,11 +2122,12 @@ server_connection_ptr_t accept_h1(asio::ip::tcp::socket socket,
 server_connection_ptr_t accept_h1(
 	std::shared_ptr<::riwo::http_exp::connection> transport,
 	message_limits limits, timeout_policy timeouts,
-	server_accept_handler_t handler)
+	server_accept_handler_t handler, std::string initial_input)
 {
 	auto session = std::make_shared<
 		::riwo::http_exp::v1::detail::h1_server_session>(
-		std::move(transport), protocol::v1_1, std::move(limits), timeouts);
+		std::move(transport), protocol::v1_1, std::move(limits), timeouts,
+		std::move(initial_input));
 	auto value = std::make_shared<h1_server_loop>();
 	value->session = session;
 	value->handler = std::move(handler);

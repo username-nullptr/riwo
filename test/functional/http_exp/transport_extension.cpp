@@ -175,7 +175,10 @@ public:
 			initial = std::move(initial_input_), handler = std::move(handler)]() mutable {
 			transport_t transport {
 				http::make_byte_stream(memory_stream{executor, std::move(state)}),
-				http::protocol::v1_1, {}, std::move(initial)};
+				http::protocol::v1_1,
+				{.local_endpoint = "192.0.2.2:8080",
+				 .remote_endpoint = "192.0.2.1:4242"},
+				std::move(initial)};
 			std::move(handler)(riwo::error_code{}, accepted_t(
 				std::in_place_type<transport_t>, std::move(transport)));
 		});
@@ -416,6 +419,12 @@ void injected_acceptor_replays_initial_input()
 	[&context](http::basic_server_exchange<executor_type> &exchange)
 		-> riwo::awaitable<void>
 	{
+		RIWO_TEST_CHECK_EQ(exchange.remote_address(), "192.0.2.1");
+		RIWO_TEST_CHECK_EQ(exchange.remote_port(), 4242U);
+		riwo::error_code endpoint_error;
+		RIWO_TEST_CHECK_EQ(exchange.local_endpoint(endpoint_error),
+			asio::ip::tcp::endpoint(asio::ip::make_address("192.0.2.2"), 8080));
+		RIWO_TEST_CHECK(!endpoint_error);
 		co_await exchange.respond({http::status::ok, {}},
 			std::string_view("accepted"), riwo::use_awaitable);
 		context.stop();

@@ -695,14 +695,14 @@ class basic_client<Exec>::impl : public std::enable_shared_from_this<impl>
 
 public:
 	impl(executor_type executor_value, config_t config_value) :
-		m_executor(std::move(executor_value)),
+		m_exec(std::move(executor_value)),
 		m_config(validate_config(std::move(config_value))),
 		m_use_extended_connect(detail::extended_connect(m_config.http)),
-		m_http(m_executor, detail::websocket_http_config(m_config.http,
+		m_http(m_exec, detail::websocket_http_config(m_config.http,
 			m_config.handshake_timeout)) {}
 
 	impl(http_client_t &&http_client, config_t config_value) :
-		m_executor(http_client.get_executor()),
+		m_exec(http_client.get_executor()),
 		m_config(validate_config(std::move(config_value))),
 		m_use_extended_connect(detail::extended_connect(http_client.config())),
 		m_http(std::move(http_client)) {}
@@ -763,12 +763,12 @@ public:
 			using handler_t = decltype(completion_handler);
 			using operation_t = open_handler_operation<handler_t>;
 			auto operation = std::make_shared<operation_t>(self,
-				std::move(completion_handler), self->m_executor);
+				std::move(completion_handler), self->m_exec);
 			self->retain_operation(operation);
 			operation->arm_cancellation(operation);
 			const auto stream_options = *request.stream_options;
 			const auto timeout = *request.handshake_timeout;
-			detail::start_handshake_io<stream_t>(self->m_executor,
+			detail::start_handshake_io<stream_t>(self->m_exec,
 			[client = &self->m_http, request = std::move(request), diagnostics,
 			 stream_options, timeout,
 			 extended = self->m_use_extended_connect]
@@ -792,13 +792,13 @@ public:
 			} guard {m_pending_open_count};
 			const auto stream_options = *request.stream_options;
 			const auto timeout = *request.handshake_timeout;
-			stream_t result(m_executor, stream_options);
+			stream_t result(m_exec, stream_options);
 			detail::open_sync(m_http, std::move(request), diagnostics,
 				stream_options, timeout, m_use_extended_connect, result, error);
 			return result;
 		}
 		catch(...) { error = exception_error(std::current_exception()); }
-		return stream_t(m_executor, m_config.stream);
+		return stream_t(m_exec, m_config.stream);
 	}
 
 	void cancel() noexcept
@@ -814,7 +814,7 @@ public:
 			operation->cancellation.emit(asio::cancellation_type::all);
 	}
 
-	executor_type m_executor;
+	executor_type m_exec;
 	config_t m_config;
 	bool m_use_extended_connect = false;
 	http_client_t m_http;
@@ -940,7 +940,7 @@ auto basic_client<Exec>::http_client() noexcept -> http_client_t& {
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::get_executor() const noexcept -> executor_type {
-	return m_impl->m_executor;
+	return m_impl->m_exec;
 }
 
 template <core_concepts::exec Exec>

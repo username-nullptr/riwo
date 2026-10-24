@@ -26,8 +26,8 @@ public:
 	void read_some(mutable_buffer buffer, io_handler_t handler) override;
 	void write(const_buffer buffer, io_handler_t handler) override;
 
-	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer, error_code &error) noexcept override;
-	[[nodiscard]] size_t write_sync(const_buffer buffer, error_code &error) noexcept override;
+	[[nodiscard]] size_t read_some_sync(const mutable_buffer &buffer, error_code &error) noexcept override;
+	[[nodiscard]] size_t write_sync(const const_buffer &buffer, error_code &error) noexcept override;
 
 	void close(close_handler_t handler) override;
 	void cancel() noexcept override;
@@ -48,6 +48,8 @@ private:
 	class impl;
 	std::unique_ptr<impl> m_impl {};
 };
+
+using tcp_connection_ptr = std::shared_ptr<tcp_connection>;
 
 } //namespace riwo::http_exp
 

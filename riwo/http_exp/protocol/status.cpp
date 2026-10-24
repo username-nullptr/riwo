@@ -6,16 +6,8 @@
 namespace riwo::http_exp
 {
 
-class status::impl
-{
-public:
-	explicit impl(uint16_t value) : m_code(value) {}
-
-	uint16_t m_code;
-};
-
 status::status(well_known value) noexcept :
-	m_impl(std::make_shared<impl>(static_cast<uint16_t>(value)))
+	m_code(static_cast<uint16_t>(value))
 {
 }
 
@@ -23,20 +15,23 @@ status::status(uint16_t code)
 {
 	if( code < 100 or code > 599 )
 		throw std::invalid_argument("HTTP status must be in the range 100..599");
-	m_impl = std::make_shared<impl>(code);
+	m_code = code;
 }
 
-status::status(status &&other) noexcept : m_impl(std::move(other.m_impl)) {}
+status::status(status &&other) noexcept :
+	m_code(std::exchange(other.m_code, 0))
+{
+}
 
 status &status::operator=(status &&other) noexcept
 {
 	if( this != &other )
-		m_impl = std::move(other.m_impl);
+		m_code = std::exchange(other.m_code, 0);
 	return *this;
 }
 
 uint16_t status::code() const noexcept {
-	return m_impl ? m_impl->m_code : 0;
+	return m_code;
 }
 
 std::string_view status::text() const noexcept

@@ -10,6 +10,7 @@ namespace riwo::http_exp::detail
 {
 
 class stream;
+class session_pool;
 
 struct send_result
 {
@@ -50,8 +51,15 @@ public:
 		const reply_head &head) noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	[[nodiscard]] std::shared_ptr<stream> open_stream_sync(
+		const request_head &head, body_spec spec,
+		const client_config &config, error_code &error) noexcept;
+	void open_stream(const request_head &head, body_spec spec,
+		const client_config &config, open_handler_t handler);
+
+	client_config m_config;
+	std::shared_ptr<client_session> m_injected_session;
+	std::shared_ptr<session_pool> m_pool;
 };
 
 [[nodiscard]] RIWO_HTTP_EXP_API
@@ -72,42 +80,25 @@ namespace riwo::http_exp
 {
 
 template <core_concepts::exec Exec>
-class basic_client<Exec>::impl
+void basic_client<Exec>::reset_state(config_t config)
 {
-public:
-	impl(executor_t executor_value, config_t config_value,
-		std::shared_ptr<detail::client_session> session,
-		detail::connector_ptr_t connector = {}) :
-		m_executor(std::move(executor_value)), m_session(std::move(session)),
-		m_connector(std::move(connector))
-	{
-		set_config(std::move(config_value));
-	}
-
-	void set_config(config_t config)
-	{
-		m_config = std::move(config);
-		if( m_config.cookies.enabled and not m_config.cookies.jar )
-			m_config.cookies.jar = std::make_shared<cookie_jar>();
-		else if( not m_config.cookies.enabled )
-			m_config.cookies.jar.reset();
-		m_state = detail::make_client_state(asio::any_io_executor(m_executor),
-			m_config, m_session, m_connector);
-	}
-
-	executor_t m_executor;
-	config_t m_config;
-	std::shared_ptr<detail::client_session> m_session;
-	detail::connector_ptr_t m_connector;
-	std::shared_ptr<detail::client_state> m_state;
-};
+	m_config = std::move(config);
+	if( m_config.cookies.enabled and not m_config.cookies.jar )
+		m_config.cookies.jar = std::make_shared<cookie_jar>();
+	else if( not m_config.cookies.enabled )
+		m_config.cookies.jar.reset();
+	m_state = detail::make_client_state(asio::any_io_executor(m_exec),
+		m_config, m_session, m_connector);
+}
 
 template <core_concepts::exec Exec>
 basic_client<Exec>::basic_client(basic_client &&other) noexcept :
-	m_impl(std::move(other.m_impl))
+	m_exec(other.m_exec), m_config(std::move(other.m_config)),
+	m_session(std::move(other.m_session)),
+	m_connector(std::move(other.m_connector)),
+	m_state(std::move(other.m_state))
 {
-	other.m_impl = std::make_shared<impl>(m_impl->m_executor, config_t{},
-		std::shared_ptr<detail::client_session>{});
+	other.reset_state(config_t{});
 }
 
 template <core_concepts::exec Exec>
@@ -116,10 +107,12 @@ auto basic_client<Exec>::operator=(basic_client &&other) noexcept
 {
 	if( this == &other )
 		return *this;
-	auto replacement = std::make_shared<impl>(other.m_impl->m_executor,
-		config_t{}, std::shared_ptr<detail::client_session>{});
-	m_impl = std::move(other.m_impl);
-	other.m_impl = std::move(replacement);
+	m_exec = other.m_exec;
+	m_config = std::move(other.m_config);
+	m_session = std::move(other.m_session);
+	m_connector = std::move(other.m_connector);
+	m_state = std::move(other.m_state);
+	other.reset_state(config_t{});
 	return *this;
 }
 
@@ -167,10 +160,10 @@ basic_client<Exec>::basic_client(Exec0 &&executor,
 	requires (
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_t>) :
-	m_impl(std::make_shared<impl>(
-		get_executor_helper(std::forward<Exec0>(executor)),
-		std::move(config), std::move(session)))
+	m_exec(get_executor_helper(std::forward<Exec0>(executor))),
+	m_session(std::move(session))
 {
+	reset_state(std::move(config));
 }
 
 template <core_concepts::exec Exec>
@@ -180,39 +173,37 @@ basic_client<Exec>::basic_client(Exec0 &&executor,
 	config_t config)
 	requires (
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
-		core_concepts::match_sched<Exec0,executor_t>)
+		core_concepts::match_sched<Exec0,executor_t>) :
+	m_exec(get_executor_helper(std::forward<Exec0>(executor)))
 {
 	if( not connector )
 		throw std::invalid_argument(
 		"riwo::http_exp::basic_client: connector is null");
-	auto selected_executor = get_executor_helper(
-		std::forward<Exec0>(executor));
 	auto adapter = detail::make_connector_adapter(
-		asio::any_io_executor(selected_executor), std::move(connector));
-	m_impl = std::make_shared<impl>(std::move(selected_executor),
-		std::move(config), std::shared_ptr<detail::client_session>{},
-		std::move(adapter));
+		asio::any_io_executor(m_exec), std::move(connector));
+	m_connector = std::move(adapter);
+	reset_state(std::move(config));
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::get_executor() const noexcept -> executor_t {
-	return m_impl->m_executor;
+	return m_exec;
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::set_config(config_t config) -> basic_client& {
-	m_impl->set_config(std::move(config));
+	reset_state(std::move(config));
 	return *this;
 }
 
 template <core_concepts::exec Exec>
 auto basic_client<Exec>::config() const -> config_t {
-	return m_impl->m_config;
+	return m_config;
 }
 
 template <core_concepts::exec Exec>
 std::shared_ptr<cookie_jar> basic_client<Exec>::cookie_store() const noexcept {
-	return m_impl->m_state->cookie_store();
+	return m_state->cookie_store();
 }
 
 template <core_concepts::exec Exec>
@@ -223,8 +214,8 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto result = m_impl->m_state->send(std::move(request_value), token);
-		return token ? reply_t(m_impl->m_executor) : reply_t(m_impl->m_executor,
+		auto result = m_state->send(std::move(request_value), token);
+		return token ? reply_t(m_exec) : reply_t(m_exec,
 			result.selected_protocol, std::move(result.head), std::move(result.body),
 			{}, std::move(result.owner), result.max_buffered_body,
 			result.reply_protocol);
@@ -232,20 +223,20 @@ auto basic_client<Exec>::send(request request_value, Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto result = m_impl->m_state->send(std::move(request_value), error);
+		auto result = m_state->send(std::move(request_value), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<reply_t>(
 				sys_unexpected(error)));
-		return reply_t(m_impl->m_executor, result.selected_protocol,
+		return reply_t(m_exec, result.selected_protocol,
 			std::move(result.head), std::move(result.body), {},
 			std::move(result.owner), result.max_buffered_body,
 			result.reply_protocol);
 	}
 	else
 	{
-		auto state = m_impl->m_state;
-		auto executor = m_impl->m_executor;
-		return initiate_io<reply_t>(m_impl->m_executor,
+		auto state = m_state;
+		auto executor = m_exec;
+		return initiate_io<reply_t>(m_exec,
 		[state = std::move(state), executor,
 		 request_value = std::move(request_value)](auto handler) mutable
 		{
@@ -275,16 +266,16 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto result = m_impl->m_state->send(std::move(request_value), token);
+		auto result = m_state->send(std::move(request_value), token);
 		if( token )
-			return reply_t(m_impl->m_executor);
-		reply_t active(m_impl->m_executor, result.selected_protocol,
+			return reply_t(m_exec);
+		reply_t active(m_exec, result.selected_protocol,
 			result.head, result.body, {}, result.owner,
 			result.max_buffered_body, result.reply_protocol);
 		auto bytes = active.read_all(token);
 		if( token )
-			return reply_t(m_impl->m_executor);
-		return reply_t(m_impl->m_executor, result.selected_protocol,
+			return reply_t(m_exec);
+		return reply_t(m_exec, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner), result.max_buffered_body,
 			result.reply_protocol);
@@ -292,24 +283,24 @@ auto basic_client<Exec>::fetch(request request_value, Token &&token)
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto result = m_impl->m_state->send(std::move(request_value), error);
+		auto result = m_state->send(std::move(request_value), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<reply_t>(
 				sys_unexpected(error)));
-		reply_t active(m_impl->m_executor, result.selected_protocol,
+		reply_t active(m_exec, result.selected_protocol,
 			result.head, result.body, {}, result.owner,
 			result.max_buffered_body, result.reply_protocol);
 		auto bytes = active.read_all();
-		return reply_t(m_impl->m_executor, result.selected_protocol,
+		return reply_t(m_exec, result.selected_protocol,
 			std::move(result.head), std::move(result.body), std::move(bytes),
 			std::move(result.owner), result.max_buffered_body,
 			result.reply_protocol);
 	}
 	else
 	{
-		auto state = m_impl->m_state;
-		auto executor = m_impl->m_executor;
-		return initiate_io<reply_t>(m_impl->m_executor,
+		auto state = m_state;
+		auto executor = m_exec;
+		return initiate_io<reply_t>(m_exec,
 		[state = std::move(state), executor,
 		 request_value = std::move(request_value)](auto handler) mutable
 		{
@@ -355,30 +346,30 @@ auto basic_client<Exec>::open(request request_value, body_spec spec,
 		Token,error_code,exchange_t>
 {
 	auto origin = request_value.url();
-	auto cookies = m_impl->m_state->cookie_store();
+	auto cookies = m_state->cookie_store();
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		auto stream = m_impl->m_state->open(
+		auto stream = m_state->open(
 			std::move(request_value), std::move(spec), token);
-		return exchange_t(m_impl->m_executor, std::move(stream),
+		return exchange_t(m_exec, std::move(stream),
 			std::move(cookies), std::move(origin));
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto stream = m_impl->m_state->open(
+		auto stream = m_state->open(
 			std::move(request_value), std::move(spec), error);
 		if( error )
 			return expected_value_or_throw(sys_expected<exchange_t>(
 				sys_unexpected(error)));
-		return exchange_t(m_impl->m_executor, std::move(stream),
+		return exchange_t(m_exec, std::move(stream),
 			std::move(cookies), std::move(origin));
 	}
 	else
 	{
-		auto state = m_impl->m_state;
-		auto executor = m_impl->m_executor;
-		return initiate_io<exchange_t>(m_impl->m_executor,
+		auto state = m_state;
+		auto executor = m_exec;
+		return initiate_io<exchange_t>(m_exec,
 		[state = std::move(state), executor, cookies = std::move(cookies),
 		 origin = std::move(origin),
 		 request_value = std::move(request_value), spec = std::move(spec)]

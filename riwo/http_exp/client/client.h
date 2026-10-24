@@ -15,6 +15,7 @@ namespace riwo::http_exp::detail
 {
 class client_session;
 class client_state;
+class connector;
 }
 
 namespace riwo::http_exp
@@ -108,8 +109,12 @@ public:
 			Token,error_code,reply_t>;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	void reset_state(config_t config);
+	executor_t m_exec;
+	config_t m_config;
+	std::shared_ptr<detail::client_session> m_session;
+	std::shared_ptr<detail::connector> m_connector;
+	std::shared_ptr<detail::client_state> m_state;
 };
 
 using client = basic_client<>;

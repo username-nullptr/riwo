@@ -178,11 +178,11 @@ class session_pool::impl : public std::enable_shared_from_this<session_pool::imp
 public:
 	impl(executor_t executor_value, client_config config_value,
 		connector_ptr_t connector_value, session_factory_ptr_t factory_value) :
-		m_executor(std::move(executor_value)), m_config(std::move(config_value)),
+		m_exec(std::move(executor_value)), m_config(std::move(config_value)),
 		m_connector(std::move(connector_value)), m_factory(std::move(factory_value))
 	{
 		if( not m_connector )
-			m_connector = make_default_connector(m_executor);
+			m_connector = make_default_connector(m_exec);
 		if( not m_factory )
 			m_factory = make_default_session_factory();
 	}
@@ -410,7 +410,7 @@ public:
 		return result;
 	}
 
-	executor_t m_executor;
+	executor_t m_exec;
 	client_config m_config;
 	connector_ptr_t m_connector;
 	session_factory_ptr_t m_factory;
@@ -485,7 +485,7 @@ private:
 			iterator->second.pump_scheduled = true;
 		}
 		auto weak = weak_from_this();
-		asio::post(m_executor,
+		asio::post(m_exec,
 		[weak, key] {
 			if( auto self = weak.lock() )
 				self->pump(key);
@@ -694,7 +694,7 @@ private:
 		if( m_config.timeout.pool_wait.count() <= 0 )
 			return ;
 		auto weak = weak_from_this();
-		value->timer = std::make_shared<timer_t>(m_executor);
+		value->timer = std::make_shared<timer_t>(m_exec);
 		value->timer->expires_after(m_config.timeout.pool_wait);
 		value->timer->async_wait(
 		[weak, value](error_code error) {
@@ -709,7 +709,7 @@ private:
 	{
 		if( m_config.pool.idle_timeout.count() <= 0 )
 			return ;
-		value->idle_timer = std::make_shared<timer_t>(m_executor);
+		value->idle_timer = std::make_shared<timer_t>(m_exec);
 		value->idle_timer->expires_after(m_config.pool.idle_timeout);
 		auto weak = weak_from_this();
 		auto timer = value->idle_timer;
@@ -837,7 +837,7 @@ session_pool::session_pool(client_config config,
 session_pool::~session_pool() = default;
 
 auto session_pool::get_executor() const noexcept -> executor_t {
-	return m_impl->m_executor;
+	return m_impl->m_exec;
 }
 
 auto session_pool::config() const noexcept -> const client_config & {

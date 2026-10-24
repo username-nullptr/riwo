@@ -6,8 +6,9 @@
 
 #include <riwo/http_exp/body/file_handle.h>
 
-namespace riwo::http_exp
-{
+namespace riwo::http_exp { namespace detail {
+class input_file_backend;
+} //namespace detail
 
 struct file_span
 {
@@ -52,8 +53,8 @@ public:
 	[[nodiscard]] bool replayable() const noexcept;
 
 private:
-	class impl;
-	std::unique_ptr<impl> m_impl;
+	std::unique_ptr<detail::input_file_backend> m_backend {};
+	bool m_cancelled = false;
 };
 
 } //namespace riwo::http_exp

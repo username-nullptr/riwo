@@ -78,17 +78,6 @@ body_writer_state_ptr make_body_writer_state (
 } //namespace detail
 
 template <core_concepts::exec Exec>
-class RIWO_HTTP_EXP_TAPI basic_body_writer<Exec>::impl
-{
-public:
-	impl(executor_t executor_value, std::shared_ptr<detail::body_writer_state> state_value) :
-		m_state(std::move(state_value)), m_executor(std::move(executor_value)) {}
-
-	detail::body_writer_state_ptr m_state {};
-	executor_t m_executor;
-};
-
-template <core_concepts::exec Exec>
 basic_body_writer<Exec>::basic_body_writer()
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_body_writer(executor_t(riwo::get_executor()))
@@ -117,10 +106,8 @@ template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_body_writer<Exec>::basic_body_writer(Exec0 &&exec, detail::body_writer_state_ptr state)
 	requires core_concepts::match_sched<Exec0,executor_t> :
-	m_impl(std::make_shared<impl>(
-		get_executor_helper(std::forward<Exec0>(exec)),
-		state ? std::move(state) : detail::make_body_writer_state())
-	)
+	m_state(state ? std::move(state) : detail::make_body_writer_state()),
+	m_exec(get_executor_helper(std::forward<Exec0>(exec)))
 {
 
 }
@@ -128,8 +115,8 @@ basic_body_writer<Exec>::basic_body_writer(Exec0 &&exec, detail::body_writer_sta
 template <core_concepts::exec Exec>
 basic_body_writer<Exec>::~basic_body_writer()
 {
-	if( m_impl->m_state and not m_impl->m_state->ended() )
-		m_impl->m_state->cancel();
+	if( m_state and not m_state->ended() )
+		m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -137,12 +124,12 @@ template <core_concepts::tf_opt_token<error_code,size_t> Token>
 auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
-		return m_impl->m_state->write(buffer, token);
+		return m_state->write(buffer, token);
 
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		auto size = m_impl->m_state->write(buffer, error);
+		auto size = m_state->write(buffer, error);
 
 		return expected_value_or_throw(error ?
 			sys_expected<size_t>(sys_unexpected(error)) : sys_expected<size_t>(size)
@@ -150,7 +137,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->m_state;
+		auto state = m_state;
 		using token_t = std::remove_cvref_t<Token>;
 
 		if constexpr( is_detached_v<token_unbound_t<token_t>> )
@@ -159,7 +146,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 			if( buffer.size() != 0 )
 				std::memcpy(owned->data(), buffer.data(), buffer.size());
 
-			return initiate_io<size_t>(m_impl->m_executor,
+			return initiate_io<size_t>(m_exec,
 			[state = std::move(state), owned](auto handler) mutable
 			{
 				state->write(riwo::buffer(*owned),
@@ -173,7 +160,7 @@ auto basic_body_writer<Exec>::write(const_buffer buffer, Token &&token)
 		}
 		else
 		{
-			return initiate_io<size_t>(m_impl->m_executor,
+			return initiate_io<size_t>(m_exec,
 			[state = std::move(state), buffer](auto handler) mutable
 			{
 				state->write(buffer,
@@ -190,12 +177,12 @@ template <core_concepts::tf_opt_token<error_code> Token>
 auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 {
 	if constexpr( is_error_code_token_v<Token> )
-		m_impl->m_state->finish(std::move(trailers), token);
+		m_state->finish(std::move(trailers), token);
 
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
 		error_code error;
-		m_impl->m_state->finish(std::move(trailers), error);
+		m_state->finish(std::move(trailers), error);
 		if( error )
 		{
 			(void)expected_value_or_throw (
@@ -205,8 +192,8 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 	}
 	else
 	{
-		auto state = m_impl->m_state;
-		return initiate_io_void(m_impl->m_executor,
+		auto state = m_state;
+		return initiate_io_void(m_exec,
 		[state = std::move(state), trailers = std::move(trailers)](auto handler) mutable
 		{
 			state->finish(std::move(trailers),
@@ -220,19 +207,19 @@ auto basic_body_writer<Exec>::finish(fields trailers, Token &&token)
 template <core_concepts::exec Exec>
 void basic_body_writer<Exec>::cancel() noexcept
 {
-	m_impl->m_state->cancel();
+	m_state->cancel();
 }
 
 template <core_concepts::exec Exec>
 void basic_body_writer<Exec>::detach() noexcept
 {
-	m_impl->m_state = detail::make_body_writer_state();
+	m_state = detail::make_body_writer_state();
 }
 
 template <core_concepts::exec Exec>
 auto basic_body_writer<Exec>::get_executor() const noexcept -> executor_t
 {
-	return m_impl->m_executor;
+	return m_exec;
 }
 
 } //namespace riwo::http_exp

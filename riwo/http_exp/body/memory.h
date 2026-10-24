@@ -39,8 +39,9 @@ public:
 	[[nodiscard]] constexpr bool replayable() const noexcept { return true; }
 
 private:
-	class impl;
-	std::unique_ptr<impl> m_impl;
+	std::vector<std::byte> m_bytes {};
+	size_t m_offset = 0;
+	bool m_cancelled = false;
 };
 
 } //namespace riwo::http_exp

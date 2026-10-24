@@ -56,9 +56,12 @@ public:
 		using base_iterator_t = std::vector<field>::const_iterator;
 		const_iterator(base_iterator_t current, base_iterator_t end,
 			std::string_view name) noexcept;
+		void skip() noexcept;
 
-		class impl;
-		std::unique_ptr<impl> m_impl;
+		base_iterator_t m_current {};
+		base_iterator_t m_end {};
+		std::string_view m_name;
+		bool m_initialized = false;
 	};
 
 	[[nodiscard]] const_iterator begin() const noexcept;
@@ -67,8 +70,8 @@ public:
 private:
 	friend class fields;
 	field_range(const std::vector<field> &values, std::string name);
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	const std::vector<field> *m_values = nullptr;
+	std::string m_name;
 };
 
 class RIWO_HTTP_EXP_API fields
@@ -97,8 +100,7 @@ public:
 	[[nodiscard]] size_t size() const noexcept;
 
 private:
-	class impl;
-	std::unique_ptr<impl> m_impl;
+	container_t m_values;
 };
 
 } //namespace riwo::http_exp

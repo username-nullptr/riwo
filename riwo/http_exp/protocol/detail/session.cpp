@@ -79,7 +79,7 @@ public:
 		std::shared_ptr<body_writer_state> writer,
 		endpoint_t remote, endpoint_t local,
 		std::shared_ptr<void> owner, std::function<void()> cancel) :
-		m_executor(std::move(executor)), m_version(version),
+		m_exec(std::move(executor)), m_version(version),
 		m_reader(std::move(reader)), m_writer(std::move(writer)),
 		m_remote(remote), m_local(local), m_owner(std::move(owner)),
 		m_cancel(std::move(cancel))
@@ -87,7 +87,7 @@ public:
 	}
 
 	[[nodiscard]] asio::any_io_executor get_executor() const noexcept override {
-		return m_executor;
+		return m_exec;
 	}
 	[[nodiscard]] protocol selected_protocol() const noexcept override {
 		return m_version;
@@ -187,7 +187,7 @@ public:
 		error_code &error) const noexcept override { error.clear(); return m_local; }
 
 private:
-	asio::any_io_executor m_executor;
+	asio::any_io_executor m_exec;
 	protocol m_version;
 	std::shared_ptr<body_reader_state> m_reader;
 	std::shared_ptr<body_writer_state> m_writer;

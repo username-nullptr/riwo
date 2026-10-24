@@ -111,8 +111,7 @@ public:
 	operator uint16_t() const noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	uint16_t m_code = 0;
 };
 
 } //namespace riwo::http_exp

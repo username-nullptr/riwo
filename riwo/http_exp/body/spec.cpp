@@ -35,35 +35,29 @@ void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 
 } //namespace
 
-class RIWO_DECL_HIDDEN body_spec::impl
-{
-public:
-	impl(mode type, optional<uint64_t> length, trailer_spec trailers) :
-		m_type(type), m_length(length), m_trailers(std::move(trailers))
-	{
-		validate(m_type, m_trailers);
-	}
-	mode m_type {};
-	optional<uint64_t> m_length {};
-	trailer_spec m_trailers {};
-};
-
 body_spec::body_spec(mode type, optional<uint64_t> length, trailer_spec trailers) :
-	m_impl(std::make_shared<impl>(type, length, std::move(trailers)))
+	m_type(type), m_length(length), m_trailers(std::move(trailers))
 {
-
+	validate(m_type, m_trailers);
 }
 
 body_spec::body_spec(body_spec &&other) noexcept :
-	m_impl(std::move(other.m_impl))
+	m_type(std::exchange(other.m_type, mode::empty)),
+	m_length(std::exchange(other.m_length, nullopt)),
+	m_trailers(std::move(other.m_trailers))
 {
-
+	other.m_trailers.names.clear();
 }
 
 body_spec &body_spec::operator=(body_spec &&other) noexcept
 {
 	if( this != &other )
-		m_impl = std::move(other.m_impl);
+	{
+		m_type = std::exchange(other.m_type, mode::empty);
+		m_length = std::exchange(other.m_length, nullopt);
+		m_trailers = std::move(other.m_trailers);
+		other.m_trailers.names.clear();
+	}
 	return *this;
 }
 
@@ -89,18 +83,17 @@ body_spec body_spec::head(uint64_t content_length)
 
 body_spec::mode body_spec::type() const noexcept
 {
-	return m_impl ? m_impl->m_type : mode::empty;
+	return m_type;
 }
 
 optional<uint64_t> body_spec::length() const noexcept
 {
-	return m_impl ? m_impl->m_length : nullopt;
+	return m_length;
 }
 
 const body_spec::trailer_spec &body_spec::trailers() const noexcept
 {
-	static const trailer_spec empty;
-	return m_impl ? m_impl->m_trailers : empty;
+	return m_trailers;
 }
 
 } //namespace riwo::http_exp
