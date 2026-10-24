@@ -5,6 +5,7 @@
 #include <riwo/http_exp/server/application_session.h>
 #include <riwo/http_exp/protocol/compression.h>
 #include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/protocol/detail/syntax.h>
 
 namespace riwo::http_exp::detail
 {
@@ -192,17 +193,18 @@ bool server_exchange_state::prepare_compression(response_head &head,
 		return false;
 	head.headers.set("Content-Encoding", "gzip");
 	head.headers.erase("Content-Length");
-	if( const auto vary = head.headers.find_first("vary") )
+	bool varies_on_encoding = false;
+	for( const auto &vary : head.headers.find_all("vary") )
 	{
-		std::string value(*vary);
-		std::string lower = value;
-		std::ranges::transform(lower, lower.begin(), [](unsigned char ch) {
-			return static_cast<char>(std::tolower(ch));
-		});
-		if( lower.find("accept-encoding") == std::string::npos )
-			head.headers.set("Vary", value + ", Accept-Encoding");
+		const auto value = vary.value.to_string();
+		if( comma_list_contains(value, "accept-encoding") or
+			comma_list_contains(value, "*") )
+		{
+			varies_on_encoding = true;
+			break;
+		}
 	}
-	else
+	if( not varies_on_encoding )
 		head.headers.add("Vary", "Accept-Encoding");
 	if( const auto etag_value = head.headers.find_first("etag") )
 	{

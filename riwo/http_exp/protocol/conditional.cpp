@@ -2,21 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "conditional.h"
+#include "detail/syntax.h"
 
 namespace riwo::http_exp
 {
 
 namespace
 {
-
-[[nodiscard]] std::string_view trim(std::string_view value) noexcept
-{
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
-	while( not value.empty() and (value.back() == ' ' or value.back() == '\t') )
-		value.remove_suffix(1);
-	return value;
-}
 
 [[nodiscard]] optional<std::string_view> field_value(
 	const fields &values, std::string_view name) noexcept {
@@ -26,7 +18,7 @@ namespace
 template <typename Func>
 [[nodiscard]] bool any_entity_tag(std::string_view value, Func &&func) noexcept
 {
-	value = trim(value);
+	value = detail::trim_ows(value);
 	if( value == "*" )
 		return func(value);
 	size_t begin = 0;
@@ -37,7 +29,7 @@ template <typename Func>
 			quoted = not quoted;
 		if( index != value.size() and (quoted or value[index] != ',') )
 			continue;
-		const auto item = trim(value.substr(begin, index - begin));
+		const auto item = detail::trim_ows(value.substr(begin, index - begin));
 		if( not item.empty() and func(item) )
 			return true;
 		begin = index + 1;
@@ -74,7 +66,7 @@ template <typename Func>
 
 optional<entity_tag> parse_entity_tag(std::string_view value) noexcept
 {
-	value = trim(value);
+	value = detail::trim_ows(value);
 	entity_tag result;
 	if( value.starts_with("W/") )
 	{
@@ -116,7 +108,7 @@ bool weak_entity_tag_equal(std::string_view lhs,
 optional<std::chrono::system_clock::time_point> parse_http_date(
 	std::string_view value) noexcept
 {
-	value = trim(value);
+	value = detail::trim_ows(value);
 	std::tm result {};
 	bool parsed = parse_date_format(value, "%a, %d %b %Y %H:%M:%S GMT", result);
 	if( not parsed )

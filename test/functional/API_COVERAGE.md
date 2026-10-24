@@ -67,6 +67,9 @@ behavior rather than by implementation source file.
 - `http_exp/application.cpp`: public-API application workflow covering routing,
   query targets, authentication rejection and body draining, state mutation,
   case-insensitive headers, streaming events/trailers, and 404 responses.
+- `http_exp/reliability.cpp`: end-to-end response-buffer limits, header timeout
+  mapping, and successful pool recovery after an HTTP/1 or HTTP/2 exchange
+  fails.
 - `http_exp/regressions.cpp`: raw HTTP/1 wire regressions for target forms,
   OPTIONS/Allow, method rejection, 100-continue, HEAD, and invalid fields.
 - `interop/http_interop.py`: independent HTTP_EXP client/server compatibility

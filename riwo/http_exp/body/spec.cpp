@@ -35,7 +35,7 @@ void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 
 } //namespace
 
-class body_spec::impl
+class RIWO_DECL_HIDDEN body_spec::impl
 {
 public:
 	impl(mode type, optional<uint64_t> length, trailer_spec trailers) :
@@ -43,52 +43,65 @@ public:
 	{
 		validate(m_type, m_trailers);
 	}
-
-	mode m_type;
-	optional<uint64_t> m_length;
-	trailer_spec m_trailers;
+	mode m_type {};
+	optional<uint64_t> m_length {};
+	trailer_spec m_trailers {};
 };
 
-body_spec::body_spec(mode type, optional<uint64_t> length,
-	trailer_spec trailers) :
+body_spec::body_spec(mode type, optional<uint64_t> length, trailer_spec trailers) :
 	m_impl(std::make_shared<impl>(type, length, std::move(trailers)))
 {
+
 }
 
-body_spec::body_spec(body_spec &&other) noexcept : m_impl(other.m_impl) {}
+body_spec::body_spec(body_spec &&other) noexcept :
+	m_impl(std::move(other.m_impl))
+{
+	other.m_impl = std::make_shared<impl>(mode::empty, 0, trailer_spec());
+}
 
 body_spec &body_spec::operator=(body_spec &&other) noexcept
 {
 	if( this != &other )
-		m_impl = other.m_impl;
+	{
+		m_impl = std::move(other.m_impl);
+		other.m_impl = std::make_shared<impl>(mode::empty, 0, trailer_spec());
+	}
 	return *this;
 }
 
-body_spec body_spec::empty() {
+body_spec body_spec::empty()
+{
 	return {mode::empty, nullopt, {}};
 }
 
-body_spec body_spec::known(uint64_t size, trailer_spec trailers) {
+body_spec body_spec::known(uint64_t size, trailer_spec trailers)
+{
 	return {mode::known_length, size, std::move(trailers)};
 }
 
-body_spec body_spec::streaming(trailer_spec trailers) {
+body_spec body_spec::streaming(trailer_spec trailers)
+{
 	return {mode::streaming, nullopt, std::move(trailers)};
 }
 
-body_spec body_spec::head(uint64_t content_length) {
+body_spec body_spec::head(uint64_t content_length)
+{
 	return {mode::head, content_length, {}};
 }
 
-body_spec::mode body_spec::type() const noexcept {
+body_spec::mode body_spec::type() const noexcept
+{
 	return m_impl->m_type;
 }
 
-optional<uint64_t> body_spec::length() const noexcept {
+optional<uint64_t> body_spec::length() const noexcept
+{
 	return m_impl->m_length;
 }
 
-const body_spec::trailer_spec &body_spec::trailers() const noexcept {
+const body_spec::trailer_spec &body_spec::trailers() const noexcept
+{
 	return m_impl->m_trailers;
 }
 

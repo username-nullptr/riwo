@@ -2,16 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "fields.h"
+#include "detail/syntax.h"
 #include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp { namespace
 {
-
-[[nodiscard]] bool token_character(unsigned char value) noexcept
-{
-	return std::isalnum(value) != 0 or std::string_view("!#$%&'*+-.^_`|~").find(
-		static_cast<char>(value)) != std::string_view::npos;
-}
 
 [[nodiscard]] bool equal_name(std::string_view lhs, std::string_view rhs) noexcept
 {
@@ -21,7 +16,7 @@ namespace riwo::http_exp { namespace
 void validate(std::string_view name, std::string_view value)
 {
 	if( name.empty() or not std::ranges::all_of(name, [](unsigned char byte) {
-		return token_character(byte);
+		return detail::ascii_token_character(byte);
 	}))
 		throw std::invalid_argument("Invalid HTTP field name");
 

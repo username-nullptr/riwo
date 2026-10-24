@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "method.h"
+#include "detail/syntax.h"
 
 namespace riwo::http_exp { namespace
 {
@@ -23,12 +24,6 @@ constexpr std::array known_methods {
 	known_method{"TRACE",   {true,  true}},
 	known_method{"CONNECT", {false, false}}
 };
-
-[[nodiscard]] bool token_character(unsigned char value) noexcept
-{
-	return std::isalnum(value) != 0 or std::string_view("!#$%&'*+-.^_`|~").find(
-		static_cast<char>(value)) != std::string_view::npos;
-}
 
 [[nodiscard]] optional<method::well_known> identify(std::string_view token) noexcept
 {
@@ -92,7 +87,7 @@ private:
 	{
 		if( token.empty() or not std::ranges::all_of(
 			token, [](unsigned char value) {
-				return token_character(value);
+				return detail::ascii_token_character(value);
 			}) )
 			throw std::invalid_argument("Invalid HTTP method token");
 	}

@@ -82,6 +82,7 @@ ctest --test-dir build-test -L interop --output-on-failure
 cmake -S . -B build-stress -DBUILD_TESTING=ON \
   -DRIWO_BUILD_STRESS_TESTS=ON \
   -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -92,8 +93,9 @@ ctest --test-dir build-stress -L stress --output-on-failure
 CTest names are `riwo.stress.<area>`. Entries run serially at the CTest level;
 the test executables create their own internal concurrency. Coverage includes
 Core queues/locks and fallback joining threads, coroutine synchronization,
-repeated HTTP/WebSocket connections, utility lifecycle/fanout, and optional UDP
-soft-bus pressure.
+repeated HTTP/WebSocket connections, HTTP_EXP HTTP/1 pool concurrency and
+HTTP/2 multiplexing with a stalled consumer, utility lifecycle/fanout, and
+optional UDP soft-bus pressure.
 
 ## Fuzz profile
 

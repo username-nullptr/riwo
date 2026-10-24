@@ -5,6 +5,7 @@
 #include <riwo/core/utils/string_tools.h>
 #include "wire.h"
 #include <riwo/http_exp/protocol/duplex_channel.h>
+#include <riwo/http_exp/protocol/detail/syntax.h>
 #include <riwo/http_exp/server/detail/session.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 
@@ -243,21 +244,9 @@ private:
 	auto range = values.find_all(name);
 	for( auto iterator = range.begin(); iterator != range.end(); ++iterator )
 	{
-		std::string_view text = iterator->value.to_string();
-		while( not text.empty() )
-		{
-			const auto comma = text.find(',');
-			auto item = text.substr(0, comma);
-			while( not item.empty() and (item.front() == ' ' or item.front() == '\t') )
-				item.remove_prefix(1);
-			while( not item.empty() and (item.back() == ' ' or item.back() == '\t') )
-				item.remove_suffix(1);
-			if( strtls::ascii_equal(item, token, false) )
-				return true;
-			if( comma == std::string_view::npos )
-				break;
-			text.remove_prefix(comma + 1);
-		}
+		if( ::riwo::http_exp::detail::comma_list_contains(
+			iterator->value.to_string(), token) )
+			return true;
 	}
 	return false;
 }
@@ -271,13 +260,8 @@ private:
 		while( not text.empty() )
 		{
 			const auto comma = text.find(',');
-			auto item = text.substr(0, comma);
-			while( not item.empty() and
-				(item.front() == ' ' or item.front() == '\t') )
-				item.remove_prefix(1);
-			while( not item.empty() and
-				(item.back() == ' ' or item.back() == '\t') )
-				item.remove_suffix(1);
+			auto item = ::riwo::http_exp::detail::trim_ows(
+				text.substr(0, comma));
 			if( item.empty() or
 				not strtls::ascii_equal(item, "100-continue", false) )
 				return true;

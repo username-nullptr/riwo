@@ -5,7 +5,6 @@
 #define RIWO_HTTP_EXP_TRANSPORT_TLS_CONNECTION_H
 
 #include <riwo/http_exp/transport/connection.h>
-
 #if RIWO_OPENSSL_SUPPORT
 
 namespace riwo::http_exp
@@ -22,24 +21,25 @@ public:
 	explicit tls_connection(tls_socket_t socket);
 	~tls_connection() override;
 
-	[[nodiscard]] executor_t get_executor() const noexcept override;
+public:
 	void read_some(mutable_buffer buffer, io_handler_t handler) override;
 	void write(const_buffer buffer, io_handler_t handler) override;
+
+	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer, error_code &error) noexcept override;
+	[[nodiscard]] size_t write_sync(const_buffer buffer, error_code &error) noexcept override;
+
 	void close(close_handler_t handler) override;
 	void cancel() noexcept override;
+
+public:
 	void set_read_timeout(optional<timeout_t> value) override;
 	void set_write_timeout(optional<timeout_t> value) override;
+
+	[[nodiscard]] executor_t get_executor() const noexcept override;
 	[[nodiscard]] bool is_open() const noexcept override;
 
-	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,
-		error_code &error) noexcept override;
-	[[nodiscard]] size_t write_sync(const_buffer buffer,
-		error_code &error) noexcept override;
-
-	[[nodiscard]] endpoint_t remote_endpoint(
-		error_code &error) const noexcept override;
-	[[nodiscard]] endpoint_t local_endpoint(
-		error_code &error) const noexcept override;
+	[[nodiscard]] endpoint_t remote_endpoint(error_code &error) const noexcept override;
+	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept override;
 
 	[[nodiscard]] tls_socket_t &socket() noexcept;
 
@@ -51,5 +51,4 @@ private:
 } //namespace riwo::http_exp
 
 #endif //RIWO_OPENSSL_SUPPORT
-
 #endif //RIWO_HTTP_EXP_TRANSPORT_TLS_CONNECTION_H

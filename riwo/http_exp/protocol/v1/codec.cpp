@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "codec.h"
+#include <riwo/http_exp/protocol/detail/syntax.h>
 #include <riwo/http_exp/protocol/v1/detail/wire.h>
 
 namespace riwo::http_exp::v1 { namespace
@@ -42,15 +43,6 @@ namespace riwo::http_exp::v1 { namespace
 	return {static_cast<const char *>(input.data()), input.size()};
 }
 
-[[nodiscard]] std::string_view trim(std::string_view value) noexcept
-{
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
-	while( not value.empty() and (value.back() == ' ' or value.back() == '\t') )
-		value.remove_suffix(1);
-	return value;
-}
-
 [[nodiscard]] sys_expected<fields> parse_trailers(std::string_view block,
 	const message_limits &limits) noexcept
 {
@@ -78,7 +70,8 @@ namespace riwo::http_exp::v1 { namespace
 				return sys_unexpected(make_error_code(
 					errc::connection_protocol_error));
 			const auto name = line.substr(0, colon);
-			const auto value = trim(line.substr(colon + 1));
+			const auto value = ::riwo::http_exp::detail::trim_ows(
+				line.substr(colon + 1));
 			if( name.size() > limits.max_field_name_size or
 				value.size() > limits.max_field_value_size )
 				return sys_unexpected(make_error_code(errc::header_limit_exceeded));

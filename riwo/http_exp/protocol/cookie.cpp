@@ -2,34 +2,19 @@
 // SPDX-License-Identifier: MIT
 
 #include "cookie.h"
+#include "detail/syntax.h"
 #include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/error.h>
 
 namespace riwo::http_exp { namespace
 {
 
-[[nodiscard]] std::string_view trim_ows(std::string_view value) noexcept
-{
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
-	while( not value.empty() and (value.back() == ' ' or value.back() == '\t') )
-		value.remove_suffix(1);
-	return value;
-}
-
-[[nodiscard]] bool token_character(unsigned char value) noexcept
-{
-	return (value >= '0' and value <= '9') or
-		(value >= 'A' and value <= 'Z') or
-		(value >= 'a' and value <= 'z') or
-		std::string_view("!#$%&'*+-.^_`|~").find(static_cast<char>(value)) !=
-		std::string_view::npos;
-}
+using detail::trim_ows;
 
 [[nodiscard]] bool valid_token(std::string_view value) noexcept
 {
 	return not value.empty() and
-		std::ranges::all_of(value, token_character);
+		std::ranges::all_of(value, detail::ascii_token_character);
 }
 
 [[nodiscard]] bool cookie_octet(unsigned char value) noexcept

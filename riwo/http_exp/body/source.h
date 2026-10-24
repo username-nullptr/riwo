@@ -6,16 +6,11 @@
 
 #include <riwo/http_exp/global.h>
 
-namespace riwo::http_exp
-{
-
-namespace concepts
+namespace riwo::http_exp::concepts
 {
 
 template <typename Source>
-concept body_source_model = requires(
-	Source &source,
-	mutable_buffer buffer,
+concept body_source_model = requires(Source &source, mutable_buffer buffer,
 	asio::any_completion_handler<void(error_code, size_t)> read_handler_t,
 	asio::any_completion_handler<void(error_code)> rewind_handler_t)
 {
@@ -27,19 +22,22 @@ concept body_source_model = requires(
 };
 
 template <typename Source>
-concept finalizable_body_source_model = requires(
-	Source &source,
-	error_code &error,
-	asio::any_completion_handler<void(error_code)> finish_handler)
+concept body_source_model_p =
+	body_source_model<std::remove_cvref_t<Source>>;
+
+template <typename Source>
+concept finalizable_body_source_model = requires
+(Source &source, error_code &error, asio::any_completion_handler<void(error_code)> finish_handler)
 {
 	{ source.finish(error) } -> std::same_as<void>;
 	{ source.finish(std::move(finish_handler)) } -> std::same_as<void>;
 };
 
-} //namespace concepts
+template <typename Source>
+concept finalizable_body_source_model_p =
+	finalizable_body_source_model<std::remove_cvref_t<Source>>;
 
-} //namespace riwo::http_exp
-
+} // namespace riwo::http_exp::concepts
 #include <riwo/http_exp/body/file_source.h>
 #include <riwo/http_exp/body/memory.h>
 
@@ -51,7 +49,7 @@ static_assert(concepts::body_source_model<file_body_source>);
 static_assert(concepts::finalizable_body_source_model<file_body_source>);
 
 } //namespace riwo::http_exp
-
 #include <riwo/http_exp/body/detail/source.h>
+
 
 #endif //RIWO_HTTP_EXP_BODY_SOURCE_H

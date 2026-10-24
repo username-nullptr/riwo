@@ -2,21 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "file.h"
-#include <random>
+#include <riwo/http_exp/protocol/detail/multipart_utils.h>
 
 namespace riwo::http_exp
 {
 
 namespace
 {
-
-[[nodiscard]] std::string lower(std::string value)
-{
-	std::ranges::transform(value, value.begin(), [](unsigned char ch) {
-		return static_cast<char>(std::tolower(ch));
-	});
-	return value;
-}
 
 [[nodiscard]] std::chrono::system_clock::time_point system_time(
 	std::filesystem::file_time_type value)
@@ -42,13 +34,6 @@ namespace
 		std::chrono::floor<std::chrono::seconds>(*date);
 }
 
-[[nodiscard]] std::string make_boundary()
-{
-	std::random_device random;
-	return std::format("riwo-{:016x}-{:016x}",
-		static_cast<uint64_t>(random()), static_cast<uint64_t>(random()));
-}
-
 [[nodiscard]] bool path_has_prefix(const std::filesystem::path &path,
 	const std::filesystem::path &prefix) noexcept
 {
@@ -64,7 +49,7 @@ namespace
 
 std::string mime_type(std::filesystem::path path)
 {
-	const auto extension = lower(path.extension().string());
+	const auto extension = strtls::to_lower(path.extension().string());
 	static const std::unordered_map<std::string,std::string_view> values {
 		{".html", "text/html; charset=utf-8"},
 		{".htm", "text/html; charset=utf-8"},
@@ -181,18 +166,14 @@ public:
 			request.method.known() != method::head) or not range_header or
 			not if_range_matches(request, etag, modified) )
 		{
-			segments.push_back({{}, {0, file_size}, {}});
-			total_size = file_size;
-			open();
+			select_complete_representation(file_size);
 			return ;
 		}
 		auto parsed = parse_range_header(*range_header);
 		if( not parsed or parsed->unit != "bytes" or
 			parsed->ranges.size() > options.max_ranges )
 		{
-			segments.push_back({{}, {0, file_size}, {}});
-			total_size = file_size;
-			open();
+			select_complete_representation(file_size);
 			return ;
 		}
 		auto ranges = resolve_byte_ranges(*parsed, file_size);
@@ -216,9 +197,7 @@ public:
 		if( ranges.empty() or (selected_bytes > file_size and
 			selected_bytes - file_size > options.max_range_overhead) )
 		{
-			segments.push_back({{}, {0, file_size}, {}});
-			total_size = file_size;
-			open();
+			select_complete_representation(file_size);
 			return ;
 		}
 		head.status = status::partial_content;
@@ -232,7 +211,7 @@ public:
 			return ;
 		}
 
-		const auto boundary = make_boundary();
+		const auto boundary = detail::make_multipart_boundary();
 		head.headers.set("Content-Type", "multipart/byteranges; boundary=" +
 			boundary);
 		total_size = 0;
@@ -253,6 +232,13 @@ public:
 		if( closing.size() > std::numeric_limits<uint64_t>::max() - total_size )
 			throw std::length_error("multipart byte ranges are too large");
 		total_size += closing.size();
+		open();
+	}
+
+	void select_complete_representation(uint64_t file_size)
+	{
+		segments.push_back({{}, {0, file_size}, {}});
+		total_size = file_size;
 		open();
 	}
 
@@ -347,18 +333,29 @@ size_t file_response_source::read_some(mutable_buffer buffer,
 			}
 			if( m_impl->file_offset < segment.range.length )
 			{
-				const auto absolute = segment.range.offset + m_impl->file_offset;
-				if( absolute > static_cast<uint64_t>(
-					std::numeric_limits<std::streamoff>::max()) )
+				if( m_impl->file_offset == 0 )
 				{
-					error = make_system_error_code(std::errc::value_too_large);
-					return 0;
+					if( segment.range.offset > static_cast<uint64_t>(
+						std::numeric_limits<std::streamoff>::max()) )
+					{
+						error = make_system_error_code(
+							std::errc::value_too_large);
+						return 0;
+					}
+					m_impl->file.clear();
+					m_impl->file.seekg(static_cast<std::streamoff>(
+						segment.range.offset));
+					if( not m_impl->file )
+					{
+						error = make_system_error_code(std::errc::io_error);
+						return 0;
+					}
 				}
-				m_impl->file.clear();
-				m_impl->file.seekg(static_cast<std::streamoff>(absolute));
-				const auto count = static_cast<size_t>(std::min<uint64_t>(
-					buffer.size(), segment.range.length - m_impl->file_offset));
-				m_impl->file.read(output, static_cast<std::streamsize>(count));
+				const auto count = static_cast<std::streamsize>(
+					std::min<uint64_t>(segment.range.length - m_impl->file_offset,
+						std::min<uint64_t>(buffer.size(),
+							std::numeric_limits<std::streamsize>::max())));
+				m_impl->file.read(output, count);
 				const auto read = static_cast<size_t>(m_impl->file.gcount());
 				if( read == 0 )
 				{

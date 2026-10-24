@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "wire.h"
+#include <riwo/http_exp/protocol/detail/syntax.h>
 #include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp::v1::detail { namespace
@@ -11,31 +12,6 @@ namespace riwo::http_exp::v1::detail { namespace
 	std::string_view rhs) noexcept
 {
 	return strtls::ascii_equal(lhs, rhs, false);
-}
-
-[[nodiscard]] std::string_view trim(std::string_view value) noexcept
-{
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
-	while( not value.empty() and (value.back() == ' ' or value.back() == '\t') )
-		value.remove_suffix(1);
-	return value;
-}
-
-[[nodiscard]] bool contains_token(std::string_view value,
-	std::string_view token) noexcept
-{
-	while( not value.empty() )
-	{
-		auto comma = value.find(',');
-		auto item = trim(value.substr(0, comma));
-		if( equal_ci(item, token) )
-			return true;
-		if( comma == std::string_view::npos )
-			break;
-		value.remove_prefix(comma + 1);
-	}
-	return false;
 }
 
 [[nodiscard]] bool valid_host_value(std::string_view value) noexcept
@@ -144,7 +120,8 @@ struct parsed_fields
 				return sys_unexpected(make_error_code(
 					errc::connection_protocol_error));
 			auto name = line.substr(0, colon);
-			auto value = trim(line.substr(colon + 1));
+			auto value = ::riwo::http_exp::detail::trim_ows(
+				line.substr(colon + 1));
 			if( name.size() > limits.max_field_name_size or
 				value.size() > limits.max_field_value_size )
 				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
@@ -162,13 +139,15 @@ struct parsed_fields
 			}
 			else if( equal_ci(name, "Transfer-Encoding") )
 			{
-				if( not equal_ci(trim(value), "chunked") )
+				if( not equal_ci(
+					::riwo::http_exp::detail::trim_ows(value), "chunked") )
 					return sys_unexpected(make_error_code(
 						errc::connection_protocol_error));
 				result.chunked = true;
 			}
 			else if( equal_ci(name, "Connection") )
-				result.close = contains_token(value, "close");
+				result.close = ::riwo::http_exp::detail::comma_list_contains(
+					value, "close");
 			result.values.add(std::string(name), std::string(value));
 		}
 		if( result.chunked and result.content_length )
@@ -429,7 +408,7 @@ sys_expected<parsed_response> parse_response(std::string_view wire,
 sys_expected<uint64_t> parse_chunk_size(std::string_view line) noexcept
 {
 	auto semicolon = line.find(';');
-	line = trim(line.substr(0, semicolon));
+	line = ::riwo::http_exp::detail::trim_ows(line.substr(0, semicolon));
 	uint64_t result = 0;
 	auto parsed = std::from_chars(line.data(), line.data() + line.size(),
 		result, 16);

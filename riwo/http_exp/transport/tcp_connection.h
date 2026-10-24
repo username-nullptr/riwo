@@ -15,33 +15,32 @@ class RIWO_HTTP_EXP_API tcp_connection final : public connection,
 	RIWO_DISABLE_COPY_MOVE(tcp_connection)
 
 public:
-	explicit tcp_connection(
-		asio::any_io_executor executor = riwo::get_executor());
+	explicit tcp_connection(asio::any_io_executor executor = riwo::get_executor());
 	explicit tcp_connection(asio::ip::tcp::socket socket);
 	~tcp_connection() override;
 
-	[[nodiscard]] executor_t get_executor() const noexcept override;
+public:
+	void connect_sync(std::string_view host, uint16_t port, error_code &error) noexcept override;
+	void connect_async(std::string_view host, uint16_t port, close_handler_t handler) override;
+
 	void read_some(mutable_buffer buffer, io_handler_t handler) override;
 	void write(const_buffer buffer, io_handler_t handler) override;
+
+	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer, error_code &error) noexcept override;
+	[[nodiscard]] size_t write_sync(const_buffer buffer, error_code &error) noexcept override;
+
 	void close(close_handler_t handler) override;
 	void cancel() noexcept override;
+
+public:
 	void set_read_timeout(optional<timeout_t> value) override;
 	void set_write_timeout(optional<timeout_t> value) override;
+
+	[[nodiscard]] executor_t get_executor() const noexcept override;
 	[[nodiscard]] bool is_open() const noexcept override;
 
-	[[nodiscard]] size_t read_some_sync(mutable_buffer buffer,
-		error_code &error) noexcept override;
-	[[nodiscard]] size_t write_sync(const_buffer buffer,
-		error_code &error) noexcept override;
-	void connect_sync(std::string_view host, uint16_t port,
-		error_code &error) noexcept override;
-	void connect_async(std::string_view host, uint16_t port,
-		close_handler_t handler) override;
-
-	[[nodiscard]] endpoint_t remote_endpoint(
-		error_code &error) const noexcept override;
-	[[nodiscard]] endpoint_t local_endpoint(
-		error_code &error) const noexcept override;
+	[[nodiscard]] endpoint_t remote_endpoint(error_code &error) const noexcept override;
+	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept override;
 
 	[[nodiscard]] asio::ip::tcp::socket &socket() noexcept;
 
@@ -51,5 +50,6 @@ private:
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_TRANSPORT_TCP_CONNECTION_H

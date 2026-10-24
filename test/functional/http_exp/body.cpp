@@ -4,6 +4,7 @@
 #include "test.h"
 
 #include <riwo/http_exp.h>
+#include <riwo/http_exp/body/detail/source_transfer.h>
 #include <riwo/http_exp/protocol/detail/session.h>
 #include <cstdio>
 #include <fstream>
@@ -106,6 +107,37 @@ private:
 	std::optional<read_handler_t> pending_;
 };
 
+class oversized_reader_adapter final : public http::detail::body_reader_adapter
+{
+public:
+	http::body_read_result read_some_sync(riwo::mutable_buffer buffer,
+		riwo::error_code &error) noexcept override
+	{
+		error.clear();
+		return {buffer.size() + 1, false};
+	}
+
+	void read_some(riwo::mutable_buffer buffer, read_handler_t handler) override
+	{
+		std::move(handler)(riwo::error_code{},
+			http::body_read_result{buffer.size() + 1, false});
+	}
+
+	http::fields trailers_sync(riwo::error_code &error) noexcept override
+	{
+		error.clear();
+		return {};
+	}
+
+	void trailers(trailers_handler_t handler) override {
+		std::move(handler)(riwo::error_code{}, http::fields{});
+	}
+
+	void cancel() noexcept override { cancelled = true; }
+
+	bool cancelled = false;
+};
+
 class fake_writer_adapter final : public http::detail::body_writer_adapter
 {
 public:
@@ -181,6 +213,35 @@ public:
 	bool cancelled_ = false;
 	riwo::const_buffer pending_buffer_;
 	std::optional<write_handler_t> pending_;
+};
+
+struct oversized_body_source
+{
+	[[nodiscard]] riwo::optional<uint64_t> size() const noexcept { return {}; }
+	[[nodiscard]] bool replayable() const noexcept { return false; }
+
+	[[nodiscard]] size_t read_some(riwo::mutable_buffer buffer,
+		riwo::error_code &error) noexcept
+	{
+		error.clear();
+		return buffer.size() + 1;
+	}
+
+	void read_some(riwo::mutable_buffer buffer,
+		asio::any_completion_handler<void(riwo::error_code,size_t)> handler)
+	{
+		std::move(handler)(riwo::error_code{}, buffer.size() + 1);
+	}
+
+	void finish(riwo::error_code &error) noexcept { error.clear(); }
+	void finish(asio::any_completion_handler<void(riwo::error_code)> handler) {
+		std::move(handler)(riwo::error_code{});
+	}
+	void rewind(asio::any_completion_handler<void(riwo::error_code)> handler) {
+		std::move(handler)(http::make_error_code(
+			http::errc::operation_not_supported));
+	}
+	void cancel() noexcept {}
 };
 
 class fake_stream final : public http::detail::stream
@@ -379,6 +440,32 @@ void built_in_sources()
 		RIWO_TEST_CHECK_EQ(response.read_some(
 			riwo::buffer(file_data), error), 0U);
 		RIWO_TEST_CHECK(!error);
+	}
+	{
+		http::request_head request;
+		request.headers.add("Range", "bytes=1-7");
+		http::file_response_source response(path, request);
+		RIWO_TEST_CHECK_EQ(response.response().status,
+			http::status::partial_content);
+		RIWO_TEST_CHECK_EQ(response.size().value(), 7U);
+		std::array<char,3> chunk {};
+		std::string contents;
+		for(;;)
+		{
+			const auto count = response.read_some(riwo::buffer(chunk), error);
+			if( error )
+				break;
+			contents.append(chunk.data(), count);
+		}
+		RIWO_TEST_CHECK_EQ(error,
+			asio::error::make_error_code(asio::error::eof));
+		RIWO_TEST_CHECK_EQ(contents, "ile-dat");
+		response.rewind([&](riwo::error_code value) { error = value; });
+		RIWO_TEST_CHECK(!error);
+		RIWO_TEST_CHECK_EQ(response.read_some(
+			riwo::buffer(chunk), error), chunk.size());
+		RIWO_TEST_CHECK(!error);
+		RIWO_TEST_CHECK_EQ(std::string_view(chunk.data(), chunk.size()), "ile");
 	}
 	{
 		std::ifstream input(path, std::ios::binary);
@@ -613,6 +700,39 @@ void reader_state_machine()
 	RIWO_TEST_CHECK(second);
 	overlap_adapter->complete();
 	RIWO_TEST_CHECK(first);
+
+	auto oversized_adapter = std::make_shared<oversized_reader_adapter>();
+	auto oversized = http::detail::make_body_reader_state(
+		oversized_adapter, true);
+	read = oversized->read_some(riwo::buffer(data), error);
+	RIWO_TEST_CHECK_EQ(read.bytes, data.size() + 1);
+	RIWO_TEST_CHECK_EQ(error,
+		riwo::make_system_error_code(std::errc::io_error));
+	RIWO_TEST_CHECK(oversized_adapter->cancelled);
+
+	auto async_oversized_adapter =
+		std::make_shared<oversized_reader_adapter>();
+	auto async_oversized = http::detail::make_body_reader_state(
+		async_oversized_adapter, true);
+	bool invalid_read_completed = false;
+	async_oversized->read_some(riwo::buffer(data),
+	[&](riwo::error_code value, http::body_read_result result) {
+		RIWO_TEST_CHECK_EQ(value,
+			riwo::make_system_error_code(std::errc::io_error));
+		RIWO_TEST_CHECK_EQ(result.bytes, data.size() + 1);
+		invalid_read_completed = true;
+	});
+	RIWO_TEST_CHECK(invalid_read_completed);
+	RIWO_TEST_CHECK(async_oversized_adapter->cancelled);
+
+	auto discard_oversized_adapter =
+		std::make_shared<oversized_reader_adapter>();
+	auto discard_oversized = http::detail::make_body_reader_state(
+		discard_oversized_adapter, true);
+	discard_oversized->discard(error);
+	RIWO_TEST_CHECK_EQ(error,
+		riwo::make_system_error_code(std::errc::io_error));
+	RIWO_TEST_CHECK(discard_oversized_adapter->cancelled);
 }
 
 void writer_state_machine()
@@ -713,6 +833,36 @@ void writer_state_machine()
 	RIWO_TEST_CHECK(second);
 	overlap_adapter->complete();
 	RIWO_TEST_CHECK(first);
+}
+
+void source_transfer_guards()
+{
+	auto adapter = std::make_shared<fake_writer_adapter>();
+	auto writer = http::detail::make_body_writer_state(adapter,
+		http::body_spec::streaming(), true);
+	auto source = http::detail::make_body_source(oversized_body_source{});
+	riwo::error_code error;
+	RIWO_TEST_CHECK_EQ(http::detail::transfer_source_sync(
+		*source, *writer, {}, error), 0U);
+	RIWO_TEST_CHECK_EQ(error,
+		riwo::make_system_error_code(std::errc::io_error));
+	RIWO_TEST_CHECK(adapter->bytes_.empty());
+
+	auto async_adapter = std::make_shared<fake_writer_adapter>();
+	auto async_writer = http::detail::make_body_writer_state(async_adapter,
+		http::body_spec::streaming(), true);
+	auto async_source = http::detail::make_body_source(oversized_body_source{});
+	bool completed = false;
+	http::detail::transfer_source(std::move(async_source),
+		std::move(async_writer), {},
+	[&](riwo::error_code async_error, uint64_t transferred) {
+		RIWO_TEST_CHECK_EQ(async_error,
+			riwo::make_system_error_code(std::errc::io_error));
+		RIWO_TEST_CHECK_EQ(transferred, 0U);
+		completed = true;
+	});
+	RIWO_TEST_CHECK(completed);
+	RIWO_TEST_CHECK(async_adapter->bytes_.empty());
 }
 
 void client_open_and_metadata()
@@ -1113,6 +1263,7 @@ int main(int argc, const char *const argv[])
 		{"file sinks", file_sinks},
 		{"body reader state machine", reader_state_machine},
 		{"body writer state machine", writer_state_machine},
+		{"source transfer guards", source_transfer_guards},
 		{"client open metadata", client_open_and_metadata},
 		{"reply convenience operations", reply_convenience_operations},
 		{"server exchange state machine", server_exchange_state_machine}

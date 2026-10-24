@@ -35,8 +35,8 @@ public:
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_writer();
-	[[nodiscard]] executor_t get_executor() const noexcept;
 
+public:
 	// Asynchronous writes borrow the buffer until completion. Detached writes
 	// make an owned copy because the caller has no completion lifetime barrier.
 	template <core_concepts::tf_opt_token<error_code,size_t> Token = use_sync_t>
@@ -49,6 +49,8 @@ public:
 	// Releases this facade without cancelling the shared body state. Used when
 	// an exchange transfers ownership to a protocol-neutral duplex channel.
 	void detach() noexcept;
+
+	[[nodiscard]] executor_t get_executor() const noexcept;
 
 private:
 	class impl;

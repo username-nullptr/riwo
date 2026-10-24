@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "compression.h"
+#include "detail/syntax.h"
+#include <riwo/core/utils/string_tools.h>
 
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
 # include <zlib.h>
@@ -13,27 +15,14 @@ namespace riwo::http_exp
 namespace
 {
 
-[[nodiscard]] std::string_view trim(std::string_view value) noexcept
-{
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
-	while( not value.empty() and (value.back() == ' ' or value.back() == '\t') )
-		value.remove_suffix(1);
-	return value;
-}
-
 [[nodiscard]] std::string lower(std::string_view value)
 {
-	std::string result(value);
-	std::ranges::transform(result, result.begin(), [](unsigned char ch) {
-		return static_cast<char>(std::tolower(ch));
-	});
-	return result;
+	return strtls::to_lower(value);
 }
 
 [[nodiscard]] optional<double> quality(std::string_view value) noexcept
 {
-	value = trim(value);
+	value = detail::trim_ows(value);
 	if( value.empty() or (value.front() != '0' and value.front() != '1') )
 		return {};
 	const auto whole = value.front();
@@ -74,7 +63,7 @@ double content_coding_quality(std::string_view value,
 {
 	try
 	{
-		const auto wanted = lower(trim(coding));
+		const auto wanted = lower(detail::trim_ows(coding));
 		optional<double> explicit_value;
 		optional<double> wildcard;
 		size_t begin = 0;
@@ -84,15 +73,15 @@ double content_coding_quality(std::string_view value,
 			auto item = value.substr(begin, comma == std::string_view::npos ?
 				value.size() - begin : comma - begin);
 			const auto semicolon = item.find(';');
-			const auto name = lower(trim(item.substr(0, semicolon)));
+			const auto name = lower(detail::trim_ows(item.substr(0, semicolon)));
 			double result = 1.;
 			bool valid = not name.empty();
 			if( semicolon != std::string_view::npos )
 			{
-				auto parameter = trim(item.substr(semicolon + 1));
+				auto parameter = detail::trim_ows(item.substr(semicolon + 1));
 				const auto equal = parameter.find('=');
 				if( equal == std::string_view::npos or
-					lower(trim(parameter.substr(0, equal))) != "q" )
+					lower(detail::trim_ows(parameter.substr(0, equal))) != "q" )
 					valid = false;
 				else if( auto parsed = quality(parameter.substr(equal + 1)) )
 					result = *parsed;
@@ -120,7 +109,8 @@ bool is_precompressed_mime_type(std::string_view value) noexcept
 {
 	try
 	{
-		const auto type = lower(trim(value.substr(0, value.find(';'))));
+		const auto type = lower(detail::trim_ows(
+			value.substr(0, value.find(';'))));
 		if( type.empty() or type == "application/octet-stream" )
 			return true;
 		if( (type.starts_with("image/") and type != "image/svg+xml") or
@@ -139,7 +129,8 @@ bool is_compressible_mime_type(std::string_view value) noexcept
 {
 	try
 	{
-		const auto type = lower(trim(value.substr(0, value.find(';'))));
+		const auto type = lower(detail::trim_ows(
+			value.substr(0, value.find(';'))));
 		if( is_precompressed_mime_type(type) )
 			return false;
 		return type.starts_with("text/") or type == "image/svg+xml" or

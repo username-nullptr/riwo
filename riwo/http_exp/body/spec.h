@@ -17,14 +17,16 @@ public:
 		std::vector<std::string> names;
 		friend bool operator==(const trailer_spec &, const trailer_spec &) = default;
 	};
-
-	enum class mode { empty, known_length, streaming, head };
-
+	enum class mode {
+		empty, known_length, streaming, head
+	};
 	body_spec(const body_spec &) = default;
 	body_spec &operator=(const body_spec &) = default;
+
 	body_spec(body_spec &&other) noexcept;
 	body_spec &operator=(body_spec &&other) noexcept;
 
+public:
 	[[nodiscard]] static body_spec empty();
 	[[nodiscard]] static body_spec known(uint64_t size, trailer_spec trailers = {});
 	[[nodiscard]] static body_spec streaming(trailer_spec trailers = {});
@@ -35,7 +37,9 @@ public:
 	[[nodiscard]] const trailer_spec &trailers() const noexcept;
 
 private:
-	body_spec(mode type, optional<uint64_t> length, trailer_spec trailers);
+	body_spec(mode type,
+		optional<uint64_t> length, trailer_spec trailers
+	);
 	class impl;
 	std::shared_ptr<impl> m_impl;
 };

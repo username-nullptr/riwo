@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_SERVER_DETAIL_EXCHANGE_H
 
 #include <riwo/http_exp/body/detail/encoder.h>
+#include <riwo/http_exp/body/detail/source_transfer.h>
 
 namespace riwo::http_exp::detail
 {
@@ -477,65 +478,15 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 	{
 		error_code error;
 		m_impl->m_state->respond(std::move(head), spec, error);
-		std::array<std::byte,8192> buffer;
-		uint64_t total = 0;
-		while( not error and not head_only )
-		{
-			if( length and total == *length )
-				break;
-			auto target = riwo::buffer(buffer);
-			if( length )
-				target = mutable_buffer(target.data(), static_cast<size_t>(
-					std::min<uint64_t>(target.size(), *length - total)));
-			const auto read = source->read_some_sync(target, error);
-			if( error == asio::error::make_error_code(asio::error::eof) )
-			{
-				if( length )
-					error = make_error_code(errc::body_length_mismatch);
-				else
-					error.clear();
-				break;
-			}
-			if( error )
-				break;
-			if( read == 0 or read > target.size() )
-			{
-				error = read == 0 ?
-					make_error_code(errc::body_length_mismatch) :
-					make_system_error_code(std::errc::io_error);
-				break;
-			}
-			size_t offset = 0;
-			while( offset != read )
-			{
-				const auto remaining = read - offset;
-				const auto written = m_impl->m_response_body->write(
-					const_buffer(static_cast<const std::byte*>(target.data()) + offset,
-						remaining), error);
-				if( written > remaining )
-				{
-					error = make_system_error_code(std::errc::io_error);
-					break;
-				}
-				if( written > std::numeric_limits<uint64_t>::max() - total )
-				{
-					error = make_system_error_code(std::errc::value_too_large);
-					break;
-				}
-				offset += written;
-				total += written;
-				if( error or written == 0 )
-				{
-					if( not error )
-						error = make_system_error_code(std::errc::io_error);
-					break;
-				}
-			}
-		}
-		if( not error )
+		if( not error and head_only )
 			source->finish_sync(error);
-		if( not error and not head_only )
-			m_impl->m_response_body->finish({}, error);
+		else if( not error )
+		{
+			detail::source_transfer_options options {.length = length};
+			(void)detail::transfer_source_sync(*source,
+				*m_impl->m_state->response_body(),
+				std::move(options), error);
+		}
 		if( error )
 		{
 			source->cancel();
@@ -557,10 +508,6 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			body_spec spec = body_spec::empty();
 			optional<uint64_t> length;
 			bool head_only = false;
-			std::array<std::byte,8192> buffer;
-			size_t chunk_size = 0;
-			size_t chunk_offset = 0;
-			uint64_t total = 0;
 			asio::any_completion_handler<void(error_code)> handler;
 
 			void start()
@@ -571,123 +518,31 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 					if( error )
 						self->fail(error);
 					else if( self->head_only )
-						self->finish_source();
+						self->finish_head_source();
 					else
-						self->read_next();
+						self->transfer_body_source();
 				});
 			}
 
-			void read_next()
-			{
-				if( length and total == *length )
-				{
-					finish_source();
-					return ;
-				}
-				auto target = riwo::buffer(buffer);
-				if( length )
-					target = mutable_buffer(target.data(), static_cast<size_t>(
-						std::min<uint64_t>(target.size(), *length - total)));
-				auto self = this->shared_from_this();
-				source->read_some(target,
-				[self = std::move(self), target]
-				(error_code error, size_t size) mutable {
-					self->read_complete(target, error, size);
-				});
-			}
-
-			void read_complete(mutable_buffer target,
-				error_code error, size_t size)
-			{
-				if( error == asio::error::make_error_code(asio::error::eof) )
-				{
-					if( length )
-						fail(make_error_code(errc::body_length_mismatch));
-					else
-						finish_source();
-					return ;
-				}
-				if( error )
-				{
-					fail(error);
-					return ;
-				}
-				if( size == 0 or size > target.size() )
-				{
-					fail(size == 0 ?
-						make_error_code(errc::body_length_mismatch) :
-						make_system_error_code(std::errc::io_error));
-					return ;
-				}
-				chunk_size = size;
-				chunk_offset = 0;
-				write_next();
-			}
-
-			void write_next()
-			{
-				auto self = this->shared_from_this();
-				owner->m_response_body->write(const_buffer(
-					buffer.data() + chunk_offset, chunk_size - chunk_offset),
-				[self = std::move(self)]
-				(error_code write_error, size_t written) mutable {
-					self->write_complete(write_error, written);
-				});
-			}
-
-			void write_complete(error_code error, size_t written)
-			{
-				const auto remaining = chunk_size - chunk_offset;
-				if( written > remaining )
-				{
-					fail(make_system_error_code(std::errc::io_error));
-					return ;
-				}
-				if( written > std::numeric_limits<uint64_t>::max() - total )
-				{
-					fail(make_system_error_code(std::errc::value_too_large));
-					return ;
-				}
-				chunk_offset += written;
-				total += written;
-				if( error )
-				{
-					fail(error);
-					return ;
-				}
-				if( written == 0 )
-				{
-					fail(make_system_error_code(std::errc::io_error));
-					return ;
-				}
-				if( chunk_offset != chunk_size )
-					write_next();
-				else
-					read_next();
-			}
-
-			void finish_source()
+			void finish_head_source()
 			{
 				auto self = this->shared_from_this();
 				source->finish(
 				[self = std::move(self)](error_code error) mutable {
 					if( error )
-					{
 						self->fail(error);
-						return ;
-					}
-					if( self->head_only )
-						self->complete({});
 					else
-						self->finish_response();
+						self->complete({});
 				});
 			}
 
-			void finish_response()
+			void transfer_body_source()
 			{
 				auto self = this->shared_from_this();
-				owner->m_response_body->finish({},
-				[self = std::move(self)](error_code error) mutable {
+				detail::source_transfer_options options {.length = length};
+				detail::transfer_source(source, owner->m_state->response_body(),
+					std::move(options),
+				[self = std::move(self)](error_code error, uint64_t) mutable {
 					if( error )
 						self->fail(error);
 					else

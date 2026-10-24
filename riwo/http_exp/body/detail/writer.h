@@ -6,7 +6,7 @@
 
 #include <riwo/http_exp/error.h>
 
-namespace riwo::http_exp::detail
+namespace riwo::http_exp { namespace detail
 {
 
 class RIWO_HTTP_EXP_API body_writer_adapter
@@ -16,11 +16,11 @@ class RIWO_HTTP_EXP_API body_writer_adapter
 public:
 	using write_handler_t = asio::any_completion_handler<void(error_code,size_t)>;
 	using finish_handler_t = asio::any_completion_handler<void(error_code)>;
-	using ptr_t = std::shared_ptr<body_writer_adapter>;
 
 	body_writer_adapter() = default;
 	virtual ~body_writer_adapter();
 
+public:
 	[[nodiscard]] virtual size_t write_sync(const_buffer buffer, error_code &error) noexcept = 0;
 	virtual void write(const_buffer buffer, write_handler_t handler) = 0;
 
@@ -29,7 +29,8 @@ public:
 
 	virtual void cancel() noexcept = 0;
 };
-using body_writer_adapter_ptr = body_writer_adapter::ptr_t;
+
+using body_writer_adapter_ptr = std::shared_ptr<body_writer_adapter>;
 
 class RIWO_HTTP_EXP_API body_writer_state final :
 	public std::enable_shared_from_this<body_writer_state>
@@ -46,8 +47,9 @@ public:
 	);
 	~body_writer_state();
 
+public:
 	[[nodiscard]] size_t write(const const_buffer &buffer, error_code &error) noexcept;
-	void write(const_buffer buffer, write_handler_t handler);
+	void write(const const_buffer &buffer, write_handler_t handler);
 
 	void finish(fields trailers, error_code &error) noexcept;
 	void finish(fields trailers, finish_handler_t handler);
@@ -63,6 +65,7 @@ private:
 	class impl;
 	std::shared_ptr<impl> m_impl;
 };
+
 using body_writer_state_ptr = body_writer_state::ptr_t;
 
 [[nodiscard]] RIWO_HTTP_EXP_API
@@ -72,10 +75,7 @@ body_writer_state_ptr make_body_writer_state (
 	bool ready = false
 );
 
-} //namespace riwo::http_exp::detail
-
-namespace riwo::http_exp
-{
+} //namespace detail
 
 template <core_concepts::exec Exec>
 class RIWO_HTTP_EXP_TAPI basic_body_writer<Exec>::impl
@@ -130,12 +130,6 @@ basic_body_writer<Exec>::~basic_body_writer()
 {
 	if( m_impl->m_state and not m_impl->m_state->ended() )
 		m_impl->m_state->cancel();
-}
-
-template <core_concepts::exec Exec>
-auto basic_body_writer<Exec>::get_executor() const noexcept -> executor_t
-{
-	return m_impl->m_executor;
 }
 
 template <core_concepts::exec Exec>
@@ -233,6 +227,12 @@ template <core_concepts::exec Exec>
 void basic_body_writer<Exec>::detach() noexcept
 {
 	m_impl->m_state = detail::make_body_writer_state();
+}
+
+template <core_concepts::exec Exec>
+auto basic_body_writer<Exec>::get_executor() const noexcept -> executor_t
+{
+	return m_impl->m_executor;
 }
 
 } //namespace riwo::http_exp

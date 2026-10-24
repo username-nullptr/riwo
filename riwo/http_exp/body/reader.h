@@ -6,13 +6,9 @@
 
 #include <riwo/http_exp/protocol/fields.h>
 
-namespace riwo::http_exp::detail
-{
+namespace riwo::http_exp { namespace detail {
 class body_reader_state;
-}
-
-namespace riwo::http_exp
-{
+} //namespace detail
 
 struct body_read_result
 {
@@ -36,37 +32,32 @@ public:
 	explicit basic_body_reader(Exec0 &&executor)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	explicit basic_body_reader(
-		std::shared_ptr<detail::body_reader_state> state)
+	explicit basic_body_reader(std::shared_ptr<detail::body_reader_state> state)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	basic_body_reader(Exec0 &&executor,
-		std::shared_ptr<detail::body_reader_state> state)
+	basic_body_reader(Exec0 &&executor, std::shared_ptr<detail::body_reader_state> state)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	~basic_body_reader();
 
-	[[nodiscard]] executor_t get_executor() const noexcept;
-	[[nodiscard]] bool is_finished() const noexcept;
+public:
+	template <core_concepts::dis_detached_tf_opt_token<error_code,body_read_result> Token = use_sync_t>
+	[[nodiscard]] auto read_some(mutable_buffer buffer, Token &&token = {});
 
-	template <typename Token = use_sync_t>
-	[[nodiscard]] auto read_some(mutable_buffer buffer, Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<
-			Token,error_code,body_read_result>;
+	template <core_concepts::tf_opt_token<error_code> Token = use_sync_t>
+	auto discard(Token &&token = {});
 
-	template <typename Token = use_sync_t>
-	auto discard(Token &&token = {})
-		requires core_concepts::tf_opt_token<Token,error_code>;
-
-	template <typename Token = use_sync_t>
-	[[nodiscard]] auto trailers(Token &&token = {})
-		requires core_concepts::dis_detached_tf_opt_token<Token,error_code,fields>;
+	template <core_concepts::dis_detached_tf_opt_token<error_code,fields> Token = use_sync_t>
+	[[nodiscard]] auto trailers(Token &&token = {});
 
 	void cancel() noexcept;
 	// Releases this facade without cancelling the shared body state. Used when
 	// an exchange transfers ownership to a protocol-neutral duplex channel.
 	void detach() noexcept;
+
+	[[nodiscard]] executor_t get_executor() const noexcept;
+	[[nodiscard]] bool is_finished() const noexcept;
 
 private:
 	class impl;
@@ -76,7 +67,7 @@ private:
 using body_reader = basic_body_reader<>;
 
 } //namespace riwo::http_exp
-
 #include <riwo/http_exp/body/detail/reader.h>
+
 
 #endif //RIWO_HTTP_EXP_BODY_READER_H

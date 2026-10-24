@@ -52,6 +52,23 @@ struct exception_middleware final : http::middleware
 
 void semantic_helpers()
 {
+	const std::string non_ascii_token {'X', '-', static_cast<char>(0xE9)};
+	bool invalid_field_rejected = false;
+	try {
+		http::fields invalid;
+		invalid.add(non_ascii_token, "value");
+	}
+	catch(const std::invalid_argument&) {
+		invalid_field_rejected = true;
+	}
+	RIWO_TEST_CHECK(invalid_field_rejected);
+	bool invalid_method_rejected = false;
+	try { (void)http::method(non_ascii_token); }
+	catch(const std::invalid_argument&) {
+		invalid_method_rejected = true;
+	}
+	RIWO_TEST_CHECK(invalid_method_rejected);
+
 	auto query = http::parse_query_parameters("q=one+two&q=three&empty=");
 	RIWO_TEST_CHECK(query.has_value());
 	RIWO_TEST_CHECK_EQ(query->find_first("q").value(), "one two");
@@ -59,6 +76,8 @@ void semantic_helpers()
 
 	auto range = http::parse_range_header("bytes=0-2,-2");
 	RIWO_TEST_CHECK(range.has_value());
+	RIWO_TEST_CHECK(!http::parse_range_header(
+		std::string("byt") + static_cast<char>(0xE9) + "s=0-1").has_value());
 	auto resolved = http::resolve_byte_ranges(*range, 10);
 	RIWO_TEST_CHECK_EQ(resolved.size(), 2U);
 	RIWO_TEST_CHECK_EQ(http::format_content_range(resolved.front(), 10),
@@ -84,6 +103,14 @@ void semantic_helpers()
 	RIWO_TEST_CHECK_EQ(parts->size(), 2U);
 	RIWO_TEST_CHECK_EQ(parts->back().filename, "a.txt");
 	RIWO_TEST_CHECK_EQ(parts->back().data, "abc");
+	auto form_boundary = http::multipart_boundary(
+		"Multipart/Form-Data; charset=utf-8; boundary=\"riwo-boundary\"");
+	RIWO_TEST_CHECK(form_boundary.has_value());
+	RIWO_TEST_CHECK_EQ(*form_boundary, "riwo-boundary");
+	auto ranges_boundary = http::parse_multipart_byte_ranges_boundary(
+		"Multipart/ByteRanges; boundary=\"riwo-ranges\"");
+	RIWO_TEST_CHECK(ranges_boundary.has_value());
+	RIWO_TEST_CHECK_EQ(*ranges_boundary, "riwo-ranges");
 
 	RIWO_TEST_CHECK_EQ(http::content_coding_quality(
 		"br;q=0.4, gzip;q=0.8", "gzip"), 0.8);
@@ -191,6 +218,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		{
 			http::response_head head;
 			head.headers.add("Content-Type", "text/plain");
+			head.headers.add("Vary", "X-Accept-Encoding-Suffix");
 			const std::string body(2048, 'z');
 			co_await exchange.respond(std::move(head), body,
 				riwo::use_awaitable);
@@ -331,8 +359,16 @@ void application_compatibility_for(http::protocol_requirement requirement,
 			std::move(compression_request), riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(compressed_reply.headers().find_first(
 			"content-encoding").value(), "gzip");
-		RIWO_TEST_CHECK(compressed_reply.headers().find_first("vary")->find(
-			"Accept-Encoding") != std::string_view::npos);
+		size_t vary_count = 0;
+		bool varies_on_encoding = false;
+		for( const auto &vary : compressed_reply.headers().find_all("vary") )
+		{
+			++vary_count;
+			if( vary.value.to_string() == "Accept-Encoding" )
+				varies_on_encoding = true;
+		}
+		RIWO_TEST_CHECK_EQ(vary_count, 2U);
+		RIWO_TEST_CHECK(varies_on_encoding);
 		auto decoded = http::gzip_decompress(body_text(compressed_reply));
 		RIWO_TEST_CHECK(decoded.has_value());
 		RIWO_TEST_CHECK_EQ(decoded->size(), 2048U);

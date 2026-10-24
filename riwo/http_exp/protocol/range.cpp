@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "range.h"
+#include "detail/multipart_utils.h"
+#include "detail/syntax.h"
 
 namespace riwo::http_exp
 {
@@ -11,22 +13,6 @@ namespace
 
 [[nodiscard]] error_code invalid() noexcept {
 	return make_system_error_code(std::errc::invalid_argument);
-}
-
-[[nodiscard]] std::string_view trim(std::string_view value) noexcept
-{
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
-	while( not value.empty() and (value.back() == ' ' or value.back() == '\t') )
-		value.remove_suffix(1);
-	return value;
-}
-
-[[nodiscard]] bool token_char(unsigned char value) noexcept
-{
-	constexpr std::string_view extra = "!#$%&'*+-.^_`|~";
-	return std::isalnum(value) or extra.find(static_cast<char>(value)) !=
-		std::string_view::npos;
 }
 
 [[nodiscard]] sys_expected<uint64_t> decimal(std::string_view value) noexcept
@@ -42,15 +28,6 @@ namespace
 	return result;
 }
 
-[[nodiscard]] std::string lower(std::string_view value)
-{
-	std::string result(value);
-	std::ranges::transform(result, result.begin(), [](unsigned char ch) {
-		return static_cast<char>(std::tolower(ch));
-	});
-	return result;
-}
-
 } //namespace
 
 uint64_t content_range::length() const noexcept {
@@ -61,26 +38,28 @@ sys_expected<range_specifier> parse_range_header(std::string_view value) noexcep
 {
 	try
 	{
-		value = trim(value);
+		value = detail::trim_ows(value);
 		const auto equal = value.find('=');
 		if( equal == std::string_view::npos )
 			return sys_unexpected(invalid());
-		const auto unit = trim(value.substr(0, equal));
+		const auto unit = detail::trim_ows(value.substr(0, equal));
 		if( unit.empty() or std::ranges::any_of(unit,
-			[](unsigned char ch) { return not token_char(ch); }) )
+			[](unsigned char ch) {
+				return not detail::ascii_token_character(ch);
+			}) )
 			return sys_unexpected(invalid());
-		range_specifier result {lower(unit), {}};
+		range_specifier result {strtls::to_lower(unit), {}};
 		value.remove_prefix(equal + 1);
 		for(;;)
 		{
 			const auto comma = value.find(',');
-			const auto item = trim(value.substr(0, comma));
+			const auto item = detail::trim_ows(value.substr(0, comma));
 			const auto dash = item.find('-');
 			if( item.empty() or dash == std::string_view::npos or
 				item.find('-', dash + 1) != std::string_view::npos )
 				return sys_unexpected(invalid());
-			const auto first = trim(item.substr(0, dash));
-			const auto last = trim(item.substr(dash + 1));
+			const auto first = detail::trim_ows(item.substr(0, dash));
+			const auto last = detail::trim_ows(item.substr(dash + 1));
 			byte_range_spec spec;
 			if( first.empty() )
 			{
@@ -162,17 +141,19 @@ sys_expected<content_range> parse_content_range(std::string_view value) noexcept
 {
 	try
 	{
-		value = trim(value);
+		value = detail::trim_ows(value);
 		const auto space = value.find_first_of(" \t");
 		if( space == std::string_view::npos )
 			return sys_unexpected(invalid());
 		const auto unit = value.substr(0, space);
 		if( unit.empty() or std::ranges::any_of(unit,
-			[](unsigned char ch) { return not token_char(ch); }) )
+			[](unsigned char ch) {
+				return not detail::ascii_token_character(ch);
+			}) )
 			return sys_unexpected(invalid());
-		value = trim(value.substr(space + 1));
+		value = detail::trim_ows(value.substr(space + 1));
 		content_range result;
-		result.unit = lower(unit);
+		result.unit = strtls::to_lower(unit);
 		if( value.starts_with("*/") )
 		{
 			auto complete = decimal(value.substr(2));
@@ -231,40 +212,8 @@ std::string format_unsatisfied_content_range(uint64_t complete_length) {
 sys_expected<std::string> parse_multipart_byte_ranges_boundary(
 	std::string_view content_type) noexcept
 {
-	try
-	{
-		const auto semicolon = content_type.find(';');
-		if( lower(trim(content_type.substr(0, semicolon))) !=
-			"multipart/byteranges" )
-			return sys_unexpected(invalid());
-		auto rest = semicolon == std::string_view::npos ? std::string_view{} :
-			content_type.substr(semicolon + 1);
-		while( not rest.empty() )
-		{
-			const auto next = rest.find(';');
-			const auto item = trim(rest.substr(0, next));
-			const auto equal = item.find('=');
-			if( equal != std::string_view::npos and
-				lower(trim(item.substr(0, equal))) == "boundary" )
-			{
-				auto value = trim(item.substr(equal + 1));
-				if( value.size() >= 2 and value.front() == '"' and
-					value.back() == '"' )
-					value = value.substr(1, value.size() - 2);
-				if( value.empty() or value.size() > 70 or value.back() == ' ' or
-					value.find_first_of("\r\n") != std::string_view::npos )
-					return sys_unexpected(invalid());
-				return std::string(value);
-			}
-			if( next == std::string_view::npos )
-				break;
-			rest.remove_prefix(next + 1);
-		}
-		return sys_unexpected(invalid());
-	}
-	catch(...) {
-		return sys_unexpected(exception_error(std::current_exception()));
-	}
+	return detail::parse_multipart_boundary(content_type,
+		"multipart/byteranges");
 }
 
 } //namespace riwo::http_exp

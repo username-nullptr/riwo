@@ -9,6 +9,7 @@
 #include <riwo/http_exp/protocol/v1/detail/session.h>
 #include <riwo/http_exp/body/detail/decoder.h>
 #include <riwo/http_exp/body/detail/progress.h>
+#include <riwo/http_exp/body/detail/source_transfer.h>
 #include <riwo/http_exp/protocol/authentication.h>
 #include <riwo/core/utils/string_tools.h>
 
@@ -655,43 +656,15 @@ send_result client_state::send(request request_value,
 	}
 	else if( source )
 	{
-		std::array<std::byte,8192> buffer;
-		uint64_t total = 0;
-		for(;;)
-		{
-			if( auto length = spec.length(); length and total == *length )
-				break;
-			auto target = riwo::buffer(buffer);
-			if( auto length = spec.length() )
-				target = mutable_buffer(target.data(), static_cast<size_t>(
-					std::min<uint64_t>(target.size(), *length - total)));
-			auto size = source->read_some_sync(target, error);
-			if( error == asio::error::make_error_code(asio::error::eof) )
-			{
-				if( spec.type() == body_spec::mode::streaming )
-					error.clear();
-				else
-					error = make_error_code(errc::body_length_mismatch);
-				break;
+		auto length = spec.length();
+		source_transfer_options options {
+			.length = length,
+			.trailers = std::move(trailers),
+			.progress = [upload_progress, length](uint64_t transferred) {
+				notify_progress(upload_progress, transferred, length);
 			}
-			if( error )
-				break;
-			if( size == 0 )
-			{
-				error = make_error_code(errc::body_length_mismatch);
-				break;
-			}
-			auto written = writer->write(const_buffer(target.data(), size), error);
-			total += written;
-			if( not error )
-				notify_progress(upload_progress, total, spec.length());
-			if( error )
-				break;
-		}
-		if( not error )
-			source->finish_sync(error);
-		if( not error )
-			writer->finish(std::move(trailers), error);
+		};
+		(void)transfer_source_sync(*source, *writer, std::move(options), error);
 		if( error )
 		{
 			const auto delivery = active_stream->delivery();
@@ -808,11 +781,8 @@ void client_state::send(request request_value, send_handler_t handler)
 		body_spec spec;
 		fields trailers;
 		send_handler_t handler;
-		std::array<std::byte,8192> buffer;
-		uint64_t total = 0;
 		uint64_t max_buffered_body = 8U * 1024U * 1024U;
 		bool automatic_decompression = true;
-		bool source_finished = false;
 		retry_policy retries;
 		redirect_policy redirects;
 		progress_observer upload_progress;
@@ -861,7 +831,7 @@ void client_state::send(request request_value, send_handler_t handler)
 				wait_reply();
 				return ;
 			}
-			read_next();
+			transfer_body_source();
 		}
 
 		void write_body()
@@ -875,87 +845,39 @@ void client_state::send(request request_value, send_handler_t handler)
 					self->fail(make_error_code(errc::body_length_mismatch));
 				else
 				{
-					self->total = written;
-					notify_progress(self->upload_progress, self->total,
+					notify_progress(self->upload_progress, written,
 						self->spec.length());
-					self->finish_request();
+					self->finish_buffer_body();
 				}
 			});
 		}
 
-		void read_next()
+		void finish_buffer_body()
 		{
-			if( auto length = spec.length(); length and total == *length )
-			{
-				finish_request();
-				return ;
-			}
-			auto target = riwo::buffer(buffer);
-			if( auto length = spec.length() )
-				target = mutable_buffer(target.data(), static_cast<size_t>(
-					std::min<uint64_t>(target.size(), *length - total)));
-			auto self = shared_from_this();
-			source->read_some(target,
-			[self = std::move(self), target]
-			(error_code error, size_t size) mutable {
-				self->read_complete(target, error, size);
-			});
-		}
-
-		void read_complete(mutable_buffer target, error_code error, size_t size)
-		{
-			if( error == asio::error::make_error_code(asio::error::eof) )
-			{
-				if( spec.type() == body_spec::mode::streaming )
-					finish_request();
-				else
-					fail(make_error_code(errc::body_length_mismatch));
-				return ;
-			}
-			if( error )
-			{
-				fail(error);
-				return ;
-			}
-			if( size == 0 )
-			{
-				fail(make_error_code(errc::body_length_mismatch));
-				return ;
-			}
-			auto self = shared_from_this();
-			writer->write(const_buffer(target.data(), size),
-			[self = std::move(self)](error_code write_error, size_t written) mutable {
-				self->total += written;
-				if( not write_error )
-					notify_progress(self->upload_progress, self->total,
-						self->spec.length());
-				if( write_error )
-					self->fail(write_error);
-				else
-					self->read_next();
-			});
-		}
-
-		void finish_request()
-		{
-			if( source and not source_finished )
-			{
-				auto self = shared_from_this();
-				source->finish(
-				[self = std::move(self)](error_code error) mutable {
-					if( error )
-					{
-						self->fail(error);
-						return ;
-					}
-					self->source_finished = true;
-					self->finish_request();
-				});
-				return ;
-			}
 			auto self = shared_from_this();
 			writer->finish(std::move(trailers),
 			[self = std::move(self)](error_code error) mutable {
+				if( error )
+					self->fail(error);
+				else
+					self->wait_reply();
+			});
+		}
+
+		void transfer_body_source()
+		{
+			auto length = spec.length();
+			source_transfer_options options {
+				.length = length,
+				.trailers = std::move(trailers),
+				.progress = [observer = upload_progress, length]
+				(uint64_t transferred) {
+					notify_progress(observer, transferred, length);
+				}
+			};
+			auto self = shared_from_this();
+			transfer_source(source, writer, std::move(options),
+			[self = std::move(self)](error_code error, uint64_t) mutable {
 				if( error )
 					self->fail(error);
 				else

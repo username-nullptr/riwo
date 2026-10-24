@@ -123,7 +123,7 @@ size_t body_writer_state::write(const const_buffer &buffer, error_code &error) n
 	return size;
 }
 
-void body_writer_state::write(const_buffer buffer, write_handler_t handler)
+void body_writer_state::write(const const_buffer &buffer, write_handler_t handler)
 {
 	auto state = m_impl;
 	if( state->m_pending )

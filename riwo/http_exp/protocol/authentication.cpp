@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "authentication.h"
+#include "detail/syntax.h"
 #include <riwo/core/algorithm/base64.h>
 
 namespace riwo::http_exp
@@ -10,27 +11,15 @@ namespace riwo::http_exp
 namespace
 {
 
-[[nodiscard]] bool ascii_iequal(std::string_view lhs,
-	std::string_view rhs) noexcept
-{
-	return lhs.size() == rhs.size() and std::ranges::equal(lhs, rhs,
-		[](unsigned char left, unsigned char right) {
-			return std::tolower(left) == std::tolower(right);
-		});
-}
-
 [[nodiscard]] optional<std::pair<std::string_view,std::string_view>>
 split_scheme(std::string_view value) noexcept
 {
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
+	value = detail::trim_ows(value);
 	const auto space = value.find_first_of(" \t");
 	if( space == std::string_view::npos )
 		return {};
 	auto scheme = value.substr(0, space);
-	value.remove_prefix(space);
-	while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-		value.remove_prefix(1);
+	value = detail::trim_ows(value.substr(space));
 	if( value.empty() )
 		return {};
 	return std::pair(scheme, value);
@@ -106,7 +95,8 @@ optional<basic_credentials> parse_basic_authorization(
 	try
 	{
 		const auto split = split_scheme(value);
-		if( not split or not ascii_iequal(split->first, "Basic") )
+		if( not split or not strtls::ascii_equal(
+			split->first, "Basic", false) )
 			return {};
 		auto decoded = decode_base64(split->second);
 		if( not decoded )
@@ -128,7 +118,8 @@ optional<std::string> parse_bearer_authorization(
 	try
 	{
 		const auto split = split_scheme(value);
-		if( not split or not ascii_iequal(split->first, "Bearer") )
+		if( not split or not strtls::ascii_equal(
+			split->first, "Bearer", false) )
 			return {};
 		if( split->second.find_first_of("\r\n") != std::string_view::npos )
 			return {};
