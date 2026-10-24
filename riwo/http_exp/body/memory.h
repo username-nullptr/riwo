@@ -36,7 +36,7 @@ public:
 	void cancel() noexcept;
 
 	[[nodiscard]] optional<uint64_t> size() const noexcept;
-	[[nodiscard]] static consteval bool replayable() noexcept { return true; }
+	[[nodiscard]] constexpr bool replayable() const noexcept { return true; }
 
 private:
 	class impl;

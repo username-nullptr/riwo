@@ -12,7 +12,7 @@
 namespace riwo::http_exp::detail
 {
 
-[[nodiscard]] inline int c_file_seek(std::FILE *file, int64_t offset, int origin) noexcept
+int c_file_seek(std::FILE *file, int64_t offset, int origin) noexcept
 {
 #ifdef _WIN32
 	return ::_fseeki64(file, offset, origin);
@@ -30,7 +30,7 @@ namespace riwo::http_exp::detail
 #endif //_WIN32
 }
 
-[[nodiscard]] inline int64_t c_file_tell(std::FILE *file) noexcept
+int64_t c_file_tell(std::FILE *file) noexcept
 {
 #ifdef _WIN32
 	return ::_ftelli64(file);
