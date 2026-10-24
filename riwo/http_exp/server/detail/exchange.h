@@ -482,7 +482,9 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			source->finish_sync(error);
 		else if( not error )
 		{
-			detail::source_transfer_options options {.length = length};
+			detail::source_transfer_options options {
+				.length = length, .trailers = {}, .progress = {}
+			};
 			(void)detail::transfer_source_sync(*source,
 				*m_impl->m_state->response_body(),
 				std::move(options), error);
@@ -539,7 +541,9 @@ auto basic_server_exchange<Exec>::respond(response_head head,
 			void transfer_body_source()
 			{
 				auto self = this->shared_from_this();
-				detail::source_transfer_options options {.length = length};
+				detail::source_transfer_options options {
+					.length = length, .trailers = {}, .progress = {}
+				};
 				detail::transfer_source(source, owner->m_state->response_body(),
 					std::move(options),
 				[self = std::move(self)](error_code error, uint64_t) mutable {
