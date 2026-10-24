@@ -97,22 +97,28 @@ route_pattern::~route_pattern() = default;
 route_pattern::route_pattern(const route_pattern&) = default;
 route_pattern &route_pattern::operator=(const route_pattern&) = default;
 route_pattern::route_pattern(route_pattern &&other) noexcept :
-	m_impl(other.m_impl)
+	m_impl(std::move(other.m_impl))
 {
 }
 
 route_pattern &route_pattern::operator=(route_pattern &&other) noexcept
 {
 	if( this != &other )
-		m_impl = other.m_impl;
+		m_impl = std::move(other.m_impl);
 	return *this;
 }
 
-std::string_view route_pattern::text() const noexcept { return m_impl->text; }
-bool route_pattern::exact() const noexcept { return m_impl->exact; }
+std::string_view route_pattern::text() const noexcept {
+	return m_impl ? std::string_view(m_impl->text) : std::string_view{};
+}
+bool route_pattern::exact() const noexcept {
+	return m_impl and m_impl->exact;
+}
 
 optional<route_match> route_pattern::match(std::string_view path) const noexcept
 {
+	if( not m_impl )
+		return {};
 	try
 	{
 		std::match_results<std::string_view::const_iterator> matches;
