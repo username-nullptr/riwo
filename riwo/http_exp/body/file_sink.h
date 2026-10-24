@@ -17,13 +17,13 @@ public:
 	explicit file_sink(std::ofstream &&stream);
 	explicit file_sink(std::fstream &&stream);
 
-	explicit file_sink(borrowed_file_ref<std::ofstream> stream);
-	explicit file_sink(borrowed_file_ref<std::fstream> stream);
+	explicit file_sink(const borrowed_file_ref<std::ofstream> &stream);
+	explicit file_sink(const borrowed_file_ref<std::fstream> &stream);
 
 	explicit file_sink(owned_c_file file);
 	explicit file_sink(borrowed_c_file file);
 
-	explicit file_sink(std::filesystem::path path);
+	explicit file_sink(const std::filesystem::path &path);
 	~file_sink();
 
 	file_sink(file_sink &&) noexcept;
@@ -33,16 +33,16 @@ public:
 	void prepare(error_code &error) const noexcept;
 	[[nodiscard]] bool random_access() const noexcept;
 
-	void write(const_buffer buffer,
+	void write(const const_buffer& buffer,
 		asio::any_completion_handler<void(error_code,size_t)> handler
 	);
-	[[nodiscard]] size_t write(const_buffer buffer, error_code &error) noexcept;
+	[[nodiscard]] size_t write(const const_buffer &buffer, error_code &error) noexcept;
 
-	void write_at(uint64_t offset, const_buffer buffer,
+	void write_at(uint64_t offset, const const_buffer &buffer,
 		asio::any_completion_handler<void(error_code,size_t)> handler
 	);
 	[[nodiscard]] size_t write_at (
-		uint64_t offset, const_buffer buffer, error_code &error
+		uint64_t offset, const const_buffer &buffer, error_code &error
 	) noexcept;
 
 	void finish(error_code &error) noexcept;
@@ -73,10 +73,14 @@ concept body_sink_model = requires(
 	{ sink.cancel() } noexcept -> std::same_as<void>;
 };
 
+template <typename Sink>
+concept body_sink_model_p = body_sink_model<std::remove_cvref_t<Sink>>;
+
 } //namespace concepts
 
 static_assert(concepts::body_sink_model<file_sink>);
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_BODY_FILE_SINK_H

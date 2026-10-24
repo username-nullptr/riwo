@@ -3,10 +3,6 @@
 
 #include "memory.h"
 
-#include <algorithm>
-#include <cstring>
-#include <utility>
-
 namespace riwo::http_exp { namespace
 {
 
@@ -37,9 +33,10 @@ public:
 memory_body_source::memory_body_source(std::vector<std::byte> bytes) :
 	m_impl(std::make_unique<impl>(std::move(bytes)))
 {
+
 }
 
-memory_body_source::memory_body_source(const_buffer bytes) :
+memory_body_source::memory_body_source(const const_buffer &bytes) :
 	m_impl(std::make_unique<impl>(std::vector<std::byte>(bytes.size())))
 {
 	if( not m_impl->m_bytes.empty() )
@@ -49,6 +46,7 @@ memory_body_source::memory_body_source(const_buffer bytes) :
 memory_body_source::memory_body_source() :
 	m_impl(std::make_unique<impl>())
 {
+
 }
 
 memory_body_source::~memory_body_source() = default;
@@ -56,6 +54,7 @@ memory_body_source::~memory_body_source() = default;
 memory_body_source::memory_body_source(const memory_body_source &other) :
 	m_impl(std::make_unique<impl>(*other.m_impl))
 {
+
 }
 
 memory_body_source &memory_body_source::operator=(const memory_body_source &other)
@@ -71,8 +70,7 @@ memory_body_source::memory_body_source(memory_body_source &&other) noexcept :
 	other.m_impl = std::make_unique<impl>();
 }
 
-memory_body_source &memory_body_source::operator=(
-	memory_body_source &&other) noexcept
+memory_body_source &memory_body_source::operator=(memory_body_source &&other) noexcept
 {
 	if( this == &other )
 		return *this;
@@ -81,7 +79,7 @@ memory_body_source &memory_body_source::operator=(
 	return *this;
 }
 
-size_t memory_body_source::read_some(mutable_buffer buffer, error_code &error) noexcept
+size_t memory_body_source::read_some(const mutable_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
 	if( m_impl->m_cancelled )
@@ -97,7 +95,7 @@ size_t memory_body_source::read_some(mutable_buffer buffer, error_code &error) n
 		error = eof_error();
 		return 0;
 	}
-	const auto size = std::min(
+	const auto size = std::min (
 		buffer.size(), m_impl->m_bytes.size() - m_impl->m_offset
 	);
 	std::memcpy(buffer.data(), m_impl->m_bytes.data() + m_impl->m_offset, size);
@@ -106,10 +104,10 @@ size_t memory_body_source::read_some(mutable_buffer buffer, error_code &error) n
 }
 
 void memory_body_source::read_some
-(mutable_buffer buffer, asio::any_completion_handler<void(error_code,size_t)> handler)
+(const mutable_buffer &buffer, asio::any_completion_handler<void(error_code,size_t)> handler)
 {
 	error_code error;
-	auto size = read_some(std::move(buffer), error);
+	auto size = read_some(buffer, error);
 	std::move(handler)(error, size);
 }
 
@@ -128,11 +126,6 @@ void memory_body_source::cancel() noexcept
 optional<uint64_t> memory_body_source::size() const noexcept
 {
 	return m_impl->m_bytes.size();
-}
-
-bool memory_body_source::replayable() const noexcept
-{
-	return true;
 }
 
 } //namespace riwo::http_exp

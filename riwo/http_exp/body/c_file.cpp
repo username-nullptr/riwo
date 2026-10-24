@@ -3,12 +3,14 @@
 
 #include "file_handle.h"
 
-#include <utility>
-
 namespace riwo::http_exp
 {
 
-owned_c_file::owned_c_file(std::FILE *file) noexcept : m_file(file) {}
+owned_c_file::owned_c_file(std::FILE *file) noexcept :
+	m_file(file)
+{
+
+}
 
 owned_c_file::~owned_c_file()
 {
@@ -19,6 +21,7 @@ owned_c_file::~owned_c_file()
 owned_c_file::owned_c_file(owned_c_file &&other) noexcept :
 	m_file(std::exchange(other.m_file, nullptr))
 {
+
 }
 
 owned_c_file &owned_c_file::operator=(owned_c_file &&other) noexcept
@@ -47,11 +50,16 @@ std::FILE *owned_c_file::operator*() const noexcept
 	return m_file;
 }
 
-borrowed_c_file::borrowed_c_file(std::FILE *file) noexcept : m_file(file) {}
+borrowed_c_file::borrowed_c_file(std::FILE *file) noexcept :
+	m_file(file)
+{
+
+}
 
 borrowed_c_file::borrowed_c_file(borrowed_c_file &&other) noexcept :
 	m_file(std::exchange(other.m_file, nullptr))
 {
+
 }
 
 borrowed_c_file &borrowed_c_file::operator=(borrowed_c_file &&other) noexcept

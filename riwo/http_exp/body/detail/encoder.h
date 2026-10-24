@@ -9,9 +9,10 @@
 namespace riwo::http_exp::detail
 {
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<body_source>
-make_gzip_body_source(std::shared_ptr<body_source> source);
+[[nodiscard]] RIWO_HTTP_EXP_API
+body_source_ptr make_gzip_body_source(body_source_ptr source);
 
 } //namespace riwo::http_exp::detail
+
 
 #endif //RIWO_HTTP_EXP_BODY_DETAIL_ENCODER_H

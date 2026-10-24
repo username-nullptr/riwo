@@ -5,16 +5,11 @@
 #include "c_file_position.h"
 #include <riwo/http_exp/error.h>
 
-#include <algorithm>
-#include <exception>
-#include <limits>
-#include <utility>
-
 namespace riwo::http_exp::detail { namespace
 {
 
 template <concepts::output_file_stream Stream>
-class stream_output_backend final : public output_file_backend
+class RIWO_DECL_HIDDEN stream_output_backend final : public output_file_backend
 {
 public:
 	explicit stream_output_backend(const std::filesystem::path &path)
@@ -46,17 +41,14 @@ public:
 			error_code ignored;
 			finish(ignored);
 		}
-		catch(...) {
-		}
+		catch(...) {}
 	}
 
-	void prepare(error_code &error) const noexcept override
-	{
+	void prepare(error_code &error) const noexcept override {
 		error = m_open_error;
 	}
 
-	[[nodiscard]] bool random_access() const noexcept override
-	{
+	[[nodiscard]] bool random_access() const noexcept override {
 		return m_random_access;
 	}
 
@@ -70,15 +62,15 @@ public:
 		}
 		if( m_finished )
 		{
-			error = http_exp::make_error_code(errc::operation_not_permitted);
+			error = make_error_code(errc::operation_not_permitted);
 			return 0;
 		}
 		size_t total = 0;
 		while( total != buffer.size() )
 		{
 			const auto size = static_cast<std::streamsize>(std::min<size_t>(
-				buffer.size() - total,
-				static_cast<size_t>(std::numeric_limits<std::streamsize>::max())));
+				buffer.size() - total, std::numeric_limits<std::streamsize>::max()
+			));
 			m_stream->write(static_cast<const char*>(buffer.data()) + total, size);
 			if( not *m_stream )
 			{
@@ -90,8 +82,7 @@ public:
 		return total;
 	}
 
-	[[nodiscard]] size_t write_at(uint64_t offset, const_buffer buffer,
-		error_code &error) override
+	[[nodiscard]] size_t write_at(uint64_t offset, const_buffer buffer, error_code &error) override
 	{
 		error.clear();
 		if( m_open_error )
@@ -100,16 +91,18 @@ public:
 			return 0;
 		}
 		const auto maximum = static_cast<uint64_t>(
-			std::numeric_limits<std::streamoff>::max());
+			std::numeric_limits<std::streamoff>::max()
+		);
 		if( not m_random_access or m_base_offset < 0 or
 			static_cast<uint64_t>(m_base_offset) > maximum or
 			offset > maximum - static_cast<uint64_t>(m_base_offset) )
 		{
-			error = http_exp::make_error_code(errc::operation_not_supported);
+			error = make_error_code(errc::operation_not_supported);
 			return 0;
 		}
 		m_stream->seekp(static_cast<std::streamoff>(
-			static_cast<uint64_t>(m_base_offset) + offset), std::ios::beg);
+			static_cast<uint64_t>(m_base_offset) + offset), std::ios::beg
+		);
 		if( not *m_stream )
 		{
 			error = make_system_error_code(std::errc::io_error);
@@ -123,6 +116,7 @@ public:
 		error.clear();
 		if( m_finished )
 			return ;
+
 		if( m_open_error )
 		{
 			error = m_open_error;
@@ -142,11 +136,14 @@ public:
 			try {
 				m_stream->clear();
 				m_stream->seekp(m_base);
+
 				if( not *m_stream and not error )
 					error = make_system_error_code(std::errc::io_error);
+
 				m_stream->clear(m_saved_state);
 			}
-			catch(...) {
+			catch(...)
+			{
 				if( not error )
 					error = exception_error(std::current_exception());
 			}
@@ -165,9 +162,11 @@ private:
 		try {
 			m_saved_state = m_stream->rdstate();
 			m_base = m_stream->tellp();
+
 			m_random_access = m_base >= 0;
 			if( m_random_access )
 				m_base_offset = static_cast<std::streamoff>(m_base);
+
 			if( not m_random_access )
 				m_stream->clear(m_saved_state);
 		}
@@ -176,18 +175,21 @@ private:
 		}
 	}
 
-	optional<Stream> m_owned;
+	optional<Stream> m_owned {};
 	Stream *m_stream = nullptr;
+
 	bool m_borrowed = false;
 	bool m_random_access = false;
 	bool m_finished = false;
+
 	std::ios::iostate m_saved_state = std::ios::goodbit;
 	std::streampos m_base {};
 	std::streamoff m_base_offset = -1;
-	error_code m_open_error;
+
+	error_code m_open_error {};
 };
 
-class c_output_backend final : public output_file_backend
+class RIWO_DECL_HIDDEN c_output_backend final : public output_file_backend
 {
 public:
 	explicit c_output_backend(owned_c_file file) :
@@ -196,7 +198,7 @@ public:
 		initialize();
 	}
 
-	explicit c_output_backend(borrowed_c_file file) :
+	explicit c_output_backend(const borrowed_c_file &file) :
 		m_file(file.get()), m_borrowed(true)
 	{
 		initialize();
@@ -208,17 +210,14 @@ public:
 			error_code ignored;
 			finish(ignored);
 		}
-		catch(...) {
-		}
+		catch(...) {}
 	}
 
-	void prepare(error_code &error) const noexcept override
-	{
+	void prepare(error_code &error) const noexcept override {
 		error = m_open_error;
 	}
 
-	[[nodiscard]] bool random_access() const noexcept override
-	{
+	[[nodiscard]] bool random_access() const noexcept override {
 		return m_base >= 0;
 	}
 
@@ -232,15 +231,16 @@ public:
 		}
 		if( m_finished )
 		{
-			error = http_exp::make_error_code(errc::operation_not_permitted);
+			error = make_error_code(errc::operation_not_permitted);
 			return 0;
 		}
 		size_t total = 0;
 		while( total != buffer.size() )
 		{
-			const auto count = std::fwrite(
+			const auto count = std::fwrite (
 				static_cast<const std::byte*>(buffer.data()) + total,
-				1, buffer.size() - total, m_file);
+				1, buffer.size() - total, m_file
+			);
 			if( count == 0 )
 			{
 				error = make_system_error_code(std::errc::io_error);
@@ -251,8 +251,8 @@ public:
 		return total;
 	}
 
-	[[nodiscard]] size_t write_at(uint64_t offset, const_buffer buffer,
-		error_code &error) override
+	[[nodiscard]] size_t write_at
+	(uint64_t offset, const_buffer buffer, error_code &error) override
 	{
 		error.clear();
 		if( m_open_error )
@@ -260,14 +260,12 @@ public:
 			error = m_open_error;
 			return 0;
 		}
-		if( m_base < 0 or offset > static_cast<uint64_t>(
-			std::numeric_limits<int64_t>::max() - m_base) )
+		if( m_base < 0 or offset > static_cast<uint64_t>(std::numeric_limits<int64_t>::max() - m_base) )
 		{
-			error = http_exp::make_error_code(errc::operation_not_supported);
+			error = make_error_code(errc::operation_not_supported);
 			return 0;
 		}
-		if( c_file_seek(m_file, m_base + static_cast<int64_t>(offset),
-			SEEK_SET) != 0 )
+		if( c_file_seek(m_file, m_base + static_cast<int64_t>(offset), SEEK_SET) != 0 )
 		{
 			error = make_system_error_code(std::errc::io_error);
 			return 0;
@@ -280,6 +278,7 @@ public:
 		error.clear();
 		if( m_finished )
 			return ;
+
 		if( m_open_error )
 		{
 			error = m_open_error;
@@ -288,12 +287,14 @@ public:
 		}
 		if( std::fflush(m_file) != 0 )
 			error = make_system_error_code(std::errc::io_error);
+
 		if( m_borrowed )
 		{
 			std::clearerr(m_file);
-			if( m_base >= 0 and
-				c_file_seek(m_file, m_base, SEEK_SET) != 0 and not error )
+
+			if( m_base >= 0 and c_file_seek(m_file, m_base, SEEK_SET) != 0 and not error )
 				error = make_system_error_code(std::errc::io_error);
+
 			std::clearerr(m_file);
 		}
 		m_finished = true;
@@ -317,32 +318,31 @@ private:
 			std::clearerr(m_file);
 	}
 
-	owned_c_file m_owned;
+	owned_c_file m_owned {};
 	std::FILE *m_file = nullptr;
+
 	bool m_borrowed = false;
 	bool m_finished = false;
+
 	int64_t m_base = -1;
-	error_code m_open_error;
+	error_code m_open_error {};
 };
 
 } //namespace
 
-output_file_backend_ptr make_output_file_backend(
-	const std::filesystem::path &path)
+output_file_backend_ptr make_output_file_backend(const std::filesystem::path &path)
 {
 	return std::make_unique<stream_output_backend<std::ofstream>>(path);
 }
 
 output_file_backend_ptr make_output_file_backend(std::ofstream &&stream)
 {
-	return std::make_unique<stream_output_backend<std::ofstream>>(
-		std::move(stream));
+	return std::make_unique<stream_output_backend<std::ofstream>>(std::move(stream));
 }
 
 output_file_backend_ptr make_output_file_backend(std::fstream &&stream)
 {
-	return std::make_unique<stream_output_backend<std::fstream>>(
-		std::move(stream));
+	return std::make_unique<stream_output_backend<std::fstream>>(std::move(stream));
 }
 
 output_file_backend_ptr make_output_file_backend(std::ofstream *stream)

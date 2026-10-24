@@ -11,10 +11,13 @@ namespace riwo::http_exp::detail
 
 class RIWO_DECL_HIDDEN input_file_backend
 {
-public:
-	virtual ~input_file_backend() = default;
-	[[nodiscard]] virtual size_t read(mutable_buffer, error_code&) = 0;
+	RIWO_DISABLE_COPY_MOVE(input_file_backend)
 
+public:
+	input_file_backend() = default;
+	virtual ~input_file_backend() = default;
+
+	[[nodiscard]] virtual size_t read(mutable_buffer, error_code&) = 0;
 	virtual void rewind(error_code&) = 0;
 	virtual void finish(error_code&) = 0;
 
@@ -43,9 +46,9 @@ make_input_file_backend(owned_c_file file, optional<file_span> span);
 make_input_file_backend(borrowed_c_file file, optional<file_span> span);
 
 [[nodiscard]] RIWO_DECL_HIDDEN input_file_backend_ptr
-make_input_file_backend(const std::filesystem::path &path,
-	optional<file_span> span);
+make_input_file_backend(const std::filesystem::path &path, const optional<file_span> &span);
 
 } //namespace riwo::http_exp::detail
+
 
 #endif //RIWO_HTTP_EXP_BODY_DETAIL_FILE_SOURCE_BACKEND_H

@@ -13,7 +13,7 @@ class RIWO_HTTP_EXP_API memory_body_source
 {
 public:
 	explicit memory_body_source(std::vector<std::byte> bytes);
-	explicit memory_body_source(const_buffer bytes);
+	explicit memory_body_source(const const_buffer &bytes);
 
 	memory_body_source();
 	~memory_body_source();
@@ -25,16 +25,18 @@ public:
 	memory_body_source &operator=(memory_body_source &&) noexcept;
 
 public:
-	void read_some(mutable_buffer buffer,
+	void read_some(const mutable_buffer& buffer,
 		asio::any_completion_handler<void(error_code,size_t)> handler
 	);
-	[[nodiscard]] size_t read_some(mutable_buffer buffer, error_code &error) noexcept;
+	[[nodiscard]] size_t read_some (
+		const mutable_buffer &buffer, error_code &error
+	) noexcept;
 
 	void rewind(asio::any_completion_handler<void(error_code)> handler);
 	void cancel() noexcept;
 
 	[[nodiscard]] optional<uint64_t> size() const noexcept;
-	[[nodiscard]] bool replayable() const noexcept;
+	[[nodiscard]] static consteval bool replayable() noexcept { return true; }
 
 private:
 	class impl;
@@ -42,5 +44,6 @@ private:
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_BODY_MEMORY_H

@@ -5,9 +5,7 @@
 #define RIWO_HTTP_EXP_BODY_FILE_HANDLE_H
 
 #include <riwo/http_exp/global.h>
-#include <cstdio>
 #include <fstream>
-#include <utility>
 
 namespace riwo::http_exp { namespace concepts
 {
@@ -26,7 +24,7 @@ concept output_file_stream =
 
 template <typename Stream>
 requires (concepts::input_file_stream<Stream> or concepts::output_file_stream<Stream>)
-class borrowed_file_ref
+class RIWO_HTTP_EXP_TAPI borrowed_file_ref
 {
 	RIWO_DISABLE_COPY(borrowed_file_ref)
 
@@ -43,8 +41,10 @@ private:
 };
 
 template <typename Stream>
-[[nodiscard]] borrowed_file_ref<Stream> borrowed_file(Stream &stream) noexcept
-	requires (concepts::input_file_stream<Stream> or concepts::output_file_stream<Stream>);
+[[nodiscard]] RIWO_HTTP_EXP_TAPI
+borrowed_file_ref<Stream> borrowed_file(Stream &stream) noexcept requires (
+	concepts::input_file_stream<Stream> or concepts::output_file_stream<Stream>
+);
 
 class RIWO_HTTP_EXP_API owned_c_file
 {
