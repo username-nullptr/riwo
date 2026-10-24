@@ -55,6 +55,12 @@ if (TEST_TOOLCHAIN_FILE)
 	list(APPEND configure_command "-DCMAKE_TOOLCHAIN_FILE=${TEST_TOOLCHAIN_FILE}")
 endif ()
 
+if (TEST_VCPKG_TARGET_TRIPLET)
+	list(APPEND configure_command
+		"-DVCPKG_TARGET_TRIPLET=${TEST_VCPKG_TARGET_TRIPLET}"
+	)
+endif ()
+
 if (TEST_BUILD_TYPE)
 	list(APPEND configure_command "-DCMAKE_BUILD_TYPE=${TEST_BUILD_TYPE}")
 endif ()
