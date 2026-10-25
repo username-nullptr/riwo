@@ -44,15 +44,15 @@ namespace
 {
 	if( policy.preference.empty() )
 		return false;
-	for( auto current = policy.preference.begin();
-		current != policy.preference.end(); ++current )
+	for(auto current=policy.preference.begin();
+		current!=policy.preference.end(); ++current)
 		if( std::ranges::find(policy.preference.begin(), current, *current) !=
 			current )
 			return false;
-	if( policy.requirement == protocol_requirement::require_http1 )
+	if( policy.requirement == protocol_requirement::require_v1 )
 		return contains_protocol(policy, protocol::v1_1);
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( policy.requirement == protocol_requirement::require_http2 )
+	if( policy.requirement == protocol_requirement::require_v2 )
 		return contains_protocol(policy, protocol::v2);
 	return contains_protocol(policy, protocol::v1_1) or
 		contains_protocol(policy, protocol::v2);
@@ -110,9 +110,9 @@ server_tls_context::server_tls_context(server_tls_config config) :
 {
 	if( m_config.certificate_chain_file.empty() or
 		m_config.private_key_file.empty() )
-		throw std::invalid_argument("HTTP TLS certificate and private key are required");
+		invalid_argument::loc_throw("HTTP TLS certificate and private key are required");
 	if( not valid_tls_policy(m_config.protocols) )
-		throw std::invalid_argument("HTTP TLS protocol policy is invalid");
+		invalid_argument::loc_throw("HTTP TLS protocol policy is invalid");
 	m_context.set_options(asio::ssl::context::default_workarounds |
 		asio::ssl::context::no_sslv2 | asio::ssl::context::no_sslv3);
 	m_context.use_certificate_chain_file(
@@ -148,13 +148,13 @@ int server_tls_context::select_alpn(void *, const unsigned char **out,
 	unsigned int input_length, void *argument) noexcept
 {
 	const auto &policy = static_cast<server_tls_context*>(argument)->m_config.protocols;
-	for( auto preferred : policy.preference )
+	for(auto preferred : policy.preference)
 	{
-		if( policy.requirement == protocol_requirement::require_http1 and
+		if( policy.requirement == protocol_requirement::require_v1 and
 			preferred != protocol::v1_1 )
 			continue;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		if( policy.requirement == protocol_requirement::require_http2 and
+		if( policy.requirement == protocol_requirement::require_v2 and
 			preferred != protocol::v2 )
 			continue;
 		const std::string_view wanted = preferred == protocol::v2 ?
@@ -162,7 +162,7 @@ int server_tls_context::select_alpn(void *, const unsigned char **out,
 #else
 		const std::string_view wanted = "http/1.1";
 #endif
-		for( unsigned int offset = 0; offset < input_length; )
+		for(unsigned int offset=0; offset<input_length;)
 		{
 			const auto length = input[offset++];
 			if( offset + length > input_length )
@@ -198,7 +198,7 @@ public:
 		m_acceptor(std::move(acceptor)), m_context(std::move(context))
 	{
 		if( not m_context )
-			throw std::invalid_argument("TLS context is null");
+			invalid_argument::loc_throw("TLS context is null");
 	}
 
 	void accept(accept_handler_t handler)
@@ -268,7 +268,7 @@ public:
 							const auto &policy =
 								self->m_context->config().protocols;
 							if( policy.requirement !=
-								protocol_requirement::require_http1 and
+								protocol_requirement::require_v1 and
 								(policy.requirement !=
 									protocol_requirement::automatic or
 								not contains_protocol(policy, protocol::v1_1)) )
@@ -334,7 +334,7 @@ public:
 		m_acceptor.acceptor().close(ignored);
 		std::lock_guard lock(m_mutex);
 		m_cancelled = true;
-		for( const auto &value : m_handshakes )
+		for(const auto &value : m_handshakes)
 			if( auto socket = value.lock() )
 				socket->next_layer().close(ignored);
 		m_handshakes.clear();

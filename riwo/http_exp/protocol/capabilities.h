@@ -17,4 +17,5 @@ struct stream_capabilities
 
 } //namespace riwo::http_exp
 
+
 #endif //RIWO_HTTP_EXP_PROTOCOL_CAPABILITIES_H

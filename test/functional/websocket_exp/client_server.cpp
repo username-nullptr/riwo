@@ -24,14 +24,14 @@ void websocket_round_trip(bool use_http2, bool compression)
 	{
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		server_config.http.protocols.requirement =
-			http::protocol_requirement::require_http2;
+			http::protocol_requirement::require_v2;
 #else
 		return;
 #endif
 	}
 	else
 		server_config.http.protocols.requirement =
-			http::protocol_requirement::require_http1;
+			http::protocol_requirement::require_v1;
 
 	ws::server service(std::move(acceptor), server_config);
 	auto handler = [](ws::accept_result accepted)
@@ -92,12 +92,12 @@ void websocket_round_trip(bool use_http2, bool compression)
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		client_config.http.protocols.requirement =
-			http::protocol_requirement::require_http2;
+			http::protocol_requirement::require_v2;
 #endif
 	}
 	else
 		client_config.http.protocols.requirement =
-			http::protocol_requirement::require_http1;
+			http::protocol_requirement::require_v1;
 	ws::client client(context, client_config);
 	const auto endpoint = std::format("ws://127.0.0.1:{}/echo?case=roundtrip",
 		service.http_server().acceptor().local_endpoint().port());
@@ -192,7 +192,7 @@ void standalone_accept_queue()
 	asio::ip::tcp::acceptor acceptor(context);
 	ws::server_config server_config;
 	server_config.http.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	ws::server service(std::move(acceptor), server_config);
 	service.bind({riwo::ip_type::v4, 0}).start();
 
@@ -209,7 +209,7 @@ void standalone_accept_queue()
 
 	ws::client_config client_config;
 	client_config.http.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	ws::client client(context, client_config);
 	const auto endpoint = std::format("ws://127.0.0.1:{}/accept",
 		service.http_server().acceptor().local_endpoint().port());
@@ -241,7 +241,7 @@ void redirect_and_external_client()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	http::server service(std::move(acceptor), server_config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/redirect",
@@ -270,7 +270,7 @@ void redirect_and_external_client()
 
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	http::client http_client(context, client_config);
 	const auto base = std::format("ws://127.0.0.1:{}",
 		service.acceptor().local_endpoint().port());
@@ -316,7 +316,7 @@ void cancel_pending_open()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	http::server service(std::move(acceptor), server_config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/stall",
@@ -333,7 +333,7 @@ void cancel_pending_open()
 
 	ws::client_config client_config;
 	client_config.http.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	ws::client client(context, client_config);
 	const auto endpoint = std::format("ws://127.0.0.1:{}/stall",
 		service.acceptor().local_endpoint().port());
@@ -432,7 +432,7 @@ void upgrade_rejection_preserved()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config config;
-	config.protocols.requirement = http::protocol_requirement::require_http1;
+	config.protocols.requirement = http::protocol_requirement::require_v1;
 	http::server service(std::move(acceptor), config);
 	service.bind({riwo::ip_type::v4, 0});
 	service.on_request<http::method::get>("/deny",

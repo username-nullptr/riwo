@@ -9,7 +9,9 @@
 namespace riwo::http_exp
 {
 
-enum class protocol_role { client, server };
+enum class protocol_role {
+	client, server
+};
 
 struct ingest_result
 {
@@ -30,23 +32,19 @@ namespace concepts
 
 template<class Engine>
 concept protocol_engine = requires(Engine &engine, const_buffer input,
-	mutable_buffer output, protocol_action_t action,
-	protocol_event_handler_t events)
+	mutable_buffer output, protocol_action_t action, protocol_event_handler_t events)
 {
-	{ engine.selected_protocol() } -> std::same_as<http_exp::protocol>;
-	{ engine.ingest(input, events) } ->
-		std::same_as<sys_expected<ingest_result>>;
-	{ engine.finish_input(events) } ->
-		std::same_as<sys_expected<ingest_result>>;
-	{ engine.submit(std::move(action)) } ->
-		std::same_as<sys_expected<void>>;
-	{ engine.produce(output) } ->
-		std::same_as<sys_expected<produce_result>>;
+	{ engine.selected_protocol() } -> std::same_as<protocol>;
+	{ engine.ingest(input, events) } -> std::same_as<sys_expected<ingest_result>>;
+
+	{ engine.finish_input(events) } -> std::same_as<sys_expected<ingest_result>>;
+	{ engine.submit(std::move(action)) } -> std::same_as<sys_expected<void>>;
+
+	{ engine.produce(output) } -> std::same_as<sys_expected<produce_result>>;
 	{ engine.wants_write() } noexcept -> std::same_as<bool>;
 };
 
-} //namespace concepts
+}} //namespace riwo::http_exp::concepts
 
-} //namespace riwo::http_exp
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_ENGINE_H

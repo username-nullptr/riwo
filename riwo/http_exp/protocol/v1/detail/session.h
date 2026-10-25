@@ -12,44 +12,45 @@
 namespace riwo::http_exp::v1::detail
 {
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<
-	::riwo::http_exp::detail::client_session>
-make_client_session(protocol version, message_limits limits = {},
-	timeout_policy timeouts = {}, bool absolute_form = false,
-	asio::any_io_executor executor = riwo::get_executor());
+[[nodiscard]] RIWO_HTTP_EXP_API
+http_exp::detail::client_session_ptr make_client_session (
+	protocol version, const message_limits &limits = {}, const timeout_policy &timeouts = {},
+	bool absolute_form = false, asio::any_io_executor executor = get_executor()
+);
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<
-	::riwo::http_exp::detail::client_session>
-make_client_session(asio::any_io_executor executor, protocol version,
-	message_limits limits = {}, timeout_policy timeouts = {},
-	bool absolute_form = false);
+[[nodiscard]] RIWO_HTTP_EXP_API
+http_exp::detail::client_session_ptr make_client_session (
+	asio::any_io_executor executor, protocol version, const message_limits &limits = {},
+	const timeout_policy &timeouts = {}, bool absolute_form = false
+);
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<
-	::riwo::http_exp::detail::client_session>
-make_client_session(protocol version, message_limits limits,
-	std::shared_ptr<::riwo::http_exp::connection> transport,
-	timeout_policy timeouts = {}, bool absolute_form = false,
-	asio::any_io_executor executor = riwo::get_executor());
+[[nodiscard]] RIWO_HTTP_EXP_API
+http_exp::detail::client_session_ptr make_client_session (
+	protocol version, const message_limits &limits, connection_ptr transport,
+	const timeout_policy &timeouts = {}, bool absolute_form = false,
+	asio::any_io_executor executor = get_executor()
+);
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<
-	::riwo::http_exp::detail::client_session>
-make_client_session(asio::any_io_executor executor, protocol version,
-	message_limits limits,
-	std::shared_ptr<::riwo::http_exp::connection> transport,
-	timeout_policy timeouts = {}, bool absolute_form = false);
+[[nodiscard]] RIWO_HTTP_EXP_API
+http_exp::detail::client_session_ptr make_client_session (
+	asio::any_io_executor executor, protocol version, const message_limits &limits,
+	connection_ptr transport, const timeout_policy &timeouts = {},
+	bool absolute_form = false
+);
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<
-	::riwo::http_exp::detail::server_session>
-make_server_session(asio::ip::tcp::socket socket,
-	message_limits limits = {}, timeout_policy timeouts = {});
+[[nodiscard]] RIWO_HTTP_EXP_API
+http_exp::detail::server_session_ptr make_server_session (
+	asio::ip::tcp::socket socket, const message_limits &limits = {},
+	const timeout_policy &timeouts = {}
+);
 
-[[nodiscard]] RIWO_HTTP_EXP_API std::shared_ptr<
-	::riwo::http_exp::detail::server_session>
-make_server_session(
-	std::shared_ptr<::riwo::http_exp::connection> transport,
-	protocol version, message_limits limits = {},
-	timeout_policy timeouts = {});
+[[nodiscard]] RIWO_HTTP_EXP_API
+http_exp::detail::server_session_ptr make_server_session (
+	connection_ptr transport, protocol version, const message_limits &limits = {},
+	const timeout_policy &timeouts = {}
+);
 
 } //namespace riwo::http_exp::v1::detail
+
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_SESSION_H

@@ -89,7 +89,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		add_nv(result, ":scheme", head.scheme);
 		add_nv(result, ":authority", head.authority);
 		add_nv(result, ":path", head.target.empty() ? "/" : head.target);
-		for( const auto &field : head.headers )
+		for(const auto &field : head.headers)
 		{
 			auto name = lower(field.name);
 			if( forbidden_header(name) or
@@ -111,7 +111,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		nv_block result;
 		result.storage.reserve(trailers.size() * 2);
 		result.values.reserve(trailers.size());
-		for( const auto &field : trailers )
+		for(const auto &field : trailers)
 		{
 			auto name = lower(field.name);
 			if( name.starts_with(':') or forbidden_header(name) or name == "te" )
@@ -224,8 +224,8 @@ public:
 			std::addressof(m_extension) : nullptr;
 	}
 	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
-		optional<response_head> response, error_code &error) noexcept override;
-	void open_duplex(optional<response_head> response,
+		const optional<response_head> &response, error_code &error) noexcept override;
+	void open_duplex(const optional<response_head> &response,
 		duplex_handler_t handler) override;
 	void cancel() noexcept override;
 
@@ -400,8 +400,8 @@ public:
 		m_release_handler = std::move(handler);
 	}
 
-	[[nodiscard]] std::shared_ptr<stream> open_sync(request_head head,
-		body_spec spec, error_code &error) noexcept override
+	[[nodiscard]] std::shared_ptr<stream> open_sync(const request_head &head,
+		const body_spec &spec, error_code &error) noexcept override
 	{
 		error.clear();
 		if( not select_mode(1) )
@@ -938,7 +938,7 @@ private:
 		if( m_closed.exchange(true) )
 			return ;
 		m_draining = true;
-		for( auto &[id, value] : m_streams )
+		for(auto &[id, value] : m_streams)
 		{
 			ignore_unused(id);
 			complete_error(*value, error);
@@ -959,7 +959,7 @@ private:
 		if( m_closed.exchange(true) )
 			return ;
 		m_draining = true;
-		for( auto &[id, value] : m_streams )
+		for(auto &[id, value] : m_streams)
 		{
 			ignore_unused(id);
 			complete_error(*value, error);
@@ -1227,7 +1227,7 @@ private:
 		if( frame->hd.type == NGHTTP2_GOAWAY )
 		{
 			self.m_draining = true;
-			for( auto &[id, value] : self.m_streams )
+			for(auto &[id, value] : self.m_streams)
 				if( id > frame->goaway.last_stream_id )
 				{
 					value->m_wire_error = frame->goaway.error_code;
@@ -1504,7 +1504,7 @@ bool v2_stream::reusable() const noexcept {
 }
 
 std::shared_ptr<duplex_state> v2_stream::open_duplex_sync(
-	optional<response_head> response, error_code &error) noexcept
+	const optional<response_head> &response, error_code &error) noexcept
 {
 	ignore_unused(response);
 	error.clear();
@@ -1528,7 +1528,7 @@ std::shared_ptr<duplex_state> v2_stream::open_duplex_sync(
 		});
 }
 
-void v2_stream::open_duplex(optional<response_head> response,
+void v2_stream::open_duplex(const optional<response_head> &response,
 	duplex_handler_t handler)
 {
 	error_code error;

@@ -62,18 +62,18 @@ public:
 	void wait_response(response_handler_t handler) override {
 		m_inner->wait_response(std::move(handler));
 	}
-	void respond_sync(response_head head, body_spec spec,
+	void respond_sync(const response_head &head, const body_spec &spec,
 		error_code &error) noexcept override {
 		m_inner->respond_sync(std::move(head), std::move(spec), error);
 	}
-	void respond(response_head head, body_spec spec,
+	void respond(const response_head &head, const body_spec &spec,
 		operation_handler_t handler) override {
 		m_inner->respond(std::move(head), std::move(spec), std::move(handler));
 	}
-	void inform_sync(response_head head, error_code &error) noexcept override {
+	void inform_sync(const response_head &head, error_code &error) noexcept override {
 		m_inner->inform_sync(std::move(head), error);
 	}
-	void inform(response_head head, operation_handler_t handler) override {
+	void inform(const response_head &head, operation_handler_t handler) override {
 		m_inner->inform(std::move(head), std::move(handler));
 	}
 	[[nodiscard]] endpoint_t remote_endpoint(
@@ -85,14 +85,14 @@ public:
 		return m_inner->local_endpoint(error);
 	}
 	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
-		optional<response_head> response, error_code &error) noexcept override
+		const optional<response_head> &response, error_code &error) noexcept override
 	{
 		auto result = m_inner->open_duplex_sync(std::move(response), error);
 		if( not error )
 			abandon(false);
 		return result;
 	}
-	void open_duplex(optional<response_head> response,
+	void open_duplex(const optional<response_head> &response,
 		duplex_handler_t handler) override
 	{
 		auto self = shared_from_this();
@@ -341,16 +341,16 @@ public:
 		{
 			std::lock_guard lock(m_mutex);
 			m_stopped = true;
-			for( auto &[key, value] : m_buckets )
+			for(auto &[key, value] : m_buckets)
 			{
 				ignore_unused(key);
-				for( auto &item : value.waiters )
+				for(auto &item : value.waiters)
 				{
 					item->queued = false;
 					failed.push_back(item);
 				}
 				value.waiters.clear();
-				for( auto &value_slot : value.sessions )
+				for(auto &value_slot : value.sessions)
 				{
 					if( value_slot->session )
 						sessions.push_back(value_slot->session);
@@ -358,10 +358,10 @@ public:
 			}
 			m_condition.notify_all();
 		}
-		for( auto &item : failed )
+		for(auto &item : failed)
 			complete(item, asio::error::make_error_code(
 				asio::error::operation_aborted), {});
-		for( auto &session : sessions )
+		for(auto &session : sessions)
 			session->graceful_shutdown(
 				[](error_code) {});
 	}
@@ -375,7 +375,7 @@ public:
 	{
 		std::lock_guard lock(m_mutex);
 		size_t result = 0;
-		for( const auto &[key, value] : m_buckets )
+		for(const auto &[key, value] : m_buckets)
 		{
 			ignore_unused(key);
 			result += value.sessions.size();
@@ -387,10 +387,10 @@ public:
 	{
 		std::lock_guard lock(m_mutex);
 		size_t result = 0;
-		for( const auto &[key, value] : m_buckets )
+		for(const auto &[key, value] : m_buckets)
 		{
 			ignore_unused(key);
-			for( const auto &item : value.sessions )
+			for(const auto &item : value.sessions)
 				if( not item->busy and not item->session->closed() and
 					not item->session->draining() )
 					++result;
@@ -402,7 +402,7 @@ public:
 	{
 		std::lock_guard lock(m_mutex);
 		size_t result = 0;
-		for( const auto &[key, value] : m_buckets )
+		for(const auto &[key, value] : m_buckets)
 		{
 			ignore_unused(key);
 			result += value.waiters.size();
@@ -432,7 +432,7 @@ private:
 
 	[[nodiscard]] slot_ptr_t take_slot_locked(bucket &value)
 	{
-		for( auto &item : value.sessions )
+		for(auto &item : value.sessions)
 		{
 			if( not usable(item) )
 				continue;

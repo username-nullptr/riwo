@@ -90,7 +90,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		if( decoded_size > limit )
 			return sys_unexpected(
 				make_error_code(errc::header_limit_exceeded));
-		for( const auto &field : head.headers )
+		for(const auto &field : head.headers)
 		{
 			auto name = lower(field.name);
 			if( name.starts_with(':') or forbidden_header(name) )
@@ -131,7 +131,7 @@ void add_nv(nv_block &block, std::string name, std::string value)
 		result.storage.reserve(trailers.size() * 2);
 		result.values.reserve(trailers.size());
 		size_t decoded_size = 0;
-		for( const auto &field : trailers )
+		for(const auto &field : trailers)
 		{
 			auto name = lower(field.name);
 			if( name.starts_with(':') or forbidden_header(name) or name == "te" or
@@ -212,15 +212,15 @@ public:
 		error_code &error) const noexcept override;
 	[[nodiscard]] endpoint_t local_endpoint(
 		error_code &error) const noexcept override;
-	void respond_sync(response_head head, body_spec spec,
+	void respond_sync(const response_head &head, const body_spec &spec,
 		error_code &error) noexcept override;
-	void respond(response_head head, body_spec spec,
+	void respond(const response_head &head, const body_spec &spec,
 		operation_handler_t handler) override;
-	void inform_sync(response_head head, error_code &error) noexcept override;
-	void inform(response_head head, operation_handler_t handler) override;
+	void inform_sync(const response_head &head, error_code &error) noexcept override;
+	void inform(const response_head &head, operation_handler_t handler) override;
 	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync(
-		optional<response_head> response, error_code &error) noexcept override;
-	void open_duplex(optional<response_head> response,
+		const optional<response_head> &response, error_code &error) noexcept override;
+	void open_duplex(const optional<response_head> &response,
 		duplex_handler_t handler) override;
 	[[nodiscard]] bool reusable() const noexcept override;
 	[[nodiscard]] void *protocol_extension(
@@ -801,7 +801,7 @@ private:
 		if( m_closed.exchange(true) )
 			return ;
 		m_draining = true;
-		for( auto &[id, value] : m_streams )
+		for(auto &[id, value] : m_streams)
 		{
 			ignore_unused(id);
 			complete_error(*value, error);
@@ -835,7 +835,7 @@ private:
 	void complete_shutdown(error_code error)
 	{
 		auto handlers = std::move(m_shutdown_handlers);
-		for( auto &handler : handlers ) std::move(handler)(error);
+		for(auto &handler : handlers) std::move(handler)(error);
 	}
 
 	void finish_shutdown_if_idle()
@@ -997,7 +997,7 @@ private:
 				value.m_request.url = riwo::url(value.m_scheme + "://" +
 					value.m_authority + value.m_path);
 			optional<uint64_t> content_length_value;
-			for( const auto &field : value.m_request.headers )
+			for(const auto &field : value.m_request.headers)
 			{
 				if( lower(field.name) != "content-length" )
 					continue;
@@ -1354,29 +1354,29 @@ auto server_stream_impl::remote_endpoint(error_code &error) const noexcept
 auto server_stream_impl::local_endpoint(error_code &error) const noexcept
 	-> endpoint_t { return m_session->local_endpoint(error); }
 
-void server_stream_impl::respond_sync(response_head head, body_spec spec,
+void server_stream_impl::respond_sync(const response_head &head, const body_spec &spec,
 	error_code &error) noexcept {
 	m_session->respond_sync(*this, std::move(head), std::move(spec), error);
 }
 
-void server_stream_impl::respond(response_head head, body_spec spec,
+void server_stream_impl::respond(const response_head &head, const body_spec &spec,
 	operation_handler_t handler) {
 	m_session->respond(shared_from_this(), std::move(head), std::move(spec),
 		std::move(handler));
 }
 
-void server_stream_impl::inform_sync(response_head head,
+void server_stream_impl::inform_sync(const response_head &head,
 	error_code &error) noexcept {
 	m_session->inform_sync(*this, std::move(head), error);
 }
 
-void server_stream_impl::inform(response_head head,
+void server_stream_impl::inform(const response_head &head,
 	operation_handler_t handler) {
 	m_session->inform(shared_from_this(), std::move(head), std::move(handler));
 }
 
 std::shared_ptr<duplex_state> server_stream_impl::open_duplex_sync(
-	optional<response_head> response, error_code &error) noexcept
+	const optional<response_head> &response, error_code &error) noexcept
 {
 	error.clear();
 	if( m_duplex_opened or not m_request.connect_protocol or not response or
@@ -1402,7 +1402,7 @@ std::shared_ptr<duplex_state> server_stream_impl::open_duplex_sync(
 		});
 }
 
-void server_stream_impl::open_duplex(optional<response_head> response,
+void server_stream_impl::open_duplex(const optional<response_head> &response,
 	duplex_handler_t handler)
 {
 	if( m_duplex_opened or not m_request.connect_protocol or not response or
@@ -1603,7 +1603,7 @@ sys_expected<std::shared_ptr<server_session>> make_server_session(
 		return sys_unexpected(make_error_code(errc::negotiation_failed));
 	if( auto error = validate_server_config(config) )
 		return sys_unexpected(error);
-	if( config.protocols.requirement == protocol_requirement::require_http1 or
+	if( config.protocols.requirement == protocol_requirement::require_v1 or
 		std::ranges::find(config.protocols.preference, protocol::v2) ==
 			config.protocols.preference.end() )
 		return sys_unexpected(make_error_code(errc::negotiation_failed));

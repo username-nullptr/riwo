@@ -15,9 +15,9 @@ namespace
 	static std::atomic<uint64_t> sequence {0};
 	std::array<unsigned char,24> bytes {};
 	std::random_device random;
-	for( auto &value : bytes ) value = static_cast<unsigned char>(random());
+	for(auto &value : bytes) value = static_cast<unsigned char>(random());
 	auto counter = sequence.fetch_add(1, std::memory_order_relaxed);
-	for( size_t index = 0; index < sizeof(counter); ++index )
+	for(size_t index=0; index<sizeof(counter); ++index)
 		bytes[index] ^= static_cast<unsigned char>(counter >> (index * 8U));
 	constexpr char alphabet[] =
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -25,7 +25,7 @@ namespace
 	result.reserve(32);
 	uint32_t accumulator = 0;
 	unsigned bits = 0;
-	for( const auto value : bytes )
+	for(const auto value : bytes)
 	{
 		accumulator = (accumulator << 8U) | value;
 		bits += 8;
@@ -212,7 +212,7 @@ void application_session_manager::set_config(application_session_config config)
 void application_session_manager::insert(application_session_ptr value)
 {
 	if( not value )
-		throw std::invalid_argument(
+		invalid_argument::loc_throw(
 		"riwo::http_exp::application_session_manager: null session");
 	std::lock_guard lock(m_impl->mutex);
 	m_impl->sessions.insert_or_assign(std::string(value->id()), std::move(value));
@@ -277,8 +277,8 @@ size_t application_session_manager::purge_expired() noexcept
 	std::vector<application_session_ptr> expired;
 	{
 		std::lock_guard lock(m_impl->mutex);
-		for( auto iterator = m_impl->sessions.begin();
-			iterator != m_impl->sessions.end(); )
+		for(auto iterator=m_impl->sessions.begin();
+			iterator!=m_impl->sessions.end();)
 		{
 			if( iterator->second->valid() )
 				++iterator;
@@ -289,7 +289,7 @@ size_t application_session_manager::purge_expired() noexcept
 			}
 		}
 	}
-	for( const auto &value : expired ) value->notify_timeout();
+	for(const auto &value : expired) value->notify_timeout();
 	return expired.size();
 }
 

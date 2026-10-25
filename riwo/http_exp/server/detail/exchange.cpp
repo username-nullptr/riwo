@@ -138,7 +138,7 @@ application_session_ptr server_exchange_state::find_session()
 	auto cookies = parse_cookie_fields(m_impl->m_request.headers);
 	if( not cookies )
 		return {};
-	for( const auto &cookie : *cookies )
+	for(const auto &cookie : *cookies)
 	{
 		if( cookie.name != config.cookie_name )
 			continue;
@@ -194,7 +194,7 @@ bool server_exchange_state::prepare_compression(response_head &head,
 	head.headers.set("Content-Encoding", "gzip");
 	head.headers.erase("Content-Length");
 	bool varies_on_encoding = false;
-	for( const auto &vary : head.headers.find_all("vary") )
+	for(const auto &vary : head.headers.find_all("vary"))
 	{
 		const auto value = vary.value.to_string();
 		if( comma_list_contains(value, "accept-encoding") or
@@ -224,7 +224,7 @@ void attach_session_cookie(auto &state,
 		not state.m_sessions )
 		return ;
 	const auto config = state.m_sessions->config();
-	add_set_cookie(head.headers, response_cookie {
+	set_cookie(head.headers, response_cookie {
 		.name = config.cookie_name,
 		.value = riwo::value(std::string(state.m_application_session->id())),
 		.path = config.cookie_path,

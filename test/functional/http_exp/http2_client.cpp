@@ -268,7 +268,7 @@ void prior_knowledge_body_and_trailers()
 	std::jthread server([&] { run_peer(acceptor, state); });
 
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_http2;
+	config.protocols.requirement = http::protocol_requirement::require_v2;
 	config.pool.max_sessions_per_origin = 1;
 	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/upload",
@@ -306,7 +306,7 @@ void multiplexed_async_requests()
 	std::jthread server([&] { run_peer(acceptor, state); });
 
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_http2;
+	config.protocols.requirement = http::protocol_requirement::require_v2;
 	config.pool.max_sessions_per_origin = 1;
 	http::client client(context, config);
 	const auto base = std::format("http://127.0.0.1:{}",
@@ -314,7 +314,7 @@ void multiplexed_async_requests()
 	size_t completed = 0;
 	std::array<riwo::error_code,2> errors {};
 	std::array<std::string,2> bodies;
-	for( size_t index = 0; index < 2; ++index )
+	for(size_t index=0; index<2; ++index)
 	{
 		client.fetch(http::request(http::method::get,
 			base + "/stream/" + std::to_string(index)),
@@ -337,8 +337,8 @@ void multiplexed_async_requests()
 
 void reset_and_goaway_errors()
 {
-	for( const auto action : {peer_state::behavior::reset,
-		peer_state::behavior::goaway} )
+	for(const auto action : {peer_state::behavior::reset,
+		peer_state::behavior::goaway})
 	{
 		riwo::io_context_t context;
 		asio::ip::tcp::acceptor acceptor(context,
@@ -348,7 +348,7 @@ void reset_and_goaway_errors()
 		std::jthread server([&] { run_peer(acceptor, state); });
 		http::client_config config;
 		config.protocols.requirement =
-			http::protocol_requirement::require_http2;
+			http::protocol_requirement::require_v2;
 		config.retries.max_attempts = 1;
 		http::client client(context, config);
 		const auto target = std::format("http://127.0.0.1:{}/failure",
@@ -371,7 +371,7 @@ void refused_stream_retries_async()
 	std::jthread server([&] { run_peer(acceptor, state); });
 	http::client_config config;
 	config.protocols.requirement =
-		http::protocol_requirement::require_http2;
+		http::protocol_requirement::require_v2;
 	config.retries.max_attempts = 2;
 	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/retry",
@@ -406,7 +406,7 @@ void redirect_rewinds_replayable_source()
 	std::jthread server([&] { run_peer(acceptor, state); });
 	http::client_config config;
 	config.protocols.requirement =
-		http::protocol_requirement::require_http2;
+		http::protocol_requirement::require_v2;
 	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/redirect",
 		acceptor.local_endpoint().port());

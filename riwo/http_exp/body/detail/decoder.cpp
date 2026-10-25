@@ -29,7 +29,7 @@ struct RIWO_DECL_HIDDEN decoding_body_reader_adapter::impl
 		m_stream.opaque = Z_NULL;
 
 		if( inflateInit2(&m_stream, window) != Z_OK )
-			throw std::runtime_error("cannot initialize HTTP content decoder");
+			runtime_error::loc_throw("cannot initialize HTTP content decoder");
 
 		m_initialized = true;
 	}

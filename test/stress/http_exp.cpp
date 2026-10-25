@@ -52,7 +52,7 @@ void concurrent_http1_pool_pressure()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	http::server service(std::move(acceptor), server_config);
 	std::atomic_size_t handled {0};
 	std::atomic_size_t server_errors {0};
@@ -94,7 +94,7 @@ void concurrent_http1_pool_pressure()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	client_config.pool.max_sessions_per_origin = 4;
 	client_config.pool.max_waiters_per_origin = worker_count * 2;
 	client_config.retries.max_attempts = 1;
@@ -103,13 +103,13 @@ void concurrent_http1_pool_pressure()
 
 	std::vector<std::future<void>> futures;
 	futures.reserve(worker_count);
-	for(size_t worker = 0; worker < worker_count; ++worker)
+	for(size_t worker=0; worker<worker_count; ++worker)
 	{
 		futures.emplace_back(asio::co_spawn(client_strand,
 		[&, worker, seed]() -> riwo::awaitable<void>
 		{
-			for(size_t request_index = 0;
-				request_index < requests_per_worker; ++request_index)
+			for(size_t request_index=0;
+				request_index<requests_per_worker; ++request_index)
 			{
 				const auto body_size = request_index % 19 == 0 ?
 					size_t {64 * 1024} :
@@ -152,7 +152,7 @@ void http2_multiplexed_slow_consumer_pressure()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_http2;
+		http::protocol_requirement::require_v2;
 	// 128 default-sized stream windows fit inside the configured 8 MiB
 	// connection budget; raising only the stream count would be an invalid
 	// resource configuration rather than useful pressure.
@@ -168,7 +168,7 @@ void http2_multiplexed_slow_consumer_pressure()
 			co_await exchange.respond({http::status::ok, {}},
 				http::body_spec::streaming(), riwo::use_awaitable);
 			const std::string chunk(4096, 's');
-			for(size_t index = 0; index < 128; ++index)
+			for(size_t index=0; index<128; ++index)
 				(void)co_await exchange.response_body().write(
 					riwo::buffer(chunk), riwo::use_awaitable);
 			co_await exchange.response_body().finish({}, riwo::use_awaitable);
@@ -198,7 +198,7 @@ void http2_multiplexed_slow_consumer_pressure()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_http2;
+		http::protocol_requirement::require_v2;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.max_waiters_per_origin = fast_count + 4;
 	client_config.retries.max_attempts = 1;
@@ -223,7 +223,7 @@ void http2_multiplexed_slow_consumer_pressure()
 
 		std::vector<std::future<void>> fast;
 		fast.reserve(fast_count);
-		for(size_t index = 0; index < fast_count; ++index)
+		for(size_t index=0; index<fast_count; ++index)
 		{
 			fast.emplace_back(asio::co_spawn(client_strand,
 			[&, index, seed]() -> riwo::awaitable<void>
@@ -263,7 +263,7 @@ void http2_multiplexed_slow_consumer_pressure()
 
 		std::array<char,1021> buffer {};
 		size_t received = 0;
-		for(size_t reads = 0;; ++reads)
+		for(size_t reads=0;; ++reads)
 		{
 			http::body_read_result result;
 			try {
@@ -283,7 +283,7 @@ void http2_multiplexed_slow_consumer_pressure()
 				co_await asio::post(riwo::use_awaitable);
 		}
 		RIWO_TEST_CHECK_EQ(received, 512U * 1024U);
-		for(size_t attempt = 0; attempt < 100 and
+		for(size_t attempt=0; attempt<100 and
 			!slow_finished.load(std::memory_order_acquire); ++attempt)
 			co_await asio::post(riwo::use_awaitable);
 		RIWO_TEST_CHECK(slow_finished.load(std::memory_order_acquire));

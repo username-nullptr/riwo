@@ -10,7 +10,7 @@ namespace riwo::http_exp::detail { namespace
 
 [[noreturn]] void throw_file_error(std::errc error = std::errc::io_error)
 {
-	throw std::system_error(std::make_error_code(error));
+	system_error::loc_throw(std::make_error_code(error));
 }
 
 [[nodiscard]] error_code eof_error() noexcept

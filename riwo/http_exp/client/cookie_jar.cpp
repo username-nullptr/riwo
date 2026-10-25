@@ -128,7 +128,7 @@ public:
 			config.max_cookies_per_domain )
 		{
 			auto candidate = values.end();
-			for( auto iterator = values.begin(); iterator != values.end(); ++iterator )
+			for(auto iterator=values.begin(); iterator!=values.end(); ++iterator)
 			{
 				if( iterator->domain != domain )
 					continue;
@@ -308,7 +308,7 @@ size_t cookie_jar::store(const riwo::url &origin,
 	const fields &response_headers)
 {
 	size_t result = 0;
-	for( const auto &header : response_headers.find_all("Set-Cookie") )
+	for(const auto &header : response_headers.find_all("Set-Cookie"))
 	{
 		auto parsed = parse_set_cookie(header.value.to_string());
 		if( parsed and store(origin, *parsed) )
@@ -331,7 +331,7 @@ std::vector<cookie_pair> cookie_jar::select(const riwo::url &target,
 	std::scoped_lock lock(m_impl->mutex);
 	m_impl->remove_expired(now);
 	std::vector<cookie_entry*> matches;
-	for( auto &item : m_impl->values )
+	for(auto &item : m_impl->values)
 	{
 		if( item.host_only ? item.domain != host :
 			not domain_match(host, item.domain) )
@@ -353,7 +353,7 @@ std::vector<cookie_pair> cookie_jar::select(const riwo::url &target,
 	});
 	std::vector<cookie_pair> result;
 	result.reserve(matches.size());
-	for( const auto *item : matches )
+	for(const auto *item : matches)
 		result.push_back({item->name, item->value});
 	return result;
 }

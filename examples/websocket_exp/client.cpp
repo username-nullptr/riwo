@@ -13,9 +13,9 @@ namespace ws = riwo::websocket_exp;
 [[nodiscard]] http::protocol_requirement protocol_requirement(
 	std::string_view value)
 {
-	if( value == "http1" ) return http::protocol_requirement::require_http1;
+	if( value == "http1" ) return http::protocol_requirement::require_v1;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( value == "http2" ) return http::protocol_requirement::require_http2;
+	if( value == "http2" ) return http::protocol_requirement::require_v2;
 #endif
 	throw std::invalid_argument(
 		"protocol must be http1"

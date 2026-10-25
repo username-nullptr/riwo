@@ -74,7 +74,7 @@ public:
 	{
 		m_running = false;
 		m_acceptor_wrap.cancel();
-		for( auto &value : m_connections )
+		for(auto &value : m_connections)
 			if( value )
 				value->cancel();
 		m_connections.clear();
@@ -85,15 +85,15 @@ public:
 		std::vector<middleware_ptr_t> middleware = {})
 	{
 		if( path.empty() )
-			throw std::invalid_argument(
+			invalid_argument::loc_throw(
 				"riwo::http_exp::server::on_request: path is empty");
 		if( not handler )
-			throw std::invalid_argument(
+			invalid_argument::loc_throw(
 				"riwo::http_exp::server::on_request: handler is empty");
 		route_pattern compiled(path);
 		std::lock_guard lock(m_routes_write_mutex);
 		auto current = m_routes.load(std::memory_order_acquire);
-		for( const auto &value : current->routes )
+		for(const auto &value : current->routes)
 		{
 			if( value.pattern.text() != path )
 				continue;
@@ -103,7 +103,7 @@ public:
 					return std::ranges::find(methods, candidate) != methods.end();
 				});
 			if( overlaps )
-				throw std::invalid_argument(
+				invalid_argument::loc_throw(
 				"riwo::http_exp::server::on_request: route/method is already bound");
 		}
 		auto updated = std::make_shared<route_table>(*current);
@@ -116,7 +116,7 @@ public:
 	void use_middleware(middleware_ptr_t middleware)
 	{
 		if( not middleware )
-			throw std::invalid_argument(
+			invalid_argument::loc_throw(
 			"riwo::http_exp::server::use: middleware is null");
 		std::lock_guard lock(m_routes_write_mutex);
 		auto current = m_routes.load(std::memory_order_acquire);
@@ -153,7 +153,7 @@ private:
 		}) )
 			values.emplace_back(http_exp::method::options);
 		std::string result;
-		for( const auto &value : values )
+		for(const auto &value : values)
 		{
 			if( not result.empty() )
 				result += ", ";
@@ -186,7 +186,7 @@ private:
 		try
 		{
 			bool stopped = false;
-			for( ; entered < chain.size(); ++entered )
+			for(; entered<chain.size(); ++entered)
 			{
 				const auto &middleware = chain[entered];
 				if( middleware and co_await middleware->before(exchange) )
@@ -416,7 +416,7 @@ private:
 			bool selected_direct = false;
 			size_t best_specificity = 0;
 			std::vector<const route*> path_matches;
-			for( const auto &candidate : routes->routes )
+			for(const auto &candidate : routes->routes)
 			{
 				auto match = candidate.pattern.match(target);
 				if( not match )
@@ -460,8 +460,8 @@ private:
 			{
 				auto all_methods = [routes]() {
 					std::vector<http_exp::method> values;
-					for( const auto &route : routes->routes )
-						for( const auto &value : route.methods )
+					for(const auto &route : routes->routes)
+						for(const auto &value : route.methods)
 							if( std::ranges::none_of(values,
 								[&value](const http_exp::method &item) {
 									return item == value;
@@ -492,8 +492,8 @@ private:
 				else if( not path_matches.empty() )
 				{
 					std::vector<http_exp::method> allowed;
-					for( const auto *candidate : path_matches )
-						for( const auto &value : candidate->methods )
+					for(const auto *candidate : path_matches)
+						for(const auto &value : candidate->methods)
 							if( std::ranges::find(allowed, value) == allowed.end() )
 								allowed.push_back(value);
 					co_await self->method_not_allowed(exchange,
@@ -639,7 +639,7 @@ auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint)
 	error_code error;
 	bind(std::move(endpoint), error);
 	if( error )
-		throw std::system_error(std::error_code(error));
+		system_error::loc_throw(std::error_code(error));
 	return *this;
 }
 
@@ -700,7 +700,7 @@ auto basic_server<Exec,ServiceExec>::on_request(std::string path,
 	controller_ptr_t controller) -> basic_server&
 {
 	if( not controller )
-		throw std::invalid_argument(
+		invalid_argument::loc_throw(
 		"riwo::http_exp::server::on_request: controller is null");
 	auto handler = [controller](context_t &exchange) -> awaitable<void> {
 		co_await controller->service(exchange);
@@ -797,7 +797,7 @@ auto basic_server<Exec,ServiceExec>::start(size_t maximum) -> basic_server&
 	error_code error;
 	start(maximum, error);
 	if( error )
-		throw std::system_error(std::error_code(error));
+		system_error::loc_throw(std::error_code(error));
 	return *this;
 }
 
@@ -823,7 +823,7 @@ auto basic_server<Exec,ServiceExec>::serve(
 	error_code error;
 	serve(std::move(transport), error);
 	if( error )
-		throw std::system_error(std::error_code(error));
+		system_error::loc_throw(std::error_code(error));
 	return *this;
 }
 

@@ -32,14 +32,14 @@ std::shared_ptr<const route_pattern::impl>
 route_pattern::compile(std::string pattern)
 {
 	if( pattern.empty() or not pattern.starts_with('/') )
-		throw std::invalid_argument(
+		invalid_argument::loc_throw(
 			"riwo::http_exp::route_pattern: pattern must start with '/'");
 
 	auto result = std::make_shared<route_pattern::impl>();
 	result->text = std::move(pattern);
 	std::string expression = "^";
 	std::unordered_set<std::string> names;
-	for( size_t index = 0; index < result->text.size(); ++index )
+	for(size_t index=0; index<result->text.size(); ++index)
 	{
 		const auto current = result->text[index];
 		if( current == '*' )
@@ -56,12 +56,12 @@ route_pattern::compile(std::string pattern)
 		{
 			const auto close = result->text.find('}', index + 1);
 			if( close == std::string::npos or close == index + 1 )
-				throw std::invalid_argument(
+				invalid_argument::loc_throw(
 					"riwo::http_exp::route_pattern: invalid path argument");
 			auto name = result->text.substr(index + 1, close - index - 1);
 			if( name.find_first_of("{}/") != std::string::npos or
 				not names.insert(name).second )
-				throw std::invalid_argument(
+				invalid_argument::loc_throw(
 					"riwo::http_exp::route_pattern: invalid or duplicate argument");
 			result->argument_names.emplace_back(std::move(name));
 			expression += "([^/]+)";
@@ -71,7 +71,7 @@ route_pattern::compile(std::string pattern)
 		else
 		{
 			if( current == '}' )
-				throw std::invalid_argument(
+				invalid_argument::loc_throw(
 					"riwo::http_exp::route_pattern: unmatched '}'");
 			if( regex_special(current) )
 				expression.push_back('\\');
@@ -127,7 +127,7 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 			return {};
 		parameter_view::container_t parameters;
 		parameters.reserve(m_impl->argument_names.size());
-		for( size_t index = 0; index < m_impl->argument_names.size(); ++index )
+		for(size_t index=0; index<m_impl->argument_names.size(); ++index)
 		{
 			auto decoded = decode_uri_component(std::string_view(
 				matches[index + 1].first, matches[index + 1].second), false);

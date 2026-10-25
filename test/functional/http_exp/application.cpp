@@ -109,8 +109,8 @@ void note_service_workflow()
 			co_await exchange.respond(std::move(head),
 				http::body_spec::streaming({{"X-Event-Count"}}),
 				riwo::use_awaitable);
-			for( const std::string_view event :
-				{"data: created\n\n", "data: indexed\n\n"} )
+			for(const std::string_view event :
+				{"data: created\n\n", "data: indexed\n\n"})
 			{
 				(void)co_await exchange.response_body().write(
 					riwo::buffer(event), riwo::use_awaitable);
@@ -125,7 +125,7 @@ void note_service_workflow()
 		{
 			http::response_head head {http::status::found, {}};
 			head.headers.add("Set-Cookie", "bad name=ignored");
-			http::add_set_cookie(head.headers, {
+			http::set_cookie(head.headers, {
 				.name = "redirect", .value = riwo::value("ready"),
 				.path = "/cookies", .http_only = true});
 			head.headers.add("Location", "/cookies/target");
@@ -159,7 +159,7 @@ void note_service_workflow()
 		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
-			http::add_set_cookie(head.headers, {
+			http::set_cookie(head.headers, {
 				.name = "stream", .value = riwo::value("captured"),
 				.path = "/cookies"});
 			co_await exchange.respond(std::move(head),
@@ -169,7 +169,7 @@ void note_service_workflow()
 		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			http::response_head head;
-			http::add_set_cookie(head.headers, {
+			http::set_cookie(head.headers, {
 				.name = "disabled", .value = riwo::value("unexpected"),
 				.path = "/cookies"});
 			co_await exchange.respond(std::move(head),
@@ -196,7 +196,7 @@ void note_service_workflow()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(1);
 	http::client client(context, client_config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>

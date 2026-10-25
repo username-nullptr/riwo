@@ -38,8 +38,8 @@ namespace
 	const std::filesystem::path &prefix) noexcept
 {
 	auto current = path.begin();
-	for( auto expected = prefix.begin(); expected != prefix.end();
-		++expected, ++current )
+	for(auto expected=prefix.begin(); expected!=prefix.end();
+		++expected, ++current)
 		if( current == path.end() or *current != *expected )
 			return false;
 	return true;
@@ -118,18 +118,17 @@ public:
 			if( not std_error )
 				std_error = std::make_error_code(
 				std::errc::no_such_file_or_directory);
-			throw std::filesystem::filesystem_error(
-				"HTTP file response", path, std_error);
+			filesystem_error::loc_throw("HTTP file response", path, std_error);
 		}
 		const auto file_size = std::filesystem::file_size(path, std_error);
 		if( std_error )
-			throw std::filesystem::filesystem_error(
-			"HTTP file response size", path, std_error);
+			filesystem_error::loc_throw(
+				"HTTP file response size", path, std_error);
 		const auto modified_file_time =
 			std::filesystem::last_write_time(path, std_error);
 		if( std_error )
-			throw std::filesystem::filesystem_error(
-			"HTTP file response last write", path, std_error);
+			filesystem_error::loc_throw(
+				"HTTP file response last write", path, std_error);
 		const auto modified = system_time(modified_file_time);
 		const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
 			modified.time_since_epoch()).count();
@@ -187,7 +186,7 @@ public:
 			return ;
 		}
 		uint64_t selected_bytes = 0;
-		for( const auto &range : ranges )
+		for(const auto &range : ranges)
 		{
 			if( range.length > std::numeric_limits<uint64_t>::max() -
 				selected_bytes )
@@ -215,7 +214,7 @@ public:
 		head.headers.set("Content-Type", "multipart/byteranges; boundary=" +
 			boundary);
 		total_size = 0;
-		for( const auto &range : ranges )
+		for(const auto &range : ranges)
 		{
 			auto prefix = std::format("--{}\r\nContent-Type: {}\r\n"
 				"Content-Range: {}\r\n\r\n", boundary, type,
@@ -224,13 +223,13 @@ public:
 			if( prefix.size() > maximum - total_size or
 				2 > maximum - total_size - prefix.size() or
 				range.length > maximum - total_size - prefix.size() - 2 )
-				throw std::length_error("multipart byte ranges are too large");
+				length_error::loc_throw("multipart byte ranges are too large");
 			total_size += prefix.size() + range.length + 2;
 			segments.push_back({std::move(prefix), range, "\r\n"});
 		}
 		closing = "--" + boundary + "--\r\n";
 		if( closing.size() > std::numeric_limits<uint64_t>::max() - total_size )
-			throw std::length_error("multipart byte ranges are too large");
+			length_error::loc_throw("multipart byte ranges are too large");
 		total_size += closing.size();
 		open();
 	}
@@ -248,9 +247,8 @@ public:
 		file.clear();
 		file.open(path, std::ios::binary);
 		if( not file )
-			throw std::filesystem::filesystem_error(
-			"HTTP file response open", path,
-			std::make_error_code(std::errc::io_error));
+			filesystem_error::loc_throw("HTTP file response open", path,
+				std::make_error_code(std::errc::io_error));
 		segment_index = 0;
 		prefix_offset = 0;
 		file_offset = 0;

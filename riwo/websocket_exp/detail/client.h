@@ -116,7 +116,7 @@ inline bool extended_connect(const http_exp::client_config &config) noexcept
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	return config.protocols.requirement ==
-		http_exp::protocol_requirement::require_http2;
+		http_exp::protocol_requirement::require_v2;
 #else
 	ignore_unused(config);
 	return false;
@@ -128,12 +128,12 @@ inline http_exp::client_config websocket_http_config(
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	if( config.protocols.requirement ==
-		http_exp::protocol_requirement::require_http2 )
+		http_exp::protocol_requirement::require_v2 )
 		config.h2.enable_extended_connect = true;
 	else
 #endif
 		config.protocols.requirement =
-			http_exp::protocol_requirement::require_http1;
+			http_exp::protocol_requirement::require_v1;
 	config.redirects.max_redirects = 0;
 	config.automatic_decompression = false;
 	if( handshake_timeout > std::chrono::milliseconds::zero() )

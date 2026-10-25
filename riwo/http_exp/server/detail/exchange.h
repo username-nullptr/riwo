@@ -602,7 +602,7 @@ auto basic_server_exchange<Exec>::respond_file(std::filesystem::path path,
 	{
 		auto resolved = resolve_resource_path(resource_root(), path);
 		if( not resolved )
-			throw std::system_error(std::error_code(resolved.error()));
+			system_error::loc_throw(std::error_code(resolved.error()));
 		path = std::move(*resolved);
 	}
 	file_response_source source(std::move(path), request(), std::move(options));

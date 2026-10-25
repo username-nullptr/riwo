@@ -60,7 +60,7 @@ void h1_client_server_round_trip()
 		{
 			co_await exchange.respond({http::status::ok, {}},
 				http::body_spec::streaming({{"Digest"}}), riwo::use_awaitable);
-			for( size_t index = 0; index < 128; ++index )
+			for(size_t index=0; index<128; ++index)
 			{
 				const std::string chunk(1024, static_cast<char>('a' + index % 26));
 				(void)co_await exchange.response_body().write(

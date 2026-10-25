@@ -14,9 +14,10 @@ struct parameter
 	std::string name;
 	std::string value;
 
-	friend bool operator==(const parameter &, const parameter &) = default;
+	friend bool operator== (
+		const parameter&, const parameter&
+	) = default;
 };
-
 // An owning, immutable-at-the-exchange-boundary parameter collection.  It
 // preserves input order and duplicate query keys.
 class RIWO_HTTP_EXP_API parameter_view
@@ -37,12 +38,13 @@ public:
 	[[nodiscard]] bool contains(std::string_view name) const noexcept;
 	[[nodiscard]] bool empty() const noexcept;
 	[[nodiscard]] size_t size() const noexcept;
+
 	[[nodiscard]] const_iterator begin() const noexcept;
 	[[nodiscard]] const_iterator end() const noexcept;
 	[[nodiscard]] const container_t &values() const noexcept;
 
 private:
-	container_t m_values;
+	container_t m_values {};
 };
 
 [[nodiscard]] RIWO_HTTP_EXP_API optional<std::string>
@@ -52,5 +54,6 @@ decode_uri_component(std::string_view value, bool plus_as_space = false) noexcep
 parse_query_parameters(std::string_view query) noexcept;
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_PARAMETERS_H

@@ -12,15 +12,12 @@ namespace riwo::http_exp::v1 { namespace
 {
 	switch( value )
 	{
-	case detail::body_framing::content_length:
-		return body_framing::content_length;
-	case detail::body_framing::chunked:
-		return body_framing::chunked;
-	case detail::body_framing::until_eof:
-		return body_framing::until_eof;
-	default:
-		return body_framing::none;
+	case detail::body_framing::content_length: return body_framing::content_length;
+	case detail::body_framing::chunked       : return body_framing::chunked       ;
+	case detail::body_framing::until_eof     : return body_framing::until_eof     ;
+	default: break;
 	}
+	return body_framing::none;
 }
 
 [[nodiscard]] body_framing framing_for(const body_spec &spec) noexcept
@@ -28,97 +25,106 @@ namespace riwo::http_exp::v1 { namespace
 	switch( spec.type() )
 	{
 	case body_spec::mode::known_length:
-		return spec.length().value_or(0) == 0 ? body_framing::none :
-			body_framing::content_length;
+		return spec.length().value_or(0) == 0 ?
+			body_framing::none : body_framing::content_length;
+
 	case body_spec::mode::streaming:
 		return body_framing::chunked;
+
 	case body_spec::mode::head:
 		return body_framing::none;
-	default:
-		return body_framing::none;
+
+	default: break;
 	}
+	return body_framing::none;
 }
 
-[[nodiscard]] std::string_view as_chars(const_buffer input) noexcept {
-	return {static_cast<const char *>(input.data()), input.size()};
-}
-
-[[nodiscard]] sys_expected<fields> parse_trailers(std::string_view block,
-	const message_limits &limits) noexcept
+[[nodiscard]] std::string_view as_chars(const const_buffer &input) noexcept
 {
-	try
+	return {static_cast<const char*>(input.data()), input.size()};
+}
+
+[[nodiscard]] sys_expected<fields>
+parse_trailers(std::string_view block, const message_limits &limits) noexcept
+try
+{
+	fields result;
+	size_t count = 0;
+	size_t total = 0;
+
+	while( not block.empty() )
 	{
-		fields result;
-		size_t count = 0;
-		size_t total = 0;
-		while( not block.empty() )
-		{
-			const auto end = block.find("\r\n");
-			if( end == std::string_view::npos )
-				return sys_unexpected(make_error_code(
-					errc::connection_protocol_error));
-			const auto line = block.substr(0, end);
-			block.remove_prefix(end + 2);
-			if( line.empty() )
-				break;
-			if( ++count > limits.max_field_count or
-				total + line.size() > limits.max_header_list_size )
-				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
-			total += line.size();
-			const auto colon = line.find(':');
-			if( colon == 0 or colon == std::string_view::npos )
-				return sys_unexpected(make_error_code(
-					errc::connection_protocol_error));
-			const auto name = line.substr(0, colon);
-			const auto value = ::riwo::http_exp::detail::trim_ows(
-				line.substr(colon + 1));
-			if( name.size() > limits.max_field_name_size or
-				value.size() > limits.max_field_value_size )
-				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
-			result.add(std::string(name), std::string(value));
-		}
-		return result;
+		const auto end = block.find("\r\n");
+		if( end == std::string_view::npos )
+			return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
+		const auto line = block.substr(0, end);
+		block.remove_prefix(end + 2);
+
+		if( line.empty() )
+			break;
+
+		if( ++count > limits.max_field_count or total + line.size() > limits.max_header_list_size )
+			return sys_unexpected(make_error_code(errc::header_limit_exceeded));
+
+		total += line.size();
+		const auto colon = line.find(':');
+
+		if( colon == 0 or colon == std::string_view::npos )
+			return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
+		const auto name = line.substr(0, colon);
+		const auto value = http_exp::detail::trim_ows(line.substr(colon + 1));
+
+		if( name.size() > limits.max_field_name_size or value.size() > limits.max_field_value_size )
+			return sys_unexpected(make_error_code(errc::header_limit_exceeded));
+
+		result.add(std::string(name), std::string(value));
 	}
-	catch(...) {
-		return sys_unexpected(make_error_code(errc::connection_protocol_error));
-	}
+	return result;
+}
+catch(...) {
+	return sys_unexpected(make_error_code(errc::connection_protocol_error));
 }
 
 } //namespace
 
-sys_expected<serialized_head> serialize_request_head(const request_head &value,
-	const body_spec &spec, protocol version, request_target_form form) noexcept
+sys_expected<serialized_head> serialize_request_head
+(const request_head &value, const body_spec &spec, protocol version, request_target_form form) noexcept
+try
 {
-	try
-	{
-		auto head = value;
-		bool absolute = form == request_target_form::absolute;
-		if( form == request_target_form::authority )
-			head.target = head.authority;
-		else if( form == request_target_form::asterisk )
-			head.target = "*";
-		auto wire = detail::serialize_request(head, spec, version, absolute);
-		if( not wire )
-			return sys_unexpected(wire.error());
-		return serialized_head {
-			.wire = std::move(*wire),
-			.framing = framing_for(spec),
-			.close_after_message = false
-		};
-	}
-	catch(...) {
-		return sys_unexpected(exception_error(std::current_exception()));
-	}
-}
+	auto head = value;
+	bool absolute = form == request_target_form::absolute;
 
-sys_expected<serialized_head> serialize_response_head(const response_head &head,
-	const body_spec &spec, protocol version,
-	connection_disposition disposition) noexcept
-{
-	auto wire = detail::serialize_response(head, spec, version,
-		disposition == connection_disposition::close);
+	if( form == request_target_form::authority )
+		head.target = head.authority;
+
+	else if( form == request_target_form::asterisk )
+		head.target = "*";
+
+	auto wire = detail::serialize_request(head, spec, version, absolute);
 	if( not wire )
 		return sys_unexpected(wire.error());
+
+	return serialized_head {
+		.wire = std::move(*wire),
+		.framing = framing_for(spec),
+		.close_after_message = false
+	};
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
+}
+
+sys_expected<serialized_head> serialize_response_head
+(const response_head &head,const body_spec &spec, protocol version, connection_disposition disposition) noexcept
+{
+	auto wire = detail::serialize_response(head, spec, version,
+		disposition == connection_disposition::close
+	);
+	if( not wire )
+		return sys_unexpected(wire.error());
+
 	return serialized_head {
 		.wire = std::move(*wire),
 		.framing = framing_for(spec),
@@ -126,22 +132,31 @@ sys_expected<serialized_head> serialize_response_head(const response_head &head,
 	};
 }
 
-class request_parser::impl
+class RIWO_DECL_HIDDEN request_parser::impl
 {
+	RIWO_DISABLE_COPY_MOVE(impl)
+
 public:
-	explicit impl(message_limits value) : limits(std::move(value)) {}
-	message_limits limits;
-	std::string pending;
+	explicit impl(const message_limits &value) :
+		limits(value) {}
+
+	message_limits limits {};
+	std::string pending {};
 	bool done = false;
 };
 
-request_parser::request_parser(message_limits limits) :
-	m_impl(std::make_unique<impl>(std::move(limits))) {}
+request_parser::request_parser(const message_limits &limits) :
+	m_impl(std::make_unique<impl>(limits))
+{
+
+}
+
 request_parser::request_parser(request_parser &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
 	other.m_impl = std::make_unique<impl>(message_limits{});
 }
+
 request_parser &request_parser::operator=(request_parser &&other) noexcept
 {
 	if( this == &other )
@@ -150,10 +165,11 @@ request_parser &request_parser::operator=(request_parser &&other) noexcept
 	other.m_impl = std::make_unique<impl>(message_limits{});
 	return *this;
 }
+
 request_parser::~request_parser() = default;
 
 sys_expected<head_parse_result<parsed_request_head>>
-request_parser::ingest(const_buffer input) noexcept
+request_parser::ingest(const const_buffer &input) noexcept
 {
 	if( m_impl->done )
 		return sys_unexpected(make_error_code(errc::operation_not_permitted));
@@ -162,6 +178,7 @@ request_parser::ingest(const_buffer input) noexcept
 		const auto text = as_chars(input);
 		const auto old_size = m_impl->pending.size();
 		const auto marker_in_input = text.find("\r\n\r\n");
+
 		size_t take = text.size();
 		if( marker_in_input != std::string_view::npos and old_size == 0 )
 			take = marker_in_input + 4;
@@ -169,13 +186,16 @@ request_parser::ingest(const_buffer input) noexcept
 		{
 			m_impl->pending.append(text);
 			const auto marker = m_impl->pending.find("\r\n\r\n");
+
 			if( marker != std::string::npos )
 				take = marker + 4 > old_size ? marker + 4 - old_size : 0;
+
 			if( marker == std::string::npos )
 			{
 				if( m_impl->pending.size() > m_impl->limits.max_header_list_size +
 					m_impl->limits.max_start_line_size + 4 )
 					return sys_unexpected(make_error_code(errc::header_limit_exceeded));
+
 				return head_parse_result<parsed_request_head> {
 					.consumed = text.size(), .needs_input = true
 				};
@@ -187,11 +207,14 @@ request_parser::ingest(const_buffer input) noexcept
 			complete.assign(text.substr(0, take));
 		else
 			complete = m_impl->pending;
+
 		auto parsed = detail::parse_request(complete, m_impl->limits);
 		if( not parsed )
 			return sys_unexpected(parsed.error());
+
 		m_impl->done = true;
 		m_impl->pending.clear();
+
 		return head_parse_result<parsed_request_head> {
 			.consumed = take,
 			.head = parsed_request_head {
@@ -208,30 +231,44 @@ request_parser::ingest(const_buffer input) noexcept
 	}
 }
 
-void request_parser::reset() noexcept {
+void request_parser::reset() noexcept
+{
 	m_impl->pending.clear();
 	m_impl->done = false;
 }
-bool request_parser::complete() const noexcept { return m_impl->done; }
 
-class response_parser::impl
+bool request_parser::complete() const noexcept
 {
+	return m_impl->done;
+}
+
+class RIWO_DECL_HIDDEN response_parser::impl
+{
+	RIWO_DISABLE_COPY_MOVE(impl)
+
 public:
-	impl(message_limits value, bool head) :
-		limits(std::move(value)), head_request(head) {}
-	message_limits limits;
-	std::string pending;
+	impl(const message_limits &value, bool head) :
+		limits(value), head_request(head) {}
+
+	message_limits limits {};
+	std::string pending {};
+
 	bool head_request = false;
 	bool done = false;
 };
 
-response_parser::response_parser(message_limits limits, bool head_request) :
-	m_impl(std::make_unique<impl>(std::move(limits), head_request)) {}
+response_parser::response_parser(const message_limits &limits, bool head_request) :
+	m_impl(std::make_unique<impl>(limits, head_request))
+{
+
+}
+
 response_parser::response_parser(response_parser &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
 	other.m_impl = std::make_unique<impl>(message_limits{}, false);
 }
+
 response_parser &response_parser::operator=(response_parser &&other) noexcept
 {
 	if( this == &other )
@@ -240,10 +277,11 @@ response_parser &response_parser::operator=(response_parser &&other) noexcept
 	other.m_impl = std::make_unique<impl>(message_limits{}, false);
 	return *this;
 }
+
 response_parser::~response_parser() = default;
 
 sys_expected<head_parse_result<parsed_response_head>>
-response_parser::ingest(const_buffer input) noexcept
+response_parser::ingest(const const_buffer &input) noexcept
 {
 	if( m_impl->done )
 		return sys_unexpected(make_error_code(errc::operation_not_permitted));
@@ -251,26 +289,33 @@ response_parser::ingest(const_buffer input) noexcept
 	{
 		const auto text = as_chars(input);
 		const auto old_size = m_impl->pending.size();
+
 		m_impl->pending.append(text);
 		const auto marker = m_impl->pending.find("\r\n\r\n");
+
 		if( marker == std::string::npos )
 		{
 			if( m_impl->pending.size() > m_impl->limits.max_header_list_size +
 				m_impl->limits.max_start_line_size + 4 )
 				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
+
 			return head_parse_result<parsed_response_head> {
 				.consumed = text.size(), .needs_input = true
 			};
 		}
 		const auto total = marker + 4;
 		const auto take = total > old_size ? total - old_size : 0;
+
 		m_impl->pending.resize(total);
-		auto parsed = detail::parse_response(m_impl->pending,
-			m_impl->limits, m_impl->head_request);
+		auto parsed = detail::parse_response (
+			m_impl->pending, m_impl->limits, m_impl->head_request
+		);
 		if( not parsed )
 			return sys_unexpected(parsed.error());
+
 		m_impl->done = true;
 		m_impl->pending.clear();
+
 		return head_parse_result<parsed_response_head> {
 			.consumed = take,
 			.head = parsed_response_head {
@@ -287,31 +332,50 @@ response_parser::ingest(const_buffer input) noexcept
 	}
 }
 
-void response_parser::reset(bool head_request) noexcept {
+void response_parser::reset(bool head_request) noexcept
+{
 	m_impl->pending.clear();
 	m_impl->head_request = head_request;
 	m_impl->done = false;
 }
-bool response_parser::complete() const noexcept { return m_impl->done; }
 
-class chunk_decoder::impl
+bool response_parser::complete() const noexcept
 {
+	return m_impl->done;
+}
+
+class RIWO_DECL_HIDDEN chunk_decoder::impl
+{
+	RIWO_DISABLE_COPY_MOVE(impl)
+
 public:
-	explicit impl(message_limits value) : limits(std::move(value)) {}
-	enum class state { size, data, data_crlf, trailers, done } current = state::size;
-	message_limits limits;
-	std::string pending;
+	explicit impl(const message_limits &value) :
+		limits(value) {}
+
+	enum class state {
+		size, data, data_crlf, trailers, done
+	}
+	current = state::size;
+
+	message_limits limits {};
+	std::string pending {};
+
 	uint64_t remaining = 0;
 	uint64_t total = 0;
 };
 
-chunk_decoder::chunk_decoder(message_limits limits) :
-	m_impl(std::make_unique<impl>(std::move(limits))) {}
+chunk_decoder::chunk_decoder(const message_limits &limits) :
+	m_impl(std::make_unique<impl>(limits))
+{
+
+}
+
 chunk_decoder::chunk_decoder(chunk_decoder &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
 	other.m_impl = std::make_unique<impl>(message_limits{});
 }
+
 chunk_decoder &chunk_decoder::operator=(chunk_decoder &&other) noexcept
 {
 	if( this == &other )
@@ -320,96 +384,105 @@ chunk_decoder &chunk_decoder::operator=(chunk_decoder &&other) noexcept
 	other.m_impl = std::make_unique<impl>(message_limits{});
 	return *this;
 }
+
 chunk_decoder::~chunk_decoder() = default;
 
-sys_expected<chunk_decode_result> chunk_decoder::ingest(
-	const_buffer input) noexcept
+sys_expected<chunk_decode_result> chunk_decoder::ingest(const const_buffer &input) noexcept
+try
 {
-	try
+	chunk_decode_result result;
+	const auto text = as_chars(input);
+	size_t offset = 0;
+	while( offset < text.size() )
 	{
-		chunk_decode_result result;
-		const auto text = as_chars(input);
-		size_t offset = 0;
-		while( offset < text.size() )
-		{
-			if( m_impl->current == impl::state::done )
-				break;
-			if( m_impl->current == impl::state::data )
-			{
-				const auto count = static_cast<size_t>(std::min<uint64_t>(
-					m_impl->remaining, text.size() - offset));
-				result.data.resize(count);
-				if( count != 0 )
-					std::memcpy(result.data.data(),
-					text.data() + offset, count);
-				offset += count;
-				m_impl->remaining -= count;
-				m_impl->total += count;
-				if( m_impl->limits.max_body_size and
-					m_impl->total > *m_impl->limits.max_body_size )
-					return sys_unexpected(make_error_code(errc::buffer_limit_exceeded));
-				if( m_impl->remaining == 0 )
-					m_impl->current = impl::state::data_crlf;
-				result.consumed = offset;
-				result.needs_input = m_impl->remaining != 0;
-				if( count != 0 )
-					return result;
-				continue;
-			}
+		if( m_impl->current == impl::state::done )
+			break;
 
-			m_impl->pending.push_back(text[offset++]);
+		if( m_impl->current == impl::state::data )
+		{
+			const auto count = static_cast<size_t>(std::min<uint64_t>(
+				m_impl->remaining, text.size() - offset
+			));
+			result.data.resize(count);
+			if( count != 0 )
+				std::memcpy(result.data.data(), text.data() + offset, count);
+
+			offset += count;
+			m_impl->remaining -= count;
+			m_impl->total += count;
+
+			if( m_impl->limits.max_body_size and m_impl->total > *m_impl->limits.max_body_size )
+				return sys_unexpected(make_error_code(errc::buffer_limit_exceeded));
+
+			if( m_impl->remaining == 0 )
+				m_impl->current = impl::state::data_crlf;
+
 			result.consumed = offset;
-			if( m_impl->current == impl::state::data_crlf )
-			{
-				if( m_impl->pending.size() < 2 )
-					continue;
-				if( m_impl->pending != "\r\n" )
-					return sys_unexpected(make_error_code(
-						errc::connection_protocol_error));
-				m_impl->pending.clear();
-				m_impl->current = impl::state::size;
-				continue;
-			}
-			const auto marker = m_impl->pending.find("\r\n");
-			if( marker == std::string::npos )
-			{
-				if( m_impl->pending.size() > m_impl->limits.max_header_list_size )
-					return sys_unexpected(make_error_code(errc::header_limit_exceeded));
-				continue;
-			}
-			if( m_impl->current == impl::state::size )
-			{
-				auto parsed = detail::parse_chunk_size(
-					std::string_view(m_impl->pending).substr(0, marker));
-				if( not parsed )
-					return sys_unexpected(parsed.error());
-				m_impl->pending.clear();
-				m_impl->remaining = *parsed;
-				m_impl->current = *parsed == 0 ? impl::state::trailers :
-					impl::state::data;
-				continue;
-			}
-			if( m_impl->current == impl::state::trailers and
-				(m_impl->pending == "\r\n" or
-				 m_impl->pending.ends_with("\r\n\r\n")) )
-			{
-				auto trailers = parse_trailers(m_impl->pending, m_impl->limits);
-				if( not trailers )
-					return sys_unexpected(trailers.error());
-				result.trailers = std::move(*trailers);
-				result.message_end = true;
-				m_impl->pending.clear();
-				m_impl->current = impl::state::done;
+			result.needs_input = m_impl->remaining != 0;
+
+			if( count != 0 )
 				return result;
-			}
+			continue;
 		}
-		result.needs_input = m_impl->current != impl::state::done;
-		result.message_end = m_impl->current == impl::state::done;
-		return result;
+		m_impl->pending.push_back(text[offset++]);
+		result.consumed = offset;
+
+		if( m_impl->current == impl::state::data_crlf )
+		{
+			if( m_impl->pending.size() < 2 )
+				continue;
+
+			if( m_impl->pending != "\r\n" )
+				return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
+			m_impl->pending.clear();
+			m_impl->current = impl::state::size;
+			continue;
+		}
+		const auto marker = m_impl->pending.find("\r\n");
+		if( marker == std::string::npos )
+		{
+			if( m_impl->pending.size() > m_impl->limits.max_header_list_size )
+				return sys_unexpected(make_error_code(errc::header_limit_exceeded));
+			continue;
+		}
+		if( m_impl->current == impl::state::size )
+		{
+			auto parsed = detail::parse_chunk_size (
+				std::string_view(m_impl->pending).substr(0, marker)
+			);
+			if( not parsed )
+				return sys_unexpected(parsed.error());
+
+			m_impl->pending.clear();
+			m_impl->remaining = *parsed;
+
+			m_impl->current = *parsed == 0 ?
+				impl::state::trailers : impl::state::data;
+
+			continue;
+		}
+		if( m_impl->current == impl::state::trailers and
+			(m_impl->pending == "\r\n" or m_impl->pending.ends_with("\r\n\r\n")) )
+		{
+			auto trailers = parse_trailers(m_impl->pending, m_impl->limits);
+			if( not trailers )
+				return sys_unexpected(trailers.error());
+
+			result.trailers = std::move(*trailers);
+			result.message_end = true;
+
+			m_impl->pending.clear();
+			m_impl->current = impl::state::done;
+			return result;
+		}
 	}
-	catch(...) {
-		return sys_unexpected(exception_error(std::current_exception()));
-	}
+	result.needs_input = m_impl->current != impl::state::done;
+	result.message_end = m_impl->current == impl::state::done;
+	return result;
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
 }
 
 sys_expected<void> chunk_decoder::finish_input() noexcept
@@ -419,36 +492,36 @@ sys_expected<void> chunk_decoder::finish_input() noexcept
 	return sys_unexpected(make_error_code(errc::unexpected_eof));
 }
 
-void chunk_decoder::reset() noexcept {
+void chunk_decoder::reset() noexcept
+{
 	m_impl->current = impl::state::size;
 	m_impl->pending.clear();
 	m_impl->remaining = 0;
 	m_impl->total = 0;
 }
-bool chunk_decoder::complete() const noexcept {
+bool chunk_decoder::complete() const noexcept
+{
 	return m_impl->current == impl::state::done;
 }
 
-sys_expected<std::string> chunk_encoder::encode(const_buffer input) const
+sys_expected<std::string> chunk_encoder::encode(const const_buffer &input) const
+try
 {
-	try
-	{
-		std::string result = detail::serialize_chunk_header(input.size());
-		result.append(static_cast<const char *>(input.data()), input.size());
-		result += "\r\n";
-		return result;
-	}
-	catch(...) {
-		return sys_unexpected(exception_error(std::current_exception()));
-	}
+	std::string result = detail::serialize_chunk_header(input.size());
+	result.append(static_cast<const char *>(input.data()), input.size());
+	result += "\r\n";
+	return result;
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
 }
 
 sys_expected<std::string> chunk_encoder::finish(const fields &trailers) const
-{
-	try { return detail::serialize_last_chunk(trailers); }
-	catch(...) {
-		return sys_unexpected(exception_error(std::current_exception()));
-	}
+try {
+	return detail::serialize_last_chunk(trailers);
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
 }
 
 } //namespace riwo::http_exp::v1

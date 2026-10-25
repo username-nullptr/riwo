@@ -26,13 +26,13 @@ namespace http = riwo::http_exp;
 }
 
 [[nodiscard]] riwo::awaitable<void> respond_text
-(http::server_exchange &exchange, std::string body, http::status status = http::status::ok)
+(http::server_exchange &exchange, const std::string &body, http::status status = http::status::ok)
 {
 	http::response_head head {status, {}};
 	head.headers.add("Content-Type", "text/plain; charset=utf-8");
 
 	co_await exchange.respond (
-		std::move(head), std::move(body), riwo::use_awaitable
+		std::move(head), body, riwo::use_awaitable
 	);
 }
 
@@ -72,9 +72,14 @@ try
 	[](http::server_exchange &exchange) -> riwo::awaitable<void>
 	{
 		http::response_head head {http::status::found, {}};
-		head.headers
-		.add("Set-Cookie", "welcome=http-exp; Path=/; HttpOnly; SameSite=Lax")
-		.add("Location", "/whoami");
+		head.set_cookie ({
+			.name = "welcome",
+			.value = riwo::value("http-exp"),
+			.path = "/",
+			.same_site = http::cookie_same_site::lax,
+			.http_only = true
+		});
+		head.headers.add("Location", "/whoami");
 
 		co_await exchange.respond (
 			std::move(head), std::string_view{}, riwo::use_awaitable
@@ -102,7 +107,7 @@ try
 			http::body_spec::streaming({{"X-Chunk-Count"}}),
 			riwo::use_awaitable
 		);
-		for(std::string_view chunk : {"first\n", "second\n", "third\n"} )
+		for(std::string_view chunk : {"first\n", "second\n", "third\n"})
 		{
 			(void)co_await exchange.response_body().write (
 				riwo::buffer(chunk), riwo::use_awaitable

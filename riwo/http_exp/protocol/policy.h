@@ -12,22 +12,24 @@ namespace riwo::http_exp
 enum class protocol_requirement
 {
 	automatic,
-	require_http1,
+	require_v1,
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	require_http2
-#endif
+	require_v2
+#endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
 };
 
 struct protocol_policy
 {
+	std::vector<protocol> preference {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	std::vector<protocol> preference {protocol::v2, protocol::v1_1};
-#else
-	std::vector<protocol> preference {protocol::v1_1};
-#endif
+		protocol::v2,
+#endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
+		protocol::v1_1
+	};
 	protocol_requirement requirement = protocol_requirement::automatic;
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_POLICY_H

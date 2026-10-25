@@ -47,7 +47,7 @@ void h1_codec_fragmentation()
 	RIWO_TEST_CHECK(encoded->wire.starts_with("POST /upload?q=1 HTTP/1.1\r\n"));
 	RIWO_TEST_CHECK(encoded->framing == http::v1::body_framing::content_length);
 
-	for( size_t split = 0; split <= encoded->wire.size(); ++split )
+	for(size_t split=0; split<=encoded->wire.size(); ++split)
 	{
 		http::v1::request_parser parser;
 		auto first = parser.ingest(riwo::buffer(
@@ -318,7 +318,7 @@ void h2_manual_engine_loop()
 		return http::event_flow::continue_;
 	};
 
-	for( size_t round = 0; round < 16; ++round )
+	for(size_t round=0; round<16; ++round)
 	{
 		const auto to_server = drain(client, 3);
 		if( not to_server.empty() )
@@ -341,7 +341,7 @@ void h2_manual_engine_loop()
 		.stream = server_stream, .head = response,
 		.body = http::body_spec::empty()
 	}).has_value());
-	for( size_t round = 0; round < 16 and not response_received; ++round )
+	for(size_t round=0; round<16 and not response_received; ++round)
 	{
 		const auto to_client = drain(server, 2);
 		if( not to_client.empty() )

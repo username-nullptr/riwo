@@ -19,7 +19,7 @@ namespace riwo::http_exp::detail { namespace
 
 [[nodiscard]] bool valid_trailers(const body_spec &spec, const fields &values) noexcept
 {
-	for( const auto &value : values )
+	for(const auto &value : values)
 	{
 		if( std::ranges::none_of(spec.trailers().names,
 			[&](const std::string &name) {

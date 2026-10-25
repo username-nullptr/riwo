@@ -14,13 +14,18 @@ status::status(well_known value) noexcept :
 status::status(uint16_t code)
 {
 	if( code < 100 or code > 599 )
-		throw std::invalid_argument("HTTP status must be in the range 100..599");
+	{
+		invalid_argument::loc_throw (
+			"HTTP status must be in the range 100..599"
+		);
+	}
 	m_code = code;
 }
 
 status::status(status &&other) noexcept :
 	m_code(std::exchange(other.m_code, 0))
 {
+
 }
 
 status &status::operator=(status &&other) noexcept
@@ -30,7 +35,13 @@ status &status::operator=(status &&other) noexcept
 	return *this;
 }
 
-uint16_t status::code() const noexcept {
+status::well_known status::enum_code() const noexcept
+{
+	return static_cast<well_known>(m_code);
+}
+
+uint16_t status::code() const noexcept
+{
 	return m_code;
 }
 
@@ -111,18 +122,6 @@ bool status::allows_body() const noexcept
 		value != reset_content and value != not_modified;
 }
 
-bool operator==(status lhs, status::well_known rhs) noexcept {
-	return lhs.code() == static_cast<uint16_t>(rhs);
-}
-
-bool operator==(status::well_known lhs, status rhs) noexcept {
-	return static_cast<uint16_t>(lhs) == rhs.code();
-}
-
-bool operator==(status lhs, status rhs) noexcept {
-	return lhs.code() == rhs.code();
-}
-
 status::operator well_known() const noexcept
 {
 	return static_cast<well_known>(code());
@@ -131,6 +130,21 @@ status::operator well_known() const noexcept
 status::operator uint16_t() const noexcept
 {
 	return code();
+}
+
+bool operator==(status lhs, status::well_known rhs) noexcept
+{
+	return lhs.code() == static_cast<uint16_t>(rhs);
+}
+
+bool operator==(status::well_known lhs, status rhs) noexcept
+{
+	return static_cast<uint16_t>(lhs) == rhs.code();
+}
+
+bool operator==(status lhs, status rhs) noexcept
+{
+	return lhs.code() == rhs.code();
 }
 
 } //namespace riwo::http_exp

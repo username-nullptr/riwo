@@ -177,7 +177,7 @@ basic_client<Exec>::basic_client(Exec0 &&executor,
 	m_exec(get_executor_helper(std::forward<Exec0>(executor)))
 {
 	if( not connector )
-		throw std::invalid_argument(
+		invalid_argument::loc_throw(
 		"riwo::http_exp::basic_client: connector is null");
 	auto adapter = detail::make_connector_adapter(
 		asio::any_io_executor(m_exec), std::move(connector));

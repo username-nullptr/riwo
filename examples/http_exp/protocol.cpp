@@ -56,7 +56,10 @@ void round_trip(std::string_view name, Client client, Server server)
 	request.scheme = "http";
 	request.authority = "example.test";
 	request.target = "/hello";
-	request.headers.add("Accept", "text/plain");
+
+	request
+	.set_header("Accept", "text/plain")
+	.add_cookie("example", "request");
 
 	auto submitted = client.submit(http::open_request_action {
 		.stream = 1,
@@ -74,7 +77,7 @@ void round_trip(std::string_view name, Client client, Server server)
 		return http::event_flow::continue_;
 	});
 	// HTTP/2 may emit its initial SETTINGS before the request is delivered.
-	for( size_t round = 0; server_stream == 0 and round != 4; ++round )
+	for(size_t round=0; server_stream==0 and round!=4; ++round)
 	{
 		(void)pump(server, client, [](const auto &) {
 			return http::event_flow::continue_;
@@ -91,7 +94,10 @@ void round_trip(std::string_view name, Client client, Server server)
 
 	http::response_head response;
 	response.status = http::status::ok;
-	response.headers.add("Content-Type", "text/plain");
+
+	response
+	.set_header("Content-Type", "text/plain")
+	.set_cookie("example", "response");
 
 	submitted = server.submit(http::send_response_action {
 		.stream = server_stream,

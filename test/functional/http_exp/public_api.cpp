@@ -705,6 +705,30 @@ void head_convenience_contracts()
 	RIWO_TEST_CHECK(!request.has_header("X-Trace"));
 	RIWO_TEST_CHECK(!request.content_length());
 
+	request
+		.add_cookie({"sid", "one"})
+		.add_cookie({"sid", "two"});
+	auto request_cookies = http::parse_cookie_fields(request.headers);
+	RIWO_TEST_CHECK(request_cookies);
+	RIWO_TEST_CHECK_EQ(std::ranges::distance(
+		request.headers.find_all("Cookie")), 1);
+	RIWO_TEST_CHECK_EQ(request_cookies->size(), 2U);
+	RIWO_TEST_CHECK_EQ(request_cookies->at(0).value.to_string(), "one");
+	RIWO_TEST_CHECK_EQ(request_cookies->at(1).value.to_string(), "two");
+
+	std::array replacement_cookies {
+		http::cookie_pair {"replacement", "first"},
+		http::cookie_pair {"enabled", true}
+	};
+	request.set_cookies(replacement_cookies);
+	request_cookies = http::parse_cookie_fields(request.headers);
+	RIWO_TEST_CHECK(request_cookies);
+	RIWO_TEST_CHECK_EQ(request_cookies->size(), 2U);
+	RIWO_TEST_CHECK_EQ(request_cookies->at(0).name, "replacement");
+	RIWO_TEST_CHECK_EQ(request_cookies->at(1).value.to_string(), "true");
+	request.set_cookies({});
+	RIWO_TEST_CHECK(!request.has_header("Cookie"));
+
 	http::request_head submitted {
 		.url = riwo::url("http://fallback.test/resource")
 	};
@@ -726,6 +750,17 @@ void head_convenience_contracts()
 	RIWO_TEST_CHECK(!response.is_redirection());
 	RIWO_TEST_CHECK(!response.is_error());
 	RIWO_TEST_CHECK(response.allows_body());
+	response
+		.set_cookie({.name = "sid", .value = "one", .path = "/"})
+		.set_cookie({.name = "theme", .value = "dark"});
+	const auto response_cookies = response.headers.find_all("Set-Cookie");
+	RIWO_TEST_CHECK_EQ(std::ranges::distance(response_cookies), 2);
+	RIWO_TEST_CHECK_EQ(response_cookies.begin()->value.to_string(),
+		"sid=one; Path=/");
+	auto second_response_cookie = response_cookies.begin();
+	++second_response_cookie;
+	RIWO_TEST_CHECK_EQ(second_response_cookie->value.to_string(),
+		"theme=dark");
 
 	response.status = http::status::found;
 	RIWO_TEST_CHECK(response.is_redirection());
@@ -784,7 +819,7 @@ void cookie_value_contracts()
 		.name = "sid", .value = riwo::value("42"), .domain = "bad domain"}),
 		std::invalid_argument);
 	http::fields response_headers;
-	http::add_set_cookie(response_headers, response);
+	http::set_cookie(response_headers, response);
 	RIWO_TEST_CHECK_EQ(response_headers.find_first("set-cookie").value(),
 		"sid=42; Max-Age=60; Path=/; Secure; HttpOnly; SameSite=Lax; Priority=High");
 

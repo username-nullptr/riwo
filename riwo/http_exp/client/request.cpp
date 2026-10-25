@@ -47,7 +47,7 @@ const http_exp::fields &request::headers() const noexcept {
 request &request::connect_protocol(std::string protocol)
 {
 	if( method().known() != http_exp::method::connect or protocol.empty() )
-		throw std::invalid_argument(
+		invalid_argument::loc_throw(
 			"Extended CONNECT requires CONNECT and a non-empty protocol");
 	m_impl->m_head.connect_protocol = std::move(protocol);
 	return *this;
@@ -60,7 +60,7 @@ const optional<std::string> &request::connect_protocol() const noexcept {
 request &request::upgrade_protocol(std::string protocol)
 {
 	if( protocol.empty() )
-		throw std::invalid_argument("Upgrade protocol cannot be empty");
+		invalid_argument::loc_throw("Upgrade protocol cannot be empty");
 	m_impl->m_head.upgrade_protocol = std::move(protocol);
 	return *this;
 }
@@ -97,7 +97,7 @@ request &request::file(std::filesystem::path path)
 request &request::trailers(fields values)
 {
 	body_spec::trailer_spec description;
-	for( const auto &value : values )
+	for(const auto &value : values)
 	{
 		const auto duplicate = std::ranges::any_of(description.names,
 			[&](const std::string &name) {
@@ -111,7 +111,7 @@ request &request::trailers(fields values)
 	else if( m_impl->m_body_spec.type() == body_spec::mode::streaming )
 		m_impl->m_body_spec = body_spec::streaming(std::move(description));
 	else if( not values.empty() )
-		throw std::invalid_argument("An empty HTTP body cannot have trailers");
+		invalid_argument::loc_throw("An empty HTTP body cannot have trailers");
 	m_impl->m_trailers = std::move(values);
 	return *this;
 }

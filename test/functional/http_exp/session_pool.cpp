@@ -82,7 +82,7 @@ public:
 	}
 
 	std::shared_ptr<detail::stream> open_sync(
-		http::request_head head, http::body_spec,
+		const http::request_head &head, const http::body_spec&,
 		riwo::error_code &error) noexcept override
 	{
 		if( busy )
@@ -234,7 +234,7 @@ void session_key_identity()
 
 	auto policy_config = config;
 	policy_config.protocols.requirement =
-		http::protocol_requirement::require_http1;
+		http::protocol_requirement::require_v1;
 	auto required = detail::make_session_key(
 		make_head("http://example.test/"), policy_config);
 	RIWO_TEST_CHECK(required != http);
@@ -283,7 +283,7 @@ void protocol_negotiation()
 
 	auto prior = detail::negotiate_protocol(http::protocol_policy {
 		.preference = plain.protocols.preference,
-		.requirement = http::protocol_requirement::require_http2
+		.requirement = http::protocol_requirement::require_v2
 	}, plain, true);
 	RIWO_TEST_CHECK_EQ(prior.value(), http::protocol::v2);
 #else
@@ -548,7 +548,7 @@ void h1_pool_reuses_connection()
 	[&]() -> riwo::awaitable<void>
 	{
 		const auto target = std::format("http://127.0.0.1:{}/reuse", port);
-		for( size_t index = 0; index < 4; ++index )
+		for(size_t index=0; index<4; ++index)
 		{
 			auto reply = co_await client.fetch(
 				http::request(http::method::get, target),
@@ -592,7 +592,7 @@ void h1_server_keep_alive()
 	[&]() -> riwo::awaitable<void>
 	{
 		const auto target = std::format("http://127.0.0.1:{}/value", port);
-		for( size_t index = 0; index < 4; ++index )
+		for(size_t index=0; index<4; ++index)
 		{
 			auto reply = co_await client.fetch(
 				http::request(http::method::get, target),
@@ -614,7 +614,7 @@ void async_connect_does_not_block()
 	riwo::io_context_t context;
 	http::client_config config;
 	config.timeout.connect = std::chrono::milliseconds(500);
-	config.protocols.requirement = http::protocol_requirement::require_http1;
+	config.protocols.requirement = http::protocol_requirement::require_v1;
 	http::request_head head {
 		http::method::get, riwo::url("http://10.255.255.1:81/")
 	};

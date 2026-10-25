@@ -9,6 +9,7 @@
 #include <riwo/http_exp/cxx/configs.h>
 
 #include <riwo/core/async_expected.h>
+#include <riwo/core/cxx/exception.h>
 #include <riwo/core/url.h>
 
 

@@ -15,21 +15,21 @@ namespace riwo::http_exp { namespace
 void validate(body_spec::mode mode, const body_spec::trailer_spec &trailers)
 {
 	if( mode == body_spec::mode::empty and not trailers.names.empty() )
-		throw std::invalid_argument("An empty HTTP body cannot have trailers");
+		invalid_argument::loc_throw("An empty HTTP body cannot have trailers");
 
 	fields validator;
-	for(size_t index = 0; index < trailers.names.size(); ++index)
+	for(size_t index=0; index<trailers.names.size(); ++index)
 	{
 		validator.add(trailers.names[index], "value");
-		for(size_t previous = 0; previous < index; ++previous)
+		for(size_t previous=0; previous<index; ++previous)
 		{
 			if( equal_name(trailers.names[index], trailers.names[previous]) )
-				throw std::invalid_argument("Duplicate HTTP trailer name");
+				invalid_argument::loc_throw("Duplicate HTTP trailer name");
 		}
 		const auto &name = trailers.names[index];
 		if( equal_name(name, "content-length") or equal_name(name, "transfer-encoding") or
 			equal_name(name, "host") or equal_name(name, "trailer") )
-			throw std::invalid_argument("Forbidden HTTP trailer name");
+			invalid_argument::loc_throw("Forbidden HTTP trailer name");
 	}
 }
 

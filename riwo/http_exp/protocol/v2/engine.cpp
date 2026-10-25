@@ -45,7 +45,7 @@ struct header_block
 	{
 		native.clear();
 		native.reserve(names.size());
-		for( size_t index = 0; index < names.size(); ++index )
+		for(size_t index=0; index<names.size(); ++index)
 			native.push_back(nghttp2_nv {
 				.name = reinterpret_cast<uint8_t *>(names[index].data()),
 				.value = reinterpret_cast<uint8_t *>(values[index].data()),
@@ -72,7 +72,7 @@ struct header_block
 			result.add(":path", head.target.empty() ? "/" : head.target);
 		}
 		result.add(":authority", head.authority);
-		for( const auto &field : head.headers )
+		for(const auto &field : head.headers)
 		{
 			auto name = lower(field.name);
 			if( name == "host" )
@@ -97,7 +97,7 @@ struct header_block
 	{
 		header_block result;
 		result.add(":status", std::to_string(head.status.code()));
-		for( const auto &field : head.headers )
+		for(const auto &field : head.headers)
 		{
 			auto name = lower(field.name);
 			if( forbidden(name) or (name == "te" and
@@ -119,7 +119,7 @@ struct header_block
 	try
 	{
 		header_block result;
-		for( const auto &field : trailers )
+		for(const auto &field : trailers)
 		{
 			auto name = lower(field.name);
 			if( name.starts_with(':') or forbidden(name) or name == "te" or
@@ -622,7 +622,7 @@ connection_engine::connection_engine(connection_config config) :
 	m_impl(std::make_unique<impl>(std::move(config)))
 {
 	if( auto error = m_impl->initialize() )
-		throw std::system_error(std::error_code(error));
+		system_error::loc_throw(std::error_code(error));
 }
 connection_engine::connection_engine(connection_engine &&other) noexcept :
 	m_impl(std::move(other.m_impl))

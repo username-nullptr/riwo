@@ -18,7 +18,8 @@ using stream_token_t = uint64_t;
 struct request_head_event
 {
 	stream_token_t stream = 0;
-	http_exp::request_head head {};
+	request_head head {};
+
 	body_spec body = body_spec::empty();
 	protocol version = protocol::v1_1;
 };
@@ -26,7 +27,8 @@ struct request_head_event
 struct response_head_event
 {
 	stream_token_t stream = 0;
-	http_exp::response_head head {};
+	response_head head {};
+
 	body_spec body = body_spec::empty();
 	protocol version = protocol::v1_1;
 };
@@ -40,7 +42,7 @@ struct body_data_event
 struct trailers_event
 {
 	stream_token_t stream = 0;
-	http_exp::fields trailers {};
+	fields trailers {};
 };
 
 struct stream_end_event
@@ -54,12 +56,8 @@ struct stream_reset_event
 	error_info error {};
 };
 
-enum class connection_event_kind
-{
-	settings,
-	goaway,
-	input_finished,
-	closed
+enum class connection_event_kind {
+	settings, goaway, input_finished, closed
 };
 
 struct connection_event
@@ -69,14 +67,15 @@ struct connection_event
 	optional<stream_token_t> last_stream {};
 };
 
-using protocol_event_t = std::variant<
+using protocol_event_t = std::variant <
 	request_head_event,
 	response_head_event,
 	body_data_event,
 	trailers_event,
 	stream_end_event,
 	stream_reset_event,
-	connection_event>;
+	connection_event
+>;
 
 struct open_request_action
 {
@@ -117,18 +116,27 @@ struct shutdown_action
 	optional<stream_token_t> last_stream {};
 };
 
-using protocol_action_t = std::variant<
+using protocol_action_t = std::variant <
 	open_request_action,
 	send_response_action,
 	send_data_action,
 	send_trailers_action,
 	reset_stream_action,
-	shutdown_action>;
+	shutdown_action
+>;
 
-enum class event_flow { continue_, pause };
-using protocol_event_handler_t =
-	std::function<event_flow(const protocol_event_t &)>;
+enum class event_flow
+{
+	continue_, pause,
+	Continue = continue_,
+	Pause = pause
+};
+
+using protocol_event_handler_t = std::function <
+	event_flow(const protocol_event_t&)
+>;
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_EVENT_H

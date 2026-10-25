@@ -19,7 +19,7 @@ namespace riwo::http_exp::detail { namespace
 [[nodiscard]] bool permits_http1(const protocol_policy &policy) noexcept
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( policy.requirement == protocol_requirement::require_http2 )
+	if( policy.requirement == protocol_requirement::require_v2 )
 		return false;
 #endif
 	return contains(policy, protocol::v1_0) or
@@ -29,7 +29,7 @@ namespace riwo::http_exp::detail { namespace
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 [[nodiscard]] bool permits_http2(const protocol_policy &policy) noexcept
 {
-	if( policy.requirement == protocol_requirement::require_http1 )
+	if( policy.requirement == protocol_requirement::require_v1 )
 		return false;
 	return contains(policy, protocol::v2);
 }
@@ -125,8 +125,8 @@ error_code validate_server_config(const server_config &config) noexcept
 		config.protocols.preference.empty() )
 		return make_error_code(config.h1.max_pipeline_depth != 1 ?
 			errc::operation_not_supported : errc::negotiation_failed);
-	for( auto current = config.protocols.preference.begin();
-		current != config.protocols.preference.end(); ++current )
+	for(auto current=config.protocols.preference.begin();
+		current!=config.protocols.preference.end(); ++current)
 		if( std::ranges::find(config.protocols.preference.begin(), current,
 			*current) != current )
 			return make_error_code(errc::negotiation_failed);

@@ -160,7 +160,7 @@ namespace
 			url.host().empty() or url.has_fragment() or not ascii(url.host()) )
 			return sys_unexpected(make_error_code(errc::invalid_target));
 
-		for( const auto &header : value.headers() )
+		for(const auto &header : value.headers())
 		{
 			if( owned_header(header.name) )
 				return sys_unexpected(make_error_code(errc::invalid_field_name));
@@ -211,7 +211,7 @@ namespace
 		return {};
 	std::string_view value;
 	auto values = head.headers.find_all("Content-Encoding");
-	for( auto iterator = values.begin(); iterator != values.end(); ++iterator )
+	for(auto iterator=values.begin(); iterator!=values.end(); ++iterator)
 		value = iterator->value.to_string();
 	while( not value.empty() and
 		(value.front() == ' ' or value.front() == '\t') )

@@ -264,7 +264,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		// The client can receive the response before the server coroutine resumes
 		// from respond() and unwinds the middleware chain.
 		asio::steady_timer trace_timer(context);
-		for(size_t attempt = 0; attempt < 100 and trace.size() < 4U; ++attempt)
+		for(size_t attempt=0; attempt<100 and trace.size()<4U; ++attempt)
 		{
 			trace_timer.expires_after(std::chrono::milliseconds(1));
 			co_await trace_timer.async_wait(riwo::use_awaitable);
@@ -361,7 +361,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 			"content-encoding").value(), "gzip");
 		size_t vary_count = 0;
 		bool varies_on_encoding = false;
-		for( const auto &vary : compressed_reply.headers().find_all("vary") )
+		for(const auto &vary : compressed_reply.headers().find_all("vary"))
 		{
 			++vary_count;
 			if( vary.value.to_string() == "Accept-Encoding" )
@@ -428,14 +428,14 @@ void application_compatibility_for(http::protocol_requirement requirement,
 
 void application_compatibility_http1()
 {
-	application_compatibility_for(http::protocol_requirement::require_http1,
+	application_compatibility_for(http::protocol_requirement::require_v1,
 		http::protocol::v1_1);
 }
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 void application_compatibility_http2()
 {
-	application_compatibility_for(http::protocol_requirement::require_http2,
+	application_compatibility_for(http::protocol_requirement::require_v2,
 		http::protocol::v2);
 }
 #endif

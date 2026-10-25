@@ -296,28 +296,28 @@ public:
 			http::response_head{http::status::created, {}});
 	}
 
-	void respond_sync(http::response_head head, http::body_spec,
+	void respond_sync(const http::response_head &head, const http::body_spec&,
 		riwo::error_code &error) noexcept override
 	{
 		error.clear();
 		response = std::move(head);
 	}
 
-	void respond(http::response_head head, http::body_spec,
+	void respond(const http::response_head &head, const http::body_spec&,
 		operation_handler_t handler) override
 	{
 		response = std::move(head);
 		std::move(handler)(riwo::error_code{});
 	}
 
-	void inform_sync(http::response_head head,
+	void inform_sync(const http::response_head &head,
 		riwo::error_code &error) noexcept override
 	{
 		error.clear();
 		informationals.push_back(std::move(head));
 	}
 
-	void inform(http::response_head head, operation_handler_t handler) override
+	void inform(const http::response_head &head, operation_handler_t handler) override
 	{
 		informationals.push_back(std::move(head));
 		std::move(handler)(riwo::error_code{});
@@ -348,7 +348,7 @@ public:
 	bool closed() const noexcept override { return false; }
 
 	std::shared_ptr<http::detail::stream> open_sync(
-		http::request_head head, http::body_spec spec,
+		const http::request_head &head, const http::body_spec &spec,
 		riwo::error_code &error) noexcept override
 	{
 		error.clear();

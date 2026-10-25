@@ -6,6 +6,7 @@
 
 #include <riwo/http_exp/protocol/method.h>
 #include <riwo/http_exp/protocol/fields.h>
+#include <riwo/http_exp/protocol/cookie.h>
 #include <riwo/core/url.h>
 
 namespace riwo::http_exp
@@ -14,12 +15,16 @@ namespace riwo::http_exp
 class RIWO_HTTP_EXP_API request_head
 {
 public:
-	http_exp::method method {http_exp::method::get};
+	http_exp::method method {
+		http_exp::method::get
+	};
 	riwo::url url {};
+
 	std::string scheme {};
 	std::string authority {};
 	std::string target {"/"};
 	http_exp::fields headers {};
+
 	optional<std::string> connect_protocol {};
 	optional<std::string> upgrade_protocol {};
 
@@ -32,9 +37,15 @@ public:
 
 	request_head &set_header(std::string name, riwo::value value);
 	request_head &add_header(std::string name, riwo::value value);
+
 	request_head &erase_header(std::string_view name) noexcept;
 	request_head &unset_header(std::string_view name) noexcept;
 
+	request_head &set_cookies(std::span<const cookie_pair> values);
+	request_head &add_cookie(std::string name, riwo::value value);
+	request_head &add_cookie(cookie_pair value);
+
+public:
 	[[nodiscard]] optional<std::string_view> content_type() const noexcept;
 	[[nodiscard]] optional<uint64_t> content_length() const noexcept;
 
@@ -47,5 +58,6 @@ public:
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_REQUEST_HEAD_H

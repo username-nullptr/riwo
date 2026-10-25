@@ -14,10 +14,10 @@ namespace riwo::http_exp::example
 	if( value == "auto" )
 		return protocol_requirement::automatic;
 	if( value == "http1" )
-		return protocol_requirement::require_http1;
+		return protocol_requirement::require_v1;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	if( value == "http2" )
-		return protocol_requirement::require_http2;
+		return protocol_requirement::require_v2;
 #endif
 	throw std::invalid_argument (
 		"protocol must be auto, http1"
