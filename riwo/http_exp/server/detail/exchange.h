@@ -19,7 +19,7 @@ public:
 	using duplex_handler_t = asio::any_completion_handler<void(
 		error_code,std::shared_ptr<duplex_state>)>;
 
-	server_exchange_state(std::shared_ptr<stream> stream = {},
+	server_exchange_state(std::shared_ptr<session_stream> stream = {},
 		request_head request = {}, parameter_view path_parameters = {},
 		parameter_view query_parameters = {},
 		std::shared_ptr<application_session_manager> sessions = {},
@@ -66,7 +66,7 @@ private:
 
 [[nodiscard]] RIWO_HTTP_EXP_API
 std::shared_ptr<server_exchange_state> make_server_exchange_state(
-	std::shared_ptr<stream> stream = {}, request_head request = {},
+	std::shared_ptr<session_stream> stream = {}, request_head request = {},
 	parameter_view path_parameters = {}, parameter_view query_parameters = {},
 	std::shared_ptr<application_session_manager> sessions = {},
 	std::filesystem::path resource_root = {},
@@ -82,7 +82,7 @@ template <core_concepts::exec Exec>
 class basic_server_exchange<Exec>::impl
 {
 public:
-	impl(executor_t executor_value, std::shared_ptr<detail::stream> stream,
+	impl(executor_t executor_value, std::shared_ptr<session_stream> stream,
 		request_t request, parameter_view path_parameters = {},
 		parameter_view query_parameters = {},
 		std::shared_ptr<application_session_manager> sessions = {},
@@ -117,7 +117,7 @@ basic_server_exchange<Exec>::basic_server_exchange()
 
 template <core_concepts::exec Exec>
 basic_server_exchange<Exec>::basic_server_exchange(
-	std::shared_ptr<detail::stream> stream, request_t request_value)
+	std::shared_ptr<session_stream> stream, request_t request_value)
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_server_exchange(executor_t(riwo::get_executor()),
 		std::move(stream), std::move(request_value))
@@ -141,7 +141,7 @@ basic_server_exchange<Exec>::~basic_server_exchange() {
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
-	std::shared_ptr<detail::stream> stream, request_t request_value)
+	std::shared_ptr<session_stream> stream, request_t request_value)
 	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_impl(std::make_shared<impl>(
 		get_executor_helper(std::forward<Exec0>(executor)),
@@ -152,7 +152,7 @@ basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_server_exchange<Exec>::basic_server_exchange(Exec0 &&executor,
-	std::shared_ptr<detail::stream> stream, request_t request_value,
+	std::shared_ptr<session_stream> stream, request_t request_value,
 	parameter_view path_parameters, parameter_view query_parameters,
 	std::shared_ptr<application_session_manager> sessions,
 	std::filesystem::path resource_root, bool automatic_compression,

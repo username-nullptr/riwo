@@ -148,14 +148,14 @@ fields &fields::operator=(fields &&other) noexcept
 	return *this;
 }
 
-fields &fields::add(std::string name, riwo::value value)
+fields &fields::add_impl(std::string name, riwo::value value)
 {
 	validate(name, value.to_string());
-	m_values.push_back({std::move(name), std::move(value)});
+	m_values.emplace_back(std::move(name), std::move(value));
 	return *this;
 }
 
-fields &fields::set(std::string name, riwo::value value)
+fields &fields::set_impl(std::string name, riwo::value value)
 {
 	validate(name, value.to_string());
 	auto &values = m_values;
@@ -165,7 +165,7 @@ fields &fields::set(std::string name, riwo::value value)
 	});
 	if( first == values.end() )
 	{
-		values.push_back({std::move(name), std::move(value)});
+		values.emplace_back(std::move(name), std::move(value));
 		return *this;
 	}
 	first->name = std::move(name);
@@ -178,7 +178,7 @@ fields &fields::set(std::string name, riwo::value value)
 	return *this;
 }
 
-fields &fields::erase(std::string_view name)
+fields &fields::erase_impl(std::string_view name)
 {
 	auto &values = m_values;
 	values.erase (
@@ -190,12 +190,12 @@ fields &fields::erase(std::string_view name)
 	return *this;
 }
 
-field_range fields::find_all(std::string_view name) const
+field_range fields::find_all_impl(std::string name) const
 {
-	return {m_values, std::string(name)};
+	return {m_values, std::move(name)};
 }
 
-optional<std::string_view> fields::find_first(std::string_view name) const
+optional<std::string_view> fields::find_first_impl(std::string_view name) const noexcept
 {
 	const auto &values = m_values;
 	const auto found = std::ranges::find_if(values, [&](const field &item) {

@@ -4,6 +4,7 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_V2_DETAIL_NGHTTP2_COMPAT_H
 #define RIWO_HTTP_EXP_PROTOCOL_V2_DETAIL_NGHTTP2_COMPAT_H
 
+#include <riwo/http_exp/cxx/attributes.h>
 #include <riwo/http_exp/cxx/configs.h>
 
 #if RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
@@ -12,78 +13,56 @@
 # include <BaseTsd.h>
 typedef SSIZE_T ssize_t;
 # define _SSIZE_T_DEFINED
-#endif
+#endif //RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
 
 #include <nghttp2/nghttp2.h>
 
-namespace riwo::http_exp::v2::detail::nghttp2_api {
+namespace riwo::http_exp::v2::detail::nghttp2_api
+{
 
 #if RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
 
 using ssize_type_t = nghttp2_ssize;
 using data_provider_t = nghttp2_data_provider2;
 
-inline ssize_type_t session_mem_recv(nghttp2_session *session,
-	const uint8_t *input, size_t size)
-{
-	return nghttp2_session_mem_recv2(session, input, size);
-}
+RIWO_HTTP_EXP_API ssize_type_t
+session_mem_recv(nghttp2_session *session, const uint8_t *input, size_t size);
 
-inline ssize_type_t session_mem_send(nghttp2_session *session,
-	const uint8_t **output)
-{
-	return nghttp2_session_mem_send2(session, output);
-}
+RIWO_HTTP_EXP_API ssize_type_t
+session_mem_send(nghttp2_session *session, const uint8_t **output);
 
-inline int32_t submit_request(nghttp2_session *session,
-	const nghttp2_priority_spec *priority, const nghttp2_nv *headers,
-	size_t count, const data_provider_t *provider, void *user_data)
-{
-	return nghttp2_submit_request2(session, priority, headers, count,
-		provider, user_data);
-}
+RIWO_HTTP_EXP_API int32_t submit_request (
+	nghttp2_session *session, const nghttp2_priority_spec *priority, const nghttp2_nv *headers,
+	size_t count, const data_provider_t *provider, void *user_data
+);
+RIWO_HTTP_EXP_API int submit_response (
+	nghttp2_session *session, int32_t stream_id, const nghttp2_nv *headers,
+	size_t count, const data_provider_t *provider
+);
 
-inline int submit_response(nghttp2_session *session, int32_t stream_id,
-	const nghttp2_nv *headers, size_t count, const data_provider_t *provider)
-{
-	return nghttp2_submit_response2(session, stream_id, headers, count,
-		provider);
-}
-
-#else
+#else //RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
 
 using ssize_type_t = ssize_t;
 using data_provider_t = nghttp2_data_provider;
 
-inline ssize_type_t session_mem_recv(nghttp2_session *session,
-	const uint8_t *input, size_t size)
-{
-	return nghttp2_session_mem_recv(session, input, size);
-}
+RIWO_HTTP_EXP_API ssize_type_t
+session_mem_recv(nghttp2_session *session, const uint8_t *input, size_t size);
 
-inline ssize_type_t session_mem_send(nghttp2_session *session,
-	const uint8_t **output)
-{
-	return nghttp2_session_mem_send(session, output);
-}
+RIWO_HTTP_EXP_API ssize_type_t
+session_mem_send(nghttp2_session *session, const uint8_t **output);
 
-inline int32_t submit_request(nghttp2_session *session,
-	const nghttp2_priority_spec *priority, const nghttp2_nv *headers,
-	size_t count, const data_provider_t *provider, void *user_data)
-{
-	return nghttp2_submit_request(session, priority, headers, count,
-		provider, user_data);
-}
+RIWO_HTTP_EXP_API int32_t submit_request (
+	nghttp2_session *session, const nghttp2_priority_spec *priority, const nghttp2_nv *headers,
+	size_t count, const data_provider_t *provider, void *user_data
+);
+RIWO_HTTP_EXP_API int submit_response (
+	nghttp2_session *session, int32_t stream_id, const nghttp2_nv *headers,
+	size_t count, const data_provider_t *provider
+);
 
-inline int submit_response(nghttp2_session *session, int32_t stream_id,
-	const nghttp2_nv *headers, size_t count, const data_provider_t *provider)
-{
-	return nghttp2_submit_response(session, stream_id, headers, count,
-		provider);
-}
-
-#endif
+#endif //RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
 
 } //namespace riwo::http_exp::v2::detail::nghttp2_api
+
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_V2_DETAIL_NGHTTP2_COMPAT_H

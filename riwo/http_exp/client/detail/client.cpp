@@ -5,8 +5,8 @@
 #include "connector.h"
 #include "session_pool.h"
 #include <riwo/http_exp/protocol/request_head.h>
-#include <riwo/http_exp/protocol/detail/session.h>
-#include <riwo/http_exp/protocol/v1/detail/session.h>
+#include <riwo/http_exp/session/client_session.h>
+#include <riwo/http_exp/session/v1/session.h>
 #include <riwo/http_exp/body/detail/decoder.h>
 #include <riwo/http_exp/body/detail/progress.h>
 #include <riwo/http_exp/body/detail/source_transfer.h>
@@ -445,7 +445,7 @@ void notify_progress(const progress_observer &observer,
 
 } //namespace
 
-std::shared_ptr<stream> client_state::open_stream_sync(
+std::shared_ptr<session_stream> client_state::open_stream_sync(
 	const request_head &head, body_spec spec,
 	const client_config &config, error_code &error) noexcept
 {
@@ -493,7 +493,7 @@ client_state::client_state(client_config config,
 
 client_state::~client_state() = default;
 
-std::shared_ptr<stream> client_state::open(request request_value,
+std::shared_ptr<session_stream> client_state::open(request request_value,
 	body_spec spec, error_code &error) noexcept
 {
 	error.clear();
@@ -519,12 +519,12 @@ void client_state::open(request request_value, body_spec spec,
 	auto head = freeze_request(request_value, spec, true);
 	if( not head )
 	{
-		std::move(handler)(head.error(), std::shared_ptr<stream>{});
+		std::move(handler)(head.error(), std::shared_ptr<session_stream>{});
 		return ;
 	}
 	if( auto cookie_error = add_request_cookies(*head, cookie_store()) )
 	{
-		std::move(handler)(cookie_error, std::shared_ptr<stream>{});
+		std::move(handler)(cookie_error, std::shared_ptr<session_stream>{});
 		return ;
 	}
 	auto config = request_access::effective_config(request_value, m_config);
@@ -757,7 +757,7 @@ void client_state::send(request request_value, send_handler_t handler)
 	{
 		std::shared_ptr<client_state> owner;
 		request request_value;
-		std::shared_ptr<stream> active_stream;
+		std::shared_ptr<session_stream> active_stream;
 		optional<const_buffer> body;
 		std::shared_ptr<body_source> source;
 		std::shared_ptr<body_writer_state> writer;
@@ -772,7 +772,7 @@ void client_state::send(request request_value, send_handler_t handler)
 		progress_observer download_progress;
 
 		operation(std::shared_ptr<client_state> owner_value,
-			request original_request, std::shared_ptr<stream> stream_value,
+			request original_request, std::shared_ptr<session_stream> stream_value,
 			optional<const_buffer> body_value,
 			std::shared_ptr<body_source> source_value, body_spec description,
 			fields trailer_values, uint64_t max_buffered_body_value,
@@ -1017,7 +1017,7 @@ void client_state::send(request request_value, send_handler_t handler)
 	 upload_progress = std::move(upload_progress),
 	 download_progress = std::move(download_progress),
 	 handler = std::move(handler)]
-	(error_code error, std::shared_ptr<stream> active_stream) mutable
+	(error_code error, std::shared_ptr<session_stream> active_stream) mutable
 	{
 		if( error )
 		{

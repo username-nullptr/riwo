@@ -21,7 +21,11 @@
 namespace riwo::http_exp::detail
 {
 class server_exchange_state;
-class stream;
+}
+
+namespace riwo::http_exp
+{
+class session_stream;
 }
 
 namespace riwo::http_exp
@@ -50,18 +54,18 @@ public:
 	explicit basic_server_exchange(Exec0 &&executor)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	basic_server_exchange(std::shared_ptr<detail::stream> stream,
+	basic_server_exchange(std::shared_ptr<session_stream> stream,
 		request_t request)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_server_exchange(Exec0 &&executor,
-		std::shared_ptr<detail::stream> stream, request_t request)
+		std::shared_ptr<session_stream> stream, request_t request)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	template <typename Exec0>
 	basic_server_exchange(Exec0 &&executor,
-		std::shared_ptr<detail::stream> stream, request_t request,
+		std::shared_ptr<session_stream> stream, request_t request,
 		parameter_view path_parameters, parameter_view query_parameters,
 		std::shared_ptr<application_session_manager> sessions,
 		std::filesystem::path resource_root = {},

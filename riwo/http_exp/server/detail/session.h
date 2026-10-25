@@ -12,13 +12,16 @@ namespace riwo::http_exp
 class connection;
 }
 
+namespace riwo::http_exp
+{
+class session_stream;
+}
+
 namespace riwo::http_exp::detail
 {
 
-class stream;
-
 using server_accept_handler_t = std::function<void(
-	error_code,std::shared_ptr<stream>,request_head)>;
+	error_code,std::shared_ptr<session_stream>,request_head)>;
 
 class RIWO_HTTP_EXP_API server_connection
 {

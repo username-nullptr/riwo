@@ -4,7 +4,7 @@
 #include <riwo/http_exp/server/exchange.h>
 #include <riwo/http_exp/server/application_session.h>
 #include <riwo/http_exp/protocol/compression.h>
-#include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/session/session_stream.h>
 #include <riwo/http_exp/protocol/detail/syntax.h>
 
 namespace riwo::http_exp::detail
@@ -13,7 +13,7 @@ namespace riwo::http_exp::detail
 class RIWO_HTTP_EXP_TAPI server_exchange_state::impl
 {
 public:
-	impl(std::shared_ptr<stream> value, request_head metadata,
+	impl(std::shared_ptr<session_stream> value, request_head metadata,
 		parameter_view path_values, parameter_view query_values,
 		std::shared_ptr<application_session_manager> manager,
 		std::filesystem::path root, bool compression_enabled,
@@ -33,7 +33,7 @@ public:
 			m_response_body = make_body_writer_state();
 	}
 
-	std::shared_ptr<stream> m_stream;
+	std::shared_ptr<session_stream> m_stream;
 	request_head m_request;
 	parameter_view m_path_parameters;
 	parameter_view m_query_parameters;
@@ -50,7 +50,7 @@ public:
 	uint64_t m_compression_minimum = 1024;
 };
 
-server_exchange_state::server_exchange_state(std::shared_ptr<stream> stream,
+server_exchange_state::server_exchange_state(std::shared_ptr<session_stream> stream,
 	request_head request, parameter_view path_parameters,
 	parameter_view query_parameters,
 	std::shared_ptr<application_session_manager> sessions,
@@ -409,7 +409,7 @@ void server_exchange_state::cancel() noexcept
 }
 
 std::shared_ptr<server_exchange_state> make_server_exchange_state(
-	std::shared_ptr<stream> stream, request_head request,
+	std::shared_ptr<session_stream> stream, request_head request,
 	parameter_view path_parameters, parameter_view query_parameters,
 	std::shared_ptr<application_session_manager> sessions,
 	std::filesystem::path resource_root, bool automatic_compression,

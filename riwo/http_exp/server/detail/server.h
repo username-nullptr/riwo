@@ -107,8 +107,8 @@ public:
 				"riwo::http_exp::server::on_request: route/method is already bound");
 		}
 		auto updated = std::make_shared<route_table>(*current);
-		updated->routes.push_back(route {std::move(compiled),
-			std::move(methods), std::move(handler), std::move(middleware)});
+		updated->routes.emplace_back(std::move(compiled),
+			std::move(methods), std::move(handler), std::move(middleware));
 		m_routes.store(std::shared_ptr<const route_table>(std::move(updated)),
 			std::memory_order_release);
 	}
@@ -335,7 +335,7 @@ private:
 			auto connection = detail::accept_server(std::move(*socket),
 				self->m_config,
 			[self]
-			(error_code accept_error, std::shared_ptr<detail::stream> stream,
+			(error_code accept_error, std::shared_ptr<session_stream> stream,
 				request_head request) mutable {
 				if( accept_error )
 				{
@@ -348,7 +348,7 @@ private:
 				[](const detail::server_connection_ptr_t &value) {
 					return not value or value->closed();
 				});
-			self->m_connections.push_back(std::move(connection));
+			self->m_connections.emplace_back(std::move(connection));
 		});
 	}
 
@@ -365,7 +365,7 @@ public:
 			auto active = detail::accept_server(std::move(connection), selected,
 				m_config,
 			[self](error_code accept_error,
-				std::shared_ptr<detail::stream> stream,
+				std::shared_ptr<session_stream> stream,
 				request_head request) mutable
 			{
 				if( accept_error )
@@ -380,7 +380,7 @@ public:
 					return not value or value->closed();
 				});
 			if( active )
-				m_connections.push_back(std::move(active));
+				m_connections.emplace_back(std::move(active));
 		}
 		catch(...) {
 			error = exception_error(std::current_exception());
@@ -389,7 +389,7 @@ public:
 
 private:
 
-	void serve(std::shared_ptr<detail::stream> stream, request_head request)
+	void serve(std::shared_ptr<session_stream> stream, request_head request)
 	{
 		auto self = this->shared_from_this();
 		riwo::dispatch(m_service_executor,
@@ -432,7 +432,7 @@ private:
 				}
 				if( match->specificity != best_specificity )
 					continue;
-				path_matches.push_back(&candidate);
+				path_matches.emplace_back(&candidate);
 				// Prefer a direct method match over the implicit HEAD -> GET rule.
 				if( method_matches(candidate, request.method, false) )
 				{
@@ -466,7 +466,7 @@ private:
 								[&value](const http_exp::method &item) {
 									return item == value;
 								}) )
-								values.push_back(value);
+								values.emplace_back(value);
 					return values;
 				};
 
@@ -495,7 +495,7 @@ private:
 					for(const auto *candidate : path_matches)
 						for(const auto &value : candidate->methods)
 							if( std::ranges::find(allowed, value) == allowed.end() )
-								allowed.push_back(value);
+								allowed.emplace_back(value);
 					co_await self->method_not_allowed(exchange,
 						std::move(allowed), routes);
 				}

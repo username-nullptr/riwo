@@ -9,7 +9,6 @@
 namespace riwo::http_exp::detail
 {
 
-class stream;
 class session_pool;
 
 struct send_result
@@ -29,7 +28,7 @@ class RIWO_HTTP_EXP_API client_state :
 
 public:
 	using open_handler_t = asio::any_completion_handler<void(
-		error_code,std::shared_ptr<stream>)>;
+		error_code,std::shared_ptr<session_stream>)>;
 	using send_handler_t = asio::any_completion_handler<void(
 		error_code,send_result)>;
 
@@ -40,7 +39,7 @@ public:
 		std::shared_ptr<client_session> session = {},
 		std::shared_ptr<connector> connector = {});
 	~client_state();
-	[[nodiscard]] std::shared_ptr<stream> open(request request_value,
+	[[nodiscard]] std::shared_ptr<session_stream> open(request request_value,
 		body_spec spec, error_code &error) noexcept;
 	void open(request request_value, body_spec spec, open_handler_t handler);
 	[[nodiscard]] send_result send(request request_value,
@@ -51,7 +50,7 @@ public:
 		const reply_head &head) noexcept;
 
 private:
-	[[nodiscard]] std::shared_ptr<stream> open_stream_sync(
+	[[nodiscard]] std::shared_ptr<session_stream> open_stream_sync(
 		const request_head &head, body_spec spec,
 		const client_config &config, error_code &error) noexcept;
 	void open_stream(const request_head &head, body_spec spec,
@@ -125,7 +124,7 @@ basic_client<Exec>::basic_client(config_t config)
 
 template <core_concepts::exec Exec>
 basic_client<Exec>::basic_client(
-	std::shared_ptr<detail::client_session> session, config_t config)
+	std::shared_ptr<client_session> session, config_t config)
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_client(executor_t(riwo::get_executor()), std::move(session),
 		std::move(config))
@@ -149,14 +148,14 @@ basic_client<Exec>::basic_client(Exec0 &&executor, config_t config)
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_t>) :
 	basic_client(std::forward<Exec0>(executor),
-		std::shared_ptr<detail::client_session>{}, std::move(config))
+		std::shared_ptr<client_session>{}, std::move(config))
 {
 }
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_client<Exec>::basic_client(Exec0 &&executor,
-	std::shared_ptr<detail::client_session> session, config_t config)
+	std::shared_ptr<client_session> session, config_t config)
 	requires (
 		not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
 		core_concepts::match_sched<Exec0,executor_t>) :
@@ -378,7 +377,7 @@ auto basic_client<Exec>::open(request request_value, body_spec spec,
 			state->open(std::move(request_value), std::move(spec),
 			[handler = std::move(handler), executor,
 			 cookies = std::move(cookies), origin = std::move(origin)]
-			(error_code error, std::shared_ptr<detail::stream> stream) mutable
+			(error_code error, std::shared_ptr<session_stream> stream) mutable
 			{
 				try {
 					std::move(handler)(error,

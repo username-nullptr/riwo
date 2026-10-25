@@ -204,7 +204,7 @@ public:
 		{
 			head.headers.add("Content-Range",
 				format_content_range(ranges.front(), file_size));
-			segments.push_back({{}, ranges.front(), {}});
+			segments.emplace_back(std::string{}, ranges.front(), std::string{});
 			total_size = ranges.front().length;
 			open();
 			return ;
@@ -225,7 +225,7 @@ public:
 				range.length > maximum - total_size - prefix.size() - 2 )
 				length_error::loc_throw("multipart byte ranges are too large");
 			total_size += prefix.size() + range.length + 2;
-			segments.push_back({std::move(prefix), range, "\r\n"});
+			segments.emplace_back(std::move(prefix), range, "\r\n");
 		}
 		closing = "--" + boundary + "--\r\n";
 		if( closing.size() > std::numeric_limits<uint64_t>::max() - total_size )
@@ -236,7 +236,8 @@ public:
 
 	void select_complete_representation(uint64_t file_size)
 	{
-		segments.push_back({{}, {0, file_size}, {}});
+		segments.emplace_back(std::string{},
+			resolved_byte_range {0, file_size}, std::string{});
 		total_size = file_size;
 		open();
 	}

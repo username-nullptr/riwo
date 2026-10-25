@@ -104,7 +104,7 @@ request &request::trailers(fields values)
 				return strtls::ascii_equal(name, value.name, false);
 			});
 		if( not duplicate )
-			description.names.push_back(value.name);
+			description.names.emplace_back(value.name);
 	}
 	if( auto length = m_impl->m_body_spec.length() )
 		m_impl->m_body_spec = body_spec::known(*length, std::move(description));

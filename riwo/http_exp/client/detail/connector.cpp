@@ -4,13 +4,13 @@
 #include "connector.h"
 #include "factory.h"
 
-#include <riwo/http_exp/protocol/v1/detail/session.h>
+#include <riwo/http_exp/session/v1/session.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 #include <riwo/http_exp/protocol/authentication.h>
 #include <riwo/core/utils/string_tools.h>
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-# include <riwo/http_exp/protocol/v2/detail/session.h>
+# include <riwo/http_exp/session/v2/session.h>
 #endif
 
 #if RIWO_OPENSSL_SUPPORT
@@ -25,7 +25,10 @@
 # include <sys/socket.h>
 #endif
 
-namespace riwo::http_exp::detail { namespace
+namespace riwo::http_exp::detail
+{
+
+namespace
 {
 
 constexpr bool h2_client_session_available =
@@ -44,7 +47,7 @@ constexpr bool h2_client_session_available =
 		if( error )
 			return endpoints;
 		for(const auto &value : results)
-			endpoints.push_back(value.endpoint());
+			endpoints.emplace_back(value.endpoint());
 		return endpoints;
 	}
 
@@ -59,7 +62,7 @@ constexpr bool h2_client_session_available =
 		error = resolve_error;
 		if( not error )
 			for(const auto &value : results)
-				endpoints.push_back(value.endpoint());
+				endpoints.emplace_back(value.endpoint());
 		completed = true;
 	});
 	context.run_for(timeout);
@@ -283,7 +286,7 @@ struct proxy_target
 		std::vector<unsigned char> auth {1,
 			static_cast<unsigned char>(username.size())};
 		auth.insert(auth.end(), username.begin(), username.end());
-		auth.push_back(static_cast<unsigned char>(password.size()));
+		auth.emplace_back(static_cast<unsigned char>(password.size()));
 		auth.insert(auth.end(), password.begin(), password.end());
 		asio::write(socket, asio::buffer(auth), error);
 		if( error )
@@ -301,8 +304,8 @@ struct proxy_target
 	std::vector<unsigned char> request {5, 1, 0, 3,
 		static_cast<unsigned char>(key.host.size())};
 	request.insert(request.end(), key.host.begin(), key.host.end());
-	request.push_back(static_cast<unsigned char>(key.port >> 8));
-	request.push_back(static_cast<unsigned char>(key.port & 0xff));
+	request.emplace_back(static_cast<unsigned char>(key.port >> 8));
+	request.emplace_back(static_cast<unsigned char>(key.port & 0xff));
 	asio::write(socket, asio::buffer(request), error);
 	if( error )
 		return error;
@@ -352,7 +355,7 @@ struct proxy_target
 		std::vector<unsigned char> auth {1,
 			static_cast<unsigned char>(username.size())};
 		auth.insert(auth.end(), username.begin(), username.end());
-		auth.push_back(static_cast<unsigned char>(password.size()));
+		auth.emplace_back(static_cast<unsigned char>(password.size()));
 		auth.insert(auth.end(), password.begin(), password.end());
 		std::tie(error, size) = co_await asio::async_write(socket,
 			asio::buffer(auth), asio::as_tuple(asio::use_awaitable));
@@ -372,8 +375,8 @@ struct proxy_target
 	std::vector<unsigned char> request {5, 1, 0, 3,
 		static_cast<unsigned char>(key.host.size())};
 	request.insert(request.end(), key.host.begin(), key.host.end());
-	request.push_back(static_cast<unsigned char>(key.port >> 8));
-	request.push_back(static_cast<unsigned char>(key.port & 0xff));
+	request.emplace_back(static_cast<unsigned char>(key.port >> 8));
+	request.emplace_back(static_cast<unsigned char>(key.port & 0xff));
 	std::tie(error, size) = co_await asio::async_write(socket,
 		asio::buffer(request), asio::as_tuple(asio::use_awaitable));
 	if( error )
@@ -551,7 +554,7 @@ void mix(size_t &seed, size_t value) noexcept
 # endif
 		else
 			continue;
-		result.push_back(static_cast<unsigned char>(name.size()));
+		result.emplace_back(static_cast<unsigned char>(name.size()));
 		result.insert(result.end(), name.begin(), name.end());
 	}
 	return result;
@@ -576,7 +579,7 @@ void mix(size_t &seed, size_t value) noexcept
 			value != protocol::v2 )
 			continue;
 #endif
-		result.push_back(value);
+		result.emplace_back(value);
 	}
 	return result;
 }
@@ -1167,8 +1170,12 @@ public:
 			return sys_unexpected(make_error_code(errc::negotiation_failed));
 	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
 		if( transport.selected_protocol == protocol::v2 )
-			return ::riwo::http_exp::v2::detail::make_client_session(
-				std::move(transport.stream), config,
+			return ::riwo::http_exp::v2::make_client_session(
+				std::move(transport.stream), {
+					.timeout = config.timeout,
+					.reply_limits = config.reply_limits,
+					.h2 = config.h2
+				},
 				transport.remote, transport.local);
 	#endif
 		if( not http1(transport.selected_protocol) )
@@ -1178,7 +1185,7 @@ public:
 		auto executor = transport.stream->get_executor();
 		auto selected = transport.selected_protocol;
 		auto limits = config.reply_limits;
-		return ::riwo::http_exp::v1::detail::make_client_session(
+		return ::riwo::http_exp::v1::make_client_session(
 			std::move(executor), selected,
 			std::move(limits), std::move(transport.stream), config.timeout,
 			transport.absolute_form);
@@ -1335,12 +1342,12 @@ sys_expected<protocol> negotiate_protocol(const protocol_policy &policy,
 		if( value == protocol::v1_0 )
 		{
 			if( key.scheme == "http" )
-				eligible.push_back(value);
+				eligible.emplace_back(value);
 			continue;
 		}
 		if( value == protocol::v1_1 )
 		{
-			eligible.push_back(value);
+			eligible.emplace_back(value);
 			continue;
 		}
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
@@ -1348,7 +1355,7 @@ sys_expected<protocol> negotiate_protocol(const protocol_policy &policy,
 		{
 			if( policy.requirement == protocol_requirement::require_v2 or
 				key.scheme == "https" )
-				eligible.push_back(value);
+				eligible.emplace_back(value);
 			continue;
 		}
 #endif

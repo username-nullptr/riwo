@@ -46,19 +46,23 @@ if (RIWO_BUILD_HTTP_EXP)
 
 	riwo_install_module_headers(http_exp
 		PATTERN "v2.md" EXCLUDE
+		REGEX "/session/v1/" EXCLUDE
+		REGEX "/session/v2/" EXCLUDE
 		REGEX "/protocol/detail/" EXCLUDE
 		REGEX "/protocol/v1/detail/" EXCLUDE
-		# Public HTTP/2 headers include detail/engine.h and
-		# detail/extension.h for template and constexpr definitions.  Only
-		# headers used by the compiled session implementation stay private.
-		REGEX "/protocol/v2/detail/(nghttp2_compat|session)[.]h$" EXCLUDE
+		REGEX "/protocol/v2/detail/nghttp2_compat[.]h$" EXCLUDE
 		REGEX "/transport/tcp_connection[.]h$" EXCLUDE
 		REGEX "/transport/tls_connection[.]h$" EXCLUDE
 		REGEX "/transport/preface[.]h$" EXCLUDE
 	)
-	# basic_duplex_channel is a public class template whose definitions live in
-	# this focused detail header; keep all protocol detail trees private.
-	install(FILES http_exp/protocol/detail/duplex_channel.h
+	# These public classes have template definitions in focused detail headers.
+	# Install only those headers while keeping the remaining protocol details
+	# private.
+	install(FILES
+		http_exp/protocol/detail/duplex_channel.h
+		http_exp/protocol/detail/fields.h
+		http_exp/protocol/detail/request_head.h
+		http_exp/protocol/detail/response_head.h
 		DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp/protocol/detail
 	)
 endif ()

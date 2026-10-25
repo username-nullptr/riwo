@@ -2,32 +2,30 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
-#include "wire.h"
+#include <riwo/http_exp/protocol/v1/detail/wire.h>
 
 #include <riwo/core/utils/string_tools.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 
 #include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/protocol/detail/syntax.h>
-#include <riwo/http_exp/server/detail/session.h>
 
 #include <utility>
 
-namespace riwo::http_exp { namespace v1::detail
+namespace riwo::http_exp::v1
 {
 
-using http_exp::detail::client_session;
 using http_exp::detail::body_reader_adapter;
 using http_exp::detail::body_reader_state;
 using http_exp::detail::body_writer_adapter;
 using http_exp::detail::body_writer_state;
 using http_exp::detail::duplex_state;
-using http_exp::detail::server_session;
-using http_exp::detail::stream;
 
 using http_exp::detail::make_body_reader_state;
-using http_exp::detail::make_body_duplex_state;
+using http_exp::make_body_duplex_state;
 using http_exp::detail::make_body_writer_state;
+
+using namespace ::riwo::http_exp::v1::detail;
 
 namespace
 {
@@ -397,8 +395,6 @@ class RIWO_DECL_HIDDEN reader_adapter final : public body_reader_adapter,
 	RIWO_DISABLE_COPY_MOVE(reader_adapter)
 
 public:
-	using ptr_t = std::shared_ptr<reader_adapter>;
-
 	reader_adapter(std::shared_ptr<connection> connection_value, body_framing framing_value,
 		uint64_t length, const message_limits &limits, const timeout_policy &timeouts = {}) :
 		m_connection(std::move(connection_value)), m_framing(framing_value),
@@ -1101,7 +1097,7 @@ public:
 		[connection = std::move(connection), header, buffer, handler = std::move(handler)]
 		(error_code error, size_t) mutable
 		{
-			RIWO_UNUSED(handler);
+			RIWO_UNUSED(header);
 			if( error )
 			{
 				std::move(handler)(error, 0);
@@ -1210,7 +1206,7 @@ private:
 
 using writer_adapter_ptr = std::shared_ptr<writer_adapter>;
 
-class RIWO_DECL_HIDDEN v1_stream final : public stream,
+class RIWO_DECL_HIDDEN v1_stream final : public session_stream,
 	public std::enable_shared_from_this<v1_stream>
 {
 	RIWO_DISABLE_COPY_MOVE(v1_stream)
@@ -1461,81 +1457,6 @@ public:
 		});
 	}
 
-	void cancel() noexcept override
-	{
-		if( m_released and m_reusable )
-			return ;
-		release(false);
-	}
-
-public:
-	[[nodiscard]] protocol selected_protocol() const noexcept override {
-		return m_version;
-	}
-	[[nodiscard]] protocol response_protocol() const noexcept override {
-		return m_response_protocol;
-	}
-
-	[[nodiscard]] endpoint_t remote_endpoint(
-		error_code &error) const noexcept override {
-		return m_connection->transport->remote_endpoint(error);
-	}
-	[[nodiscard]] endpoint_t local_endpoint(
-		error_code &error) const noexcept override {
-		return m_connection->transport->local_endpoint(error);
-	}
-
-	[[nodiscard]] bool reusable() const noexcept override {
-		return m_released and m_reusable;
-	}
-
-private:
-	void read_response(response_handler_t handler)
-	{
-		auto self = shared_from_this();
-		read_head(m_connection, m_limits.max_header_list_size + m_limits.max_start_line_size,
-		[self = std::move(self), handler = std::move(handler)]
-		(error_code error, const std::string &wire) mutable
-		{
-			if( error )
-			{
-				std::move(handler)(error, response_head{});
-				return ;
-			}
-			auto parsed = parse_response(wire, self->m_limits, self->m_head_request);
-			if( not parsed )
-			{
-				std::move(handler)(parsed.error(), response_head{});
-				return ;
-			}
-			if( parsed->head.status.code() < 200 and
-				parsed->head.status.code() != status::switching_protocols )
-			{
-				self->read_response(std::move(handler));
-				return ;
-			}
-			self->m_response = parsed->head;
-			self->m_response_protocol = parsed->version;
-
-			self->m_connection->transport->set_read_timeout(self->m_timeouts.body_idle);
-			self->m_keep_alive = reusable_response(self->m_response, parsed->version);
-
-			self->m_response_ready = true;
-			self->m_reader->configure(parsed->framing, parsed->content_length);
-
-			if( parsed->framing == body_framing::none and self->m_client )
-			{
-				self->m_inbound->set_finished();
-				const auto code = self->m_response.status.code();
-
-				if( code != status::switching_protocols and
-					(self->m_request.method.known() != method::connect or code < 200 or code >= 300) )
-					self->body_finished({});
-			}
-			std::move(handler)(error_code{}, self->m_response);
-		});
-	}
-
 	[[nodiscard]] std::shared_ptr<duplex_state> open_duplex_sync
 	(const optional<response_head> &response, error_code &error) noexcept override
 	{
@@ -1648,6 +1569,81 @@ private:
 			std::move(handler)(error_code{},
 				std::make_shared<v1_duplex_state>(self->m_connection, self->m_version)
 			);
+		});
+	}
+
+	void cancel() noexcept override
+	{
+		if( m_released and m_reusable )
+			return ;
+		release(false);
+	}
+
+public:
+	[[nodiscard]] protocol selected_protocol() const noexcept override {
+		return m_version;
+	}
+	[[nodiscard]] protocol response_protocol() const noexcept override {
+		return m_response_protocol;
+	}
+
+	[[nodiscard]] endpoint_t remote_endpoint(
+		error_code &error) const noexcept override {
+		return m_connection->transport->remote_endpoint(error);
+	}
+	[[nodiscard]] endpoint_t local_endpoint(
+		error_code &error) const noexcept override {
+		return m_connection->transport->local_endpoint(error);
+	}
+
+	[[nodiscard]] bool reusable() const noexcept override {
+		return m_released and m_reusable;
+	}
+
+private:
+	void read_response(response_handler_t handler)
+	{
+		auto self = shared_from_this();
+		read_head(m_connection, m_limits.max_header_list_size + m_limits.max_start_line_size,
+		[self = std::move(self), handler = std::move(handler)]
+		(error_code error, const std::string &wire) mutable
+		{
+			if( error )
+			{
+				std::move(handler)(error, response_head{});
+				return ;
+			}
+			auto parsed = parse_response(wire, self->m_limits, self->m_head_request);
+			if( not parsed )
+			{
+				std::move(handler)(parsed.error(), response_head{});
+				return ;
+			}
+			if( parsed->head.status.code() < 200 and
+				parsed->head.status.code() != status::switching_protocols )
+			{
+				self->read_response(std::move(handler));
+				return ;
+			}
+			self->m_response = parsed->head;
+			self->m_response_protocol = parsed->version;
+
+			self->m_connection->transport->set_read_timeout(self->m_timeouts.body_idle);
+			self->m_keep_alive = reusable_response(self->m_response, parsed->version);
+
+			self->m_response_ready = true;
+			self->m_reader->configure(parsed->framing, parsed->content_length);
+
+			if( parsed->framing == body_framing::none and self->m_client )
+			{
+				self->m_inbound->set_finished();
+				const auto code = self->m_response.status.code();
+
+				if( code != status::switching_protocols and
+					(self->m_request.method.known() != method::connect or code < 200 or code >= 300) )
+					self->body_finished({});
+			}
+			std::move(handler)(error_code{}, self->m_response);
 		});
 	}
 
@@ -1765,10 +1761,10 @@ class RIWO_DECL_HIDDEN v1_client_session final : public client_session,
 			if( error )
 			{
 				session->release_stream(false);
-				std::move(handler)(error, std::shared_ptr<stream>{});
+				std::move(handler)(error, std::shared_ptr<session_stream>{});
 				return ;
 			}
-			auto result = session->make_stream(std::move(head), std::move(spec));
+			auto result = session->make_stream(std::move(head), spec);
 			std::move(handler)(error_code{}, std::move(result));
 		}
 	};
@@ -1838,7 +1834,7 @@ public:
 		m_release_handler = std::move(handler);
 	}
 
-	[[nodiscard]] std::shared_ptr<stream>
+	[[nodiscard]] std::shared_ptr<session_stream>
 	open_sync(const request_head &head, const body_spec &spec, error_code &error) noexcept override
 	{
 		error.clear();
@@ -1886,13 +1882,13 @@ public:
 		error_code begin_error;
 		if( not begin_open(begin_error) )
 		{
-			std::move(handler)(begin_error, std::shared_ptr<stream>{});
+			std::move(handler)(begin_error, std::shared_ptr<session_stream>{});
 			return ;
 		}
 		auto wire_value = serialize_request(head, spec, m_version, m_absolute_form);
 		if( not wire_value )
 		{
-			std::move(handler)(wire_value.error(), std::shared_ptr<stream>{});
+			std::move(handler)(wire_value.error(), std::shared_ptr<session_stream>{});
 			release_stream(false);
 			return ;
 		}
@@ -2001,22 +1997,16 @@ public:
 		m_connection(std::make_shared<connection>(std::move(socket))) {}
 
 	v1_server_session(connection_ptr transport, protocol version, const message_limits &limits,
-		const timeout_policy &timeouts = {}, std::string initial_input = {}) :
+		const timeout_policy &timeouts = {}, std::string initial_input = {},
+		std::function<void(bool)> release_handler = {}) :
 		m_exec(transport->get_executor()), m_limits(limits), m_timeouts(timeouts),
-		m_connection(std::make_shared<connection>(std::move(transport))), m_version(version)
+		m_connection(std::make_shared<connection>(std::move(transport))), m_version(version),
+		m_release_handler(std::move(release_handler))
 	{
 		m_connection->pending = std::move(initial_input);
 	}
 
 public:
-	[[nodiscard]] bool try_reserve_stream() noexcept
-	{
-		if( m_in_use or m_draining or closed() )
-			return false;
-		m_in_use = true;
-		return true;
-	}
-
 	void release_stream(bool reusable) noexcept
 	{
 		if( not m_in_use )
@@ -2032,17 +2022,13 @@ public:
 		catch(...) {}
 	}
 
-	void set_release_handler(std::function<void(bool)> handler) {
-		m_release_handler = std::move(handler);
-	}
-
 	void accept(accept_handler_t handler) override
 	{
 		if( m_in_use )
 		{
 			std::move(handler) (
 				make_error_code(errc::operation_in_progress),
-				std::shared_ptr<stream> {}
+				std::shared_ptr<session_stream> {}
 			);
 			return ;
 		}
@@ -2050,7 +2036,7 @@ public:
 		{
 			std::move(handler) (
 				make_error_code(errc::operation_not_permitted),
-				std::shared_ptr<stream> {}
+				std::shared_ptr<session_stream> {}
 			);
 			return ;
 		}
@@ -2067,7 +2053,7 @@ public:
 			if( error )
 			{
 				self->release_stream(false);
-				std::move(handler)(error, std::shared_ptr<stream>{});
+				std::move(handler)(error, std::shared_ptr<session_stream>{});
 				return ;
 			}
 			auto parsed = parse_request(wire, self->m_limits);
@@ -2084,7 +2070,7 @@ public:
 					ignored
 				);
 				self->release_stream(false);
-				std::move(handler)(parsed.error(), std::shared_ptr<stream>{});
+				std::move(handler)(parsed.error(), std::shared_ptr<session_stream>{});
 				return ;
 			}
 			self->m_version = parsed->version;
@@ -2101,7 +2087,7 @@ public:
 
 					std::move(handler) (
 						make_error_code(errc::invalid_field_value),
-						std::shared_ptr<stream> {}
+						std::shared_ptr<session_stream> {}
 					);
 					return ;
 				}
@@ -2115,7 +2101,7 @@ public:
 					if( expect_error )
 					{
 						self->release_stream(false);
-						std::move(handler)(expect_error, std::shared_ptr<stream>{});
+						std::move(handler)(expect_error, std::shared_ptr<session_stream>{});
 						return ;
 					}
 				}
@@ -2173,11 +2159,9 @@ private:
 	std::function<void(bool)> m_release_handler {};
 };
 
-using v1_server_session_ptr = std::shared_ptr<v1_server_session>;
-
 } //namespace
 
-http_exp::detail::client_session_ptr
+client_session_ptr
 make_client_session(protocol version, const message_limits &limits,
 	const timeout_policy &timeouts, bool absolute_form, asio::any_io_executor executor)
 {
@@ -2186,7 +2170,7 @@ make_client_session(protocol version, const message_limits &limits,
 	);
 }
 
-http_exp::detail::client_session_ptr
+client_session_ptr
 make_client_session(asio::any_io_executor executor, protocol version,
 	const message_limits &limits, const timeout_policy &timeouts, bool absolute_form)
 {
@@ -2195,7 +2179,7 @@ make_client_session(asio::any_io_executor executor, protocol version,
 	);
 }
 
-http_exp::detail::client_session_ptr
+client_session_ptr
 make_client_session(protocol version, const message_limits &limits, connection_ptr transport,
 	const timeout_policy &timeouts, bool absolute_form, asio::any_io_executor executor)
 {
@@ -2204,7 +2188,7 @@ make_client_session(protocol version, const message_limits &limits, connection_p
 	);
 }
 
-http_exp::detail::client_session_ptr
+client_session_ptr
 make_client_session(asio::any_io_executor executor, protocol version, const message_limits &limits,
 	connection_ptr transport, const timeout_policy &timeouts, bool absolute_form)
 {
@@ -2213,7 +2197,7 @@ make_client_session(asio::any_io_executor executor, protocol version, const mess
 	);
 }
 
-http_exp::detail::server_session_ptr make_server_session
+server_session_ptr make_server_session
 (asio::ip::tcp::socket socket, const message_limits &limits, const timeout_policy &timeouts)
 {
 	return std::make_shared<v1_server_session>(
@@ -2221,106 +2205,14 @@ http_exp::detail::server_session_ptr make_server_session
 	);
 }
 
-http_exp::detail::server_session_ptr make_server_session
-(connection_ptr transport, protocol version, const message_limits &limits, const timeout_policy &timeouts)
+server_session_ptr make_server_session(connection_ptr transport, protocol version,
+	const message_limits &limits, const timeout_policy &timeouts, std::string initial_input,
+	std::function<void(bool)> release_handler)
 {
 	return std::make_shared<v1_server_session>(
-		std::move(transport), version, limits, timeouts
+		std::move(transport), version, limits, timeouts,
+		std::move(initial_input), std::move(release_handler)
 	);
 }
 
-} //namespace v1::detail
-
-namespace detail
-{
-
-class RIWO_DECL_HIDDEN v1_server_loop final :
-	public std::enable_shared_from_this<v1_server_loop>
-{
-	RIWO_DISABLE_COPY_MOVE(v1_server_loop)
-
-public:
-	v1_server_loop() = default;
-
-	v1::detail::v1_server_session_ptr session {};
-	server_accept_handler_t handler {};
-	bool served = false;
-
-	void start()
-	{
-		auto self = shared_from_this();
-		session->accept([self = std::move(self)](const error_code &error, stream_ptr value) mutable
-		{
-			if( error )
-			{
-				if( not self->served )
-					self->handler(error, {}, {});
-				return ;
-			}
-			self->served = true;
-
-			auto request = value ?
-				value->request() : request_head{};
-
-			self->handler(error_code{},
-				std::move(value), std::move(request)
-			);
-		});
-	}
-};
-
-using v1_server_loop_ptr = std::shared_ptr<v1_server_loop>;
-
-class RIWO_DECL_HIDDEN v1_server_connection final : public server_connection
-{
-	RIWO_DISABLE_COPY_MOVE(v1_server_connection)
-
-public:
-	explicit v1_server_connection(v1_server_loop_ptr loop_value) :
-		loop(std::move(loop_value)) {}
-
-	void cancel() noexcept override {
-		loop->session->graceful_shutdown([](error_code) {});
-	}
-	[[nodiscard]] bool closed() const noexcept override {
-		return loop->session->closed();
-	}
-
-	v1_server_loop_ptr loop {};
-};
-
-server_connection_ptr_t accept_h1(asio::ip::tcp::socket socket,
-	message_limits limits, timeout_policy timeouts,
-	server_accept_handler_t handler)
-{
-	error_code option_error;
-	(void)socket.set_option(asio::ip::tcp::no_delay(true), option_error);
-	return accept_h1(std::make_shared<tcp_connection>(std::move(socket)),
-		std::move(limits), timeouts, std::move(handler));
-}
-
-server_connection_ptr_t accept_h1(
-	std::shared_ptr<::riwo::http_exp::connection> transport,
-	message_limits limits, timeout_policy timeouts,
-	server_accept_handler_t handler, std::string initial_input)
-{
-	auto session = std::make_shared<
-		v1::detail::v1_server_session>(
-		std::move(transport), protocol::v1_1, std::move(limits), timeouts,
-		std::move(initial_input));
-	auto value = std::make_shared<v1_server_loop>();
-	value->session = session;
-	value->handler = std::move(handler);
-	std::weak_ptr<v1_server_loop> weak = value;
-	session->set_release_handler(
-	[weak](bool reusable) {
-		if( not reusable )
-			return ;
-		if( auto self = weak.lock() )
-			self->start();
-	});
-	value->start();
-	return std::make_shared<v1_server_connection>(std::move(value));
-}
-
-}} //namespace riwo::http_exp::detail
+} //namespace riwo::http_exp::v1

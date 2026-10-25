@@ -5,7 +5,8 @@
 
 #include <riwo/http_exp.h>
 #include <riwo/http_exp/body/detail/source_transfer.h>
-#include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/session/client_session.h>
+#include <riwo/http_exp/session/session_stream.h>
 #include <cstdio>
 #include <fstream>
 
@@ -244,7 +245,7 @@ struct oversized_body_source
 	void cancel() noexcept {}
 };
 
-class fake_stream final : public http::detail::stream
+class fake_stream final : public http::session_stream
 {
 public:
 	struct test_extension
@@ -335,7 +336,7 @@ public:
 	bool cancelled = false;
 };
 
-class fake_session final : public http::detail::client_session
+class fake_session final : public http::client_session
 {
 public:
 	explicit fake_session(executor_type executor) : executor_(std::move(executor)) {}
@@ -347,7 +348,7 @@ public:
 	bool draining() const noexcept override { return false; }
 	bool closed() const noexcept override { return false; }
 
-	std::shared_ptr<http::detail::stream> open_sync(
+	std::shared_ptr<http::session_stream> open_sync(
 		const http::request_head &head, const http::body_spec &spec,
 		riwo::error_code &error) noexcept override
 	{

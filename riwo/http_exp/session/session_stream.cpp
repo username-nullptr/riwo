@@ -1,12 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include "session.h"
+#include "session_stream.h"
 #include <riwo/http_exp/protocol/duplex_channel.h>
 
 #include <utility>
 
-namespace riwo::http_exp::detail { namespace
+namespace riwo::http_exp
+{
+
+using detail::body_reader_state_ptr;
+using detail::body_writer_state_ptr;
+using detail::duplex_state;
+
+namespace
 {
 
 [[nodiscard]] error_code unsupported() noexcept
@@ -168,103 +175,82 @@ private:
 
 } //namespace
 
-response_head stream::wait_response_sync(error_code &error) noexcept
+response_head session_stream::wait_response_sync(error_code &error) noexcept
 {
 	error = unsupported();
 	return {};
 }
 
-void stream::wait_response(response_handler_t handler)
+void session_stream::wait_response(response_handler_t handler)
 {
 	std::move(handler)(unsupported(), response_head{});
 }
 
-void stream::respond_sync(const response_head&, const body_spec&, error_code &error) noexcept
+void session_stream::respond_sync(const response_head&, const body_spec&, error_code &error) noexcept
 {
 	error = unsupported();
 }
 
-void stream::respond(const response_head&, const body_spec&, operation_handler_t handler)
+void session_stream::respond(const response_head&, const body_spec&, operation_handler_t handler)
 {
 	std::move(handler)(unsupported());
 }
 
-void stream::inform_sync(const response_head&, error_code &error) noexcept
+void session_stream::inform_sync(const response_head&, error_code &error) noexcept
 {
 	error = unsupported();
 }
 
-void stream::inform(const response_head&, operation_handler_t handler)
+void session_stream::inform(const response_head&, operation_handler_t handler)
 {
 	std::move(handler)(unsupported());
 }
 
-duplex_state_ptr stream::open_duplex_sync(const optional<response_head>&, error_code &error) noexcept
+session_stream::duplex_state_ptr
+session_stream::open_duplex_sync(const optional<response_head>&, error_code &error) noexcept
 {
 	error = unsupported();
 	return {};
 }
 
-protocol stream::response_protocol() const noexcept
+protocol session_stream::response_protocol() const noexcept
 {
 	return selected_protocol();
 }
 
-void stream::open_duplex(const optional<response_head>&, duplex_handler_t handler)
+void session_stream::open_duplex(const optional<response_head>&, duplex_handler_t handler)
 {
 	std::move(handler)(unsupported(), duplex_state_ptr{});
 }
 
-auto stream::remote_endpoint(error_code &error) const noexcept -> endpoint_t
+auto session_stream::remote_endpoint(error_code &error) const noexcept -> endpoint_t
 {
 	error = unsupported();
 	return {};
 }
 
-auto stream::local_endpoint(error_code &error) const noexcept -> endpoint_t
+auto session_stream::local_endpoint(error_code &error) const noexcept -> endpoint_t
 {
 	error = unsupported();
 	return {};
 }
 
-bool stream::reusable() const noexcept
+bool session_stream::reusable() const noexcept
 {
 	return false;
 }
 
-request_delivery stream::delivery() const noexcept
+request_delivery session_stream::delivery() const noexcept
 {
 	return request_delivery::possibly_processed;
 }
 
-void *stream::protocol_extension(const std::type_info &) noexcept
+void *session_stream::protocol_extension(const std::type_info &) noexcept
 {
 	return nullptr;
 }
 
-bool client_session::try_reserve_stream() noexcept
-{
-	return available_stream_capacity() != 0;
-}
-
-void client_session::release_stream(bool reusable) noexcept
-{
-	ignore_unused(reusable);
-}
-
-void client_session::set_release_handler(std::function<void(bool)> handler)
-{
-	ignore_unused(handler);
-}
-
-stream_ptr client_session::open_sync
-(const request_head&, const body_spec&, error_code &error) noexcept
-{
-	error = unsupported();
-	return {};
-}
-
-duplex_state_ptr make_body_duplex_state(protocol version,
+std::shared_ptr<duplex_state> make_body_duplex_state(protocol version,
 	body_reader_state_ptr reader, body_writer_state_ptr writer,
 	asio::ip::tcp::endpoint remote, asio::ip::tcp::endpoint local,
 	std::shared_ptr<void> owner, std::function<void()> cancel,
@@ -277,7 +263,7 @@ duplex_state_ptr make_body_duplex_state(protocol version,
 	);
 }
 
-duplex_state_ptr make_body_duplex_state(
+std::shared_ptr<duplex_state> make_body_duplex_state(
 	asio::any_io_executor executor, protocol version,
 	body_reader_state_ptr reader, body_writer_state_ptr writer,
 	asio::ip::tcp::endpoint remote, asio::ip::tcp::endpoint local,
@@ -291,4 +277,4 @@ duplex_state_ptr make_body_duplex_state(
 	);
 }
 
-} //namespace riwo::http_exp::detail
+} //namespace riwo::http_exp

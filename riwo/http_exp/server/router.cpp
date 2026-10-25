@@ -60,7 +60,7 @@ route_pattern::compile(std::string pattern)
 					"riwo::http_exp::route_pattern: invalid path argument");
 			auto name = result->text.substr(index + 1, close - index - 1);
 			if( name.find_first_of("{}/") != std::string::npos or
-				not names.insert(name).second )
+				not names.emplace(name).second )
 				invalid_argument::loc_throw(
 					"riwo::http_exp::route_pattern: invalid or duplicate argument");
 			result->argument_names.emplace_back(std::move(name));
@@ -133,8 +133,8 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 				matches[index + 1].first, matches[index + 1].second), false);
 			if( not decoded )
 				return {};
-			parameters.push_back({m_impl->argument_names[index],
-				std::move(*decoded)});
+			parameters.emplace_back(m_impl->argument_names[index],
+				std::move(*decoded));
 		}
 		return route_match {
 			.path_parameters = parameter_view(std::move(parameters)),

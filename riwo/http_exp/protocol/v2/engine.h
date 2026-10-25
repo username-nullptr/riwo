@@ -18,12 +18,16 @@ struct connection_config
 {
 	protocol_role role = protocol_role::client;
 	message_limits limits {};
+
 	uint32_t initial_stream_window = 65'535;
 	uint32_t initial_connection_window = 1024 * 1024;
+
 	uint32_t max_concurrent_streams = 100;
 	uint32_t max_frame_size = 16 * 1024;
+
 	size_t max_dynamic_table_size = 4 * 1024;
 	size_t max_pending_output = 8 * 1024 * 1024;
+
 	bool enable_extended_connect = false;
 };
 
@@ -32,43 +36,46 @@ class RIWO_HTTP_EXP_API connection_engine
 	RIWO_DISABLE_COPY(connection_engine)
 
 public:
-	explicit connection_engine(connection_config config);
-	connection_engine(connection_engine &&) noexcept;
-	connection_engine &operator=(connection_engine &&) noexcept;
+	explicit connection_engine(const connection_config &config);
 	~connection_engine();
 
-	[[nodiscard]] protocol selected_protocol() const noexcept;
-	[[nodiscard]] sys_expected<ingest_result> ingest(
-		const_buffer input, protocol_event_handler_t events) noexcept;
-	[[nodiscard]] sys_expected<ingest_result> finish_input(
-		protocol_event_handler_t events) noexcept;
-	[[nodiscard]] sys_expected<void> submit(protocol_action_t action) noexcept;
-	[[nodiscard]] sys_expected<produce_result> produce(
-		mutable_buffer output) noexcept;
-	[[nodiscard]] bool wants_write() const noexcept;
+	connection_engine(connection_engine &&) noexcept;
+	connection_engine &operator=(connection_engine &&) noexcept;
 
-	[[nodiscard]] optional<int32_t> wire_stream_id(
-		stream_token_t stream) const noexcept;
-	[[nodiscard]] optional<stream_token_t> stream_from_wire_id(
-		int32_t stream_id) const noexcept;
+public:
+	[[nodiscard]] sys_expected<ingest_result> ingest (
+		const const_buffer &input, protocol_event_handler_t events
+	) noexcept;
+
+	[[nodiscard]] sys_expected<ingest_result> finish_input(
+		protocol_event_handler_t events
+	) noexcept;
+
+	[[nodiscard]] sys_expected<void> submit(protocol_action_t action) noexcept;
+	[[nodiscard]] sys_expected<produce_result> produce(const mutable_buffer &output) noexcept;
+
+	[[nodiscard]] optional<int32_t> wire_stream_id(stream_token_t stream) const noexcept;
+	[[nodiscard]] optional<stream_token_t> stream_from_wire_id(int32_t stream_id) const noexcept;
+
+public:
 	[[nodiscard]] connection_diagnostics diagnostics() const noexcept;
+	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] bool wants_write() const noexcept;
 
 	template <typename Extension>
 	[[nodiscard]] Extension *extension() noexcept;
 
 private:
-	[[nodiscard]] void *protocol_extension(
-		const std::type_info &type) noexcept;
-
+	[[nodiscard]] void *protocol_extension(const std::type_info &type) noexcept;
 	class impl;
-	std::unique_ptr<impl> m_impl;
+	std::unique_ptr<impl> m_impl {};
 };
 
 static_assert(concepts::protocol_engine<connection_engine>);
 
 } //namespace riwo::http_exp::v2
-
 #include <riwo/http_exp/protocol/v2/detail/engine.h>
+
 
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
 

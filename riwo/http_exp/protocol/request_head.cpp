@@ -27,44 +27,6 @@ namespace riwo::http_exp { namespace
 
 } //namespace
 
-optional<std::string_view> request_head::header(std::string_view name) const noexcept
-{
-	return headers.find_first(name);
-}
-
-bool request_head::has_header(std::string_view name) const noexcept
-{
-	return headers.find_first(name).has_value();
-}
-
-bool request_head::contains_header(std::string_view name) const noexcept
-{
-	return has_header(name);
-}
-
-request_head &request_head::set_header(std::string name, riwo::value value)
-{
-	headers.set(std::move(name), std::move(value));
-	return *this;
-}
-
-request_head &request_head::add_header(std::string name, riwo::value value)
-{
-	headers.add(std::move(name), std::move(value));
-	return *this;
-}
-
-request_head &request_head::erase_header(std::string_view name) noexcept
-{
-	headers.erase(name);
-	return *this;
-}
-
-request_head &request_head::unset_header(std::string_view name) noexcept
-{
-	return erase_header(name);
-}
-
 request_head &request_head::set_cookies(std::span<const cookie_pair> values)
 {
 	if( values.empty() )
@@ -75,13 +37,6 @@ request_head &request_head::set_cookies(std::span<const cookie_pair> values)
 	auto serialized = serialize_cookie(values);
 	headers.set("Cookie", std::move(serialized));
 	return *this;
-}
-
-request_head &request_head::add_cookie(std::string name, riwo::value value)
-{
-	return add_cookie ({
-		.name = std::move(name), .value = std::move(value)
-	});
 }
 
 request_head &request_head::add_cookie(cookie_pair value)

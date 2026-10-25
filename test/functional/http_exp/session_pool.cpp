@@ -6,7 +6,8 @@
 #include <riwo/http_exp.h>
 #include <riwo/http_exp/client/detail/connector.h>
 #include <riwo/http_exp/client/detail/session_pool.h>
-#include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/session/client_session.h>
+#include <riwo/http_exp/session/session_stream.h>
 #include <riwo/http_exp/transport/preface.h>
 
 namespace
@@ -15,7 +16,7 @@ namespace
 namespace http = riwo::http_exp;
 namespace detail = riwo::http_exp::detail;
 
-class fake_stream final : public detail::stream
+class fake_stream final : public http::session_stream
 {
 public:
 	explicit fake_stream(http::protocol version) : m_version(version) {}
@@ -39,10 +40,10 @@ public:
 	bool cancelled = false;
 };
 
-class fake_session final : public detail::client_session
+class fake_session final : public http::client_session
 {
 public:
-	using open_handler_t = detail::client_session::open_handler_t;
+	using open_handler_t = http::client_session::open_handler_t;
 
 	fake_session(executor_type executor, http::protocol version, size_t id) :
 		m_id(id), m_exec(std::move(executor)), m_version(version)
@@ -81,7 +82,7 @@ public:
 		release_handler = std::move(handler);
 	}
 
-	std::shared_ptr<detail::stream> open_sync(
+	std::shared_ptr<http::session_stream> open_sync(
 		const http::request_head &head, const http::body_spec&,
 		riwo::error_code &error) noexcept override
 	{
@@ -124,7 +125,7 @@ public:
 	bool closed_ = false;
 	size_t release_count = 0;
 	std::vector<std::string> opened_targets;
-	std::shared_ptr<detail::stream> last_stream;
+	std::shared_ptr<http::session_stream> last_stream;
 	std::function<void(bool)> release_handler;
 
 private:
@@ -165,7 +166,7 @@ public:
 	{
 	}
 
-	riwo::sys_expected<std::shared_ptr<detail::client_session>> create(
+	riwo::sys_expected<std::shared_ptr<http::client_session>> create(
 		const detail::session_key &key, detail::negotiated_transport transport,
 		const http::client_config &config) override
 	{
@@ -175,7 +176,7 @@ public:
 		auto session = std::make_shared<fake_session>(m_exec,
 			transport.selected_protocol, sessions.size());
 		sessions.push_back(session);
-		return std::shared_ptr<detail::client_session>(session);
+		return std::shared_ptr<http::client_session>(session);
 	}
 
 	asio::any_io_executor m_exec;
@@ -309,7 +310,7 @@ void factory_boundary()
 	bool completed = false;
 	pool->open(key, make_head("http://example.test/factory"),
 		http::body_spec::empty(),
-		[&](riwo::error_code error, std::shared_ptr<detail::stream> active) {
+		[&](riwo::error_code error, std::shared_ptr<http::session_stream> active) {
 			RIWO_TEST_CHECK(!error);
 			RIWO_TEST_CHECK(active);
 			completed = true;
@@ -341,12 +342,12 @@ void capacity_and_fair_queue()
 		make_head("http://example.test/queue"), config);
 
 	std::vector<std::string> completed;
-	std::map<std::string, std::shared_ptr<detail::stream>> active;
+	std::map<std::string, std::shared_ptr<http::session_stream>> active;
 	auto open = [&](std::string target) {
 		pool->open(key, make_head("http://example.test" + target),
 			http::body_spec::empty(),
 			[&, target](riwo::error_code error,
-				std::shared_ptr<detail::stream> stream) {
+				std::shared_ptr<http::session_stream> stream) {
 				RIWO_TEST_CHECK(!error);
 				active[target] = std::move(stream);
 				completed.push_back(target);
@@ -401,10 +402,10 @@ void waiter_limits_timeout_and_draining()
 	auto key = detail::make_session_key(
 		make_head("http://example.test/wait"), config);
 
-	std::shared_ptr<detail::stream> active_stream;
+	std::shared_ptr<http::session_stream> active_stream;
 	pool->open(key, make_head("http://example.test/active"),
 		http::body_spec::empty(),
-		[&](riwo::error_code, std::shared_ptr<detail::stream> stream) {
+		[&](riwo::error_code, std::shared_ptr<http::session_stream> stream) {
 			active_stream = std::move(stream);
 		});
 	drain(context);
@@ -414,14 +415,14 @@ void waiter_limits_timeout_and_draining()
 	riwo::error_code queued_error;
 	pool->open(key, make_head("http://example.test/waiting"),
 		http::body_spec::empty(),
-		[&](riwo::error_code error, std::shared_ptr<detail::stream>) {
+		[&](riwo::error_code error, std::shared_ptr<http::session_stream>) {
 			queued_completed = true;
 			queued_error = error;
 		});
 	bool limited = false;
 	pool->open(key, make_head("http://example.test/limited"),
 		http::body_spec::empty(),
-		[&](riwo::error_code error, std::shared_ptr<detail::stream>) {
+		[&](riwo::error_code error, std::shared_ptr<http::session_stream>) {
 			limited = error ==
 				http::make_error_code(http::errc::buffer_limit_exceeded);
 		});
@@ -440,7 +441,7 @@ void waiter_limits_timeout_and_draining()
 	pool->cancel();
 	pool->open(key, make_head("http://example.test/cancelled"),
 		http::body_spec::empty(),
-		[&](riwo::error_code error, std::shared_ptr<detail::stream>) {
+		[&](riwo::error_code error, std::shared_ptr<http::session_stream>) {
 			draining_failed = error ==
 				asio::error::make_error_code(asio::error::operation_aborted);
 		});
@@ -461,10 +462,10 @@ void idle_expiry()
 	auto key = detail::make_session_key(
 		make_head("http://example.test/idle"), config);
 
-	std::shared_ptr<detail::stream> active_stream;
+	std::shared_ptr<http::session_stream> active_stream;
 	pool->open(key, make_head("http://example.test/idle"),
 		http::body_spec::empty(),
-		[&](riwo::error_code, std::shared_ptr<detail::stream> stream) {
+		[&](riwo::error_code, std::shared_ptr<http::session_stream> stream) {
 			active_stream = std::move(stream);
 		});
 	drain(context);

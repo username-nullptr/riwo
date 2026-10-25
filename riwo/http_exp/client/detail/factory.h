@@ -5,7 +5,7 @@
 #define RIWO_HTTP_EXP_CLIENT_DETAIL_FACTORY_H
 
 #include <riwo/http_exp/client/detail/connector.h>
-#include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/session/client_session.h>
 
 namespace riwo::http_exp::detail
 {

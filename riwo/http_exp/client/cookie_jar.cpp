@@ -354,7 +354,7 @@ std::vector<cookie_pair> cookie_jar::select(const riwo::url &target,
 	std::vector<cookie_pair> result;
 	result.reserve(matches.size());
 	for(const auto *item : matches)
-		result.push_back({item->name, item->value});
+		result.emplace_back(item->name, item->value);
 	return result;
 }
 

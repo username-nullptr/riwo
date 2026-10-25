@@ -3,13 +3,16 @@
 
 #include "session_pool.h"
 
-namespace riwo::http_exp::detail { namespace
+namespace riwo::http_exp::detail
+{
+
+namespace
 {
 
 using clock_t = std::chrono::steady_clock;
 using timer_t = asio::steady_timer;
 
-class pooled_stream final : public stream,
+class pooled_stream final : public session_stream,
 	public std::enable_shared_from_this<pooled_stream>
 {
 	RIWO_DISABLE_COPY_MOVE(pooled_stream)
@@ -17,7 +20,7 @@ class pooled_stream final : public stream,
 public:
 	using abandon_handler_t = std::function<void(bool)>;
 
-	pooled_stream(std::shared_ptr<stream> inner, abandon_handler_t on_abandon) :
+	pooled_stream(std::shared_ptr<session_stream> inner, abandon_handler_t on_abandon) :
 		m_inner(std::move(inner)), m_on_abandon(std::move(on_abandon))
 	{
 	}
@@ -123,7 +126,7 @@ private:
 		}
 	}
 
-	std::shared_ptr<stream> m_inner;
+	std::shared_ptr<session_stream> m_inner;
 	abandon_handler_t m_on_abandon;
 	bool m_abandoned = false;
 };
@@ -191,7 +194,7 @@ public:
 		shutdown();
 	}
 
-	[[nodiscard]] std::shared_ptr<stream> open_sync(const session_key &key,
+	[[nodiscard]] std::shared_ptr<session_stream> open_sync(const session_key &key,
 		request_head head, body_spec spec, error_code &error) noexcept
 	{
 		error.clear();
@@ -316,7 +319,7 @@ public:
 					else
 					{
 						item->queued = true;
-						value.waiters.push_back(item);
+						value.waiters.emplace_back(item);
 						schedule_idle(item);
 					}
 				}
@@ -330,7 +333,7 @@ public:
 		}
 		catch(...) {
 			std::move(handler)(exception_error(std::current_exception()),
-				std::shared_ptr<stream>{});
+				std::shared_ptr<session_stream>{});
 		}
 	}
 
@@ -347,13 +350,13 @@ public:
 				for(auto &item : value.waiters)
 				{
 					item->queued = false;
-					failed.push_back(item);
+					failed.emplace_back(item);
 				}
 				value.waiters.clear();
 				for(auto &value_slot : value.sessions)
 				{
 					if( value_slot->session )
-						sessions.push_back(value_slot->session);
+						sessions.emplace_back(value_slot->session);
 				}
 			}
 			m_condition.notify_all();
@@ -469,7 +472,7 @@ private:
 		{
 			std::lock_guard lock(m_mutex);
 			auto &value = m_buckets[key];
-			value.sessions.push_back(holder);
+			value.sessions.emplace_back(holder);
 			m_condition.notify_all();
 		}
 		schedule_pump(key);
@@ -557,7 +560,7 @@ private:
 			auto weak = weak_from_this();
 			session->open(item->head, item->spec,
 			[weak, key, selected, item]
-			(error_code error, std::shared_ptr<stream> active) mutable {
+			(error_code error, std::shared_ptr<session_stream> active) mutable {
 				if( auto self = weak.lock() )
 				{
 					if( error )
@@ -755,8 +758,8 @@ private:
 		remove_slot(key, value);
 	}
 
-	[[nodiscard]] std::shared_ptr<stream> wrap(const session_key &key,
-		const slot_ptr_t &value, std::shared_ptr<stream> active)
+	[[nodiscard]] std::shared_ptr<session_stream> wrap(const session_key &key,
+		const slot_ptr_t &value, std::shared_ptr<session_stream> active)
 	{
 		if( not active )
 		{
@@ -788,7 +791,7 @@ private:
 	}
 
 	void complete(const waiter_ptr_t &value, error_code error,
-		std::shared_ptr<stream> active)
+		std::shared_ptr<session_stream> active)
 	{
 		if( not value or value->completed )
 			return ;
@@ -809,7 +812,7 @@ private:
 		if( item and not item->completed )
 		{
 			item->completed = true;
-			std::move(item->handler)(error, std::shared_ptr<stream>{});
+			std::move(item->handler)(error, std::shared_ptr<session_stream>{});
 		}
 	}
 
@@ -844,13 +847,13 @@ auto session_pool::config() const noexcept -> const client_config & {
 	return m_impl->m_config;
 }
 
-std::shared_ptr<stream> session_pool::open_sync(const session_key &key,
+std::shared_ptr<session_stream> session_pool::open_sync(const session_key &key,
 	request_head head, body_spec spec, error_code &error) noexcept
 {
 	return m_impl->open_sync(key, std::move(head), std::move(spec), error);
 }
 
-std::shared_ptr<stream> session_pool::open_sync(const origin &target,
+std::shared_ptr<session_stream> session_pool::open_sync(const origin &target,
 	request_head head, body_spec spec, error_code &error) noexcept
 {
 	auto key = make_session_key(head, m_impl->m_config);

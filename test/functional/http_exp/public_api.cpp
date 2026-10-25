@@ -5,8 +5,8 @@
 
 #include <riwo/http_exp.h>
 #include <riwo/http_exp/client/detail/session_pool.h>
-#include <riwo/http_exp/protocol/detail/session.h>
-#include <riwo/http_exp/protocol/v1/detail/session.h>
+#include <riwo/http_exp/session.h>
+#include <riwo/http_exp/session/v1/session.h>
 #include <riwo/http_exp/transport/connection.h>
 #include <riwo/http_exp/transport/tcp_connection.h>
 
@@ -91,6 +91,51 @@ static_assert(!http::concepts::body_source_model<source_with_wrong_completion>);
 static_assert(std::copyable<http::protocol_policy>);
 static_assert(std::same_as<decltype(http::field::value),riwo::value>);
 static_assert(std::copyable<http::fields>);
+static_assert(requires(http::fields &values, std::string &string,
+	std::string_view view, const char *pointer, char character) {
+	values.add(string, "value");
+	values.add(std::move(string), "value");
+	values.add(view, "value");
+	values.add(pointer, "value");
+	values.add(character, "value");
+	values.set(string, "value");
+	values.set(std::move(string), "value");
+	values.set(view, "value");
+	values.set(pointer, "value");
+	values.set(character, "value");
+	values.erase(string);
+	values.erase(view);
+	values.erase(pointer);
+	values.erase(character);
+	values.find_all(string);
+	values.find_all(view);
+	values.find_all(pointer);
+	values.find_all(character);
+	values.find_first(string);
+	values.find_first(view);
+	values.find_first(pointer);
+	values.find_first(character);
+});
+static_assert(requires(http::request_head &request,
+	http::response_head &response, std::string &string,
+	std::string_view view, const char *pointer, char character) {
+	request.header(view);
+	request.has_header(pointer);
+	request.contains_header(character);
+	request.set_header(string, "value");
+	request.add_header(std::move(string), "value");
+	request.erase_header(view);
+	request.unset_header(pointer);
+	request.add_cookie(character, "value");
+	response.header(view);
+	response.has_header(pointer);
+	response.contains_header(character);
+	response.set_header(string, "value");
+	response.add_header(std::move(string), "value");
+	response.erase_header(view);
+	response.unset_header(pointer);
+	response.set_cookie(character, "value");
+});
 static_assert(std::copyable<http::request_head>);
 static_assert(std::copyable<http::response_head>);
 static_assert(std::same_as<http::reply_head,http::response_head>);
@@ -181,19 +226,19 @@ static_assert(requires(http::server_exchange &exchange,
 	exchange.respond(std::move(source), riwo::use_awaitable);
 });
 static_assert(std::constructible_from<http::client_exchange,
-	std::shared_ptr<http::detail::stream>>);
+	std::shared_ptr<http::session_stream>>);
 static_assert(std::constructible_from<http::reply,http::protocol,
 	http::response_head,std::shared_ptr<http::detail::body_reader_state>>);
 static_assert(std::constructible_from<http::server_exchange,
-	std::shared_ptr<http::detail::stream>,http::request_head>);
+	std::shared_ptr<http::session_stream>,http::request_head>);
 static_assert(std::constructible_from<http::duplex_channel,
 	std::shared_ptr<http::detail::duplex_state>>);
 static_assert(std::constructible_from<http::client,
-	std::shared_ptr<http::detail::client_session>>);
+	std::shared_ptr<http::client_session>>);
 static_assert(std::constructible_from<http::client,
 	std::shared_ptr<http::transport_connector>>);
 static_assert(std::constructible_from<http::client,
-	std::shared_ptr<http::detail::client_session>,http::client_config>);
+	std::shared_ptr<http::client_session>,http::client_config>);
 static_assert(std::constructible_from<http::client,
 	std::shared_ptr<http::transport_connector>,http::client_config>);
 static_assert(!std::copy_constructible<http::client_exchange>);
@@ -291,9 +336,9 @@ static_assert(std::same_as<http::detail::connector::executor_t,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::detail::session_pool::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::detail::client_session::executor_t,
+static_assert(std::same_as<http::client_session::executor_t,
 	asio::any_io_executor>);
-static_assert(std::same_as<http::detail::server_session::executor_t,
+static_assert(std::same_as<http::server_session::executor_t,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::fields::container_t,
 	std::vector<http::field>>);
@@ -363,7 +408,7 @@ struct fake_connection final : http::connection
 	executor_type executor_;
 };
 
-struct fake_stream final : http::detail::stream
+struct fake_stream final : http::session_stream
 {
 	http::protocol selected_protocol() const noexcept override {
 		return http::protocol::v1_1;
@@ -383,7 +428,7 @@ struct fake_stream final : http::detail::stream
 	void cancel() noexcept override {}
 };
 
-struct fake_session final : http::detail::client_session
+struct fake_session final : http::client_session
 {
 	explicit fake_session(executor_type executor) : executor_(std::move(executor)) {}
 	executor_type get_executor() const noexcept override { return executor_; }
@@ -483,6 +528,28 @@ void semantic_value_contracts()
 	RIWO_TEST_CHECK_EQ(typed_fields.find_first("content-length").value(), "42");
 	RIWO_TEST_CHECK_EQ(typed_fields.begin()->value.get<uint32_t>().value(), 42U);
 	RIWO_TEST_CHECK_EQ(std::next(typed_fields.begin())->value.to_bool().value(), true);
+
+	std::string_view view_name = "X-View";
+	std::string string_name = "X-String";
+	typed_fields.add(view_name, "view");
+	typed_fields.set(string_name, "string");
+	typed_fields.erase(view_name);
+	RIWO_TEST_CHECK(!typed_fields.find_first("x-view"));
+	RIWO_TEST_CHECK_EQ(typed_fields.find_first(string_name).value(), "string");
+	RIWO_TEST_CHECK_EQ(std::ranges::distance(
+		typed_fields.find_all(string_name)), 1);
+
+	http::request_head templated_request_head;
+	templated_request_head.set_header(view_name, "request");
+	RIWO_TEST_CHECK_EQ(templated_request_head.header(view_name).value(), "request");
+	templated_request_head.erase_header(view_name);
+	RIWO_TEST_CHECK(!templated_request_head.has_header(view_name));
+
+	http::response_head templated_response_head;
+	templated_response_head.add_header(view_name, "response");
+	RIWO_TEST_CHECK_EQ(templated_response_head.header(view_name).value(), "response");
+	templated_response_head.unset_header(view_name);
+	RIWO_TEST_CHECK(!templated_response_head.contains_header(view_name));
 
 	auto known = http::body_spec::known(7, {{"Digest"}});
 	RIWO_TEST_CHECK(known.type() == http::body_spec::mode::known_length);
@@ -940,9 +1007,9 @@ void fake_boundaries_and_unsupported_entry_points()
 	auto client_state_with_default_executor =
 		http::detail::make_client_state(config);
 	auto h1_session_with_default_executor =
-		http::v1::detail::make_client_session(http::protocol::v1_1);
+		http::v1::make_client_session(http::protocol::v1_1);
 	auto body_duplex_with_default_executor =
-		http::detail::make_body_duplex_state(http::protocol::v1_1,
+		http::make_body_duplex_state(http::protocol::v1_1,
 			reader_state, writer_state, {}, {}, {}, [] {});
 	native_client native_default_client;
 	native_client native(context, config);

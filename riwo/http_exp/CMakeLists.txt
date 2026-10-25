@@ -21,6 +21,29 @@ set(target_name riwo.http_exp)
 add_project(${target_name} riwo.coro)
 target_compile_definitions(${target_name} PRIVATE RIWO_HTTP_EXP_SHARED)
 
+# Keep the protocol layer usable as a pure byte-in/byte-out engine.  Session
+# drivers are the composition boundary and may depend on both protocol and
+# transport, but dependencies in the opposite direction are architectural
+# errors even when the affected header is private.
+file(GLOB_RECURSE riwo_http_exp_protocol_sources CONFIGURE_DEPENDS
+	"${CMAKE_CURRENT_SOURCE_DIR}/protocol/*.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/protocol/*.h"
+)
+foreach(source IN LISTS riwo_http_exp_protocol_sources)
+	file(STRINGS "${source}" forbidden_layer_includes REGEX
+		"^[ \t]*#[ \t]*include[ \t]*[<\"]riwo/http_exp/(client|server|session|transport)/"
+	)
+	if (forbidden_layer_includes)
+		message(FATAL_ERROR
+			"${PRO_NAME}: HTTP_EXP protocol layer has a forbidden higher/I/O-layer include in "
+			"${source}: ${forbidden_layer_includes}"
+		)
+	endif ()
+endforeach()
+
+unset(forbidden_layer_includes)
+unset(riwo_http_exp_protocol_sources)
+
 option(RIWO_HTTP_EXP_ZLIB_SUPPORT
 	"-- ${PRO_NAME}: HTTP_EXP z-lib support." OFF
 )

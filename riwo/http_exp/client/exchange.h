@@ -18,7 +18,11 @@
 namespace riwo::http_exp::detail
 {
 class client_exchange_state;
-class stream;
+}
+
+namespace riwo::http_exp
+{
+class session_stream;
 }
 
 namespace riwo::http_exp
@@ -42,13 +46,13 @@ public:
 	explicit basic_client_exchange(Exec0 &&executor)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	explicit basic_client_exchange(std::shared_ptr<detail::stream> stream,
+	explicit basic_client_exchange(std::shared_ptr<session_stream> stream,
 		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {})
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	basic_client_exchange(Exec0 &&executor,
-		std::shared_ptr<detail::stream> stream,
+		std::shared_ptr<session_stream> stream,
 		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {})
 		requires core_concepts::match_sched<Exec0,executor_t>;
 

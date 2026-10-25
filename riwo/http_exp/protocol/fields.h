@@ -105,13 +105,18 @@ public:
 	fields(fields &&other) noexcept;
 	fields &operator=(fields &&other) noexcept;
 
-	public:
-	fields &add(std::string name, riwo::value value);
-	fields &set(std::string name, riwo::value value);
-	fields &erase(std::string_view name);
+public:
+	fields &add(core_concepts::text_p<char> auto &&name, riwo::value value);
+	fields &set(core_concepts::text_p<char> auto &&name, riwo::value value);
+	fields &erase(const core_concepts::text_p<char> auto &name);
 
-	[[nodiscard]] field_range find_all(std::string_view name) const;
-	[[nodiscard]] optional<std::string_view> find_first(std::string_view name) const;
+	[[nodiscard]] field_range find_all (
+		const core_concepts::text_p<char> auto &name
+	) const;
+
+	[[nodiscard]] optional<std::string_view> find_first (
+		const core_concepts::text_p<char> auto &name
+	) const noexcept;
 
 	[[nodiscard]] const_iterator begin() const noexcept;
 	[[nodiscard]] const_iterator end() const noexcept;
@@ -120,10 +125,18 @@ public:
 	[[nodiscard]] size_t size() const noexcept;
 
 private:
+	fields &add_impl(std::string name, riwo::value value);
+	fields &set_impl(std::string name, riwo::value value);
+	fields &erase_impl(std::string_view name);
+
+	[[nodiscard]] field_range find_all_impl(std::string name) const;
+	[[nodiscard]] optional<std::string_view> find_first_impl(std::string_view name) const noexcept;
+
 	container_t m_values {};
 };
 
 } //namespace riwo::http_exp
+#include <riwo/http_exp/protocol/detail/fields.h>
 
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_FIELDS_H

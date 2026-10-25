@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/http_exp/client/exchange.h>
-#include <riwo/http_exp/protocol/detail/session.h>
+#include <riwo/http_exp/session/session_stream.h>
 
 namespace riwo::http_exp::detail
 {
@@ -10,7 +10,7 @@ namespace riwo::http_exp::detail
 class client_exchange_state::impl
 {
 public:
-	explicit impl(std::shared_ptr<stream> value,
+	explicit impl(std::shared_ptr<session_stream> value,
 		std::shared_ptr<cookie_jar> cookie_store, riwo::url request_origin) :
 		m_stream(std::move(value)), m_cookie_store(std::move(cookie_store)),
 		m_origin(std::move(request_origin)),
@@ -23,7 +23,7 @@ public:
 			m_reply_body = make_body_reader_state();
 	}
 
-	std::shared_ptr<stream> m_stream;
+	std::shared_ptr<session_stream> m_stream;
 	std::shared_ptr<cookie_jar> m_cookie_store;
 	riwo::url m_origin;
 	std::shared_ptr<body_writer_state> m_request_body;
@@ -45,7 +45,7 @@ public:
 	}
 };
 
-client_exchange_state::client_exchange_state(std::shared_ptr<stream> stream,
+client_exchange_state::client_exchange_state(std::shared_ptr<session_stream> stream,
 	std::shared_ptr<cookie_jar> cookies, riwo::url origin) :
 	m_impl(std::make_shared<impl>(std::move(stream), std::move(cookies),
 		std::move(origin)))
@@ -191,7 +191,7 @@ void client_exchange_state::cancel() noexcept
 }
 
 std::shared_ptr<client_exchange_state> make_client_exchange_state(
-	std::shared_ptr<stream> stream, std::shared_ptr<cookie_jar> cookies,
+	std::shared_ptr<session_stream> stream, std::shared_ptr<cookie_jar> cookies,
 	riwo::url origin)
 {
 	return std::make_shared<client_exchange_state>(std::move(stream),

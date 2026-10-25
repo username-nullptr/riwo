@@ -17,7 +17,7 @@ public:
 	using duplex_handler_t = asio::any_completion_handler<void(
 		error_code,std::shared_ptr<duplex_state>)>;
 
-	explicit client_exchange_state(std::shared_ptr<stream> stream = {},
+	explicit client_exchange_state(std::shared_ptr<session_stream> stream = {},
 		std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {});
 	~client_exchange_state();
 	[[nodiscard]] protocol selected_protocol() const noexcept;
@@ -40,7 +40,7 @@ private:
 
 [[nodiscard]] RIWO_HTTP_EXP_API
 std::shared_ptr<client_exchange_state> make_client_exchange_state(
-	std::shared_ptr<stream> stream = {},
+	std::shared_ptr<session_stream> stream = {},
 	std::shared_ptr<cookie_jar> cookies = {}, riwo::url origin = {});
 
 } //namespace riwo::http_exp::detail
@@ -52,7 +52,7 @@ template <core_concepts::exec Exec>
 class basic_client_exchange<Exec>::impl
 {
 public:
-	impl(executor_t executor_value, std::shared_ptr<detail::stream> stream,
+	impl(executor_t executor_value, std::shared_ptr<session_stream> stream,
 		std::shared_ptr<cookie_jar> cookies, riwo::url origin) :
 		m_exec(std::move(executor_value)),
 		m_state(detail::make_client_exchange_state(std::move(stream),
@@ -76,7 +76,7 @@ basic_client_exchange<Exec>::basic_client_exchange(
 	m_impl(std::move(other.m_impl))
 {
 	other.m_impl = std::make_shared<impl>(m_impl->m_exec,
-		std::shared_ptr<detail::stream>{}, std::shared_ptr<cookie_jar>{},
+		std::shared_ptr<session_stream>{}, std::shared_ptr<cookie_jar>{},
 		riwo::url{});
 }
 
@@ -87,7 +87,7 @@ auto basic_client_exchange<Exec>::operator=(
 	if( this == &other )
 		return *this;
 	auto replacement = std::make_shared<impl>(other.m_impl->m_exec,
-		std::shared_ptr<detail::stream>{}, std::shared_ptr<cookie_jar>{},
+		std::shared_ptr<session_stream>{}, std::shared_ptr<cookie_jar>{},
 		riwo::url{});
 	if( m_impl and m_impl->m_state )
 		m_impl->m_state->cancel();
@@ -105,7 +105,7 @@ basic_client_exchange<Exec>::basic_client_exchange()
 
 template <core_concepts::exec Exec>
 basic_client_exchange<Exec>::basic_client_exchange(
-	std::shared_ptr<detail::stream> stream,
+	std::shared_ptr<session_stream> stream,
 	std::shared_ptr<cookie_jar> cookies, riwo::url origin)
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_client_exchange(executor_t(riwo::get_executor()), std::move(stream),
@@ -130,7 +130,7 @@ basic_client_exchange<Exec>::~basic_client_exchange() {
 template <core_concepts::exec Exec>
 template <typename Exec0>
 basic_client_exchange<Exec>::basic_client_exchange(Exec0 &&executor,
-	std::shared_ptr<detail::stream> stream,
+	std::shared_ptr<session_stream> stream,
 	std::shared_ptr<cookie_jar> cookies, riwo::url origin)
 	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_impl(std::make_shared<impl>(

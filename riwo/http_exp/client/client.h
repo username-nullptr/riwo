@@ -13,9 +13,13 @@
 
 namespace riwo::http_exp::detail
 {
-class client_session;
 class client_state;
 class connector;
+}
+
+namespace riwo::http_exp
+{
+class client_session;
 }
 
 namespace riwo::http_exp
@@ -40,7 +44,7 @@ public:
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	explicit basic_client(
-		std::shared_ptr<detail::client_session> session,
+		std::shared_ptr<client_session> session,
 		config_t config = {})
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
@@ -57,7 +61,7 @@ public:
 
 	template <typename Exec0>
 	basic_client(Exec0 &&executor,
-		std::shared_ptr<detail::client_session> session,
+		std::shared_ptr<client_session> session,
 		config_t config = {})
 		requires (
 			not std::same_as<std::remove_cvref_t<Exec0>,basic_client> and
@@ -112,7 +116,7 @@ private:
 	void reset_state(config_t config);
 	executor_t m_exec;
 	config_t m_config;
-	std::shared_ptr<detail::client_session> m_session;
+	std::shared_ptr<client_session> m_session;
 	std::shared_ptr<detail::connector> m_connector;
 	std::shared_ptr<detail::client_state> m_state;
 };

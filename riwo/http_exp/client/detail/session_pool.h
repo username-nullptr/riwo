@@ -21,7 +21,7 @@ public:
 	using executor_type = asio::any_io_executor;
 	using executor_t = executor_type;
 	using open_handler_t = asio::any_completion_handler<void(
-		error_code, std::shared_ptr<stream>)>;
+		error_code, std::shared_ptr<session_stream>)>;
 
 	explicit session_pool(client_config config,
 		connector_ptr_t connector = {},
@@ -35,9 +35,9 @@ public:
 	[[nodiscard]] executor_t get_executor() const noexcept;
 	[[nodiscard]] const client_config &config() const noexcept;
 
-	[[nodiscard]] std::shared_ptr<stream> open_sync(const session_key &key,
+	[[nodiscard]] std::shared_ptr<session_stream> open_sync(const session_key &key,
 		request_head head, body_spec spec, error_code &error) noexcept;
-	[[nodiscard]] std::shared_ptr<stream> open_sync(const origin &target,
+	[[nodiscard]] std::shared_ptr<session_stream> open_sync(const origin &target,
 		request_head head, body_spec spec, error_code &error) noexcept;
 
 	void open(const session_key &key, request_head head, body_spec spec,

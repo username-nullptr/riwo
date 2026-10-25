@@ -21,18 +21,39 @@ public:
 	optional<std::string> upgrade_protocol {};
 
 public:
-	[[nodiscard]] optional<std::string_view> header(std::string_view name) const noexcept;
-	[[nodiscard]] bool has_header(std::string_view name) const noexcept;
-	[[nodiscard]] bool contains_header(std::string_view name) const noexcept;
+	[[nodiscard]] optional<std::string_view> header (
+		const core_concepts::text_p<char> auto &name
+	) const noexcept;
 
-	response_head &set_header(std::string name, riwo::value value);
-	response_head &add_header(std::string name, riwo::value value);
+	[[nodiscard]] bool has_header (
+		const core_concepts::text_p<char> auto &name
+	) const noexcept;
 
-	response_head &erase_header(std::string_view name) noexcept;
-	response_head &unset_header(std::string_view name) noexcept;
+	[[nodiscard]] bool contains_header (
+		const core_concepts::text_p<char> auto &name
+	) const noexcept;
 
-	response_head &set_cookie(std::string name, riwo::value value);
-	response_head &set_cookie(const response_cookie &value);
+	response_head &set_header (
+		core_concepts::text_p<char> auto &&name, riwo::value value
+	);
+	response_head &add_header (
+		core_concepts::text_p<char> auto &&name, riwo::value value
+	);
+
+	response_head &erase_header (
+		const core_concepts::text_p<char> auto &name
+	) noexcept;
+
+	response_head &unset_header (
+		const core_concepts::text_p<char> auto &name
+	) noexcept;
+
+	response_head &set_cookie (
+		core_concepts::text_p<char> auto &&name, riwo::value value
+	);
+	response_head &set_cookie (
+		const response_cookie &value
+	);
 
 public:
 	[[nodiscard]] optional<std::string_view> content_type() const noexcept;
@@ -51,6 +72,7 @@ public:
 };
 
 } //namespace riwo::http_exp
+#include <riwo/http_exp/protocol/detail/response_head.h>
 
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_RESPONSE_HEAD_H

@@ -101,7 +101,7 @@ try
 				spec.last = *parsed_last;
 			}
 		}
-		result.ranges.push_back(spec);
+		result.ranges.emplace_back(spec);
 		if( comma == std::string_view::npos )
 			break;
 
@@ -142,7 +142,7 @@ std::vector<resolved_byte_range> resolve_byte_ranges
 
 				range.length = last - range.offset + 1;
 			}
-			result.push_back(range);
+			result.emplace_back(range);
 		}
 	}
 	catch(...) {

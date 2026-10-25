@@ -137,7 +137,7 @@ try
 		if( not name or not value )
 			return {};
 
-		result.push_back({std::move(*name), std::move(*value)});
+		result.emplace_back(std::move(*name), std::move(*value));
 		if( end == std::string_view::npos )
 			break;
 
