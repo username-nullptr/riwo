@@ -36,8 +36,10 @@ constexpr size_t protocol_cycle_count =
 	250'000 * riwo::test::performance_scale;
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
 constexpr size_t gzip_cycle_count = 2'000 * riwo::test::performance_scale;
+# if RIWO_HTTP_EXP_COMPARE_LEGACY && RIWO_HTTP_ZLIB_SUPPORT
 constexpr size_t small_gzip_cycle_count =
 	10'000 * riwo::test::performance_scale;
+# endif
 #endif
 #else
 constexpr size_t warmup_count = 10;
@@ -46,8 +48,10 @@ constexpr size_t protocol_cycle_count =
 	10'000 * riwo::test::performance_scale;
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
 constexpr size_t gzip_cycle_count = 100 * riwo::test::performance_scale;
+# if RIWO_HTTP_EXP_COMPARE_LEGACY && RIWO_HTTP_ZLIB_SUPPORT
 constexpr size_t small_gzip_cycle_count =
 	500 * riwo::test::performance_scale;
+# endif
 #endif
 #endif
 constexpr size_t secondary_request_count = request_count / 10;
@@ -699,9 +703,11 @@ duration_t measure_http_exp_gzip_round_trip(size_t count) {
 	return measure_http_exp_gzip_round_trip_payload(count, 64 * 1024);
 }
 
+#if RIWO_HTTP_EXP_COMPARE_LEGACY && RIWO_HTTP_ZLIB_SUPPORT
 duration_t measure_http_exp_small_gzip_round_trip(size_t count) {
 	return measure_http_exp_gzip_round_trip_payload(count, 512);
 }
+#endif
 
 duration_t measure_http_exp_gzip_round_trip_reused_payload(size_t count,
 	size_t payload_size)
@@ -732,9 +738,11 @@ duration_t measure_http_exp_gzip_round_trip_reused(size_t count) {
 	return measure_http_exp_gzip_round_trip_reused_payload(count, 64 * 1024);
 }
 
+#if RIWO_HTTP_EXP_COMPARE_LEGACY && RIWO_HTTP_ZLIB_SUPPORT
 duration_t measure_http_exp_small_gzip_round_trip_reused(size_t count) {
 	return measure_http_exp_gzip_round_trip_reused_payload(count, 512);
 }
+#endif
 
 struct compression_policy_results
 {
