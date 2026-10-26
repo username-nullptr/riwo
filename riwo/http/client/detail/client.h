@@ -194,6 +194,25 @@ private:
 	}
 
 	template <method_enum Method>
+	[[nodiscard]] static consteval bool safely_retryable_method() noexcept
+	{
+		// A peer can close an idle socket immediately after the pool probes it.
+		// Retry only methods whose semantics permit transparent repetition.
+		return Method == method::get or Method == method::head or
+			   Method == method::options or Method == method::trace;
+	}
+
+	[[nodiscard]] static bool stale_connection_error(const error_code &error) noexcept
+	{
+		return error == asio::error::eof or
+			   error == asio::error::broken_pipe or
+			   error == asio::error::connection_aborted or
+			   error == asio::error::connection_reset or
+			   error == asio::error::network_reset or
+			   error == asio::error::not_connected;
+	}
+
+	template <method_enum Method>
 	[[nodiscard]] static asio::awaitable<std::tuple<error_code,context_ptr<Method>>,Exec>
 	co_make_context(std::shared_ptr<impl> self, req_info request_info)
 	{
@@ -461,29 +480,44 @@ public:
 	[[nodiscard]] result_t<Method> request(req_info info) noexcept
 	{
 		const bool continue_100 = expects_continue(info);
-		auto context_expected = make_context<Method>(info);
+		context_ptr<Method> active_context {};
+		bool retried_stale_connection = false;
+		for(;;)
+		{
+			auto context_expected = make_context<Method>(info);
+			if( not context_expected )
+				return context_expected;
 
-		if( not context_expected )
-			return context_expected;
-
-		error_code io_error {};
-		ignore_unused((*context_expected)->write(io_error));
-
-		if( io_error )
-			return sys_unexpected(io_error);
-
+			error_code write_error {};
+			ignore_unused((*context_expected)->write(write_error));
+			if( not write_error )
+			{
+				active_context = std::move(*context_expected);
+				break;
+			}
+			if constexpr( safely_retryable_method<Method>() )
+			{
+				if( not retried_stale_connection and stale_connection_error(write_error) )
+				{
+					retried_stale_connection = true;
+					continue;
+				}
+			}
+			return sys_unexpected(write_error);
+		}
 		if( continue_100 )
 		{
+			error_code io_error {};
 			for(;;)
 			{
-				auto reply = (*context_expected)->reply();
+				auto reply = active_context->reply();
 				auto reply_status = reply->status();
 
 				if( reply_status == status::continue_upload or
 					(reply_status != status::none and not reply->parser().is_informational()) )
 					break;
 
-				ignore_unused((*context_expected)->wait_reply(io_error));
+				ignore_unused(active_context->wait_reply(io_error));
 				if( io_error )
 					return sys_unexpected(io_error);
 			}
@@ -493,11 +527,11 @@ public:
 			if( info.max_redirects > 0 )
 			{
 				return follow_redirects<Method>(
-					std::move(*context_expected), std::move(info)
+					std::move(active_context), std::move(info)
 				);
 			}
 		}
-		return context_expected;
+		return active_context;
 	}
 
 private:
@@ -506,22 +540,36 @@ private:
 	co_request(std::shared_ptr<impl> self, req_info request_info)
 	{
 		const bool wait_for_continue = expects_continue(request_info);
-		auto context_result = co_await co_make_context<Method>(self, request_info);
-
-		auto &[context_error, active_context] = context_result;
-		if( context_error )
+		context_ptr<Method> active_context {};
+		bool retried_stale_connection = false;
+		for(;;)
 		{
-			co_return std::tuple<error_code,context_ptr<Method>> {
-				context_error, {}
-			};
-		}
-		auto [write_error, bytes] = co_await active_context->write (
-			asio::as_tuple(asio::use_awaitable_t<Exec>{})
-		);
-		ignore_unused(bytes);
+			auto [context_error, candidate] =
+				co_await co_make_context<Method>(self, request_info);
 
-		if( write_error )
-		{
+			if( context_error )
+			{
+				co_return std::tuple<error_code,context_ptr<Method>> {
+					context_error, {}
+				};
+			}
+			auto [write_error, bytes] = co_await candidate->write (
+				asio::as_tuple(asio::use_awaitable_t<Exec>{})
+			);
+			ignore_unused(bytes);
+			if( not write_error )
+			{
+				active_context = std::move(candidate);
+				break;
+			}
+			if constexpr( safely_retryable_method<Method>() )
+			{
+				if( not retried_stale_connection and stale_connection_error(write_error) )
+				{
+					retried_stale_connection = true;
+					continue;
+				}
+			}
 			co_return std::tuple<error_code,context_ptr<Method>> {
 				write_error, {}
 			};

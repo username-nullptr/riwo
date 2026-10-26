@@ -1024,6 +1024,103 @@ void http_client_does_not_reuse_malformed_reply()
 	RIWO_TEST_CHECK_EQ(connector->connection_count("malformed.test"), 2U);
 }
 
+void http_client_recovers_from_stale_pooled_connection()
+{
+	using namespace riwo::http;
+	riwo::io_context_t context;
+	auto connector = std::make_shared<scripted_connector>(context.get_executor());
+	connector->push_response(
+		"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+	connection_pool pool(connector);
+	client requester(std::move(pool), {.default_proxy = no_proxy});
+
+	riwo::error_code error {};
+	auto first = requester.request_get("http://stale.test/first", error);
+	RIWO_TEST_CHECK(first);
+	RIWO_TEST_CHECK(not error);
+	RIWO_TEST_CHECK_EQ(first->wait_reply(error), status::ok);
+	RIWO_TEST_CHECK(not error);
+
+	// The peer can close after the pool's non-blocking probe but before the next
+	// request writes. Model that race by keeping the probe healthy while making
+	// the first write on the checked-out idle connection fail.
+	auto stale_connection = connector->last_connection();
+	RIWO_TEST_CHECK(stale_connection);
+	stale_connection->push_write(0, asio::error::connection_reset);
+	connector->push_response(
+		"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+	auto second = requester.request_get("http://stale.test/second", error);
+	RIWO_TEST_CHECK(second);
+	RIWO_TEST_CHECK(not error);
+	RIWO_TEST_CHECK_EQ(second->wait_reply(error), status::ok);
+	RIWO_TEST_CHECK(not error);
+	RIWO_TEST_CHECK_EQ(connector->connection_count("stale.test"), 2U);
+}
+
+void http_client_async_recovers_from_stale_pooled_connection()
+{
+	using namespace riwo::http;
+	riwo::io_context_t context;
+	auto connector = std::make_shared<scripted_connector>(context.get_executor());
+	connector->push_response(
+		"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+	connection_pool pool(connector);
+	client requester(std::move(pool), {.default_proxy = no_proxy});
+
+	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
+	{
+		auto first = co_await requester.request_get(
+			"http://async-stale.test/first", riwo::use_awaitable);
+		RIWO_TEST_CHECK(first);
+		RIWO_TEST_CHECK_EQ(
+			co_await first->wait_reply(riwo::use_awaitable), status::ok);
+
+		auto stale_connection = connector->last_connection();
+		RIWO_TEST_CHECK(stale_connection);
+		stale_connection->push_write(0, asio::error::connection_reset);
+		connector->push_response(
+			"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+
+		auto second = co_await requester.request_get(
+			"http://async-stale.test/second", riwo::use_awaitable);
+		RIWO_TEST_CHECK(second);
+		RIWO_TEST_CHECK_EQ(
+			co_await second->wait_reply(riwo::use_awaitable), status::ok);
+		RIWO_TEST_CHECK_EQ(
+			connector->connection_count("async-stale.test"), 2U);
+	}, asio::use_future);
+	context.run();
+	completed.get();
+}
+
+void http_client_does_not_retry_unsafe_request()
+{
+	using namespace riwo::http;
+	riwo::io_context_t context;
+	auto connector = std::make_shared<scripted_connector>(context.get_executor());
+	connector->push_response(
+		"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+	connection_pool pool(connector);
+	client requester(std::move(pool), {.default_proxy = no_proxy});
+
+	riwo::error_code error {};
+	auto first = requester.request_get("http://unsafe.test/first", error);
+	RIWO_TEST_CHECK(first);
+	RIWO_TEST_CHECK(not error);
+	RIWO_TEST_CHECK_EQ(first->wait_reply(error), status::ok);
+	RIWO_TEST_CHECK(not error);
+
+	auto stale_connection = connector->last_connection();
+	RIWO_TEST_CHECK(stale_connection);
+	stale_connection->push_write(0, asio::error::connection_reset);
+
+	auto post = requester.request_post("http://unsafe.test/post", error);
+	RIWO_TEST_CHECK(not post);
+	RIWO_TEST_CHECK_EQ(error, asio::error::connection_reset);
+	RIWO_TEST_CHECK_EQ(connector->connection_count("unsafe.test"), 1U);
+}
+
 } //namespace
 
 int main(int argc, const char *const argv[])
@@ -1043,5 +1140,11 @@ int main(int argc, const char *const argv[])
 			connection_pool_discards_failed_connections},
 		{"HTTP client does not reuse malformed replies",
 			http_client_does_not_reuse_malformed_reply},
+		{"HTTP client recovers from stale pooled connections",
+			http_client_recovers_from_stale_pooled_connection},
+		{"async HTTP client recovers from stale pooled connections",
+			http_client_async_recovers_from_stale_pooled_connection},
+		{"HTTP client does not retry unsafe requests",
+			http_client_does_not_retry_unsafe_request},
 	});
 }
