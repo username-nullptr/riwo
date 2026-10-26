@@ -8,7 +8,7 @@
 namespace riwo::http_exp::detail { namespace
 {
 
-[[noreturn]] void throw_file_error(std::errc error = std::errc::io_error)
+void throw_file_error(std::errc error = std::errc::io_error)
 {
 	system_error::loc_throw(std::make_error_code(error));
 }
