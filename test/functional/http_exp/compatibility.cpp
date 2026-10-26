@@ -456,14 +456,14 @@ void application_compatibility_for(http::protocol_requirement requirement,
 
 void application_compatibility_http1()
 {
-	application_compatibility_for(http::protocol_requirement::require_v1,
+	application_compatibility_for(http::protocol_requirement::v1,
 		http::protocol::v1_1);
 }
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 void application_compatibility_http2()
 {
-	application_compatibility_for(http::protocol_requirement::require_v2,
+	application_compatibility_for(http::protocol_requirement::v2,
 		http::protocol::v2);
 }
 #endif

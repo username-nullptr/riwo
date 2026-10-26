@@ -5,10 +5,9 @@
 #define RIWO_HTTP_EXP_CLIENT_REQUEST_H
 
 #include <riwo/http_exp/protocol/request_head.h>
+#include <riwo/http_exp/protocol/body_spec.h>
 #include <riwo/http_exp/client/config.h>
-
 #include <riwo/http_exp/body/source.h>
-#include <riwo/http_exp/body/spec.h>
 
 namespace riwo::http_exp { namespace detail {
 struct request_access;

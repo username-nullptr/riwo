@@ -9,7 +9,7 @@
 namespace riwo::http_exp
 {
 
-class RIWO_HTTP_EXP_API tcp_connection final : public connection,
+class RIWO_DECL_HIDDEN tcp_connection final : public connection,
 	public std::enable_shared_from_this<tcp_connection>
 {
 	RIWO_DISABLE_COPY_MOVE(tcp_connection)

@@ -52,7 +52,7 @@ void concurrent_http1_pool_pressure()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_v1;
+		http::protocol_requirement::v1;
 	http::server service(std::move(acceptor), server_config);
 	std::atomic_size_t handled {0};
 	std::atomic_size_t server_errors {0};
@@ -94,7 +94,7 @@ void concurrent_http1_pool_pressure()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_v1;
+		http::protocol_requirement::v1;
 	client_config.pool.max_sessions_per_origin = 4;
 	client_config.pool.max_waiters_per_origin = worker_count * 2;
 	client_config.retries.max_attempts = 1;
@@ -152,7 +152,7 @@ void http2_multiplexed_slow_consumer_pressure()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_v2;
+		http::protocol_requirement::v2;
 	// 128 default-sized stream windows fit inside the configured 8 MiB
 	// connection budget; raising only the stream count would be an invalid
 	// resource configuration rather than useful pressure.
@@ -198,7 +198,7 @@ void http2_multiplexed_slow_consumer_pressure()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_v2;
+		http::protocol_requirement::v2;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.max_waiters_per_origin = fast_count + 4;
 	client_config.retries.max_attempts = 1;

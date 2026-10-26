@@ -20,7 +20,7 @@ enum class preface_result {
 // discarding bytes. Every byte offered to the detector remains available for
 // the selected protocol, which is what lets the server replay a non-matching
 // prefix to the HTTP/1 parser.
-class RIWO_HTTP_EXP_API v2_preface_detector
+class RIWO_DECL_HIDDEN v2_preface_detector
 {
 	RIWO_DISABLE_COPY_MOVE(v2_preface_detector)
 

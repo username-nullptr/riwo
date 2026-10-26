@@ -196,7 +196,7 @@ void note_service_workflow()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_v1;
+		http::protocol_requirement::v1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(1);
 	http::client client(context, client_config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>

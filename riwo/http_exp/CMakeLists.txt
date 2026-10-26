@@ -31,7 +31,7 @@ file(GLOB_RECURSE riwo_http_exp_protocol_sources CONFIGURE_DEPENDS
 )
 foreach(source IN LISTS riwo_http_exp_protocol_sources)
 	file(STRINGS "${source}" forbidden_layer_includes REGEX
-		"^[ \t]*#[ \t]*include[ \t]*[<\"]riwo/http_exp/(client|server|session|transport)/"
+		"^[ \t]*#[ \t]*include[ \t]*[<\"]riwo/http_exp/(body|client|server|session|transport)/"
 	)
 	if (forbidden_layer_includes)
 		message(FATAL_ERROR

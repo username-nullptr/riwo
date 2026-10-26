@@ -16,8 +16,10 @@
 #endif
 #if RIWO_CONSUME_HTTP_EXP
 # include <riwo/http_exp.h>
+# include <riwo/http_exp/protocol/body_spec.h>
 # include <riwo/http_exp/protocol/v1/engine.h>
 # include <riwo/http_exp/transport/byte_stream.h>
+# include <riwo/http_exp/version.h>
 #endif
 #if RIWO_CONSUME_WEBSOCKET
 # include <riwo/websocket.h>

@@ -14,9 +14,9 @@ namespace ws = riwo::websocket_exp;
 	std::string_view value)
 {
 	if( value == "auto" ) return http::protocol_requirement::automatic;
-	if( value == "http1" ) return http::protocol_requirement::require_v1;
+	if( value == "http1" ) return http::protocol_requirement::v1;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( value == "http2" ) return http::protocol_requirement::require_v2;
+	if( value == "http2" ) return http::protocol_requirement::v2;
 #endif
 	throw std::invalid_argument(
 		"protocol must be auto, http1"

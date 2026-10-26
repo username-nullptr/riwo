@@ -3,6 +3,7 @@
 
 #include <riwo/http_exp/client/client.h>
 #include "connector.h"
+#include "request_access.h"
 #include "session_pool.h"
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/session/client_session.h>
@@ -15,114 +16,6 @@
 
 namespace riwo::http_exp::detail
 {
-
-struct request_access
-{
-	[[nodiscard]] static std::shared_ptr<body_source>
-	source(const request &value) noexcept {
-		return value.m_impl->m_source;
-	}
-
-	[[nodiscard]] static optional<const_buffer>
-	body(const request &value) noexcept {
-		return value.m_impl->m_body;
-	}
-
-	[[nodiscard]] static fields trailers(const request &value) {
-		return value.m_impl->m_trailers;
-	}
-
-	[[nodiscard]] static size_t retry_attempt(const request &value) noexcept {
-		return value.m_impl->m_retry_attempt;
-	}
-
-	[[nodiscard]] static size_t redirect_count(const request &value) noexcept {
-		return value.m_impl->m_redirect_count;
-	}
-
-	[[nodiscard]] static request clone(const request &value,
-		optional<riwo::url> target = {}, optional<method> request_method = {},
-		bool drop_body = false, bool strip_credentials = false)
-	{
-		request result(request_method ? *request_method : value.method(),
-			target ? std::move(*target) : value.url());
-		result.m_impl->m_head.headers = value.m_impl->m_head.headers;
-		result.m_impl->m_head.connect_protocol =
-			value.m_impl->m_head.connect_protocol;
-		result.m_impl->m_head.upgrade_protocol =
-			value.m_impl->m_head.upgrade_protocol;
-		if( strip_credentials )
-		{
-			result.m_impl->m_head.headers.erase("Authorization");
-			result.m_impl->m_head.headers.erase("Proxy-Authorization");
-			result.m_impl->m_head.headers.erase("Cookie");
-		}
-		result.m_impl->m_retry_attempt = value.m_impl->m_retry_attempt;
-		result.m_impl->m_redirect_count = value.m_impl->m_redirect_count;
-		result.m_impl->m_options = value.m_impl->m_options;
-		if( not drop_body )
-		{
-			result.m_impl->m_body_spec = value.m_impl->m_body_spec;
-			result.m_impl->m_body = value.m_impl->m_body;
-			result.m_impl->m_source = value.m_impl->m_source;
-			result.m_impl->m_trailers = value.m_impl->m_trailers;
-		}
-		return result;
-	}
-
-	[[nodiscard]] static client_config effective_config(
-		const request &value, const client_config &base)
-	{
-		auto result = base;
-		const auto &options = value.m_impl->m_options;
-		if( options.proxy )
-			result.proxy = *options.proxy;
-		if( options.redirects )
-			result.redirects = *options.redirects;
-		if( options.retries )
-			result.retries = *options.retries;
-		if( options.auto_decompression )
-			result.auto_decompression = *options.auto_decompression;
-		return result;
-	}
-
-	[[nodiscard]] static progress_observer upload_progress(
-		const request &value) {
-		return value.m_impl->m_options.upload_progress;
-	}
-
-	[[nodiscard]] static progress_observer download_progress(
-		const request &value) {
-		return value.m_impl->m_options.download_progress;
-	}
-
-	static void increment_retry(request &value) noexcept {
-		++value.m_impl->m_retry_attempt;
-	}
-
-	static void increment_redirect(request &value) noexcept {
-		++value.m_impl->m_redirect_count;
-	}
-
-	[[nodiscard]] static error_code prepare(request &value) noexcept
-	{
-		if( value.m_impl->m_file.empty() )
-			return {};
-		try {
-			file_body_source source(value.m_impl->m_file);
-			const auto size = source.size();
-			value.m_impl->m_body.reset();
-			value.m_impl->m_source = make_body_source(std::move(source));
-			value.m_impl->m_body_spec = body_spec::known(
-				*size, value.m_impl->m_body_spec.trailers());
-			value.m_impl->m_file.clear();
-			return {};
-		}
-		catch(...) {
-			return exception_error(std::current_exception());
-		}
-	}
-};
 
 namespace
 {

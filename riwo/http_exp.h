@@ -4,12 +4,13 @@
 #ifndef RIWO_HTTP_EXP_H
 #define RIWO_HTTP_EXP_H
 
-#include <riwo/http_exp/error.h>
-#include <riwo/http_exp/timeout.h>
-#include <riwo/http_exp/protocol.h>
-#include <riwo/http_exp/transport.h>
-#include <riwo/http_exp/body.h>
 #include <riwo/http_exp/client.h>
 #include <riwo/http_exp/server.h>
+
+#include <riwo/http_exp/transport.h>
+#include <riwo/http_exp/protocol.h>
+#include <riwo/http_exp/timeout.h>
+#include <riwo/http_exp/error.h>
+#include <riwo/http_exp/body.h>
 
 #endif //RIWO_HTTP_EXP_H

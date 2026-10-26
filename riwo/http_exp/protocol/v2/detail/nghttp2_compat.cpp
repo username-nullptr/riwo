@@ -3,6 +3,8 @@
 
 #include "nghttp2_compat.h"
 
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+
 namespace riwo::http_exp::v2::detail::nghttp2_api
 {
 
@@ -65,3 +67,5 @@ int submit_response(nghttp2_session *session, int32_t stream_id,
 #endif //RIWO_HTTP_EXP_NGHTTP2_USE_MODERN_API
 
 } //namespace riwo::http_exp::v2::detail::nghttp2_api
+
+#endif //RIWO_HTTP_EXP_HTTP2_SUPPORT

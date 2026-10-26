@@ -49,10 +49,10 @@ namespace
 		if( std::ranges::find(policy.preference.begin(), current, *current) !=
 			current )
 			return false;
-	if( policy.requirement == protocol_requirement::require_v1 )
+	if( policy.requirement == protocol_requirement::v1 )
 		return contains_protocol(policy, protocol::v1_1);
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( policy.requirement == protocol_requirement::require_v2 )
+	if( policy.requirement == protocol_requirement::v2 )
 		return contains_protocol(policy, protocol::v2);
 	return contains_protocol(policy, protocol::v1_1) or
 		contains_protocol(policy, protocol::v2);
@@ -150,11 +150,11 @@ int server_tls_context::select_alpn(void *, const unsigned char **out,
 	const auto &policy = static_cast<server_tls_context*>(argument)->m_config.protocols;
 	for(auto preferred : policy.preference)
 	{
-		if( policy.requirement == protocol_requirement::require_v1 and
+		if( policy.requirement == protocol_requirement::v1 and
 			preferred != protocol::v1_1 )
 			continue;
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		if( policy.requirement == protocol_requirement::require_v2 and
+		if( policy.requirement == protocol_requirement::v2 and
 			preferred != protocol::v2 )
 			continue;
 		const std::string_view wanted = preferred == protocol::v2 ?
@@ -268,7 +268,7 @@ public:
 							const auto &policy =
 								self->m_context->config().protocols;
 							if( policy.requirement !=
-								protocol_requirement::require_v1 and
+								protocol_requirement::v1 and
 								(policy.requirement !=
 									protocol_requirement::automatic or
 								not contains_protocol(policy, protocol::v1_1)) )

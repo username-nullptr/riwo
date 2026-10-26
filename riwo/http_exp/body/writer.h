@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_BODY_WRITER_H
 #define RIWO_HTTP_EXP_BODY_WRITER_H
 
-#include <riwo/http_exp/body/spec.h>
+#include <riwo/http_exp/protocol/body_spec.h>
 #include <riwo/http_exp/protocol/fields.h>
 
 namespace riwo::http_exp { namespace detail  {

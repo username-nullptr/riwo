@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include "spec.h"
+#include "body_spec.h"
+#include <riwo/http_exp/protocol/fields.h>
 #include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp { namespace

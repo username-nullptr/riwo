@@ -8,7 +8,6 @@
 #include <riwo/http_exp/client/detail/session_pool.h>
 #include <riwo/http_exp/session/client_session.h>
 #include <riwo/http_exp/session/session_stream.h>
-#include <riwo/http_exp/transport/preface.h>
 
 namespace
 {
@@ -235,7 +234,7 @@ void session_key_identity()
 
 	auto policy_config = config;
 	policy_config.protocols.requirement =
-		http::protocol_requirement::require_v1;
+		http::protocol_requirement::v1;
 	auto required = detail::make_session_key(
 		make_head("http://example.test/"), policy_config);
 	RIWO_TEST_CHECK(required != http);
@@ -284,7 +283,7 @@ void protocol_negotiation()
 
 	auto prior = detail::negotiate_protocol(http::protocol_policy {
 		.preference = plain.protocols.preference,
-		.requirement = http::protocol_requirement::require_v2
+		.requirement = http::protocol_requirement::v2
 	}, plain, true);
 	RIWO_TEST_CHECK_EQ(prior.value(), http::protocol::v2);
 #else
@@ -479,29 +478,6 @@ void idle_expiry()
 	RIWO_TEST_CHECK_EQ(pool->session_count(), 0U);
 }
 
-void plaintext_preface_detector()
-{
-	http::v2_preface_detector detector;
-	auto preface = std::string(http::v2_preface);
-	auto first = detector.feed(riwo::const_buffer(
-		std::string_view(preface).substr(0, 7)));
-	RIWO_TEST_CHECK(first == http::preface_result::need_more);
-	auto second = detector.feed(riwo::const_buffer(
-		std::string_view(preface).substr(7)));
-	RIWO_TEST_CHECK(second == http::preface_result::v2);
-	RIWO_TEST_CHECK_EQ(detector.buffer(), preface);
-
-	http::v2_preface_detector v1;
-	const std::string request = "GET / HTTP/1.1\r\nHost: example.test\r\n\r\n";
-	auto result = v1.feed(riwo::const_buffer(request));
-	RIWO_TEST_CHECK(result == http::preface_result::v1);
-	const auto inspected = request.substr(0,
-		http::v2_preface.size());
-	RIWO_TEST_CHECK_EQ(v1.buffer(), inspected);
-	RIWO_TEST_CHECK_EQ(v1.take_buffer(), inspected);
-	RIWO_TEST_CHECK(v1.buffer().empty());
-}
-
 void serve_keep_alive(asio::ip::tcp::socket socket, size_t &served,
 	size_t expected)
 {
@@ -615,7 +591,7 @@ void async_connect_does_not_block()
 	riwo::io_context_t context;
 	http::client_config config;
 	config.timeout.connect = std::chrono::milliseconds(500);
-	config.protocols.requirement = http::protocol_requirement::require_v1;
+	config.protocols.requirement = http::protocol_requirement::v1;
 	http::request_head head {
 		http::method::get, riwo::url("http://10.255.255.1:81/")
 	};
@@ -645,7 +621,6 @@ int main(int argc, const char *const argv[])
 		{"waiter limits timeout and draining",
 			waiter_limits_timeout_and_draining},
 		{"idle expiry", idle_expiry},
-		{"plaintext preface detector", plaintext_preface_detector},
 		{"HTTP/1 pool reuses connection", h1_pool_reuses_connection},
 		{"HTTP/1 server keep-alive", h1_server_keep_alive},
 		{"async connector does not block", async_connect_does_not_block}

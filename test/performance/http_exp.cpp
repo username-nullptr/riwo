@@ -131,7 +131,7 @@ loopback_results measure_http_exp_loopback()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
-	server_config.protocols.requirement = http::protocol_requirement::require_v1;
+	server_config.protocols.requirement = http::protocol_requirement::v1;
 	server_config.compression.enabled = false;
 	http::server service(std::move(acceptor), server_config);
 	const std::string small_body = "ok";
@@ -158,7 +158,7 @@ loopback_results measure_http_exp_loopback()
 	const auto large_url = std::format(
 		"http://127.0.0.1:{}/benchmark-large", port);
 	http::client_config client_config;
-	client_config.protocols.requirement = http::protocol_requirement::require_v1;
+	client_config.protocols.requirement = http::protocol_requirement::v1;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(250);
 	client_config.retries.max_attempts = 2;
@@ -384,7 +384,7 @@ concurrent_result measure_http_exp_concurrent_loopback()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
-	server_config.protocols.requirement = http::protocol_requirement::require_v1;
+	server_config.protocols.requirement = http::protocol_requirement::v1;
 	server_config.compression.enabled = false;
 	http::server service(std::move(acceptor), server_config);
 	const std::string body = "ok";
@@ -400,7 +400,7 @@ concurrent_result measure_http_exp_concurrent_loopback()
 	const auto target = std::format("http://127.0.0.1:{}/benchmark",
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
-	client_config.protocols.requirement = http::protocol_requirement::require_v1;
+	client_config.protocols.requirement = http::protocol_requirement::v1;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(250);
 	client_config.retries.max_attempts = 2;
@@ -752,7 +752,7 @@ compression_policy_results measure_http_exp_compression_policy_loopback()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
-	server_config.protocols.requirement = http::protocol_requirement::require_v1;
+	server_config.protocols.requirement = http::protocol_requirement::v1;
 	server_config.compression.enabled = true;
 	server_config.compression.minimum_size = 1024;
 	http::server service(std::move(acceptor), server_config);
@@ -843,7 +843,7 @@ compression_policy_results measure_http_exp_compression_policy_loopback()
 	RIWO_TEST_CHECK(port != 0);
 	const auto base = std::format("http://127.0.0.1:{}", port);
 	http::client_config client_config;
-	client_config.protocols.requirement = http::protocol_requirement::require_v1;
+	client_config.protocols.requirement = http::protocol_requirement::v1;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(250);
 	client_config.auto_decompression = false;

@@ -12,7 +12,7 @@ namespace riwo::http_exp
 
 using tls_socket_t = asio::ssl::stream<asio::ip::tcp::socket>;
 
-class RIWO_HTTP_EXP_API tls_connection final : public connection,
+class RIWO_DECL_HIDDEN tls_connection final : public connection,
 	public std::enable_shared_from_this<tls_connection>
 {
 	RIWO_DISABLE_COPY_MOVE(tls_connection)

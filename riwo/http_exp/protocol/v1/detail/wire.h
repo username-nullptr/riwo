@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_WIRE_H
 #define RIWO_HTTP_EXP_PROTOCOL_V1_DETAIL_WIRE_H
 
-#include <riwo/http_exp/body/spec.h>
+#include <riwo/http_exp/protocol/body_spec.h>
 #include <riwo/http_exp/error.h>
 
 #include <riwo/http_exp/protocol/limits.h>
@@ -40,35 +40,35 @@ struct parsed_response
 	bool close = true;
 };
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<std::string> serialize_request (
 	const request_head &head, const body_spec &spec, protocol version,
 	bool absolute_form = false
 ) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<std::string> serialize_response(
 	const response_head &head, const body_spec &spec, protocol version,
 	bool close = true
 ) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<parsed_request> parse_request (
 	std::string_view wire, const message_limits &limits
 ) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<parsed_response> parse_response (
 	std::string_view wire, const message_limits &limits, bool head_request
 ) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<uint64_t> parse_chunk_size(std::string_view line) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 std::string serialize_chunk_header(size_t size);
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 std::string serialize_last_chunk(const fields &trailers);
 
 } //namespace riwo::http_exp::v1::detail

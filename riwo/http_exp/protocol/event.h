@@ -4,10 +4,11 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_EVENT_H
 #define RIWO_HTTP_EXP_PROTOCOL_EVENT_H
 
-#include <riwo/http_exp/body/spec.h>
-#include <riwo/http_exp/error.h>
+#include <riwo/http_exp/protocol/body_spec.h>
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/response_head.h>
+
+#include <riwo/http_exp/error.h>
 #include <variant>
 
 namespace riwo::http_exp

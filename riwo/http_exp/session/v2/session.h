@@ -32,14 +32,14 @@ struct server_session_config
 	v2_config h2 {};
 };
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<client_session_ptr> make_client_session (
 	connection_ptr transport, const client_session_config &config,
 	const asio::ip::tcp::endpoint& remote = {},
 	const asio::ip::tcp::endpoint& local = {}
 );
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 sys_expected<server_session_ptr> make_server_session (
 	connection_ptr transport, const server_session_config &config,
 	std::string initial_input = {}

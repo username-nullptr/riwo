@@ -43,6 +43,13 @@ if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.body http_exp/body.cpp riwo.http_exp)
 	add_riwo_test(http_exp.http1 http_exp/http1.cpp riwo.http_exp)
 	add_riwo_test(http_exp.session-pool http_exp/session_pool.cpp riwo.http_exp)
+
+	# This white-box test owns a private implementation copy so it does not
+	# reach across the shared-library boundary for hidden symbols.
+	add_riwo_test(http_exp.preface-internal http_exp/preface.cpp riwo.http_exp)
+	target_sources(riwo.test.http_exp.preface-internal PRIVATE
+		${PROJECT_SOURCE_DIR}/riwo/http_exp/transport/preface.cpp
+	)
 	if (TARGET Riwo::http_exp_nghttp2)
 		add_riwo_test(http_exp.http2-client http_exp/http2_client.cpp riwo.http_exp)
 		target_link_libraries(riwo.test.http_exp.http2-client PRIVATE

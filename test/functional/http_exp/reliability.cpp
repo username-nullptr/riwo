@@ -154,14 +154,14 @@ void buffered_limit_recovery_for(http::protocol_requirement requirement,
 
 void buffered_limit_recovery_http1()
 {
-	buffered_limit_recovery_for(http::protocol_requirement::require_v1,
+	buffered_limit_recovery_for(http::protocol_requirement::v1,
 		http::protocol::v1_1);
 }
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 void buffered_limit_recovery_http2()
 {
-	buffered_limit_recovery_for(http::protocol_requirement::require_v2,
+	buffered_limit_recovery_for(http::protocol_requirement::v2,
 		http::protocol::v2);
 }
 #endif
@@ -172,7 +172,7 @@ void header_timeout_and_recovery()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
 	server_config.protocols.requirement =
-		http::protocol_requirement::require_v1;
+		http::protocol_requirement::v1;
 	http::server service(std::move(acceptor), server_config);
 	service.bind({riwo::ip_type::v4, 0})
 		.on_request<http::method::get>("/slow-head",
@@ -200,7 +200,7 @@ void header_timeout_and_recovery()
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
 	client_config.protocols.requirement =
-		http::protocol_requirement::require_v1;
+		http::protocol_requirement::v1;
 	client_config.timeout.header = std::chrono::milliseconds(40);
 	client_config.timeout.body_idle = std::chrono::milliseconds(500);
 	client_config.pool.max_sessions_per_origin = 1;

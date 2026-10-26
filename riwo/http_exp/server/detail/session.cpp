@@ -23,7 +23,7 @@ namespace
 [[nodiscard]] bool permits_http1(const protocol_policy &policy) noexcept
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	if( policy.requirement == protocol_requirement::require_v2 )
+	if( policy.requirement == protocol_requirement::v2 )
 		return false;
 #endif
 	return contains(policy, protocol::v1_0) or
@@ -87,7 +87,7 @@ private:
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 [[nodiscard]] bool permits_http2(const protocol_policy &policy) noexcept
 {
-	if( policy.requirement == protocol_requirement::require_v1 )
+	if( policy.requirement == protocol_requirement::v1 )
 		return false;
 	return contains(policy, protocol::v2);
 }

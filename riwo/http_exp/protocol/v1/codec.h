@@ -4,11 +4,11 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_V1_CODEC_H
 #define RIWO_HTTP_EXP_PROTOCOL_V1_CODEC_H
 
-#include <riwo/http_exp/body/spec.h>
+#include <riwo/http_exp/protocol/body_spec.h>
 #include <riwo/http_exp/protocol/limits.h>
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/response_head.h>
-#include <riwo/http_exp/protocol/version.h>
+#include <riwo/http_exp/version.h>
 
 namespace riwo::http_exp::v1
 {

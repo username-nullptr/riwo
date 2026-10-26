@@ -76,7 +76,5 @@ static_assert(concepts::protocol_engine<connection_engine>);
 } //namespace riwo::http_exp::v2
 #include <riwo/http_exp/protocol/v2/detail/engine.h>
 
-
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
-
 #endif //RIWO_HTTP_EXP_PROTOCOL_V2_ENGINE_H

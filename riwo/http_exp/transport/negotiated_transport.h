@@ -4,8 +4,8 @@
 #ifndef RIWO_HTTP_EXP_TRANSPORT_NEGOTIATED_TRANSPORT_H
 #define RIWO_HTTP_EXP_TRANSPORT_NEGOTIATED_TRANSPORT_H
 
-#include <riwo/http_exp/protocol/version.h>
 #include <riwo/http_exp/transport/byte_stream.h>
+#include <riwo/http_exp/version.h>
 
 namespace riwo::http_exp
 {

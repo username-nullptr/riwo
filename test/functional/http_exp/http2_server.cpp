@@ -95,7 +95,7 @@ void prior_knowledge_server_and_multiplexing()
 	const auto base = std::format("http://127.0.0.1:{}",
 		service.acceptor().local_endpoint().port());
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_v2;
+	config.protocols.requirement = http::protocol_requirement::v2;
 	config.pool.max_sessions_per_origin = 1;
 	http::client client(context, config);
 
@@ -154,7 +154,7 @@ void invalid_resource_configuration()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config config;
-	config.protocols.requirement = http::protocol_requirement::require_v2;
+	config.protocols.requirement = http::protocol_requirement::v2;
 	config.h2.initial_stream_window = 128 * 1024;
 	config.h2.inbound_stream_buffer = 64 * 1024;
 	http::server service(std::move(acceptor), config);
@@ -211,7 +211,7 @@ void head_response_has_no_data()
 	const auto base = std::format("http://127.0.0.1:{}",
 		service.acceptor().local_endpoint().port());
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_v2;
+	config.protocols.requirement = http::protocol_requirement::v2;
 	http::client client(context, config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
@@ -261,7 +261,7 @@ void graceful_shutdown_keeps_active_stream()
 	const auto target = std::format("http://127.0.0.1:{}/shutdown",
 		service.acceptor().local_endpoint().port());
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_v2;
+	config.protocols.requirement = http::protocol_requirement::v2;
 	http::client client(context, config);
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{

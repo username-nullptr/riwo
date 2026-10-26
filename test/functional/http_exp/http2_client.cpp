@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "nghttp2_compat.h"
 
 #include <riwo/http_exp.h>
-#include <riwo/http_exp/protocol/v2/detail/nghttp2_compat.h>
 #include <array>
 #include <map>
 #include <thread>
@@ -13,7 +13,7 @@ namespace
 {
 
 namespace http = riwo::http_exp;
-namespace nghttp2_api = riwo::http_exp::v2::detail::nghttp2_api;
+namespace nghttp2_api = riwo::test::nghttp2_api;
 
 struct peer_stream
 {
@@ -268,7 +268,7 @@ void prior_knowledge_body_and_trailers()
 	std::jthread server([&] { run_peer(acceptor, state); });
 
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_v2;
+	config.protocols.requirement = http::protocol_requirement::v2;
 	config.pool.max_sessions_per_origin = 1;
 	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/upload",
@@ -306,7 +306,7 @@ void multiplexed_async_requests()
 	std::jthread server([&] { run_peer(acceptor, state); });
 
 	http::client_config config;
-	config.protocols.requirement = http::protocol_requirement::require_v2;
+	config.protocols.requirement = http::protocol_requirement::v2;
 	config.pool.max_sessions_per_origin = 1;
 	http::client client(context, config);
 	const auto base = std::format("http://127.0.0.1:{}",
@@ -348,7 +348,7 @@ void reset_and_goaway_errors()
 		std::jthread server([&] { run_peer(acceptor, state); });
 		http::client_config config;
 		config.protocols.requirement =
-			http::protocol_requirement::require_v2;
+			http::protocol_requirement::v2;
 		config.retries.max_attempts = 1;
 		http::client client(context, config);
 		const auto target = std::format("http://127.0.0.1:{}/failure",
@@ -371,7 +371,7 @@ void refused_stream_retries_async()
 	std::jthread server([&] { run_peer(acceptor, state); });
 	http::client_config config;
 	config.protocols.requirement =
-		http::protocol_requirement::require_v2;
+		http::protocol_requirement::v2;
 	config.retries.max_attempts = 2;
 	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/retry",
@@ -406,7 +406,7 @@ void redirect_rewinds_replayable_source()
 	std::jthread server([&] { run_peer(acceptor, state); });
 	http::client_config config;
 	config.protocols.requirement =
-		http::protocol_requirement::require_v2;
+		http::protocol_requirement::v2;
 	http::client client(context, config);
 	const auto target = std::format("http://127.0.0.1:{}/redirect",
 		acceptor.local_endpoint().port());

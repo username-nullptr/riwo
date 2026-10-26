@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_EXP_ERROR_H
 #define RIWO_HTTP_EXP_ERROR_H
 
-#include <riwo/http_exp/protocol/version.h>
+#include <riwo/http_exp/version.h>
 
 namespace riwo::http_exp
 {

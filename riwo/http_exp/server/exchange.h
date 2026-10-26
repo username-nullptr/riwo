@@ -7,14 +7,14 @@
 #include <riwo/http_exp/body/reader.h>
 #include <riwo/http_exp/body/pipe.h>
 #include <riwo/http_exp/body/source.h>
-#include <riwo/http_exp/body/spec.h>
+#include <riwo/http_exp/protocol/body_spec.h>
 #include <riwo/http_exp/body/writer.h>
 #include <riwo/http_exp/protocol/capabilities.h>
 #include <riwo/http_exp/protocol/duplex_channel.h>
 #include <riwo/http_exp/protocol/parameters.h>
 #include <riwo/http_exp/protocol/request_head.h>
 #include <riwo/http_exp/protocol/response_head.h>
-#include <riwo/http_exp/protocol/version.h>
+#include <riwo/http_exp/version.h>
 #include <riwo/http_exp/server/file.h>
 #include <typeinfo>
 

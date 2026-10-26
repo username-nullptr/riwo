@@ -4,17 +4,16 @@
 #ifndef RIWO_HTTP_EXP_PROTOCOL_POLICY_H
 #define RIWO_HTTP_EXP_PROTOCOL_POLICY_H
 
-#include <riwo/http_exp/protocol/version.h>
+#include <riwo/http_exp/version.h>
 
 namespace riwo::http_exp
 {
 
 enum class protocol_requirement
 {
-	automatic,
-	require_v1,
+	automatic, v1,
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	require_v2
+	v2
 #endif //RIWO_HTTP_EXP_HTTP2_SUPPORT
 };
 

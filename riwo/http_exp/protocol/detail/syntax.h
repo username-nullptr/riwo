@@ -9,13 +9,13 @@
 namespace riwo::http_exp::detail
 {
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 std::string_view trim_ows(std::string_view value) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 bool ascii_token_character(unsigned char value) noexcept;
 
-[[nodiscard]] RIWO_HTTP_EXP_API
+[[nodiscard]] RIWO_DECL_HIDDEN
 bool comma_list_contains(std::string_view value, std::string_view token) noexcept;
 
 } //namespace riwo::http_exp::detail

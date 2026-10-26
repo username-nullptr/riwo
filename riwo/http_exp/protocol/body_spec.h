@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_HTTP_EXP_BODY_SPEC_H
-#define RIWO_HTTP_EXP_BODY_SPEC_H
+#ifndef RIWO_HTTP_EXP_PROTOCOL_BODY_SPEC_H
+#define RIWO_HTTP_EXP_PROTOCOL_BODY_SPEC_H
 
-#include <riwo/http_exp/protocol/fields.h>
+#include <riwo/http_exp/global.h>
 
 namespace riwo::http_exp
 {
@@ -48,4 +48,4 @@ private:
 } //namespace riwo::http_exp
 
 
-#endif //RIWO_HTTP_EXP_BODY_SPEC_H
+#endif //RIWO_HTTP_EXP_PROTOCOL_BODY_SPEC_H
