@@ -48,7 +48,8 @@ public:
 	template <typename Value>
 	[[nodiscard]] optional<Value> attribute_as(std::string_view key) const;
 
-	application_session &set_attribute(std::string key, std::any value);
+	application_session &set_attribute(
+		core_concepts::text_p<char> auto &&key, std::any value);
 	application_session &erase_attribute(std::string_view key) noexcept;
 	void clear_attributes() noexcept;
 
@@ -56,10 +57,12 @@ public:
 	application_session &refresh();
 	application_session &expand(std::chrono::seconds value);
 	void invalidate() noexcept;
-	application_session &on_timeout(timeout_handler_t handler);
+	application_session &set_timeout_handler(timeout_handler_t handler);
 	application_session &unbind_timeout() noexcept;
 
 private:
+	application_session &set_attribute_impl(std::string key, std::any value);
+
 	friend class application_session_manager;
 	void notify_timeout() noexcept;
 

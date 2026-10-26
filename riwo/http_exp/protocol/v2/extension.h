@@ -48,13 +48,13 @@ public:
 	constexpr connection_extension() noexcept = default;
 	constexpr explicit connection_extension(const connection_diagnostics &diagnostics) noexcept;
 
-	[[nodiscard]] constexpr const settings_snapshot &local_settings() const noexcept;
-	[[nodiscard]] constexpr const settings_snapshot &peer_settings() const noexcept;
+	[[nodiscard]] constexpr settings_snapshot local_settings() const noexcept;
+	[[nodiscard]] constexpr settings_snapshot peer_settings() const noexcept;
 
 	[[nodiscard]] constexpr size_t pending_output() const noexcept;
 	[[nodiscard]] constexpr bool draining() const noexcept;
 
-	[[nodiscard]] constexpr const connection_diagnostics&diagnostics() const noexcept;
+	[[nodiscard]] constexpr connection_diagnostics diagnostics() const noexcept;
 
 private:
 	connection_diagnostics m_diagnostics {};

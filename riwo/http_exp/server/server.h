@@ -91,29 +91,31 @@ public:
 	basic_server &bind(endpoint_wrapper_t endpoint);
 	basic_server &bind(endpoint_wrapper_t endpoint, error_code &error) noexcept;
 
-	template <method::well_known... Methods, typename Func, typename... Middleware>
-	basic_server &on_request(std::string path, Func &&func,
+	template <method::well_known... Methods, core_concepts::text_p<char> Path,
+		typename Func, typename... Middleware>
+	basic_server &on_request(Path &&path, Func &&func,
 		Middleware&&... middleware)
 		requires concepts::request_handler<Func,service_executor_t> and
 			concepts::middleware_list<service_executor_t,Middleware...>;
 
-	template <typename Func, typename... Middleware>
+	template <core_concepts::text_p<char> Path, typename Func,
+		typename... Middleware>
 	basic_server &on_request(http_exp::method request_method,
-		std::string path, Func &&func, Middleware&&... middleware)
+		Path &&path, Func &&func, Middleware&&... middleware)
 		requires concepts::request_handler<Func,service_executor_t> and
 			concepts::middleware_list<service_executor_t,Middleware...>;
 
-	template <method::well_known... Methods>
-	basic_server &on_request(std::string path, controller_ptr_t controller);
+	template <method::well_known... Methods, core_concepts::text_p<char> Path>
+	basic_server &on_request(Path &&path, controller_ptr_t controller);
 
 	basic_server &use(middleware_ptr_t middleware);
 
 	template <typename Func>
-	basic_server &on_default(Func &&func)
+	basic_server &set_default_handler(Func &&func)
 		requires concepts::request_handler<Func,service_executor_t>;
 
-	basic_server &on_server_error(server_error_handler_t handler);
-	basic_server &on_service_error(service_error_handler_t handler);
+	basic_server &set_server_error_handler(server_error_handler_t handler);
+	basic_server &set_service_error_handler(service_error_handler_t handler);
 	basic_server &unbound_request(std::string_view path);
 	basic_server &unbound_server_error();
 	basic_server &unbound_service_error();

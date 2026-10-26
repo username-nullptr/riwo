@@ -135,7 +135,7 @@ inline http_exp::client_config websocket_http_config(
 		config.protocols.requirement =
 			http_exp::protocol_requirement::require_v1;
 	config.redirects.max_redirects = 0;
-	config.automatic_decompression = false;
+	config.auto_decompression = false;
 	if( handshake_timeout > std::chrono::milliseconds::zero() )
 	{
 		config.timeout.connect = std::min(config.timeout.connect,
@@ -198,8 +198,8 @@ inline sys_expected<prepared_open> prepare_open(const connect_request &request,
 				continue;
 			result.headers().set(field.name, field.value);
 		}
-		if( use_extended_connect ) result.connect_protocol("websocket");
-		else result.upgrade_protocol("websocket");
+		if( use_extended_connect ) result.set_connect_protocol("websocket");
+		else result.set_upgrade_protocol("websocket");
 
 		auto spec = use_extended_connect ? http_exp::body_spec::streaming() :
 			http_exp::body_spec::empty();

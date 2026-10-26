@@ -62,7 +62,7 @@ try
 		}, std::make_shared<request_log>())
 		.on_request<http::method::get>(
 			"/controller", std::make_shared<greeting_controller>())
-		.on_server_error([](riwo::error_code error)
+		.set_server_error_handler([](riwo::error_code error)
 		{
 			std::cerr << "Server error: " << error.message() << '\n';
 			return true;

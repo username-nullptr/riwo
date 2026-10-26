@@ -95,14 +95,22 @@ void semantic_helpers()
 	RIWO_TEST_CHECK_EQ(credentials->username, "demo");
 	RIWO_TEST_CHECK_EQ(credentials->password, "secret");
 
-	http::multipart_form form("riwo-boundary");
-	form.add_field("name", "value").add_file("upload", "a.txt", "abc",
-		"text/plain");
+	const std::string_view boundary = "riwo-boundary";
+	http::multipart_form form(boundary);
+	const std::string_view field_name = "name";
+	std::string field_value = "value";
+	form.add_field(field_name, std::move(field_value))
+		.add_file(std::string_view("upload"), "a.txt", std::string("abc"),
+			std::string_view("text/plain"));
 	auto parts = http::parse_multipart_form(form.content_type(), form.body());
 	RIWO_TEST_CHECK(parts.has_value());
 	RIWO_TEST_CHECK_EQ(parts->size(), 2U);
 	RIWO_TEST_CHECK_EQ(parts->back().filename, "a.txt");
 	RIWO_TEST_CHECK_EQ(parts->back().data, "abc");
+	http::multipart_form default_form;
+	default_form.add_file("upload", "b.bin", std::string_view("data"));
+	RIWO_TEST_CHECK_EQ(default_form.parts().front().headers.find_first(
+		"content-type").value(), "application/octet-stream");
 	auto form_boundary = http::multipart_boundary(
 		"Multipart/Form-Data; charset=utf-8; boundary=\"riwo-boundary\"");
 	RIWO_TEST_CHECK(form_boundary.has_value());
@@ -121,6 +129,25 @@ void semantic_helpers()
 	auto decompressed = http::gzip_decompress(*compressed);
 	RIWO_TEST_CHECK(decompressed.has_value());
 	RIWO_TEST_CHECK_EQ(*decompressed, "compress me");
+	http::gzip_encoder encoder;
+	auto first = encoder.append("first", true);
+	RIWO_TEST_CHECK(first.has_value());
+	RIWO_TEST_CHECK(encoder.finished());
+	RIWO_TEST_CHECK(encoder.reset().has_value());
+	RIWO_TEST_CHECK(!encoder.finished());
+	auto second = encoder.append("second", true);
+	RIWO_TEST_CHECK(second.has_value());
+
+	http::gzip_decoder decoder(16);
+	auto first_plain = decoder.append(*first, true);
+	RIWO_TEST_CHECK(first_plain.has_value());
+	RIWO_TEST_CHECK_EQ(*first_plain, "first");
+	RIWO_TEST_CHECK(decoder.reset().has_value());
+	RIWO_TEST_CHECK(!decoder.finished());
+	RIWO_TEST_CHECK_EQ(decoder.output_size(), 0U);
+	auto second_plain = decoder.append(*second, true);
+	RIWO_TEST_CHECK(second_plain.has_value());
+	RIWO_TEST_CHECK_EQ(*second_plain, "second");
 #endif
 }
 
@@ -152,8 +179,9 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			auto session = exchange.session();
-			auto count = session->attribute_as<int>("count").value_or(0) + 1;
-			session->set_attribute("count", count);
+			const std::string_view count_key = "count";
+			auto count = session->attribute_as<int>(count_key).value_or(0) + 1;
+			session->set_attribute(count_key, count);
 			auto tags = exchange.query_parameters().find_all("tag");
 			auto response = std::format("{}:{}:{}",
 				exchange.path_parameter("id").value_or(""), tags.size(), count);
@@ -295,7 +323,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		uint64_t uploaded = 0;
 		uint64_t upload_total = 0;
 		http::request upload(http::method::post, base + "/upload");
-		upload.body("payload").on_upload_progress(
+		upload.set_body("payload").on_upload_progress(
 			[&](uint64_t transferred, uint64_t total) {
 				uploaded = transferred;
 				upload_total = total;
@@ -318,7 +346,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		uint64_t duplex_downloaded = 0;
 		uint64_t duplex_download_total = 0;
 		http::request duplex(http::method::post, base + "/duplex-progress");
-		duplex.body("request")
+		duplex.set_body("request")
 			.on_upload_progress(
 			[&](uint64_t transferred, uint64_t total) {
 				duplex_uploaded = transferred;
@@ -338,7 +366,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		RIWO_TEST_CHECK_EQ(duplex_download_total, 8U);
 
 		http::request c_upload(http::method::post, base + "/upload-c");
-		c_upload.body("c-file");
+		c_upload.set_body("c-file");
 		auto c_uploaded_reply = co_await client.fetch(std::move(c_upload),
 			riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(c_uploaded_reply.status(), http::status::no_content);
@@ -354,7 +382,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		http::request compression_request(http::method::get,
 			base + "/compress");
 		compression_request.headers().add("Accept-Encoding", "gzip");
-		compression_request.automatic_decompression(false);
+		compression_request.set_auto_decompression(false);
 		auto compressed_reply = co_await client.fetch(
 			std::move(compression_request), riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(compressed_reply.headers().find_first(
@@ -390,7 +418,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		RIWO_TEST_CHECK(body_text(unchanged).empty());
 
 		http::request no_redirect(http::method::get, base + "/redirect");
-		no_redirect.redirects({.max_redirects = 0});
+		no_redirect.set_redirects({.max_redirects = 0});
 		auto found = co_await client.fetch(std::move(no_redirect),
 			riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(found.status(), http::status::found);

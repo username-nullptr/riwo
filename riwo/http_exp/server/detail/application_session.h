@@ -4,8 +4,17 @@
 #ifndef RIWO_HTTP_EXP_SERVER_DETAIL_APPLICATION_SESSION_H
 #define RIWO_HTTP_EXP_SERVER_DETAIL_APPLICATION_SESSION_H
 
+#include <riwo/core/utils/string_tools.h>
+
 namespace riwo::http_exp
 {
+
+application_session &application_session::set_attribute(
+	core_concepts::text_p<char> auto &&key, std::any value)
+{
+	return set_attribute_impl(
+		strtls::to_string(std::forward<decltype(key)>(key)), std::move(value));
+}
 
 template <typename Value>
 optional<Value> application_session::attribute_as(std::string_view key) const

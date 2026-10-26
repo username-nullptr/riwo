@@ -25,12 +25,12 @@ constexpr connection_extension::connection_extension
 
 }
 
-constexpr const settings_snapshot &connection_extension::local_settings() const noexcept
+constexpr settings_snapshot connection_extension::local_settings() const noexcept
 {
 	return m_diagnostics.local_settings;
 }
 
-constexpr const settings_snapshot &connection_extension::peer_settings() const noexcept
+constexpr settings_snapshot connection_extension::peer_settings() const noexcept
 {
 	return m_diagnostics.peer_settings;
 }
@@ -45,7 +45,7 @@ constexpr bool connection_extension::draining() const noexcept
 	return m_diagnostics.draining;
 }
 
-constexpr const connection_diagnostics &connection_extension::diagnostics() const noexcept
+constexpr connection_diagnostics connection_extension::diagnostics() const noexcept
 {
 	return m_diagnostics;
 }

@@ -81,8 +81,8 @@ struct request_access
 			result.redirects = *options.redirects;
 		if( options.retries )
 			result.retries = *options.retries;
-		if( options.automatic_decompression )
-			result.automatic_decompression = *options.automatic_decompression;
+		if( options.auto_decompression )
+			result.auto_decompression = *options.auto_decompression;
 		return result;
 	}
 
@@ -227,9 +227,9 @@ namespace
 
 [[nodiscard]] std::shared_ptr<body_reader_state> decoded_body(
 	std::shared_ptr<body_reader_state> body, reply_head &head,
-	bool automatic_decompression)
+	bool auto_decompression)
 {
-	if( not automatic_decompression or not body or body->is_finished() )
+	if( not auto_decompression or not body or body->is_finished() )
 		return body;
 	auto encoding = decodable_encoding(head);
 	if( encoding.empty() )
@@ -241,7 +241,7 @@ namespace
 
 void add_accept_encoding(request_head &head, const client_config &config)
 {
-	if( not config.automatic_decompression or not gzip_available_v )
+	if( not config.auto_decompression or not gzip_available_v )
 		return ;
 	if( head.headers.find_first("Accept-Encoding") )
 		return ;
@@ -715,7 +715,7 @@ send_result client_state::send(request request_value,
 			std::move(download_progress));
 	}
 	body = decoded_body(std::move(body), reply_head_value,
-		config.automatic_decompression);
+		config.auto_decompression);
 	return send_result {
 		.selected_protocol = active_stream->selected_protocol(),
 		.reply_protocol = active_stream->response_protocol(),
@@ -765,7 +765,7 @@ void client_state::send(request request_value, send_handler_t handler)
 		fields trailers;
 		send_handler_t handler;
 		uint64_t max_buffered_body = 8U * 1024U * 1024U;
-		bool automatic_decompression = true;
+		bool auto_decompression = true;
 		retry_policy retries;
 		redirect_policy redirects;
 		progress_observer upload_progress;
@@ -776,7 +776,7 @@ void client_state::send(request request_value, send_handler_t handler)
 			optional<const_buffer> body_value,
 			std::shared_ptr<body_source> source_value, body_spec description,
 			fields trailer_values, uint64_t max_buffered_body_value,
-			bool automatic_decompression_value, retry_policy retry_values,
+			bool auto_decompression_value, retry_policy retry_values,
 			redirect_policy redirect_values,
 			progress_observer upload_progress_value,
 			progress_observer download_progress_value,
@@ -789,7 +789,7 @@ void client_state::send(request request_value, send_handler_t handler)
 			spec(std::move(description)), trailers(std::move(trailer_values)),
 			handler(std::move(completion)),
 			max_buffered_body(max_buffered_body_value),
-			automatic_decompression(automatic_decompression_value),
+			auto_decompression(auto_decompression_value),
 			retries(std::move(retry_values)),
 			redirects(std::move(redirect_values)),
 			upload_progress(std::move(upload_progress_value)),
@@ -907,7 +907,7 @@ void client_state::send(request request_value, send_handler_t handler)
 						self->download_progress);
 				}
 				body = decoded_body(std::move(body), head,
-					self->automatic_decompression);
+					self->auto_decompression);
 				auto result = send_result {
 					.selected_protocol =
 						self->active_stream->selected_protocol(),
@@ -1012,7 +1012,7 @@ void client_state::send(request request_value, send_handler_t handler)
 	 source = std::move(source), spec = std::move(operation_spec),
 	 trailers = std::move(trailers),
 	 max_buffered_body = m_config.reply_limits.max_buffered_body,
-	 automatic_decompression = config.automatic_decompression,
+	 auto_decompression = config.auto_decompression,
 	 retries = config.retries, redirects = config.redirects,
 	 upload_progress = std::move(upload_progress),
 	 download_progress = std::move(download_progress),
@@ -1041,7 +1041,7 @@ void client_state::send(request request_value, send_handler_t handler)
 		std::make_shared<operation>(owner, std::move(request_value),
 			std::move(active_stream), request_body,
 			std::move(source), std::move(spec), std::move(trailers),
-			max_buffered_body, automatic_decompression,
+			max_buffered_body, auto_decompression,
 			std::move(retries), std::move(redirects),
 			std::move(upload_progress), std::move(download_progress),
 			std::move(handler))->start();

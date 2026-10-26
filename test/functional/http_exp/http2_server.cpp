@@ -81,11 +81,11 @@ void prior_knowledge_server_and_multiplexing()
 			co_await exchange.respond({}, std::string_view("fast"),
 				riwo::use_awaitable);
 		})
-		.on_server_error([](riwo::error_code error) {
+		.set_server_error_handler([](riwo::error_code error) {
 			std::cerr << "HTTP/2 server error: " << error.message() << '\n';
 			return false;
 		})
-		.on_service_error([](http::server_exchange &,
+		.set_service_error_handler([](http::server_exchange &,
 			const std::exception &error) {
 			std::cerr << "HTTP/2 service error: " << error.what() << '\n';
 			return false;
@@ -103,10 +103,10 @@ void prior_knowledge_server_and_multiplexing()
 	{
 		const std::string upload(128 * 1024, 'u');
 		http::request request(http::method::post, base + "/echo");
-		request.body(riwo::buffer(upload));
+		request.set_body(riwo::buffer(upload));
 		http::fields trailers;
 		trailers.add("x-client-trailer", "done");
-		request.trailers(std::move(trailers));
+		request.set_trailers(std::move(trailers));
 		http::reply echo;
 		try {
 			echo = co_await client.fetch(std::move(request), riwo::use_awaitable);

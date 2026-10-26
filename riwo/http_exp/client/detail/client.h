@@ -423,7 +423,7 @@ auto basic_client<Exec>::post(Url &&url, const const_buffer &body,
 		Token,error_code,reply_t>
 {
 	request value(method::post, riwo::url(std::forward<Url>(url)));
-	value.body(body);
+	value.set_body(body);
 	return send(std::move(value), std::forward<Token>(token));
 }
 

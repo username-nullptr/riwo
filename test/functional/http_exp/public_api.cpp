@@ -158,7 +158,52 @@ static_assert(std::copyable<http::parameter_view>);
 static_assert(std::copyable<http::route_pattern>);
 static_assert(std::copyable<http::application_session_config>);
 static_assert(std::constructible_from<http::application_session_manager>);
+static_assert(requires(http::application_session &session,
+	http::application_session::timeout_handler_t handler) {
+	{ session.set_timeout_handler(std::move(handler)) } ->
+		std::same_as<http::application_session&>;
+});
 static_assert(std::derived_from<http::aop,http::middleware>);
+
+template <typename String>
+concept method_string = requires(String &&string) {
+	http::method(std::forward<String>(string));
+	http::method(std::forward<String>(string), http::method_properties{});
+};
+
+template <typename Text>
+concept route_pattern_text = requires(Text &&text) {
+	http::route_pattern(std::forward<Text>(text));
+};
+
+template <typename Text>
+concept application_attribute_text = requires(
+	http::application_session &session, Text &&text) {
+	session.set_attribute(std::forward<Text>(text), 1);
+};
+
+template <typename Text>
+concept multipart_text = requires(http::multipart_form &form, Text &&text) {
+	http::multipart_form(std::forward<Text>(text));
+	form.add_field(std::forward<Text>(text), std::forward<Text>(text));
+	form.add_file(std::forward<Text>(text), std::forward<Text>(text),
+		std::forward<Text>(text));
+	form.add_file(std::forward<Text>(text), std::forward<Text>(text),
+		std::forward<Text>(text), std::forward<Text>(text));
+};
+
+static_assert(method_string<std::string>);
+static_assert(method_string<std::string_view>);
+static_assert(method_string<const char*>);
+static_assert(!method_string<char>);
+static_assert(!method_string<std::wstring_view>);
+static_assert(route_pattern_text<std::string_view>);
+static_assert(!route_pattern_text<std::wstring_view>);
+static_assert(application_attribute_text<std::string_view>);
+static_assert(!application_attribute_text<std::wstring_view>);
+static_assert(std::default_initializable<http::multipart_form>);
+static_assert(multipart_text<std::string_view>);
+static_assert(!multipart_text<std::wstring_view>);
 #if RIWO_OPENSSL_SUPPORT
 static_assert(std::constructible_from<http::server_tls_context,
 	http::server_tls_config>);
@@ -175,6 +220,56 @@ static_assert(std::constructible_from<http::server,
 static_assert(!std::copy_constructible<http::request>);
 static_assert(!std::copy_constructible<http::cookie_jar>);
 static_assert(std::is_nothrow_move_constructible_v<http::request>);
+static_assert(std::same_as<
+	decltype(std::declval<const http::request&>().connect_protocol()),
+	riwo::optional<std::string>>);
+static_assert(std::same_as<
+	decltype(std::declval<const http::request&>().upgrade_protocol()),
+	riwo::optional<std::string>>);
+static_assert(std::same_as<
+	decltype(std::declval<const http::request&>().body_description()),
+	http::body_spec>);
+
+template <typename Text>
+concept request_protocol_text = requires(http::request &request, Text &&text) {
+	request.set_connect_protocol(std::forward<Text>(text));
+	request.set_upgrade_protocol(std::forward<Text>(text));
+};
+
+static_assert(request_protocol_text<std::string_view>);
+static_assert(!request_protocol_text<std::wstring_view>);
+static_assert(requires(http::request &request, std::string &string,
+	std::string_view view, const char *pointer, char character) {
+	request.set_connect_protocol(string);
+	request.set_connect_protocol(std::move(string));
+	request.set_connect_protocol(view);
+	request.set_connect_protocol(pointer);
+	request.set_connect_protocol(character);
+	request.set_upgrade_protocol(string);
+	request.set_upgrade_protocol(std::move(string));
+	request.set_upgrade_protocol(view);
+	request.set_upgrade_protocol(pointer);
+	request.set_upgrade_protocol(character);
+});
+static_assert(requires(http::request &request, riwo::const_buffer body,
+	std::filesystem::path path, http::fields trailers,
+	http::request_options options, http::proxy_policy proxy,
+	http::redirect_policy redirects, http::retry_policy retries,
+	http::progress_observer progress, source_model source) {
+	{ request.set_body(body) } -> std::same_as<http::request&>;
+	{ request.set_borrowed_body(body) } -> std::same_as<http::request&>;
+	{ request.set_file(std::move(path)) } -> std::same_as<http::request&>;
+	{ request.set_trailers(std::move(trailers)) } -> std::same_as<http::request&>;
+	{ request.set_options(std::move(options)) } -> std::same_as<http::request&>;
+	{ request.set_proxy(std::move(proxy)) } -> std::same_as<http::request&>;
+	{ request.set_redirects(std::move(redirects)) } -> std::same_as<http::request&>;
+	{ request.set_retries(std::move(retries)) } -> std::same_as<http::request&>;
+	{ request.set_auto_decompression() } -> std::same_as<http::request&>;
+	{ request.on_upload_progress(progress) } -> std::same_as<http::request&>;
+	{ request.on_download_progress(std::move(progress)) } ->
+		std::same_as<http::request&>;
+	{ request.set_source(std::move(source)) } -> std::same_as<http::request&>;
+});
 static_assert(!std::copy_constructible<http::client>);
 static_assert(std::is_nothrow_move_constructible_v<http::client>);
 static_assert(std::constructible_from<http::client>);
@@ -471,7 +566,8 @@ struct fake_transport_connector final : http::transport_connector
 
 void semantic_value_contracts()
 {
-	http::method get("GET");
+	const std::string_view get_token = "GET";
+	http::method get(get_token);
 	RIWO_TEST_CHECK(get.known() == http::method::get);
 	RIWO_TEST_CHECK(get.is_safe());
 	RIWO_TEST_CHECK(get.is_idempotent());
@@ -563,10 +659,67 @@ void semantic_value_contracts()
 
 	http::request request(http::method::post, "http://example.test/resource");
 	request.headers().set("content-type", "text/plain");
-	request.body("abc");
+	request.set_body("abc");
 	RIWO_TEST_CHECK_EQ(request.body_description().length().value(), 3U);
+	http::fields request_trailers;
+	request_trailers.add("X-Checksum", "ready");
+	request.set_trailers(std::move(request_trailers));
+	RIWO_TEST_CHECK_EQ(request.body_description().trailers().names.at(0),
+		"X-Checksum");
+	auto body_description_copy = request.body_description();
+	const_cast<http::body_spec::trailer_spec&>(
+		body_description_copy.trailers()).names.clear();
+	RIWO_TEST_CHECK_EQ(request.body_description().trailers().names.at(0),
+		"X-Checksum");
+	request.set_borrowed_body(riwo::buffer("xy"));
+	RIWO_TEST_CHECK_EQ(request.body_description().length().value(), 2U);
+	RIWO_TEST_CHECK(request.body_description().trailers().names.empty());
+
+	http::request connect_request(http::method::connect,
+		"https://example.test/resource");
+	const std::string_view connect_protocol = "websocket";
+	connect_request.set_connect_protocol(connect_protocol);
+	RIWO_TEST_CHECK_EQ(connect_request.connect_protocol().value(), "websocket");
+	auto connect_protocol_copy = connect_request.connect_protocol();
+	connect_protocol_copy->assign("mutated");
+	RIWO_TEST_CHECK_EQ(connect_request.connect_protocol().value(), "websocket");
+
+	http::request upgrade_request(http::method::get,
+		"http://example.test/resource");
+	std::string upgrade_protocol = "websocket";
+	upgrade_request.set_upgrade_protocol(std::move(upgrade_protocol));
+	RIWO_TEST_CHECK_EQ(upgrade_request.upgrade_protocol().value(), "websocket");
+	auto upgrade_protocol_copy = upgrade_request.upgrade_protocol();
+	upgrade_protocol_copy->assign("mutated");
+	RIWO_TEST_CHECK_EQ(upgrade_request.upgrade_protocol().value(), "websocket");
+
+	http::request_options options;
+	options.auto_decompression = false;
+	request.set_options(std::move(options));
+	RIWO_TEST_CHECK_EQ(request.options().auto_decompression.value(), false);
+	request
+		.set_proxy({.use_environment = true})
+		.set_redirects({.max_redirects = 1})
+		.set_retries({.max_attempts = 3})
+		.set_auto_decompression(true)
+		.on_upload_progress([](uint64_t, uint64_t) {})
+		.on_download_progress([](uint64_t, uint64_t) {});
+	RIWO_TEST_CHECK(request.options().proxy->use_environment);
+	RIWO_TEST_CHECK_EQ(request.options().redirects->max_redirects, 1U);
+	RIWO_TEST_CHECK_EQ(request.options().retries->max_attempts, 3U);
+	RIWO_TEST_CHECK_EQ(request.options().auto_decompression.value(), true);
+	RIWO_TEST_CHECK(static_cast<bool>(request.options().upload_progress));
+	RIWO_TEST_CHECK(static_cast<bool>(request.options().download_progress));
+
+	http::request file_request(http::method::post,
+		"http://example.test/resource");
+	file_request.set_file("request-body.bin");
+	RIWO_TEST_CHECK(file_request.has_body_source());
+	RIWO_TEST_CHECK(file_request.body_description().type() ==
+		http::body_spec::mode::streaming);
+
 	http::request custom_source(http::method::put, "http://example.test/resource");
-	custom_source.source(source_model{});
+	custom_source.set_source(source_model{});
 	RIWO_TEST_CHECK_EQ(custom_source.body_description().length().value(), 3U);
 }
 
@@ -627,7 +780,8 @@ void moved_from_objects_are_safe()
 	RIWO_TEST_CHECK(moved_range.begin() == moved_range.end());
 	RIWO_TEST_CHECK_EQ(std::ranges::distance(assigned_range), 1);
 
-	http::route_pattern pattern("/items/{id}");
+	const std::string_view pattern_text = "/items/{id}";
+	http::route_pattern pattern(pattern_text);
 	auto moved_pattern = std::move(pattern);
 	RIWO_TEST_CHECK(pattern.text().empty());
 	RIWO_TEST_CHECK(!pattern.exact());
@@ -640,7 +794,7 @@ void moved_from_objects_are_safe()
 
 	http::request source_request(http::method::post,
 		"http://example.test/resource");
-	source_request.body("body");
+	source_request.set_body("body");
 	auto moved_request = std::move(source_request);
 	RIWO_TEST_CHECK(source_request.method().known() == http::method::get);
 	RIWO_TEST_CHECK(!source_request.has_body_source());
@@ -1018,7 +1172,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	native_acceptor_wrap acceptor_wrap{
 		native_acceptor_wrap::acceptor_t(context)};
 	native_server native_service(std::move(acceptor_wrap));
-	native_service.on_default(native_server_handler);
+	native_service.set_default_handler(native_server_handler);
 	native_acceptor_wrap split_acceptor_wrap{
 		native_acceptor_wrap::acceptor_t(context)};
 	auto strand = asio::make_strand(context);
@@ -1115,16 +1269,19 @@ void server_facade_contract()
 	auto executor = asio::any_io_executor(context.get_executor());
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server service(std::move(acceptor));
+	const std::string_view events_path = "/events";
+	std::string custom_events_path = "/custom-events";
 
 	RIWO_TEST_CHECK(service.get_executor() == executor);
 	RIWO_TEST_CHECK(service.get_service_executor() == executor);
 
 	service
-		.on_request<http::method::get>("/events", streaming_server_handler)
-		.on_request(http::method("SUBSCRIBE"), "/custom-events", server_handler)
-		.on_default(server_handler)
-		.on_server_error([](riwo::error_code) { return true; })
-		.on_service_error([](http::server_exchange&,
+		.on_request<http::method::get>(events_path, streaming_server_handler)
+		.on_request(http::method("SUBSCRIBE"),
+			std::move(custom_events_path), server_handler)
+		.set_default_handler(server_handler)
+		.set_server_error_handler([](riwo::error_code) { return true; })
+		.set_service_error_handler([](http::server_exchange&,
 			const std::exception&) { return true; });
 
 	riwo::error_code error;

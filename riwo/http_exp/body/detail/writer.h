@@ -55,7 +55,7 @@ public:
 	void finish(fields trailers, finish_handler_t handler);
 	void cancel() noexcept;
 
-	void configure(body_spec spec, bool ready = false) noexcept;
+	void set_spec(body_spec spec, bool ready = false) noexcept;
 	void set_ready(bool ready = true) noexcept;
 
 	[[nodiscard]] bool ended() const noexcept;

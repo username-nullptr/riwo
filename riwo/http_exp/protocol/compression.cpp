@@ -51,6 +51,8 @@ namespace riwo::http_exp { namespace
 }
 
 #if RIWO_HTTP_EXP_ZLIB_SUPPORT
+constexpr size_t gzip_io_buffer_size = 64 * 1024;
+
 [[nodiscard]] error_code codec_error() noexcept  {
 	return make_system_error_code(std::errc::illegal_byte_sequence);
 }
@@ -228,7 +230,7 @@ sys_expected<std::string> gzip_encoder::append(std::string_view data, bool finis
 			));
 	}
 	std::string output {};
-	std::array<unsigned char,16384> buffer {};
+	std::array<unsigned char,gzip_io_buffer_size> buffer {};
 
 	size_t offset = 0;
 	bool first = true;
@@ -279,6 +281,18 @@ sys_expected<std::string> gzip_encoder::append(std::string_view data, bool finis
 	ignore_unused(data, finish);
 	return sys_unexpected(unsupported_error());
 #endif //RIWO_HTTP_EXP_ZLIB_SUPPORT
+}
+
+sys_expected<void> gzip_encoder::reset() noexcept
+{
+#if RIWO_HTTP_EXP_ZLIB_SUPPORT
+	if( not m_impl->initialized or deflateReset(&m_impl->stream) != Z_OK )
+		return sys_unexpected(codec_error());
+	m_impl->ended = false;
+	return {};
+#else
+	return sys_unexpected(unsupported_error());
+#endif
 }
 
 bool gzip_encoder::finished() const noexcept
@@ -364,7 +378,7 @@ sys_expected<std::string> gzip_decoder::append(std::string_view data, bool finis
 		m_impl->member_ended = false;
 	}
 	std::string output {};
-	std::array<unsigned char,16384> buffer {};
+	std::array<unsigned char,gzip_io_buffer_size> buffer {};
 
 	size_t offset = 0;
 	while( offset < data.size() )
@@ -425,6 +439,21 @@ sys_expected<std::string> gzip_decoder::append(std::string_view data, bool finis
 	return output;
 #else
 	ignore_unused(data, finish);
+	return sys_unexpected(unsupported_error());
+#endif
+}
+
+sys_expected<void> gzip_decoder::reset() noexcept
+{
+#if RIWO_HTTP_EXP_ZLIB_SUPPORT
+	if( not m_impl->initialized or inflateReset2(&m_impl->stream, MAX_WBITS + 16) != Z_OK )
+		return sys_unexpected(codec_error());
+
+	m_impl->output = 0;
+	m_impl->member_ended = false;
+	m_impl->ended = false;
+	return {};
+#else
 	return sys_unexpected(unsupported_error());
 #endif
 }

@@ -25,7 +25,7 @@ try
 		.add("Content-Type", "text/plain")
 		.add("X-Example", "buffered-request");
 
-	echo_request.body("hello from http_exp\n");
+	echo_request.set_body("hello from http_exp\n");
 	auto echoed = client.fetch(std::move(echo_request));
 
 	std::cout << "POST /echo ["

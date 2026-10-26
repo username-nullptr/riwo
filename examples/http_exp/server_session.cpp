@@ -34,7 +34,7 @@ try
 			riwo::use_awaitable
 		);
 	})
-	.on_server_error([](riwo::error_code error)
+	.set_server_error_handler([](riwo::error_code error)
 	{
 		std::cerr << "Server error: " << error.message() << '\n';
 		return true;

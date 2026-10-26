@@ -88,11 +88,6 @@ route_pattern::compile(std::string pattern)
 	return result;
 }
 
-route_pattern::route_pattern(std::string pattern) :
-	m_impl(compile(std::move(pattern)))
-{
-}
-
 route_pattern::~route_pattern() = default;
 route_pattern::route_pattern(const route_pattern&) = default;
 route_pattern &route_pattern::operator=(const route_pattern&) = default;

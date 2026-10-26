@@ -279,6 +279,16 @@ void h1_pause_resume_and_eof()
 }
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
+static_assert(std::same_as<
+	decltype(std::declval<const http::v2::connection_extension&>().local_settings()),
+	http::v2::settings_snapshot>);
+static_assert(std::same_as<
+	decltype(std::declval<const http::v2::connection_extension&>().peer_settings()),
+	http::v2::settings_snapshot>);
+static_assert(std::same_as<
+	decltype(std::declval<const http::v2::connection_extension&>().diagnostics()),
+	http::v2::connection_diagnostics>);
+
 void h2_manual_engine_loop()
 {
 	http::v2::connection_engine client({.role = http::protocol_role::client});

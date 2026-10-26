@@ -4,29 +4,28 @@
 #ifndef RIWO_HTTP_EXP_CLIENT_REQUEST_H
 #define RIWO_HTTP_EXP_CLIENT_REQUEST_H
 
-#include <riwo/http_exp/body/spec.h>
-#include <riwo/http_exp/body/source.h>
-#include <riwo/http_exp/client/config.h>
 #include <riwo/http_exp/protocol/request_head.h>
+#include <riwo/http_exp/client/config.h>
 
-namespace riwo::http_exp::detail
-{
+#include <riwo/http_exp/body/source.h>
+#include <riwo/http_exp/body/spec.h>
+
+namespace riwo::http_exp { namespace detail {
 struct request_access;
-}
-
-namespace riwo::http_exp
-{
+} //namespace detail
 
 // total is zero when the transfer length is unknown.
-using progress_observer = std::function<void(
-	uint64_t transferred, uint64_t total)>;
+using progress_observer = std::function <
+	void(uint64_t transferred, uint64_t total)
+>;
 
 struct request_options
 {
 	optional<proxy_policy> proxy;
 	optional<redirect_policy> redirects;
 	optional<retry_policy> retries;
-	optional<bool> automatic_decompression;
+
+	optional<bool> auto_decompression;
 	progress_observer upload_progress;
 	progress_observer download_progress;
 };
@@ -36,50 +35,64 @@ class RIWO_HTTP_EXP_API request
 	RIWO_DISABLE_COPY(request)
 
 public:
-	request(http_exp::method request_method, riwo::url request_url);
+	using method_t = http_exp::method;
+	using url_t = riwo::url;
+
+	request(method_t method, url_t url);
 	~request();
 
-	request(request &&) noexcept;
-	request &operator=(request &&) noexcept;
+	request(request &&other) noexcept;
+	request &operator=(request &&other) noexcept;
 
-	[[nodiscard]] http_exp::method method() const noexcept;
-	[[nodiscard]] const riwo::url &url() const noexcept;
-	[[nodiscard]] http_exp::fields &headers() noexcept;
-	[[nodiscard]] const http_exp::fields &headers() const noexcept;
-	request &connect_protocol(std::string protocol);
-	[[nodiscard]] const optional<std::string> &connect_protocol() const noexcept;
-	request &upgrade_protocol(std::string protocol);
-	[[nodiscard]] const optional<std::string> &upgrade_protocol() const noexcept;
+public:
+	request &set_connect_protocol(core_concepts::text_p<char> auto &&protocol);
+	[[nodiscard]] optional<std::string> connect_protocol() const;
+
+	request &set_upgrade_protocol(core_concepts::text_p<char> auto &&protocol);
+	[[nodiscard]] optional<std::string> upgrade_protocol() const;
 
 	// The buffer is borrowed until the send/fetch completion.
-	request &body(const const_buffer &bytes);
-	request &borrowed_body(const_buffer body);
-	request &file(std::filesystem::path path);
-	request &trailers(fields values);
-	request &options(request_options value);
-	request &proxy(proxy_policy value);
-	request &redirects(redirect_policy value);
-	request &retries(retry_policy value);
-	request &automatic_decompression(bool value = true);
+	request &set_body(const const_buffer &bytes);
+	request &set_borrowed_body(const const_buffer &body);
+
+	request &set_file(std::filesystem::path path);
+	request &set_trailers(fields values);
+
+	request &set_options(request_options value);
+	request &set_proxy(proxy_policy value);
+
+	request &set_redirects(redirect_policy value);
+	request &set_retries(retry_policy value);
+
+	request &set_auto_decompression(bool value = true);
+	request &set_source(concepts::body_source_model_p auto &&source);
+
 	request &on_upload_progress(progress_observer observer);
 	request &on_download_progress(progress_observer observer);
-	[[nodiscard]] const request_options &options() const noexcept;
 
-	template <typename Source>
-	requires concepts::body_source_model<std::remove_cvref_t<Source>>
-	request &source(Source &&source);
+public:
+	[[nodiscard]] method_t method() const noexcept;
+	[[nodiscard]] const url_t &url() const noexcept;
 
-	[[nodiscard]] const body_spec &body_description() const noexcept;
+	[[nodiscard]] fields &headers() noexcept;
+	[[nodiscard]] const fields &headers() const noexcept;
+
+	[[nodiscard]] body_spec body_description() const;
 	[[nodiscard]] bool has_body_source() const noexcept;
 
+	[[nodiscard]] const request_options &options() const noexcept;
+
 private:
+	request &set_connect_protocol_impl(std::string protocol);
+	request &set_upgrade_protocol_impl(std::string protocol);
+
 	friend struct detail::request_access;
 	class impl;
-	std::unique_ptr<impl> m_impl;
+	std::unique_ptr<impl> m_impl {};
 };
 
 } //namespace riwo::http_exp
-
 #include <riwo/http_exp/client/detail/request.h>
+
 
 #endif //RIWO_HTTP_EXP_CLIENT_REQUEST_H

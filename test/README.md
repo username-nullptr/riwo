@@ -134,6 +134,9 @@ build-fuzz/output/fuzz/riwo.fuzz.core.public-api \
 cmake -S . -B build-perf -DBUILD_TESTING=ON \
   -DRIWO_BUILD_PERFORMANCE_TESTS=ON \
   -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_HTTP_EXP=ON \
+  -DRIWO_HTTP_ZLIB_SUPPORT=ON \
+  -DRIWO_HTTP_EXP_ZLIB_SUPPORT=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Release
@@ -143,7 +146,14 @@ ctest --test-dir build-perf -L performance -V
 
 CTest names are `riwo.performance.<area>`. The suite measures Core
 algorithms/queues/locks, coroutine primitives, HTTP, WebSocket, logging,
-signal/slot, and soft bus. It enforces correctness but has no fixed performance
+signal/slot, and soft bus. When both HTTP implementations are enabled, the
+`http-exp` test runs matched sequential and concurrent HTTP/1.1 loopback,
+request/response head, and—when both implementations enable zlib—gzip
+workloads. The gzip coverage includes 512 B and 64 KiB one-shot round trips,
+reused codec state, and real HTTP compression-policy comparisons for dynamic
+versus cached output, small-response bypass, and already-compressed MIME types.
+It reports HTTP_EXP throughput relative to legacy HTTP as both a ratio and a
+percentage change. The suite enforces correctness but has no fixed performance
 threshold. Compare results only across the same host, compiler, build type,
 feature set, and scale.
 

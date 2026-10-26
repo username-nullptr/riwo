@@ -14,6 +14,16 @@ if (RIWO_BUILD_HTTP)
 	add_riwo_performance_test(http-protocol http_protocol.cpp riwo.http)
 endif ()
 
+if (RIWO_BUILD_HTTP_EXP)
+	add_riwo_performance_test(http-exp http_exp.cpp riwo.http_exp)
+	if (RIWO_BUILD_HTTP)
+		target_link_libraries(riwo.test.performance.http-exp PRIVATE riwo.http)
+		target_compile_definitions(riwo.test.performance.http-exp PRIVATE
+			RIWO_HTTP_EXP_COMPARE_LEGACY=1
+		)
+	endif ()
+endif ()
+
 if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_performance_test(websocket websocket.cpp riwo.websocket)
 endif ()

@@ -61,15 +61,11 @@ method::method(well_known value) noexcept :
 
 }
 
-method::method(std::string_view token) :
-	method(std::string(token))
+void method::initialize(std::string token)
 {
-	
-}
+	m_token = std::move(token);
+	m_known = identify(m_token);
 
-method::method(std::string token) :
-	m_token(std::move(token)), m_known(identify(m_token))
-{
 	validate_token(m_token);
 	if( m_known )
 	{
@@ -78,23 +74,14 @@ method::method(std::string token) :
 	}
 }
 
-method::method(const char *token) :
-	method(std::string(token))
+void method::initialize(std::string token, method_properties properties)
 {
+	m_token = std::move(token);
+	m_properties = normalized(properties);
 
-}
-
-method::method(std::string_view token, method_properties properties) :
-	method(std::string(token), properties)
-{
-	
-}
-
-method::method(std::string token, method_properties properties) :
-	m_token(std::move(token)), m_properties(normalized(properties)),
-	m_known(identify(m_token))
-{
+	m_known = identify(m_token);
 	validate_token(m_token);
+
 	if( m_known )
 	{
 		const auto expected =
@@ -109,12 +96,6 @@ method::method(std::string token, method_properties properties) :
 		m_properties = expected;
 		m_token.clear();
 	}
-}
-
-method::method(const char *token, method_properties properties) :
-	method(std::string(token), properties)
-{
-
 }
 
 method::method(method &&other) noexcept :

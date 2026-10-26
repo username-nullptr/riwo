@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_PROTOCOL_METHOD_H
 
 #include <riwo/http_exp/global.h>
+#include <riwo/core/cxx/string_concepts.h>
 
 namespace riwo::http_exp
 {
@@ -39,16 +40,11 @@ public:
 public:
 	method(well_known value) noexcept;
 
-	explicit method(std::string_view token);
-	explicit method(std::string token);
-	explicit method(const char *token);
+	explicit method(core_concepts::string_p<char> auto &&token);
+	method(core_concepts::string_p<char> auto &&token, method_properties properties);
 
-	method(std::string_view token, method_properties properties);
-	method(std::string token, method_properties properties);
-	method(const char *token, method_properties properties);
-
-	method(const method &) = default;
-	method &operator=(const method &) = default;
+	method(const method &other) = default;
+	method &operator=(const method &other) = default;
 
 	method(method &&other) noexcept;
 	method &operator=(method &&other) noexcept;
@@ -65,17 +61,16 @@ public:
 	) noexcept;
 
 private:
+	void initialize(std::string token);
+	void initialize(std::string token, method_properties properties);
+
 	std::string m_token {};
 	method_properties m_properties {};
 	optional<well_known> m_known {};
 };
 
 } //namespace riwo::http_exp
-
-template <>
-struct std::hash<riwo::http_exp::method> {
-	[[nodiscard]] size_t operator()(const riwo::http_exp::method &value) const noexcept;
-};
+#include <riwo/http_exp/protocol/detail/method.h>
 
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_METHOD_H

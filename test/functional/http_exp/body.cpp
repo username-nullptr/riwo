@@ -905,7 +905,7 @@ void client_open_and_metadata()
 	RIWO_TEST_CHECK(exchange.reply_body().is_finished());
 
 	http::request with_body(http::method::post, "http://example.test/");
-	with_body.body("bound");
+	with_body.set_body("bound");
 	(void)client.open(std::move(with_body), http::body_spec::streaming(), error);
 	RIWO_TEST_CHECK_EQ(error,
 		http::make_error_code(http::errc::operation_not_permitted));
@@ -918,7 +918,7 @@ void client_open_and_metadata()
 		http::make_error_code(http::errc::invalid_target));
 
 	http::request send_request(http::method::post, "http://example.test/send");
-	send_request.body("abc");
+	send_request.set_body("abc");
 	auto reply = client.send(std::move(send_request), error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(reply.status(), http::status::created);
@@ -927,7 +927,7 @@ void client_open_and_metadata()
 	std::string borrowed_request_body = "before";
 	http::request borrowed_request(http::method::post,
 		"http://example.test/send-borrowed");
-	borrowed_request.body(riwo::buffer(borrowed_request_body));
+	borrowed_request.set_body(riwo::buffer(borrowed_request_body));
 	borrowed_request_body = "after!";
 	(void)client.send(std::move(borrowed_request), error);
 	RIWO_TEST_CHECK(!error);
@@ -936,7 +936,7 @@ void client_open_and_metadata()
 	const std::array binary_body {'a', '\0', 'b'};
 	http::request binary_request(http::method::post,
 		"http://example.test/send-binary");
-	binary_request.body(riwo::buffer(binary_body));
+	binary_request.set_body(riwo::buffer(binary_body));
 	(void)client.send(std::move(binary_request), error);
 	RIWO_TEST_CHECK(!error);
 	RIWO_TEST_CHECK_EQ(session->last_stream->writer_adapter->bytes_,
@@ -952,7 +952,7 @@ void client_open_and_metadata()
 	bool asynchronous = false;
 	http::request async_request(http::method::post,
 		"http://example.test/async-send");
-	async_request.body("async");
+	async_request.set_body("async");
 	client.send(std::move(async_request),
 	[&](riwo::error_code send_error,
 		http::basic_reply<riwo::io_context_t::executor_type> async_reply)
@@ -992,7 +992,7 @@ void client_open_and_metadata()
 	source_input.seekg(1);
 	http::request file_request(http::method::post,
 		"http://example.test/async-file-source");
-	file_request.source(http::file_body_source(
+	file_request.set_source(http::file_body_source(
 		http::borrowed_file(source_input), http::file_span{1, 4}));
 	bool file_completed = false;
 	client.send(std::move(file_request),

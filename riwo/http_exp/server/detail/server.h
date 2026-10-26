@@ -7,6 +7,7 @@
 #include <riwo/http_exp/transport/detail/byte_stream_connection.h>
 #include <riwo/http_exp/server/detail/session.h>
 #include <riwo/http_exp/server/router.h>
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp
 {
@@ -662,14 +663,15 @@ auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint,
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <method::well_known... Methods, typename Func, typename... Middleware>
-auto basic_server<Exec,ServiceExec>::on_request(std::string path, Func &&func,
+template <method::well_known... Methods, core_concepts::text_p<char> Path,
+	typename Func, typename... Middleware>
+auto basic_server<Exec,ServiceExec>::on_request(Path &&path, Func &&func,
 	Middleware&&... middleware)
 	-> basic_server&
 	requires concepts::request_handler<Func,service_executor_t> and
 		concepts::middleware_list<service_executor_t,Middleware...>
 {
-	m_impl->register_route(std::move(path),
+	m_impl->register_route(strtls::to_string(std::forward<Path>(path)),
 		std::vector<http_exp::method>{http_exp::method(Methods)...},
 		request_handler_t(std::forward<Func>(func)),
 		std::vector<middleware_ptr_t> {
@@ -679,13 +681,14 @@ auto basic_server<Exec,ServiceExec>::on_request(std::string path, Func &&func,
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <typename Func, typename... Middleware>
+template <core_concepts::text_p<char> Path, typename Func,
+	typename... Middleware>
 auto basic_server<Exec,ServiceExec>::on_request(http_exp::method request_method,
-	std::string path, Func &&func, Middleware&&... middleware) -> basic_server&
+	Path &&path, Func &&func, Middleware&&... middleware) -> basic_server&
 	requires concepts::request_handler<Func,service_executor_t> and
 		concepts::middleware_list<service_executor_t,Middleware...>
 {
-	m_impl->register_route(std::move(path),
+	m_impl->register_route(strtls::to_string(std::forward<Path>(path)),
 		std::vector<http_exp::method>{std::move(request_method)},
 		request_handler_t(std::forward<Func>(func)),
 		std::vector<middleware_ptr_t> {
@@ -695,8 +698,8 @@ auto basic_server<Exec,ServiceExec>::on_request(http_exp::method request_method,
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-template <method::well_known... Methods>
-auto basic_server<Exec,ServiceExec>::on_request(std::string path,
+template <method::well_known... Methods, core_concepts::text_p<char> Path>
+auto basic_server<Exec,ServiceExec>::on_request(Path &&path,
 	controller_ptr_t controller) -> basic_server&
 {
 	if( not controller )
@@ -705,7 +708,7 @@ auto basic_server<Exec,ServiceExec>::on_request(std::string path,
 	auto handler = [controller](context_t &exchange) -> awaitable<void> {
 		co_await controller->service(exchange);
 	};
-	return on_request<Methods...>(std::move(path), std::move(handler),
+	return on_request<Methods...>(std::forward<Path>(path), std::move(handler),
 		std::move(controller));
 }
 
@@ -719,7 +722,8 @@ auto basic_server<Exec,ServiceExec>::use(middleware_ptr_t middleware)
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Func>
-auto basic_server<Exec,ServiceExec>::on_default(Func &&func) -> basic_server&
+auto basic_server<Exec,ServiceExec>::set_default_handler(Func &&func)
+	-> basic_server&
 	requires concepts::request_handler<Func,service_executor_t>
 {
 	std::lock_guard lock(m_impl->m_routes_write_mutex);
@@ -733,7 +737,7 @@ auto basic_server<Exec,ServiceExec>::on_default(Func &&func) -> basic_server&
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::on_server_error(
+auto basic_server<Exec,ServiceExec>::set_server_error_handler(
 	server_error_handler_t handler) -> basic_server&
 {
 	m_impl->m_server_error_handler = std::move(handler);
@@ -741,7 +745,7 @@ auto basic_server<Exec,ServiceExec>::on_server_error(
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::on_service_error(
+auto basic_server<Exec,ServiceExec>::set_service_error_handler(
 	service_error_handler_t handler) -> basic_server&
 {
 	m_impl->m_service_error_handler = std::move(handler);

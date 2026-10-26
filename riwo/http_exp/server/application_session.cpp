@@ -78,7 +78,7 @@ optional<std::any> application_session::attribute(std::string_view key) const
 	return found->second;
 }
 
-application_session &application_session::set_attribute(
+application_session &application_session::set_attribute_impl(
 	std::string key, std::any value)
 {
 	std::lock_guard lock(m_mutex);
@@ -134,7 +134,8 @@ void application_session::invalidate() noexcept {
 	m_valid = false;
 }
 
-application_session &application_session::on_timeout(timeout_handler_t handler)
+application_session &application_session::set_timeout_handler(
+	timeout_handler_t handler)
 {
 	std::lock_guard lock(m_mutex);
 	m_timeout_handler = std::move(handler);

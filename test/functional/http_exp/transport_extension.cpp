@@ -361,7 +361,7 @@ void request_proxy_override_reaches_connector()
 	override.username = "alice";
 	override.password = "secret";
 	http::request request(http::method::get, "http://example.test/resource");
-	request.proxy(std::move(override));
+	request.set_proxy(std::move(override));
 	bool completed = false;
 	client.fetch(std::move(request),
 	[&](riwo::error_code error, http::basic_reply<executor_type> reply) mutable {
@@ -394,7 +394,7 @@ void request_proxy_override_reaches_connector()
 	bypass_policy.no_proxy = {".example.test"};
 	http::request bypass_request(http::method::get,
 		"http://api.example.test/resource");
-	bypass_request.proxy(std::move(bypass_policy));
+	bypass_request.set_proxy(std::move(bypass_policy));
 	bypass_client.fetch(std::move(bypass_request),
 	[&](riwo::error_code error, http::basic_reply<executor_type>) mutable {
 		RIWO_TEST_CHECK(!error);

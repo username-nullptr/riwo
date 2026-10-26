@@ -295,7 +295,7 @@ void body_writer_state::cancel() noexcept
 		state->m_adapter->cancel();
 }
 
-void body_writer_state::configure(body_spec spec, bool ready) noexcept
+void body_writer_state::set_spec(body_spec spec, bool ready) noexcept
 {
 	auto state = m_impl;
 	if( state->m_pending or state->m_accepted != 0 or state->m_ended or state->m_terminated )

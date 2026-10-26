@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_SERVER_ROUTER_H
 
 #include <riwo/http_exp/protocol/parameters.h>
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::http_exp
 {
@@ -21,7 +22,7 @@ struct route_match
 class RIWO_HTTP_EXP_API route_pattern
 {
 public:
-	explicit route_pattern(std::string pattern);
+	explicit route_pattern(core_concepts::text_p<char> auto &&pattern);
 	~route_pattern();
 	route_pattern(const route_pattern &other);
 	route_pattern &operator=(const route_pattern &other);
@@ -39,6 +40,12 @@ private:
 	compile(std::string pattern);
 	std::shared_ptr<const impl> m_impl;
 };
+
+route_pattern::route_pattern(core_concepts::text_p<char> auto &&pattern) :
+	m_impl(compile(strtls::to_string(
+		std::forward<decltype(pattern)>(pattern))))
+{
+}
 
 } //namespace riwo::http_exp
 

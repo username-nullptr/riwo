@@ -275,10 +275,10 @@ void prior_knowledge_body_and_trailers()
 		acceptor.local_endpoint().port());
 	const std::string upload(128 * 1024, 'u');
 	http::request request(http::method::post, target);
-	request.body(asio::buffer(upload));
+	request.set_body(asio::buffer(upload));
 	http::fields request_trailers;
 	request_trailers.add("x-upload-trailer", "present");
-	request.trailers(std::move(request_trailers));
+	request.set_trailers(std::move(request_trailers));
 
 	auto reply = client.send(std::move(request));
 	RIWO_TEST_CHECK_EQ(reply.selected_protocol(), http::protocol::v2);
@@ -414,7 +414,7 @@ void redirect_rewinds_replayable_source()
 	std::vector<std::byte> bytes(payload.size());
 	std::memcpy(bytes.data(), payload.data(), payload.size());
 	http::request request(http::method::post, target);
-	request.source(http::memory_body_source(std::move(bytes)));
+	request.set_source(http::memory_body_source(std::move(bytes)));
 	riwo::error_code error;
 	auto reply = client.fetch(std::move(request), error);
 	server.join();

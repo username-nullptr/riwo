@@ -400,7 +400,7 @@ public:
 		m_connection(std::move(connection_value)), m_framing(framing_value),
 		m_remaining(length), m_limits(limits), m_timeouts(timeouts) {}
 
-	void configure(body_framing framing, uint64_t length) noexcept
+	void set_framing(body_framing framing, uint64_t length) noexcept
 	{
 		m_framing = framing;
 		m_remaining = length;
@@ -1034,7 +1034,7 @@ public:
 			std::optional(std::chrono::steady_clock::now() + *m_timeouts.overall) : std::nullopt
 		) {}
 
-	void configure(const body_spec &spec) noexcept {
+	void set_spec(const body_spec &spec) noexcept {
 		m_chunked = spec.type() == body_spec::mode::streaming;
 	}
 
@@ -1236,7 +1236,7 @@ public:
 			m_client ? m_timeouts.header : m_timeouts.body_idle, m_timeouts
 		));
 		m_connection->transport->set_write_timeout(m_timeouts.body_idle);
-		m_writer->configure(outbound_spec);
+		m_writer->set_spec(outbound_spec);
 
 		if( not m_client )
 		{
@@ -1317,7 +1317,7 @@ public:
 			m_keep_alive = reusable_response(m_response, parsed->version);
 			m_response_ready = true;
 
-			m_reader->configure(parsed->framing, parsed->content_length);
+			m_reader->set_framing(parsed->framing, parsed->content_length);
 			if( parsed->framing == body_framing::none and m_client )
 			{
 				m_inbound->set_finished();
@@ -1372,7 +1372,7 @@ public:
 			spec.type() == body_spec::mode::empty or
 			spec.type() == body_spec::mode::head;
 
-		m_writer->configure(spec);
+		m_writer->set_spec(spec);
 		(void)m_connection->write_sync(asio::buffer(*wire), error);
 
 		if( not m_client and not error and empty )
@@ -1406,7 +1406,7 @@ public:
 			spec.type() == body_spec::mode::empty or
 			spec.type() == body_spec::mode::head;
 
-		m_writer->configure(spec);
+		m_writer->set_spec(spec);
 		auto wire = std::make_shared<std::string>(std::move(*wire_value));
 		auto weak = weak_from_this();
 
@@ -1632,7 +1632,7 @@ private:
 			self->m_keep_alive = reusable_response(self->m_response, parsed->version);
 
 			self->m_response_ready = true;
-			self->m_reader->configure(parsed->framing, parsed->content_length);
+			self->m_reader->set_framing(parsed->framing, parsed->content_length);
 
 			if( parsed->framing == body_framing::none and self->m_client )
 			{

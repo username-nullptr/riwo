@@ -32,7 +32,7 @@ try
 	uint64_t upload_done = 0;
 
 	http::request upload_request(http::method::post, base + "/upload");
-	upload_request.file(upload_file);
+	upload_request.set_file(upload_file);
 
 	upload_request.on_upload_progress([&](uint64_t transferred, uint64_t total)
 	{

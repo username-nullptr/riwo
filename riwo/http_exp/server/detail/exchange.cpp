@@ -270,7 +270,7 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 	}
 	state->m_response_pending = true;
 	attach_session_cookie(*state, head);
-	state->m_response_body->configure(spec);
+	state->m_response_body->set_spec(spec);
 	state->m_stream->respond_sync(std::move(head), spec, error);
 	state->m_response_pending = false;
 	if( not error )
@@ -296,7 +296,7 @@ void server_exchange_state::respond(response_head head, body_spec spec,
 	}
 	state->m_response_pending = true;
 	attach_session_cookie(*state, head);
-	state->m_response_body->configure(spec);
+	state->m_response_body->set_spec(spec);
 	state->m_stream->respond(std::move(head), spec,
 	[state, handler = std::move(handler)]
 	(error_code error) mutable
@@ -356,7 +356,7 @@ std::shared_ptr<duplex_state> server_exchange_state::accept_duplex(
 		return {};
 	}
 	state->m_response_pending = true;
-	state->m_response_body->configure(body_spec::streaming());
+	state->m_response_body->set_spec(body_spec::streaming());
 	auto result = state->m_stream->open_duplex_sync(
 		optional<response_head>(std::move(head)), error);
 	state->m_response_pending = false;
@@ -381,7 +381,7 @@ void server_exchange_state::accept_duplex(response_head head,
 		return ;
 	}
 	state->m_response_pending = true;
-	state->m_response_body->configure(body_spec::streaming());
+	state->m_response_body->set_spec(body_spec::streaming());
 	state->m_stream->open_duplex(optional<response_head>(std::move(head)),
 	[state, handler = std::move(handler)]
 	(error_code error, std::shared_ptr<duplex_state> channel) mutable {

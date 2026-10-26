@@ -165,10 +165,14 @@ public:
 		{
 			if( not error )
 			{
-				self->encoder = gzip_encoder();
-				self->pending.clear();
-				self->pending_offset = 0;
-				self->ended = false;
+				if( auto reset = self->encoder.reset(); not reset )
+					error = reset.error();
+				else
+				{
+					self->pending.clear();
+					self->pending_offset = 0;
+					self->ended = false;
+				}
 			}
 			std::move(handler)(error);
 		});

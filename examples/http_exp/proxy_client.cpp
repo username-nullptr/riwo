@@ -25,12 +25,12 @@ try
 		proxy.password = argc > 4 ? argv[4] : "";
 	}
 	http::request request(http::method::get, target);
-	request.proxy(std::move(proxy));
+	request.set_proxy(std::move(proxy));
 
 	http::redirect_policy redirects;
 	redirects.max_redirects = 3;
 
-	request.redirects(redirects);
+	request.set_redirects(redirects);
 	auto reply = client.fetch(std::move(request));
 
 	std::cout << "HTTP status: " << reply.status().code() << '\n';

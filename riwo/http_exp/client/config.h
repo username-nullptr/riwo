@@ -48,7 +48,7 @@ struct client_config
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	v2_config h2 {};
 #endif
-	bool automatic_decompression = true;
+	bool auto_decompression = true;
 };
 
 } //namespace riwo::http_exp

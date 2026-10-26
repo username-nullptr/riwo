@@ -184,7 +184,7 @@ void note_service_workflow()
 			co_await exchange.respond({http::status::ok, {}},
 				std::string_view("disabled"), riwo::use_awaitable);
 		})
-		.on_default(
+		.set_default_handler(
 		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::not_found, {}},
@@ -210,7 +210,7 @@ void note_service_workflow()
 		RIWO_TEST_CHECK_EQ(buffered_body(health), R"({"status":"ok"})");
 
 		http::request unauthorized(http::method::post, base + "/notes");
-		unauthorized.body("private draft");
+		unauthorized.set_body("private draft");
 		auto rejected = co_await client.fetch(
 			std::move(unauthorized), riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(rejected.status(), http::status::unauthorized);
@@ -221,7 +221,7 @@ void note_service_workflow()
 		http::request create(http::method::post, base + "/notes");
 		create.headers().add("Authorization", "Bearer demo-token");
 		create.headers().add("Content-Type", "text/plain");
-		create.body("buy milk");
+		create.set_body("buy milk");
 		auto created = co_await client.fetch(
 			std::move(create), riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(created.status(), http::status::created);

@@ -112,7 +112,7 @@ void h1_client_server_round_trip()
 			output << "file-body";
 		}
 		http::request file_request(http::method::post, base + "/echo");
-		file_request.file(path);
+		file_request.set_file(path);
 		auto file_reply = co_await client.send(
 			std::move(file_request), riwo::use_awaitable);
 		RIWO_TEST_CHECK_EQ(co_await read_body(file_reply.body()), "file-body");

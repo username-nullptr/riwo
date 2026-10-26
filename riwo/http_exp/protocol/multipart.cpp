@@ -68,22 +68,29 @@ catch(...) {
 
 } //namespace
 
-multipart_form::multipart_form(std::string boundary) :
-	m_boundary(boundary.empty() ? detail::make_multipart_boundary() : std::move(boundary))
+multipart_form::multipart_form()
 {
+	initialize_boundary({});
+}
+
+void multipart_form::initialize_boundary(std::string boundary)
+{
+	m_boundary = boundary.empty() ?
+		detail::make_multipart_boundary() : std::move(boundary);
+
 	if( not detail::valid_multipart_boundary(m_boundary) )
 		invalid_argument::loc_throw("invalid multipart boundary");
 }
 
-multipart_form &multipart_form::add_field(std::string name, std::string value)
+void multipart_form::add_field_impl(std::string name, std::string value)
 {
 	multipart_part part {};
 	part.name = std::move(name);
 	part.data = std::move(value);
-	return add_part(std::move(part));
+	add_part(std::move(part));
 }
 
-multipart_form &multipart_form::add_file
+void multipart_form::add_file_impl
 (std::string name, std::string filename, std::string data, std::string content_type_value)
 {
 	multipart_part part {};
@@ -91,7 +98,7 @@ multipart_form &multipart_form::add_file
 	part.name = std::move(name);
 	part.filename = std::move(filename);
 	part.data = std::move(data);
-	return add_part(std::move(part));
+	add_part(std::move(part));
 }
 
 multipart_form &multipart_form::add_part(multipart_part part)

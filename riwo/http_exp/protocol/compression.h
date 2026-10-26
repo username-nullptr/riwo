@@ -34,6 +34,7 @@ public:
 	[[nodiscard]] sys_expected<std::string>
 	append(std::string_view data, bool finish = false) noexcept;
 
+	[[nodiscard]] sys_expected<void> reset() noexcept;
 	[[nodiscard]] bool finished() const noexcept;
 
 private:
@@ -53,6 +54,8 @@ public:
 
 	[[nodiscard]] sys_expected<std::string>
 	append(std::string_view data, bool finish = false) noexcept;
+
+	[[nodiscard]] sys_expected<void> reset() noexcept;
 
 	[[nodiscard]] bool finished() const noexcept;
 	[[nodiscard]] size_t output_size() const noexcept;
