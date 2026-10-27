@@ -10,37 +10,44 @@
 namespace riwo::http_exp
 {
 
-enum class cookie_site_context
-{
-	non_browser,
-	same_site,
-	cross_site
+enum class cookie_site_context {
+	non_browser, same_site, cross_site
 };
 
 struct cookie_request_context
 {
 	cookie_site_context site = cookie_site_context::non_browser;
+	method request_method { method::get };
+
 	bool top_level_navigation = false;
 	bool http_api = true;
-	http_exp::method request_method {http_exp::method::get};
 };
 
 struct cookie_entry
 {
+	using time_point_t = std::chrono::system_clock::time_point;
+
 	std::string name {};
 	riwo::value value {};
+
 	std::string domain {};
 	std::string path {"/"};
-	optional<std::chrono::system_clock::time_point> expires {};
+
+	optional<time_point_t> expires {};
 	cookie_same_site same_site = cookie_same_site::unspecified;
+
 	bool secure = false;
 	bool http_only = false;
+
 	bool host_only = true;
 	bool persistent = false;
+
 	uint64_t creation_index = 0;
 	uint64_t last_access_index = 0;
 
-	friend bool operator==(const cookie_entry &, const cookie_entry &) = default;
+	friend bool operator== (
+		const cookie_entry&, const cookie_entry&
+	) = default;
 };
 
 struct cookie_jar_config
@@ -48,8 +55,10 @@ struct cookie_jar_config
 	size_t max_cookie_size = 4096;
 	size_t max_cookies_per_domain = 50;
 	size_t max_cookies = 3000;
+
 	optional<std::chrono::seconds> max_persistent_age {
-		std::chrono::hours(24 * 400)};
+		std::chrono::hours(24 * 400)
+	};
 	std::function<bool(std::string_view)> public_suffix {};
 };
 
@@ -61,19 +70,23 @@ public:
 	explicit cookie_jar(cookie_jar_config config = {});
 	~cookie_jar();
 
-	bool store(const riwo::url &origin, const response_cookie &value);
-	size_t store(const riwo::url &origin, const fields &response_headers);
+	bool store(const url &origin, const response_cookie &value);
+	size_t store(const url &origin, const fields &response_headers);
 
-	[[nodiscard]] std::vector<cookie_pair> select(const riwo::url &target,
-		const cookie_request_context &context = {});
+	[[nodiscard]] std::vector<cookie_pair> select (
+		const url &target, const cookie_request_context &context = {}
+	);
+	void clear() noexcept;
+
 	[[nodiscard]] std::vector<cookie_entry> entries() const;
 	[[nodiscard]] size_t size() const;
-	void clear() noexcept;
 
 private:
 	class impl;
-	std::unique_ptr<impl> m_impl;
+	std::unique_ptr<impl> m_impl {};
 };
+
+using cookie_jar_ptr = std::shared_ptr<cookie_jar>;
 
 struct cookie_config
 {

@@ -43,6 +43,11 @@ if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.body http_exp/body.cpp riwo.http_exp)
 	add_riwo_test(http_exp.http1 http_exp/http1.cpp riwo.http_exp)
 	add_riwo_test(http_exp.session-pool http_exp/session_pool.cpp riwo.http_exp)
+	# session_pool is private and hidden.  Compile its implementation into the
+	# white-box test instead of reaching across the shared-library boundary.
+	target_sources(riwo.test.http_exp.session-pool PRIVATE
+		${PROJECT_SOURCE_DIR}/riwo/http_exp/client/detail/session_pool.cpp
+	)
 
 	# This white-box test owns a private implementation copy so it does not
 	# reach across the shared-library boundary for hidden symbols.

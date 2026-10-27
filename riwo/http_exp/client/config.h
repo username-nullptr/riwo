@@ -7,9 +7,10 @@
 #include <riwo/http_exp/protocol/policy.h>
 #include <riwo/http_exp/protocol/limits.h>
 #include <riwo/http_exp/protocol/v2/config.h>
+
 #include <riwo/http_exp/transport/connect_options.h>
-#include <riwo/http_exp/timeout.h>
 #include <riwo/http_exp/client/cookie_jar.h>
+#include <riwo/http_exp/timeout.h>
 
 namespace riwo::http_exp
 {
@@ -37,14 +38,19 @@ struct retry_policy
 struct client_config
 {
 	protocol_policy protocols {};
+
 	proxy_policy proxy {};
 	tls_policy tls {};
+
 	timeout_policy timeout {};
 	pool_config pool {};
+
 	redirect_policy redirects {};
 	retry_policy retries {};
+
 	cookie_config cookies {};
 	message_limits reply_limits {};
+
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	v2_config h2 {};
 #endif
@@ -52,5 +58,6 @@ struct client_config
 };
 
 } //namespace riwo::http_exp
+
 
 #endif //RIWO_HTTP_EXP_CLIENT_CONFIG_H

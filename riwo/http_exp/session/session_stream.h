@@ -24,6 +24,9 @@ public:
 	using endpoint_t = asio::ip::tcp::endpoint;
 	using duplex_state_ptr = std::shared_ptr<detail::duplex_state>;
 
+	using body_reader_state_ptr = std::shared_ptr<detail::body_reader_state>;
+	using body_writer_state_ptr = std::shared_ptr<detail::body_writer_state>;
+
 	using response_handler_t = asio::any_completion_handler <
 		void(error_code, response_head)
 	>;
@@ -40,8 +43,8 @@ public:
 	[[nodiscard]] virtual stream_capabilities capabilities() const noexcept = 0;
 	[[nodiscard]] virtual request_head request() const = 0;
 
-	[[nodiscard]] virtual std::shared_ptr<detail::body_reader_state> inbound_body() const noexcept = 0;
-	[[nodiscard]] virtual std::shared_ptr<detail::body_writer_state> outbound_body() const noexcept = 0;
+	[[nodiscard]] virtual body_reader_state_ptr inbound_body() const noexcept = 0;
+	[[nodiscard]] virtual body_writer_state_ptr outbound_body() const noexcept = 0;
 
 	[[nodiscard]] virtual response_head wait_response_sync(error_code &error) noexcept;
 	virtual void wait_response(response_handler_t handler);

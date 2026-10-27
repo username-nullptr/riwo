@@ -51,7 +51,9 @@ if (RIWO_BUILD_HTTP_EXP)
 		REGEX "/protocol/detail/" EXCLUDE
 		REGEX "/protocol/v1/detail/" EXCLUDE
 		REGEX "/protocol/v2/detail/nghttp2_compat[.]h$" EXCLUDE
+		REGEX "/client/detail/factory[.]h$" EXCLUDE
 		REGEX "/client/detail/request_access[.]h$" EXCLUDE
+		REGEX "/client/detail/session_pool[.]h$" EXCLUDE
 		REGEX "/transport/tcp_connection[.]h$" EXCLUDE
 		REGEX "/transport/tls_connection[.]h$" EXCLUDE
 		REGEX "/transport/preface[.]h$" EXCLUDE

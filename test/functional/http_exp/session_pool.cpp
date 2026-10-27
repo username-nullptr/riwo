@@ -5,9 +5,21 @@
 
 #include <riwo/http_exp.h>
 #include <riwo/http_exp/client/detail/connector.h>
+#include <riwo/http_exp/client/detail/factory.h>
 #include <riwo/http_exp/client/detail/session_pool.h>
 #include <riwo/http_exp/session/client_session.h>
 #include <riwo/http_exp/session/session_stream.h>
+
+// This test compiles a private copy of session_pool.cpp.  Direct tests always
+// inject fake_factory; the production default factory remains exercised through
+// the public client tests in the shared library.
+namespace riwo::http_exp::detail
+{
+session_factory_ptr make_default_session_factory()
+{
+	return {};
+}
+} //namespace riwo::http_exp::detail
 
 namespace
 {
@@ -320,11 +332,6 @@ void factory_boundary()
 	RIWO_TEST_CHECK_EQ(factory->sessions.size(), 1U);
 	RIWO_TEST_CHECK_EQ(factory->protocols.at(0), http::protocol::v1_1);
 	RIWO_TEST_CHECK(factory->keys.at(0) == key);
-
-	auto missing = detail::make_default_session_factory()->create(key,
-		detail::negotiated_transport {}, config);
-	RIWO_TEST_CHECK_EQ(missing.error(),
-		http::make_error_code(http::errc::negotiation_failed));
 }
 
 void capacity_and_fair_queue()

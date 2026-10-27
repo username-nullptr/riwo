@@ -4,7 +4,6 @@
 #include "test.h"
 
 #include <riwo/http_exp.h>
-#include <riwo/http_exp/client/detail/session_pool.h>
 #include <riwo/http_exp/session.h>
 #include <riwo/http_exp/transport/connection.h>
 
@@ -273,6 +272,22 @@ static_assert(std::is_nothrow_move_constructible_v<http::client>);
 static_assert(std::constructible_from<http::client>);
 static_assert(std::constructible_from<http::client,http::client_config>);
 static_assert(std::constructible_from<native_client>);
+
+template <typename Url>
+concept client_url = requires(http::client &client, Url &&url,
+	http::body_spec spec, riwo::const_buffer body) {
+	client.open(http::method::get, std::forward<Url>(url), spec);
+	client.get(std::forward<Url>(url));
+	client.post(std::forward<Url>(url), body);
+};
+
+static_assert(client_url<riwo::url>);
+static_assert(client_url<std::string>);
+static_assert(client_url<std::string_view>);
+static_assert(client_url<const char*>);
+static_assert(!client_url<int>);
+static_assert(!client_url<std::wstring_view>);
+
 static_assert(std::constructible_from<http::body_reader>);
 static_assert(std::constructible_from<http::body_writer>);
 static_assert(std::constructible_from<http::client_exchange>);
@@ -425,8 +440,6 @@ static_assert(std::same_as<http::acceptor_wrap::transport_t,
 static_assert(std::same_as<http::byte_stream::executor_t,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::detail::connector::executor_t,
-	asio::any_io_executor>);
-static_assert(std::same_as<http::detail::session_pool::executor_t,
 	asio::any_io_executor>);
 static_assert(std::same_as<http::client_session::executor_t,
 	asio::any_io_executor>);
@@ -1153,7 +1166,6 @@ void fake_boundaries_and_unsupported_entry_points()
 	auto default_connector = http::detail::make_default_connector();
 	auto connector_adapter = http::detail::make_connector_adapter(
 		std::static_pointer_cast<http::transport_connector>(connector));
-	http::detail::session_pool pool_with_default_executor(config);
 	auto client_state_with_default_executor =
 		http::detail::make_client_state(config);
 	auto body_duplex_with_default_executor =
@@ -1208,7 +1220,6 @@ void fake_boundaries_and_unsupported_entry_points()
 	RIWO_TEST_CHECK(connector_client.get_executor() == global_executor);
 	RIWO_TEST_CHECK(default_connector->get_executor() == global_executor);
 	RIWO_TEST_CHECK(connector_adapter->get_executor() == global_executor);
-	RIWO_TEST_CHECK(pool_with_default_executor.get_executor() == global_executor);
 	RIWO_TEST_CHECK(client_state_with_default_executor);
 	RIWO_TEST_CHECK(body_duplex_with_default_executor->get_executor() ==
 		global_executor);
