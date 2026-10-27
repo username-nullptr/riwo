@@ -30,6 +30,9 @@ using namespace ::riwo::http_exp::v1::detail;
 namespace
 {
 
+using head_read_handler_t =
+	asio::any_completion_handler<void(error_code,std::string)>;
+
 struct RIWO_DECL_HIDDEN connection final
 {
 	explicit connection(asio::any_io_executor executor) :
@@ -75,9 +78,13 @@ struct RIWO_DECL_HIDDEN connection final
 
 	connection_ptr transport {};
 	std::string pending {};
+	std::unique_ptr<std::array<char,4096>> head_buffer {};
+	head_read_handler_t head_handler {};
+	size_t head_limit = 0;
 
 	bool closed = false;
 	bool detached = false;
+	bool head_reading = false;
 };
 
 class RIWO_DECL_HIDDEN v1_duplex_state final : public duplex_state
@@ -339,58 +346,62 @@ bounded_timeout(std::chrono::milliseconds idle, const timeout_policy &timeouts)
 	return {};
 }
 
-class RIWO_DECL_HIDDEN head_read_operation final :
-	public std::enable_shared_from_this<head_read_operation>
+void complete_head_read
+(const std::shared_ptr<connection> &value, error_code error, std::string head = {})
 {
-public:
-	using handler_t = asio::any_completion_handler<void(error_code,std::string)>;
+	value->head_reading = false;
+	value->head_limit = 0;
 
-	head_read_operation(std::shared_ptr<connection> value, size_t maximum, handler_t completion) :
-		m_connection(std::move(value)), m_limit(maximum), m_handler(std::move(completion)) {}
-
-	void start()
-	{
-		auto head = take_head(*m_connection, m_limit);
-		if( head )
-		{
-			std::move(m_handler)(error_code{}, std::move(*head));
-			return ;
-		}
-		if( head.error() != make_error_code(errc::operation_in_progress) )
-		{
-			std::move(m_handler)(head.error(), std::string{});
-			return ;
-		}
-		auto self = shared_from_this();
-
-		m_connection->read_some(asio::buffer(m_buffer),
-		[self = std::move(self)](error_code error, size_t size) mutable
-		{
-			if( error )
-			{
-				std::move(self->m_handler)(error, std::string{});
-				return ;
-			}
-			self->m_connection->pending.append(self->m_buffer.data(), size);
-			self->start();
-		});
-	}
-
-private:
-	std::shared_ptr<connection> m_connection {};
-	size_t m_limit = 0;
-
-	handler_t m_handler {};
-	std::array<char,4096> m_buffer {};
-};
-
-void read_head(std::shared_ptr<connection> value, size_t limit, head_read_operation::handler_t handler)
-{
-	std::make_shared<head_read_operation>(std::move(value), limit, std::move(handler))->start();
+	auto handler = std::move(value->head_handler);
+	std::move(handler)(error, std::move(head));
 }
 
-class RIWO_DECL_HIDDEN reader_adapter final : public body_reader_adapter,
-	public std::enable_shared_from_this<reader_adapter>
+void continue_head_read(const std::shared_ptr<connection> &value)
+{
+	auto head = take_head(*value, value->head_limit);
+	if( head )
+	{
+		complete_head_read(value, error_code{}, std::move(*head));
+		return ;
+	}
+	if( head.error() != make_error_code(errc::operation_in_progress) )
+	{
+		complete_head_read(value, head.error());
+		return ;
+	}
+	value->read_some(asio::buffer(*value->head_buffer),
+	[value](error_code error, size_t size) mutable
+	{
+		if( error )
+		{
+			complete_head_read(value, error);
+			return ;
+		}
+		value->pending.append(value->head_buffer->data(), size);
+		continue_head_read(value);
+	});
+}
+
+void read_head
+(const std::shared_ptr<connection> &value, size_t limit, head_read_handler_t handler)
+{
+	if( value->head_reading )
+	{
+		std::move(handler)(make_error_code(errc::operation_in_progress),
+			std::string{});
+		return ;
+	}
+	if( not value->head_buffer )
+		value->head_buffer = std::make_unique<std::array<char,4096>>();
+
+	value->head_reading = true;
+	value->head_limit = limit;
+
+	value->head_handler = std::move(handler);
+	continue_head_read(value);
+}
+
+class RIWO_DECL_HIDDEN reader_adapter final : public body_reader_adapter
 {
 	RIWO_DISABLE_COPY_MOVE(reader_adapter)
 
@@ -408,6 +419,9 @@ public:
 
 	void set_end_handler(std::function<void(error_code)> handler) {
 		m_end_handler = std::move(handler);
+	}
+	void bind_lifetime(std::weak_ptr<void> lifetime) noexcept {
+		m_lifetime = std::move(lifetime);
 	}
 	[[nodiscard]] body_framing framing() const noexcept {
 		return m_framing;
@@ -727,10 +741,305 @@ private:
 		}
 	}
 
-	class async_read_operation;
-	friend class async_read_operation;
+	void async_start()
+	{
+		error_code error {};
+		if( not apply_read_timeout(error) )
+		{
+			m_ended = true;
+			async_finish(error, {});
+			return ;
+		}
+		if( m_ended or m_framing == body_framing::none )
+		{
+			m_ended = true;
+			async_finish({}, {.bytes = 0, .eof = true});
+			return ;
+		}
+		if( m_framing == body_framing::content_length )
+		{
+			if( m_remaining == 0 )
+			{
+				m_ended = true;
+				async_finish({}, {.bytes = 0, .eof = true});
+				return ;
+			}
+			auto size = copy_pending(m_async_target,
+				std::min<uint64_t>(m_remaining, SIZE_MAX), error
+			);
+			if( size != 0 or error )
+			{
+				m_remaining -= std::min<uint64_t>(m_remaining, size);
+				const bool eof = not error and m_remaining == 0;
+
+				if( eof )
+					m_ended = true;
+
+				async_finish(error, {size, eof});
+				return ;
+			}
+			async_direct_read(std::min<uint64_t>(
+				m_async_target.size(), m_remaining), true
+			);
+			return ;
+		}
+		if( m_framing == body_framing::until_eof )
+		{
+			auto size = copy_pending(m_async_target, SIZE_MAX, error);
+			if( size != 0 or error )
+			{
+				async_finish(error, {.bytes = size, .eof = false});
+				return ;
+			}
+			async_direct_read(m_async_target.size(), false);
+			return ;
+		}
+		async_chunk_step();
+	}
+
+	void async_direct_read(size_t size, bool fixed)
+	{
+		auto context = m_async_context.lock();
+		if( not context )
+		{
+			m_async_reading = false;
+			return ;
+		}
+		auto connection = m_connection;
+
+		connection->read_some(mutable_buffer(m_async_target.data(), size),
+		[this, context = std::move(context), fixed](error_code error, size_t count) mutable
+		{
+			RIWO_UNUSED(context);
+			auto &self = *this;
+
+			const bool transport_eof = is_eof(error);
+			if( fixed )
+				self.m_remaining -= std::min<uint64_t>(self.m_remaining, count);
+
+			if( transport_eof )
+			{
+				error = not fixed or self.m_remaining == 0 ?
+					error_code{} : make_error_code(errc::body_length_mismatch);
+			}
+			if( not error and count != 0 and not self.account(count, error) )
+				count = 0;
+
+			const bool eof = fixed ?
+				not error and self.m_remaining == 0 :
+				transport_eof and not error;
+
+			if( eof )
+				self.m_ended = true;
+
+			self.async_finish(error, {count, eof});
+		});
+	}
+
+	void async_fill()
+	{
+		auto context = m_async_context.lock();
+		if( not context )
+		{
+			m_async_reading = false;
+			return ;
+		}
+		if( not m_async_buffer )
+			m_async_buffer = std::make_unique<std::array<char,8192>>();
+
+		auto connection = m_connection;
+		connection->read_some(asio::buffer(*m_async_buffer),
+		[this, context = std::move(context)](const error_code &error, size_t size) mutable
+		{
+			RIWO_UNUSED(context);
+			auto &self = *this;
+
+			if( error )
+			{
+				self.async_finish(error, {});
+				return ;
+			}
+			self.m_connection->pending.append(self.m_async_buffer->data(), size);
+			self.async_chunk_step();
+		});
+	}
+
+	void async_chunk_step()
+	try
+	{
+		for(;;)
+		{
+			if( m_reading_trailers )
+			{
+				auto end = m_connection->pending.find("\r\n");
+				if( end == std::string::npos )
+				{
+					if( m_connection->pending.size() > m_limits.max_header_list_size )
+					{
+						async_finish(make_error_code(errc::header_limit_exceeded), {});
+						return ;
+					}
+					async_fill();
+					return ;
+				}
+				if( end == 0 )
+				{
+					m_connection->pending.erase(0, 2);
+					m_ended = true;
+					async_finish({}, {0, true});
+					return ;
+				}
+				auto line = std::string_view(m_connection->pending).substr(0, end);
+				auto colon = line.find(':');
+
+				if( colon == std::string_view::npos or m_trailers.size() >= m_limits.max_field_count )
+				{
+					async_finish(protocol_error(), {});
+					return ;
+				}
+				auto value = line.substr(colon + 1);
+				while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
+					value.remove_prefix(1);
+
+				m_trailers.add(std::string(line.substr(0, colon)), std::string(value));
+				m_connection->pending.erase(0, end + 2);
+				continue;
+			}
+			if( m_need_chunk_crlf )
+			{
+				if( m_connection->pending.size() < 2 )
+				{
+					async_fill();
+					return ;
+				}
+				if( not m_connection->pending.starts_with("\r\n") )
+				{
+					async_finish(protocol_error(), {});
+					return ;
+				}
+				m_connection->pending.erase(0, 2);
+				m_need_chunk_crlf = false;
+			}
+			if( m_chunk_remaining == 0 )
+			{
+				auto end = m_connection->pending.find("\r\n");
+				if( end == std::string::npos )
+				{
+					if( m_connection->pending.size() > m_limits.max_start_line_size )
+					{
+						async_finish(make_error_code(errc::header_limit_exceeded), {});
+						return ;
+					}
+					async_fill();
+					return ;
+				}
+				auto line = std::string_view(m_connection->pending).substr(0, end);
+				auto chunk = parse_chunk_size(line);
+
+				if( not chunk )
+				{
+					async_finish(chunk.error(), {});
+					return ;
+				}
+				m_connection->pending.erase(0, end + 2);
+
+				m_chunk_remaining = *chunk;
+				m_reading_trailers = *chunk == 0;
+				continue;
+			}
+			error_code error {};
+			auto size = copy_pending(m_async_target,
+				std::min<uint64_t>(m_chunk_remaining, SIZE_MAX), error
+			);
+			if( size != 0 or error )
+			{
+				m_chunk_remaining -= std::min<uint64_t>(m_chunk_remaining, size);
+				if( m_chunk_remaining == 0 )
+					m_need_chunk_crlf = true;
+
+				async_finish(error, {size, false});
+				return ;
+			}
+			async_direct_chunk_read();
+			return ;
+		}
+	}
+	catch(...) {
+		async_finish(exception_error(std::current_exception()), {});
+	}
+
+	void async_direct_chunk_read()
+	{
+		auto context = m_async_context.lock();
+		if( not context )
+		{
+			m_async_reading = false;
+			return ;
+		}
+		auto connection = m_connection;
+		const auto count = static_cast<size_t>(
+			std::min<uint64_t>(m_async_target.size(), m_chunk_remaining)
+		);
+		connection->read_some(mutable_buffer(m_async_target.data(), count),
+		[this, context = std::move(context)](error_code error, size_t size) mutable
+		{
+			RIWO_UNUSED(context);
+			auto &self = *this;
+
+			if( not error and not self.account(size, error) )
+				size = 0;
+
+			self.m_chunk_remaining -=
+				std::min<uint64_t>(self.m_chunk_remaining, size);
+
+			if( self.m_chunk_remaining == 0 )
+				self.m_need_chunk_crlf = true;
+
+			self.async_finish(error, {size, false});
+		});
+	}
+
+	void async_finish(error_code error, body_read_result result)
+	{
+		if( is_eof(error) )
+			error = make_error_code(errc::body_length_mismatch);
+
+		auto context = m_async_context.lock();
+		if( not context )
+		{
+			m_async_target = {};
+			m_async_reading = false;
+			return ;
+		}
+		auto handler = std::move(context->handler);
+		m_async_context.reset();
+
+		m_async_target = {};
+		m_async_reading = false;
+
+		if( error or result.eof )
+			notify_end(error);
+
+		std::move(handler)(error, result);
+	}
+
+private:
+	struct async_context
+	{
+		async_context(std::shared_ptr<void> owner, read_handler_t completion) :
+			lifetime(std::move(owner)), handler(std::move(completion)) {}
+
+		std::shared_ptr<void> lifetime {};
+		read_handler_t handler {};
+	};
 
 	std::shared_ptr<connection> m_connection {};
+
+	std::weak_ptr<void> m_lifetime {};
+	mutable_buffer m_async_target {};
+
+	std::weak_ptr<async_context> m_async_context {};
+	std::unique_ptr<std::array<char,8192>> m_async_buffer {};
 
 	body_framing m_framing {};
 	uint64_t m_remaining = 0;
@@ -752,274 +1061,39 @@ private:
 
 	bool m_ended = false;
 	bool m_end_notified = false;
+	bool m_async_reading = false;
 
 	std::function<void(error_code)> m_end_handler {};
 };
 
-using reader_adapter_ptr = std::shared_ptr<reader_adapter>;
-
-class RIWO_DECL_HIDDEN reader_adapter::async_read_operation final :
-	public std::enable_shared_from_this<async_read_operation>
-{
-public:
-	async_read_operation
-	(std::shared_ptr<reader_adapter> owner, mutable_buffer target, read_handler_t completion) :
-		m_owner(std::move(owner)), m_target(std::move(target)), m_handler(std::move(completion)) {}
-
-	void start()
-	{
-		error_code error {};
-		if( not m_owner->apply_read_timeout(error) )
-		{
-			m_owner->m_ended = true;
-			finish(error, {});
-			return ;
-		}
-		if( m_owner->m_ended or m_owner->m_framing == body_framing::none )
-		{
-			m_owner->m_ended = true;
-			finish({}, {.bytes = 0, .eof = true});
-			return ;
-		}
-		if( m_owner->m_framing == body_framing::content_length )
-		{
-			if( m_owner->m_remaining == 0 )
-			{
-				m_owner->m_ended = true;
-				finish({}, {.bytes = 0, .eof = true});
-				return ;
-			}
-			auto size = m_owner->copy_pending(m_target,
-				std::min<uint64_t>(m_owner->m_remaining, SIZE_MAX), error
-			);
-			if( size != 0 or error )
-			{
-				m_owner->m_remaining -= std::min<uint64_t>(m_owner->m_remaining, size);
-				const bool eof = not error and m_owner->m_remaining == 0;
-
-				if( eof )
-					m_owner->m_ended = true;
-
-				finish(error, {size, eof});
-				return ;
-			}
-			direct_read(std::min<uint64_t>(m_target.size(), m_owner->m_remaining), true);
-			return ;
-		}
-		if( m_owner->m_framing == body_framing::until_eof )
-		{
-			auto size = m_owner->copy_pending(m_target, SIZE_MAX, error);
-			if( size != 0 or error )
-			{
-				finish(error, {.bytes = size, .eof = false});
-				return ;
-			}
-			direct_read(m_target.size(), false);
-			return ;
-		}
-		chunk_step();
-	}
-
-private:
-	void direct_read(size_t size, bool fixed)
-	{
-		auto self = shared_from_this();
-		m_owner->m_connection->read_some(mutable_buffer(m_target.data(), size),
-		[self = std::move(self), fixed](error_code error, size_t count) mutable
-		{
-			const bool transport_eof = is_eof(error);
-			if( fixed )
-				self->m_owner->m_remaining -= std::min<uint64_t>(self->m_owner->m_remaining, count);
-
-			if( transport_eof )
-			{
-				error = not fixed or self->m_owner->m_remaining == 0 ?
-					error_code{} : make_error_code(errc::body_length_mismatch);
-			}
-			if( not error and count != 0 and not self->m_owner->account(count, error) )
-				count = 0;
-
-			bool eof = false;
-			if( fixed )
-				eof = not error and self->m_owner->m_remaining == 0;
-			else
-				eof = transport_eof and not error;
-
-			if( eof )
-				self->m_owner->m_ended = true;
-			self->finish(error, {count, eof});
-		});
-	}
-
-	void fill()
-	{
-		auto self = shared_from_this();
-		m_owner->m_connection->read_some(asio::buffer(m_buffer),
-		[self = std::move(self)](const error_code &error, size_t size) mutable
-		{
-			if( error )
-			{
-				self->finish(error, {});
-				return ;
-			}
-			self->m_owner->m_connection->pending.append(self->m_buffer.data(), size);
-			self->chunk_step();
-		});
-	}
-
-	void chunk_step()
-	try
-	{
-		for(;;)
-		{
-			if( m_owner->m_reading_trailers )
-			{
-				auto end = m_owner->m_connection->pending.find("\r\n");
-				if( end == std::string::npos )
-				{
-					if( m_owner->m_connection->pending.size() > m_owner->m_limits.max_header_list_size )
-					{
-						finish(make_error_code(errc::header_limit_exceeded), {});
-						return ;
-					}
-					fill();
-					return ;
-				}
-				if( end == 0 )
-				{
-					m_owner->m_connection->pending.erase(0, 2);
-					m_owner->m_ended = true;
-					finish({}, {0, true});
-					return ;
-				}
-				auto line = std::string_view(m_owner->m_connection->pending)
-					.substr(0, end);
-
-				auto colon = line.find(':');
-				if( colon == std::string_view::npos or m_owner->m_trailers.size() >=
-					m_owner->m_limits.max_field_count )
-				{
-					finish(protocol_error(), {});
-					return ;
-				}
-				auto value = line.substr(colon + 1);
-				while( not value.empty() and (value.front() == ' ' or value.front() == '\t') )
-					value.remove_prefix(1);
-
-				m_owner->m_trailers.add (
-					std::string(line.substr(0, colon)), std::string(value)
-				);
-				m_owner->m_connection->pending.erase(0, end + 2);
-				continue;
-			}
-			if( m_owner->m_need_chunk_crlf )
-			{
-				if( m_owner->m_connection->pending.size() < 2 )
-				{
-					fill();
-					return ;
-				}
-				if( not m_owner->m_connection->pending.starts_with("\r\n") )
-				{
-					finish(protocol_error(), {});
-					return ;
-				}
-				m_owner->m_connection->pending.erase(0, 2);
-				m_owner->m_need_chunk_crlf = false;
-			}
-			if( m_owner->m_chunk_remaining == 0 )
-			{
-				auto end = m_owner->m_connection->pending.find("\r\n");
-				if( end == std::string::npos )
-				{
-					if( m_owner->m_connection->pending.size() >
-						m_owner->m_limits.max_start_line_size )
-					{
-						finish(make_error_code(errc::header_limit_exceeded), {});
-						return ;
-					}
-					fill();
-					return ;
-				}
-				auto line = std::string_view(m_owner->m_connection->pending)
-					.substr(0, end);
-
-				auto chunk = parse_chunk_size(line);
-				if( not chunk )
-				{
-					finish(chunk.error(), {});
-					return ;
-				}
-				m_owner->m_connection->pending.erase(0, end + 2);
-				m_owner->m_chunk_remaining = *chunk;
-				m_owner->m_reading_trailers = *chunk == 0;
-				continue;
-			}
-			error_code error {};
-			auto size = m_owner->copy_pending(m_target,
-				std::min<uint64_t>(m_owner->m_chunk_remaining, SIZE_MAX), error
-			);
-			if( size != 0 or error )
-			{
-				m_owner->m_chunk_remaining -= std::min<uint64_t>(m_owner->m_chunk_remaining, size);
-				if( m_owner->m_chunk_remaining == 0 )
-					m_owner->m_need_chunk_crlf = true;
-
-				finish(error, {size, false});
-				return ;
-			}
-			direct_chunk_read();
-			return ;
-		}
-	}
-	catch(...) {
-		finish(exception_error(std::current_exception()), {});
-	}
-
-	void direct_chunk_read()
-	{
-		auto count = static_cast<size_t>(std::min<uint64_t>(
-			m_target.size(), m_owner->m_chunk_remaining
-		));
-		auto self = shared_from_this();
-
-		m_owner->m_connection->read_some(mutable_buffer(m_target.data(), count),
-		[self = std::move(self)](error_code error, size_t size) mutable
-		{
-			if( not error and not self->m_owner->account(size, error) )
-				size = 0;
-
-			self->m_owner->m_chunk_remaining -=
-				std::min<uint64_t>(self->m_owner->m_chunk_remaining, size);
-
-			if( self->m_owner->m_chunk_remaining == 0 )
-				self->m_owner->m_need_chunk_crlf = true;
-
-			self->finish(error, {size, false});
-		});
-	}
-
-	void finish(error_code error, body_read_result result)
-	{
-		if( is_eof(error) )
-			error = make_error_code(errc::body_length_mismatch);
-
-		if( error or result.eof )
-			m_owner->notify_end(error);
-
-		std::move(m_handler)(error, result);
-	}
-
-	reader_adapter_ptr m_owner {};
-	mutable_buffer m_target {};
-	read_handler_t m_handler {};
-	std::array<char,8192> m_buffer {};
-};
-
 void reader_adapter::read_some(mutable_buffer buffer, read_handler_t handler)
 {
-	std::make_shared<async_read_operation>
-		(shared_from_this(), buffer, std::move(handler))->start();
+	auto lifetime = m_lifetime.lock();
+	if( not lifetime )
+	{
+		std::move(handler) (
+			asio::error::make_error_code(asio::error::operation_aborted),
+			body_read_result {}
+		);
+		return ;
+	}
+	if( m_async_reading )
+	{
+		std::move(handler) (
+			make_error_code(errc::operation_in_progress),
+			body_read_result {}
+		);
+		return ;
+	}
+	auto context = std::make_shared<async_context>(
+		std::move(lifetime), std::move(handler)
+	);
+	m_async_reading = true;
+	m_async_target = buffer;
+	m_async_context = context;
+
+	async_start();
+	RIWO_UNUSED(context);
 }
 
 class RIWO_DECL_HIDDEN writer_adapter final : public body_writer_adapter
@@ -1027,15 +1101,20 @@ class RIWO_DECL_HIDDEN writer_adapter final : public body_writer_adapter
 	RIWO_DISABLE_COPY_MOVE(writer_adapter);
 
 public:
-	explicit writer_adapter
-	(std::shared_ptr<connection> connection_value, bool suppress_body = false, const timeout_policy &timeouts = {}) :
-		m_connection(std::move(connection_value)), m_suppress_body(suppress_body), m_timeouts(timeouts),
+	explicit writer_adapter(std::shared_ptr<connection> connection_value,
+		bool suppress_body = false, const timeout_policy &timeouts = {}
+	) :
+		m_connection(std::move(connection_value)),
+		m_suppress_body(suppress_body), m_timeouts(timeouts),
 		m_deadline(m_timeouts.overall ?
 			std::optional(std::chrono::steady_clock::now() + *m_timeouts.overall) : std::nullopt
 		) {}
 
 	void set_spec(const body_spec &spec) noexcept {
 		m_chunked = spec.type() == body_spec::mode::streaming;
+	}
+	void bind_lifetime(std::weak_ptr<void> lifetime) noexcept {
+		m_lifetime = std::move(lifetime);
 	}
 
 	[[nodiscard]] size_t write_sync(const_buffer buffer, error_code &error) noexcept override
@@ -1074,6 +1153,14 @@ public:
 
 	void write(const_buffer buffer, write_handler_t handler) override
 	{
+		auto lifetime = m_lifetime.lock();
+		if( not lifetime )
+		{
+			std::move(handler) (
+				asio::error::make_error_code(asio::error::operation_aborted), 0
+			);
+			return ;
+		}
 		error_code timeout;
 		if( not apply_write_timeout(timeout) )
 		{
@@ -1087,17 +1174,25 @@ public:
 		}
 		if( not m_chunked )
 		{
-			m_connection->write(buffer, std::move(handler));
+			m_connection->write(buffer,
+			[lifetime = std::move(lifetime), handler = std::move(handler)]
+			(error_code error, size_t size) mutable
+			{
+				RIWO_UNUSED(lifetime);
+				std::move(handler)(error, size);
+			});
 			return ;
 		}
 		auto connection = m_connection;
 		auto header = std::make_shared<std::string>(serialize_chunk_header(buffer.size()));
 
-		connection->write(asio::buffer(*header),
-		[connection = std::move(connection), header, buffer, handler = std::move(handler)]
-		(error_code error, size_t) mutable
+		connection->write(asio::buffer(*header), [
+			connection = std::move(connection), header, buffer,
+			lifetime = std::move(lifetime), handler = std::move(handler)
+		](error_code error, size_t) mutable
 		{
 			RIWO_UNUSED(header);
+			RIWO_UNUSED(lifetime);
 			if( error )
 			{
 				std::move(handler)(error, 0);
@@ -1141,6 +1236,13 @@ public:
 
 	void finish(fields trailers, finish_handler_t handler) override
 	{
+		auto lifetime = m_lifetime.lock();
+		if( not lifetime )
+		{
+			std::move(handler)(asio::error::make_error_code(
+				asio::error::operation_aborted));
+			return ;
+		}
 		if( not m_chunked or m_suppress_body )
 		{
 			if( m_finish_handler )
@@ -1152,13 +1254,17 @@ public:
 		auto wire = std::make_shared<std::string>(serialize_last_chunk(trailers));
 		auto finish = m_finish_handler;
 
-		m_connection->write(asio::buffer(*wire),
-		[finish = std::move(finish), wire, handler = std::move(handler)]
-		(error_code error, size_t) mutable
+		m_connection->write(asio::buffer(*wire), [
+			finish = std::move(finish), wire, lifetime = std::move(lifetime),
+			handler = std::move(handler)
+		](error_code error, size_t) mutable
 		{
 			RIWO_UNUSED(wire);
+			RIWO_UNUSED(lifetime);
+
 			if( finish )
 				finish(error);
+
 			std::move(handler)(error);
 		});
 	}
@@ -1194,6 +1300,7 @@ private:
 	}
 
 	std::shared_ptr<connection> m_connection {};
+	std::weak_ptr<void> m_lifetime {};
 
 	bool m_chunked = false;
 	bool m_suppress_body = false;
@@ -1204,8 +1311,6 @@ private:
 	std::function<void(error_code)> m_finish_handler {};
 };
 
-using writer_adapter_ptr = std::shared_ptr<writer_adapter>;
-
 class RIWO_DECL_HIDDEN v1_stream final : public session_stream,
 	public std::enable_shared_from_this<v1_stream>
 {
@@ -1214,29 +1319,25 @@ class RIWO_DECL_HIDDEN v1_stream final : public session_stream,
 public:
 	v1_stream(std::shared_ptr<connection> connection_value, protocol version, const body_spec &outbound_spec,
 		body_framing inbound_framing, uint64_t inbound_length, const message_limits &limits, bool client,
-		bool head_request = false, request_head request_value = {}, const timeout_policy &timeouts = {}) :
-
+		bool head_request = false, request_head request_value = {}, const timeout_policy &timeouts = {}
+	) :
 		m_connection(std::move(connection_value)),
 		m_version(version), m_response_protocol(version),
 		m_limits(limits), m_timeouts(timeouts), m_client(client),
 		m_head_request(head_request), m_request(std::move(request_value)),
-		m_reader(std::make_shared<reader_adapter>(
-			m_connection, inbound_framing, inbound_length, m_limits, m_timeouts
-		)),
-		m_writer(std::make_shared<writer_adapter>(
-			m_connection, not client and head_request, m_timeouts
-		)),
-		m_inbound(make_body_reader_state(m_reader, not m_client, m_limits.max_discard_body)),
-		m_outbound(make_body_writer_state(m_writer, outbound_spec, m_client))
+		m_reader(m_connection, inbound_framing, inbound_length, m_limits, m_timeouts),
+		m_writer(m_connection, not client and head_request, m_timeouts),
+		m_inbound(m_reader, not m_client, m_limits.max_discard_body),
+		m_outbound(m_writer, outbound_spec, m_client)
 	{
 		if( not m_client and inbound_framing == body_framing::none )
-			m_inbound->set_finished();
+			m_inbound.set_finished();
 
-		m_connection->transport->set_read_timeout(bounded_timeout(
+		m_connection->transport->set_read_timeout(bounded_timeout (
 			m_client ? m_timeouts.header : m_timeouts.body_idle, m_timeouts
 		));
 		m_connection->transport->set_write_timeout(m_timeouts.body_idle);
-		m_writer->set_spec(outbound_spec);
+		m_writer.set_spec(outbound_spec);
 
 		if( not m_client )
 		{
@@ -1255,14 +1356,20 @@ public:
 		m_release_handler = std::move(handler);
 		auto weak = weak_from_this();
 
-		m_reader->set_end_handler([weak](error_code error)
+		m_reader.bind_lifetime(weak);
+		m_writer.bind_lifetime(weak);
+
+		m_inbound.bind_lifetime(weak);
+		m_outbound.bind_lifetime(weak);
+
+		m_reader.set_end_handler([weak](error_code error)
 		{
 			if( auto self = weak.lock() )
 				self->body_finished(error);
 		});
 		if( not m_client )
 		{
-			m_writer->set_finish_handler([weak](error_code error)
+			m_writer.set_finish_handler([weak](error_code error)
 			{
 				if( auto self = weak.lock() )
 					self->response_finished(error);
@@ -1277,11 +1384,16 @@ public:
 		return m_request;
 	}
 
-	[[nodiscard]] std::shared_ptr<body_reader_state> inbound_body() const noexcept override {
-		return m_inbound;
+	[[nodiscard]] std::shared_ptr<body_reader_state> inbound_body() const noexcept override
+	{
+		auto *self = const_cast<v1_stream*>(this);
+		return {self->shared_from_this(), std::addressof(self->m_inbound)};
 	}
-	[[nodiscard]] std::shared_ptr<body_writer_state> outbound_body() const noexcept override {
-		return m_outbound;
+
+	[[nodiscard]] std::shared_ptr<body_writer_state> outbound_body() const noexcept override
+	{
+		auto *self = const_cast<v1_stream*>(this);
+		return {self->shared_from_this(), std::addressof(self->m_outbound)};
 	}
 
 	[[nodiscard]] response_head wait_response_sync(error_code &error) noexcept override
@@ -1317,10 +1429,10 @@ public:
 			m_keep_alive = reusable_response(m_response, parsed->version);
 			m_response_ready = true;
 
-			m_reader->set_framing(parsed->framing, parsed->content_length);
+			m_reader.set_framing(parsed->framing, parsed->content_length);
 			if( parsed->framing == body_framing::none and m_client )
 			{
-				m_inbound->set_finished();
+				m_inbound.set_finished();
 				const auto code = m_response.status.code();
 
 				if( code != status::switching_protocols and
@@ -1372,7 +1484,7 @@ public:
 			spec.type() == body_spec::mode::empty or
 			spec.type() == body_spec::mode::head;
 
-		m_writer->set_spec(spec);
+		m_writer.set_spec(spec);
 		(void)m_connection->write_sync(asio::buffer(*wire), error);
 
 		if( not m_client and not error and empty )
@@ -1406,22 +1518,20 @@ public:
 			spec.type() == body_spec::mode::empty or
 			spec.type() == body_spec::mode::head;
 
-		m_writer->set_spec(spec);
-		auto wire = std::make_shared<std::string>(std::move(*wire_value));
-		auto weak = weak_from_this();
+		m_writer.set_spec(spec);
+		m_response_wire = std::move(*wire_value);
+		auto self = shared_from_this();
 
-		m_connection->write(asio::buffer(*wire),
-		[weak, wire, empty, handler = std::move(handler)](error_code error, size_t) mutable
+		m_connection->write(asio::buffer(m_response_wire),
+		[self = std::move(self), empty, handler = std::move(handler)]
+		(error_code error, size_t) mutable
 		{
-			RIWO_UNUSED(wire);
 			if( empty )
 			{
-				if( auto self = weak.lock() )
-				{
-					if( not self->m_client )
-						self->response_finished(error);
-				}
+				if( not self->m_client )
+					self->response_finished(error);
 			}
+			self->m_response_wire.clear();
 			std::move(handler)(error);
 		});
 	}
@@ -1632,11 +1742,11 @@ private:
 			self->m_keep_alive = reusable_response(self->m_response, parsed->version);
 
 			self->m_response_ready = true;
-			self->m_reader->set_framing(parsed->framing, parsed->content_length);
+			self->m_reader.set_framing(parsed->framing, parsed->content_length);
 
 			if( parsed->framing == body_framing::none and self->m_client )
 			{
-				self->m_inbound->set_finished();
+				self->m_inbound.set_finished();
 				const auto code = self->m_response.status.code();
 
 				if( code != status::switching_protocols and
@@ -1653,7 +1763,7 @@ private:
 			return ;
 
 		release(not error and m_keep_alive and
-			m_reader->framing() != body_framing::until_eof
+			m_reader.framing() != body_framing::until_eof
 		);
 	}
 
@@ -1661,7 +1771,7 @@ private:
 	{
 		if( m_client or m_released )
 			return ;
-		release(not error and m_keep_alive and m_reader->request_complete());
+		release(not error and m_keep_alive and m_reader.request_complete());
 	}
 
 	void release(bool reusable)
@@ -1694,13 +1804,14 @@ private:
 
 	request_head m_request {};
 
-	reader_adapter_ptr m_reader {};
-	writer_adapter_ptr m_writer {};
+	reader_adapter m_reader;
+	writer_adapter m_writer;
 
-	http_exp::detail::body_reader_state_ptr m_inbound {};
-	http_exp::detail::body_writer_state_ptr m_outbound {};
+	body_reader_state m_inbound {};
+	body_writer_state m_outbound {};
 
 	response_head m_response {};
+	std::string m_response_wire {};
 
 	bool m_response_ready = false;
 	bool m_keep_alive = true;
@@ -1723,7 +1834,7 @@ class RIWO_DECL_HIDDEN v1_client_session final : public client_session,
 		request_head head {};
 
 		body_spec spec = body_spec::empty();
-		std::shared_ptr<std::string> wire {};
+		std::string wire {};
 
 		open_handler_t handler {};
 
@@ -1750,7 +1861,7 @@ class RIWO_DECL_HIDDEN v1_client_session final : public client_session,
 		void write_head()
 		{
 			auto self = shared_from_this();
-			session->m_connection->write(asio::buffer(*wire),
+			session->m_connection->write(asio::buffer(wire),
 			[self = std::move(self)](const error_code &error, size_t) mutable {
 				self->finish(error);
 			});
@@ -1770,8 +1881,9 @@ class RIWO_DECL_HIDDEN v1_client_session final : public client_session,
 	};
 
 public:
-	v1_client_session(asio::any_io_executor executor, protocol version, const message_limits &limits,
-		const timeout_policy &timeouts = {}, bool absolute_form = false) :
+	v1_client_session(asio::any_io_executor executor, protocol version,
+		const message_limits &limits, const timeout_policy &timeouts = {}, bool absolute_form = false
+	) :
 		m_exec(std::move(executor)), m_version(version), m_limits(limits), m_timeouts(timeouts),
 		m_absolute_form(absolute_form),  m_connection(std::make_shared<connection>(m_exec)),
 		m_resolver(m_exec)
@@ -1784,9 +1896,9 @@ public:
 		);
 	}
 
-	v1_client_session(asio::any_io_executor executor, protocol version,
-		const message_limits &limits, std::shared_ptr<http_exp::connection> transport,
-		const timeout_policy &timeouts = {}, bool absolute_form = false) :
+	v1_client_session(asio::any_io_executor executor, protocol version, const message_limits &limits,
+		connection_ptr transport, const timeout_policy &timeouts = {}, bool absolute_form = false
+	) :
 		m_exec(std::move(executor)), m_version(version), m_limits(limits), m_timeouts(timeouts),
 		m_absolute_form(absolute_form), m_connection(std::make_shared<connection>(std::move(transport))),
 		m_resolver(m_exec), m_preconnected(true)
@@ -1898,7 +2010,7 @@ public:
 		value->head = std::move(head);
 		value->spec = std::move(spec);
 
-		value->wire = std::make_shared<std::string>(std::move(*wire_value));
+		value->wire = std::move(*wire_value);
 		value->handler = std::move(handler);
 		value->start();
 	}

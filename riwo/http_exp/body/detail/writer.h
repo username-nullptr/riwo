@@ -45,7 +45,12 @@ public:
 	explicit body_writer_state(std::shared_ptr<body_writer_adapter> adapter = {},
 		body_spec spec = body_spec::empty(), bool ready = false
 	);
+	body_writer_state(body_writer_adapter &adapter,
+		body_spec spec = body_spec::empty(), bool ready = false
+	);
 	~body_writer_state();
+
+	void bind_lifetime(std::weak_ptr<void> lifetime) noexcept;
 
 public:
 	[[nodiscard]] size_t write(const const_buffer &buffer, error_code &error) noexcept;
@@ -62,8 +67,23 @@ public:
 	[[nodiscard]] uint64_t accepted_size() const noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	[[nodiscard]] std::shared_ptr<void> keep_alive() noexcept;
+
+	body_writer_adapter_ptr m_owned_adapter {};
+	body_writer_adapter *m_adapter = nullptr;
+
+	std::weak_ptr<void> m_lifetime {};
+	body_spec m_spec;
+
+	uint64_t m_accepted = 0;
+
+	bool m_ready = false;
+	bool m_pending = false;
+
+	bool m_ended = false;
+	bool m_terminated = false;
+
+	bool m_parent_lifetime_bound = false;
 };
 
 using body_writer_state_ptr = body_writer_state::ptr_t;

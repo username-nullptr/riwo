@@ -4,139 +4,11 @@
 #include "session_pool.h"
 #include "factory.h"
 
-namespace riwo::http_exp::detail { namespace
+namespace riwo::http_exp::detail
 {
 
 using clock_t = std::chrono::steady_clock;
 using timer_t = asio::steady_timer;
-
-class RIWO_DECL_HIDDEN pooled_stream final : public session_stream,
-	public std::enable_shared_from_this<pooled_stream>
-{
-	RIWO_DISABLE_COPY_MOVE(pooled_stream)
-
-public:
-	using abandon_handler_t = std::function<void(bool)>;
-	using ptr_t = std::shared_ptr<pooled_stream>;
-
-	pooled_stream(session_stream_ptr inner, abandon_handler_t on_abandon) :
-		m_inner(std::move(inner)), m_on_abandon(std::move(on_abandon)) {}
-
-	~pooled_stream() override
-	{
-		if( m_inner and not m_inner->reusable() )
-			m_inner->cancel();
-		abandon(false);
-	}
-
-public:
-	[[nodiscard]] stream_capabilities capabilities() const noexcept override {
-		return m_inner->capabilities();
-	}
-	[[nodiscard]] request_head request() const override {
-		return m_inner->request();
-	}
-
-	[[nodiscard]] body_reader_state_ptr inbound_body() const noexcept override {
-		return m_inner->inbound_body();
-	}
-	[[nodiscard]] body_writer_state_ptr outbound_body() const noexcept override {
-		return m_inner->outbound_body();
-	}
-
-	[[nodiscard]] response_head wait_response_sync(error_code &error) noexcept override {
-		return m_inner->wait_response_sync(error);
-	}
-	void wait_response(response_handler_t handler) override {
-		m_inner->wait_response(std::move(handler));
-	}
-
-	void respond_sync
-	(const response_head &head, const body_spec &spec, error_code &error) noexcept override {
-		m_inner->respond_sync(head, spec, error);
-	}
-	void respond
-	(const response_head &head, const body_spec &spec, operation_handler_t handler) override {
-		m_inner->respond(head, spec, std::move(handler));
-	}
-
-	void inform_sync(const response_head &head, error_code &error) noexcept override {
-		m_inner->inform_sync(head, error);
-	}
-	void inform(const response_head &head, operation_handler_t handler) override {
-		m_inner->inform(head, std::move(handler));
-	}
-
-	[[nodiscard]] duplex_state_ptr open_duplex_sync
-	(const optional<response_head> &response, error_code &error) noexcept override
-	{
-		auto result = m_inner->open_duplex_sync(response, error);
-		if( not error )
-			abandon(false);
-		return result;
-	}
-
-	void open_duplex(const optional<response_head> &response, duplex_handler_t handler) override
-	{
-		auto self = shared_from_this();
-		m_inner->open_duplex(response,
-		[self = std::move(self), handler = std::move(handler)]
-		(error_code error, std::shared_ptr<duplex_state> state) mutable
-		{
-			if( not error )
-				self->abandon(false);
-			std::move(handler)(error, std::move(state));
-		});
-	}
-
-	void cancel() noexcept override
-	{
-		m_inner->cancel();
-		abandon(false);
-	}
-
-public:
-	[[nodiscard]] protocol selected_protocol() const noexcept override  {
-		return m_inner->selected_protocol();
-	}
-	[[nodiscard]] protocol response_protocol() const noexcept override {
-		return m_inner->response_protocol();
-	}
-
-	[[nodiscard]] endpoint_t remote_endpoint(error_code &error) const noexcept override {
-		return m_inner->remote_endpoint(error);
-	}
-	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept override {
-		return m_inner->local_endpoint(error);
-	}
-
-	[[nodiscard]] request_delivery delivery() const noexcept override {
-		return m_inner->delivery();
-	}
-	[[nodiscard]] void *protocol_extension(const std::type_info &type) noexcept override {
-		return m_inner->protocol_extension(type);
-	}
-
-private:
-	void abandon(bool reusable) noexcept
-	{
-		if( m_abandoned )
-			return ;
-
-		m_abandoned = true;
-		try {
-			if( m_on_abandon )
-				m_on_abandon(reusable);
-		}
-		catch(...) {}
-	}
-
-	session_stream_ptr m_inner {};
-	abandon_handler_t m_on_abandon {};
-	bool m_abandoned = false;
-};
-
-} //namespace
 
 class RIWO_DECL_HIDDEN session_pool::impl : public std::enable_shared_from_this<impl>
 {
@@ -815,32 +687,7 @@ private:
 			release_slot(key, value, false);
 			return {};
 		}
-		auto weak = weak_from_this();
-		const auto generation = value->generation;
-
-		return std::make_shared<pooled_stream>(std::move(active),
-		[weak, key, value, generation](bool reusable)
-		{
-			if( auto self = weak.lock() )
-				self->abandon(key, value, generation, reusable);
-		});
-	}
-
-	void abandon
-	(const session_key &key, const slot_ptr &value, uint64_t generation, bool reusable)
-	{
-		client_session_ptr session {};
-		{
-			std::lock_guard lock(m_mutex);
-			if( not value or not value->busy or value->generation != generation )
-				return ;
-
-			session = value->session;
-		}
-		if( session )
-			session->release_stream(reusable);
-
-		release_slot(key, value, reusable);
+		return active;
 	}
 
 	void complete(const waiter_ptr &value, error_code error, session_stream_ptr active)

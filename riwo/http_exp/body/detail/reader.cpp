@@ -25,90 +25,84 @@ namespace riwo::http_exp::detail { namespace
 
 body_reader_adapter::~body_reader_adapter() = default;
 
-class RIWO_DECL_HIDDEN body_reader_state::impl
+class RIWO_DECL_HIDDEN body_reader_state::discard_operation final :
+	public std::enable_shared_from_this<discard_operation>
 {
 public:
-	impl(std::shared_ptr<body_reader_adapter> input, bool input_ready, uint64_t discard_limit) :
-		m_adapter(std::move(input)), m_max_discard(discard_limit), m_ready(input_ready) {}
+	discard_operation(body_reader_state &input_state,
+		std::shared_ptr<void> input_lifetime, operation_handler_t completion) :
+		state(input_state), lifetime(std::move(input_lifetime)), handler(std::move(completion)) {}
 
-	body_reader_adapter_ptr m_adapter;
-	uint64_t m_max_discard = 0;
+	body_reader_state &state;
 
-	optional<fields> m_trailer_cache;
+	std::shared_ptr<void> lifetime {};
+	operation_handler_t handler {};
 
-	bool m_ready = false;
-	bool m_pending = false;
+	std::array<std::byte,8192> buffer{};
+	uint64_t discarded = 0;
 
-	bool m_finished = false;
-	bool m_cancelled = false;
-
-public:
-	struct operation : std::enable_shared_from_this<operation>
+	void start()
 	{
-		operation(std::shared_ptr<impl> input_state, operation_handler_t completion) :
-			state(std::move(input_state)), handler(std::move(completion)) {}
-
-		std::shared_ptr<impl> state {};
-		operation_handler_t handler;
-
-		std::array<std::byte,8192> buffer{};
-		uint64_t discarded = 0;
-
-		void start()
-		{
-			auto self = shared_from_this();
-			try {
-				state->m_adapter->read_some(riwo::buffer(buffer),
-				[self = std::move(self)](error_code error, body_read_result result) mutable {
-					self->complete(error, result);
-				});
-			}
-			catch(...) {
-				finish(exception_error(std::current_exception()));
-			}
+		auto self = shared_from_this();
+		try {
+			state.m_adapter->read_some(riwo::buffer(buffer),
+			[self = std::move(self)](error_code error, body_read_result result) mutable {
+				self->complete(error, result);
+			});
 		}
-
-		void complete(error_code error, body_read_result result)
-		{
-			if( error )
-			{
-				finish(error);
-				return ;
-			}
-			if( auto invalid = invalid_read_result(result, buffer.size()) )
-			{
-				state->m_cancelled = true;
-				state->m_adapter->cancel();
-				finish(invalid);
-				return ;
-			}
-			if( result.bytes > state->m_max_discard - std::min(state->m_max_discard, discarded) )
-			{
-				state->m_adapter->cancel();
-				finish(operation_error(errc::buffer_limit_exceeded));
-				return ;
-			}
-			discarded += result.bytes;
-			if( result.eof )
-			{
-				state->m_finished = true;
-				finish({});
-				return ;
-			}
-			start();
+		catch(...) {
+			finish(exception_error(std::current_exception()));
 		}
+	}
 
-		void finish(error_code error)
+	void complete(error_code error, body_read_result result)
+	{
+		if( error )
 		{
-			state->m_pending = false;
-			std::move(handler)(error);
+			finish(error);
+			return ;
 		}
-	};
+		if( auto invalid = invalid_read_result(result, buffer.size()) )
+		{
+			state.m_cancelled = true;
+			state.m_adapter->cancel();
+			finish(invalid);
+			return ;
+		}
+		if( result.bytes > state.m_max_discard - std::min(state.m_max_discard, discarded) )
+		{
+			state.m_adapter->cancel();
+			finish(operation_error(errc::buffer_limit_exceeded));
+			return ;
+		}
+		discarded += result.bytes;
+		if( result.eof )
+		{
+			state.m_finished = true;
+			finish({});
+			return ;
+		}
+		start();
+	}
+
+	void finish(error_code error)
+	{
+		state.m_pending = false;
+		std::move(handler)(error);
+	}
 };
 
 body_reader_state::body_reader_state
 (body_reader_adapter_ptr adapter, bool ready, uint64_t max_discard) :
-	m_impl(std::make_shared<impl>(std::move(adapter), ready, max_discard))
+	m_owned_adapter(std::move(adapter)), m_adapter(m_owned_adapter.get()),
+	m_max_discard(max_discard), m_ready(ready)
+{
+
+}
+
+body_reader_state::body_reader_state
+(body_reader_adapter &adapter, bool ready, uint64_t max_discard) :
+	m_adapter(std::addressof(adapter)), m_max_discard(max_discard), m_ready(ready)
 {
 
 }
@@ -118,45 +112,42 @@ body_reader_state::~body_reader_state() = default;
 body_read_result body_reader_state::read_some(const mutable_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
-	auto state = m_impl;
-
-	if( state->m_pending )
+	if( m_pending )
 	{
 		error = operation_error(errc::operation_in_progress);
 		return {};
 	}
-	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
+	if( not m_ready or not m_adapter or m_cancelled )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return {};
 	}
-	if( state->m_finished )
+	if( m_finished )
 		return {0, true};
 
 	if( buffer.size() == 0 )
 		return {};
 
-	state->m_pending = true;
-	auto result = state->m_adapter->read_some_sync(buffer, error);
+	m_pending = true;
+	auto result = m_adapter->read_some_sync(buffer, error);
 
-	state->m_pending = false;
+	m_pending = false;
 	if( not error )
 		error = invalid_read_result(result, buffer.size());
 
 	if( error )
 	{
-		state->m_cancelled = true;
-		state->m_adapter->cancel();
+		m_cancelled = true;
+		m_adapter->cancel();
 	}
 	if( not error and result.eof )
-		state->m_finished = true;
+		m_finished = true;
 	return result;
 }
 
 void body_reader_state::read_some(const mutable_buffer &buffer, read_handler_t handler)
 {
-	auto state = m_impl;
-	if( state->m_pending )
+	if( m_pending )
 	{
 		std::move(handler) (
 			operation_error(errc::operation_in_progress),
@@ -164,7 +155,7 @@ void body_reader_state::read_some(const mutable_buffer &buffer, read_handler_t h
 		);
 		return ;
 	}
-	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
+	if( not m_ready or not m_adapter or m_cancelled )
 	{
 		std::move(handler) (
 			operation_error(errc::operation_not_permitted),
@@ -172,7 +163,7 @@ void body_reader_state::read_some(const mutable_buffer &buffer, read_handler_t h
 		);
 		return ;
 	}
-	if( state->m_finished )
+	if( m_finished )
 	{
 		std::move(handler)(error_code{},
 			body_read_result {.bytes = 0, .eof = true}
@@ -184,13 +175,28 @@ void body_reader_state::read_some(const mutable_buffer &buffer, read_handler_t h
 		std::move(handler)(error_code{}, body_read_result{});
 		return ;
 	}
-	state->m_pending = true;
+	auto lifetime = keep_alive();
+	if( not lifetime )
+	{
+		std::move(handler) (
+			operation_error(errc::operation_not_permitted),
+			body_read_result {}
+		);
+		return ;
+	}
+	auto callback_lifetime = m_parent_lifetime_bound ?
+		std::shared_ptr<void>{} : lifetime;
+
+	m_pending = true;
 	try {
-		state->m_adapter->read_some(buffer,
-		[state, capacity = buffer.size(), handler = std::move(handler)]
-		(error_code error, body_read_result result) mutable
+		m_adapter->read_some(buffer, [
+			state = this, lifetime = std::move(callback_lifetime),  capacity = buffer.size(),
+			handler = std::move(handler)
+		](error_code error, body_read_result result) mutable
 		{
+			RIWO_UNUSED(lifetime);
 			state->m_pending = false;
+
 			if( not error )
 				error = invalid_read_result(result, capacity);
 
@@ -207,7 +213,7 @@ void body_reader_state::read_some(const mutable_buffer &buffer, read_handler_t h
 	}
 	catch(...)
 	{
-		state->m_pending = false;
+		m_pending = false;
 		std::move(handler) (
 			exception_error(std::current_exception()),
 			body_read_result {}
@@ -218,160 +224,193 @@ void body_reader_state::read_some(const mutable_buffer &buffer, read_handler_t h
 void body_reader_state::discard(error_code &error) noexcept
 {
 	error.clear();
-	auto state = m_impl;
-
-	if( state->m_pending )
+	if( m_pending )
 	{
 		error = operation_error(errc::operation_in_progress);
 		return ;
 	}
-	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
+	if( not m_ready or not m_adapter or m_cancelled )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return ;
 	}
-	if( state->m_finished )
+	if( m_finished )
 		return ;
 
-	state->m_pending = true;
+	m_pending = true;
 	std::array<std::byte,8192> buffer {};
 	uint64_t discarded = 0;
 	for(;;)
 	{
-		auto result = state->m_adapter->read_some_sync(riwo::buffer(buffer), error);
+		auto result = m_adapter->read_some_sync(riwo::buffer(buffer), error);
 		if( error )
 			break;
 
 		if( auto invalid = invalid_read_result(result, buffer.size()) )
 		{
 			error = invalid;
-			state->m_cancelled = true;
-			state->m_adapter->cancel();
+			m_cancelled = true;
+			m_adapter->cancel();
 			break;
 		}
-		if( result.bytes > state->m_max_discard - std::min(state->m_max_discard, discarded) )
+		if( result.bytes > m_max_discard - std::min(m_max_discard, discarded) )
 		{
 			error = operation_error(errc::buffer_limit_exceeded);
-			state->m_adapter->cancel();
+			m_adapter->cancel();
 			break;
 		}
 		discarded += result.bytes;
 		if( result.eof )
 		{
-			state->m_finished = true;
+			m_finished = true;
 			break;
 		}
 	}
-	state->m_pending = false;
+	m_pending = false;
 }
 
 void body_reader_state::discard(operation_handler_t handler)
 {
-	auto state = m_impl;
-	if( state->m_pending )
+	if( m_pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress));
 		return ;
 	}
-	if( not state->m_ready or not state->m_adapter or state->m_cancelled )
+	if( not m_ready or not m_adapter or m_cancelled )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted));
 		return ;
 	}
-	if( state->m_finished )
+	if( m_finished )
 	{
 		std::move(handler)(error_code{});
 		return ;
 	}
-	state->m_pending = true;
-	std::make_shared<impl::operation>(state, std::move(handler))->start();
+	auto lifetime = keep_alive();
+	if( not lifetime )
+	{
+		std::move(handler)(operation_error(errc::operation_not_permitted));
+		return ;
+	}
+	auto callback_lifetime = m_parent_lifetime_bound ?
+		std::shared_ptr<void>{} : lifetime;
+
+	m_pending = true;
+	std::make_shared<discard_operation>(*this,
+		std::move(callback_lifetime), std::move(handler))->start();
 }
 
 fields body_reader_state::trailers(error_code &error) noexcept
 {
 	error.clear();
-	auto state = m_impl;
-
-	if( state->m_pending )
+	if( m_pending )
 	{
 		error = operation_error(errc::operation_in_progress);
 		return {};
 	}
-	if( not state->m_ready or not state->m_adapter or state->m_cancelled or not state->m_finished )
+	if( not m_ready or not m_adapter or m_cancelled or not m_finished )
 	{
 		error = operation_error(errc::operation_not_permitted);
 		return {};
 	}
-	if( state->m_trailer_cache )
-		return *state->m_trailer_cache;
+	if( m_trailer_cache )
+		return *m_trailer_cache;
 
-	state->m_pending = true;
-	auto result = state->m_adapter->trailers_sync(error);
+	m_pending = true;
+	auto result = m_adapter->trailers_sync(error);
 
-	state->m_pending = false;
+	m_pending = false;
 	if( not error )
-		state->m_trailer_cache = result;
+		m_trailer_cache = result;
 
 	return result;
 }
 
 void body_reader_state::trailers(trailers_handler_t handler)
 {
-	auto state = m_impl;
-	if( state->m_pending )
+	if( m_pending )
 	{
 		std::move(handler)(operation_error(errc::operation_in_progress), fields{});
 		return ;
 	}
-	if( not state->m_ready or not state->m_adapter or state->m_cancelled or not state->m_finished )
+	if( not m_ready or not m_adapter or m_cancelled or not m_finished )
 	{
 		std::move(handler)(operation_error(errc::operation_not_permitted), fields{});
 		return ;
 	}
-	if( state->m_trailer_cache )
+	if( m_trailer_cache )
 	{
-		std::move(handler)(error_code{}, *state->m_trailer_cache);
+		std::move(handler)(error_code{}, *m_trailer_cache);
 		return ;
 	}
-	state->m_pending = true;
+	auto lifetime = keep_alive();
+	if( not lifetime )
+	{
+		std::move(handler)(operation_error(errc::operation_not_permitted), fields {});
+		return ;
+	}
+	auto callback_lifetime = m_parent_lifetime_bound ?
+		std::shared_ptr<void>{} : lifetime;
+
+	m_pending = true;
 	try {
-		state->m_adapter->trailers(
-		[state, handler = std::move(handler)](error_code error, fields value) mutable
+		m_adapter->trailers (
+		[state = this, lifetime = std::move(callback_lifetime), handler = std::move(handler)]
+		(error_code error, fields value) mutable
 		{
+			RIWO_UNUSED(lifetime);
 			state->m_pending = false;
+
 			if( not error )
 				state->m_trailer_cache = value;
+
 			std::move(handler)(error, std::move(value));
 		});
 	}
 	catch(...)
 	{
-		state->m_pending = false;
+		m_pending = false;
 		std::move(handler)(exception_error(std::current_exception()), fields{});
 	}
 }
 
 void body_reader_state::cancel() noexcept
 {
-	auto state = m_impl;
-	state->m_cancelled = true;
-	if( state->m_adapter )
-		state->m_adapter->cancel();
+	m_cancelled = true;
+	if( m_adapter )
+		m_adapter->cancel();
+}
+
+void body_reader_state::bind_lifetime(std::weak_ptr<void> lifetime) noexcept
+{
+	m_lifetime = std::move(lifetime);
+	m_parent_lifetime_bound = true;
 }
 
 void body_reader_state::set_ready(bool ready) noexcept
 {
-	m_impl->m_ready = ready;
+	m_ready = ready;
 }
 
 void body_reader_state::set_finished(bool finished) noexcept
 {
-	m_impl->m_finished = finished;
+	m_finished = finished;
 }
 
 bool body_reader_state::is_finished() const noexcept
 {
-	return m_impl->m_finished;
+	return m_finished;
+}
+
+std::shared_ptr<void> body_reader_state::keep_alive() noexcept
+{
+	if( auto owner = m_lifetime.lock() )
+		return owner;
+	try {
+		return shared_from_this();
+	}
+	catch(...) {}
+	return {};
 }
 
 std::shared_ptr<body_reader_state> make_body_reader_state

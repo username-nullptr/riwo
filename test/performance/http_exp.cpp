@@ -129,13 +129,15 @@ void print_comparison(std::string_view name, size_t operations,
 	duration_t legacy, duration_t experimental, std::string_view unit);
 #endif
 
-loopback_results measure_http_exp_loopback()
+loopback_results measure_http_exp_loopback(
+	riwo::http_exp::protocol_requirement requirement =
+		riwo::http_exp::protocol_requirement::v1)
 {
 	namespace http = riwo::http_exp;
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
-	server_config.protocols.requirement = http::protocol_requirement::v1;
+	server_config.protocols.requirement = requirement;
 	server_config.compression.enabled = false;
 	http::server service(std::move(acceptor), server_config);
 	const std::string small_body = "ok";
@@ -162,7 +164,7 @@ loopback_results measure_http_exp_loopback()
 	const auto large_url = std::format(
 		"http://127.0.0.1:{}/benchmark-large", port);
 	http::client_config client_config;
-	client_config.protocols.requirement = http::protocol_requirement::v1;
+	client_config.protocols.requirement = requirement;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(250);
 	client_config.retries.max_attempts = 2;
@@ -189,8 +191,14 @@ loopback_results measure_http_exp_loopback()
 						auto reply = co_await requester->fetch(
 							http::request(http::method::get, target),
 							riwo::use_awaitable);
-						RIWO_TEST_CHECK_EQ(reply.selected_protocol(),
-							http::protocol::v1_1);
+					#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+						const auto expected_protocol =
+							requirement == http::protocol_requirement::v2 ?
+								http::protocol::v2 : http::protocol::v1_1;
+					#else
+						const auto expected_protocol = http::protocol::v1_1;
+					#endif
+						RIWO_TEST_CHECK_EQ(reply.selected_protocol(), expected_protocol);
 						RIWO_TEST_CHECK_EQ(reply.status(), http::status::ok);
 						RIWO_TEST_CHECK_EQ(body_view(reply), expected_body);
 						if( (index + 1) % batch_size == 0 )
@@ -376,19 +384,38 @@ void http_exp_loopback_throughput()
 #endif
 }
 
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+void http_exp_h2_loopback_throughput()
+{
+	const auto result = measure_http_exp_loopback(
+		riwo::http_exp::protocol_requirement::v2);
+	riwo::test::print_performance_result(
+		"HTTP_EXP/HTTP/2 one session, 2 B body",
+		request_count, result.small_keep_alive, "request");
+	riwo::test::print_performance_result(
+		"HTTP_EXP/HTTP/2 one session, 64 KiB body",
+		secondary_request_count, result.large_keep_alive, "request");
+	riwo::test::print_performance_result(
+		"HTTP_EXP/HTTP/2 new connection, 2 B body",
+		secondary_request_count, result.small_reconnect, "request");
+}
+#endif
+
 struct concurrent_result
 {
 	duration_t elapsed {};
 	size_t connection_recoveries = 0;
 };
 
-concurrent_result measure_http_exp_concurrent_loopback()
+concurrent_result measure_http_exp_concurrent_loopback(
+	const riwo::http_exp::protocol_requirement requirement =
+		riwo::http_exp::protocol_requirement::v1)
 {
 	namespace http = riwo::http_exp;
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config server_config;
-	server_config.protocols.requirement = http::protocol_requirement::v1;
+	server_config.protocols.requirement = requirement;
 	server_config.compression.enabled = false;
 	http::server service(std::move(acceptor), server_config);
 	const std::string body = "ok";
@@ -404,11 +431,23 @@ concurrent_result measure_http_exp_concurrent_loopback()
 	const auto target = std::format("http://127.0.0.1:{}/benchmark",
 		service.acceptor().local_endpoint().port());
 	http::client_config client_config;
-	client_config.protocols.requirement = http::protocol_requirement::v1;
+	client_config.protocols.requirement = requirement;
 	client_config.pool.max_sessions_per_origin = 1;
 	client_config.pool.idle_timeout = std::chrono::milliseconds(250);
 	client_config.retries.max_attempts = 2;
 	client_config.auto_decompression = false;
+	bool use_h2 = false;
+	#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+	use_h2 = requirement == http::protocol_requirement::v2;
+	#endif
+	auto worker_executor = asio::any_io_executor(context.get_executor());
+	std::shared_ptr<http::client> shared_requester;
+	if( use_h2 )
+	{
+		worker_executor = asio::make_strand(context);
+		shared_requester = std::make_shared<http::client>(
+			worker_executor, client_config);
+	}
 
 	std::array<std::thread,concurrent_io_thread_count> runners;
 	for(auto &runner : runners)
@@ -433,16 +472,25 @@ concurrent_result measure_http_exp_concurrent_loopback()
 			{
 				const auto iterations = total / concurrent_client_count +
 					(worker < total % concurrent_client_count ? 1U : 0U);
-				completed.emplace_back(asio::co_spawn(context,
+				completed.emplace_back(asio::co_spawn(worker_executor,
 				[&, iterations]() -> riwo::awaitable<void>
 				{
-					http::client requester(context.get_executor(), client_config);
+					auto requester = shared_requester;
+					if( !requester ) requester = std::make_shared<http::client>(
+						context.get_executor(), client_config);
 					for(size_t index = 0; index < iterations; ++index)
 					{
-						auto reply = co_await requester.fetch(
+						auto reply = co_await requester->fetch(
 							http::request(http::method::get, target),
 							riwo::use_awaitable);
 						RIWO_TEST_CHECK_EQ(reply.status(), http::status::ok);
+					#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+						const auto expected_protocol = use_h2 ?
+							http::protocol::v2 : http::protocol::v1;
+					#else
+						const auto expected_protocol = http::protocol::v1;
+					#endif
+						RIWO_TEST_CHECK_EQ(reply.selected_protocol(), expected_protocol);
 						RIWO_TEST_CHECK_EQ(body_view(reply), body);
 					}
 				}, riwo::use_future));
@@ -582,6 +630,17 @@ void http_exp_concurrent_loopback_throughput()
 		legacy.elapsed, experimental.elapsed, "requests");
 #endif
 }
+
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+void http_exp_h2_multiplexed_throughput()
+{
+	const auto result = measure_http_exp_concurrent_loopback(
+		riwo::http_exp::protocol_requirement::v2);
+	riwo::test::print_performance_result(
+		"HTTP_EXP/HTTP/2 multiplexed (1 session, 8 streams, 4 I/O threads), 2 B body",
+		request_count, result.elapsed, "request");
+}
+#endif
 
 duration_t measure_http_exp_request_parser(size_t count)
 {
@@ -1251,6 +1310,11 @@ int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
 		{"HTTP_EXP loopback throughput", http_exp_loopback_throughput},
+#if RIWO_HTTP_EXP_HTTP2_SUPPORT
+		{"HTTP_EXP HTTP/2 loopback throughput", http_exp_h2_loopback_throughput},
+		{"HTTP_EXP HTTP/2 multiplexed throughput",
+			http_exp_h2_multiplexed_throughput},
+#endif
 		{"HTTP_EXP concurrent loopback throughput",
 			http_exp_concurrent_loopback_throughput},
 		{"HTTP_EXP protocol hot paths", http_exp_protocol_hot_paths},

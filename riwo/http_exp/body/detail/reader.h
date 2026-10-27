@@ -47,6 +47,9 @@ public:
 	explicit body_reader_state(body_reader_adapter_ptr adapter = {},
 		bool ready = false, uint64_t max_discard = 1024 * 1024
 	);
+	body_reader_state(body_reader_adapter &adapter, bool ready,
+		uint64_t max_discard = 1024 * 1024
+	);
 	~body_reader_state();
 
 public:
@@ -60,6 +63,7 @@ public:
 	void trailers(trailers_handler_t handler);
 
 	void cancel() noexcept;
+	void bind_lifetime(std::weak_ptr<void> lifetime) noexcept;
 
 	void set_ready(bool ready = true) noexcept;
 	void set_finished(bool finished = true) noexcept;
@@ -67,8 +71,23 @@ public:
 	[[nodiscard]] bool is_finished() const noexcept;
 
 private:
-	class impl;
-	std::shared_ptr<impl> m_impl;
+	class discard_operation;
+	[[nodiscard]] std::shared_ptr<void> keep_alive() noexcept;
+
+	body_reader_adapter_ptr m_owned_adapter {};
+	body_reader_adapter *m_adapter = nullptr;
+	std::weak_ptr<void> m_lifetime {};
+
+	uint64_t m_max_discard = 0;
+	optional<fields> m_trailer_cache {};
+
+	bool m_ready = false;
+	bool m_pending = false;
+
+	bool m_finished = false;
+	bool m_cancelled = false;
+
+	bool m_parent_lifetime_bound = false;
 };
 
 using body_reader_state_ptr = body_reader_state::ptr_t;

@@ -95,17 +95,15 @@ public:
 			std::move(query_parameters), std::move(sessions),
 			std::move(resource_root), automatic_compression,
 			compression_minimum_size)),
-		m_request_body(std::make_unique<body_reader_t>(
-			m_exec, m_state->request_body())),
-		m_response_body(std::make_unique<body_writer_t>(
-			m_exec, m_state->response_body()))
+		m_request_body(m_exec, m_state->request_body()),
+		m_response_body(m_exec, m_state->response_body())
 	{
 	}
 
 	executor_t m_exec;
 	std::shared_ptr<detail::server_exchange_state> m_state;
-	std::unique_ptr<body_reader_t> m_request_body;
-	std::unique_ptr<body_writer_t> m_response_body;
+	body_reader_t m_request_body;
+	body_writer_t m_response_body;
 };
 
 template <core_concepts::exec Exec>
@@ -245,12 +243,12 @@ const std::filesystem::path &basic_server_exchange<Exec>::resource_root()
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::request_body() noexcept -> body_reader_t& {
-	return *m_impl->m_request_body;
+	return m_impl->m_request_body;
 }
 
 template <core_concepts::exec Exec>
 auto basic_server_exchange<Exec>::response_body() noexcept -> body_writer_t& {
-	return *m_impl->m_response_body;
+	return m_impl->m_response_body;
 }
 
 template <core_concepts::exec Exec>
@@ -655,8 +653,8 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 		auto state = m_impl->m_state->accept_duplex(std::move(head), token);
 		if( not token )
 		{
-			m_impl->m_request_body->detach();
-			m_impl->m_response_body->detach();
+			m_impl->m_request_body.detach();
+			m_impl->m_response_body.detach();
 		}
 		return channel_t(m_impl->m_exec, std::move(state));
 	}
@@ -667,8 +665,8 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 		if( error )
 			return expected_value_or_throw(sys_expected<channel_t>(
 				sys_unexpected(error)));
-		m_impl->m_request_body->detach();
-		m_impl->m_response_body->detach();
+		m_impl->m_request_body.detach();
+		m_impl->m_response_body.detach();
 		return channel_t(m_impl->m_exec, std::move(state));
 	}
 	else
@@ -685,8 +683,8 @@ auto basic_server_exchange<Exec>::accept_duplex(response_head head,
 				 std::shared_ptr<detail::duplex_state> channel) mutable {
 					if( not error )
 					{
-						owner->m_request_body->detach();
-						owner->m_response_body->detach();
+						owner->m_request_body.detach();
+						owner->m_response_body.detach();
 					}
 					std::move(handler)(error,
 						channel_t(executor, std::move(channel)));

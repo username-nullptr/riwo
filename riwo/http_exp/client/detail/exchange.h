@@ -66,14 +66,14 @@ public:
 		m_state(detail::make_client_exchange_state(std::move(stream),
 			std::move(cookies), std::move(origin))
 		),
-		m_request_body(std::make_unique<body_writer_t>(m_exec, m_state->request_body())),
-		m_reply_body(std::make_unique<body_reader_t>(m_exec, m_state->reply_body())) {}
+		m_request_body(m_exec, m_state->request_body()),
+		m_reply_body(m_exec, m_state->reply_body()) {}
 
 	executor_t m_exec {};
 	detail::client_exchange_state_ptr m_state {};
 
-	std::unique_ptr<body_writer_t> m_request_body {};
-	std::unique_ptr<body_reader_t> m_reply_body {};
+	body_writer_t m_request_body {};
+	body_reader_t m_reply_body {};
 };
 
 template <core_concepts::exec Exec>
@@ -165,7 +165,7 @@ protocol basic_client_exchange<Exec>::selected_protocol() const noexcept
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::request_body() noexcept -> body_writer_t&
 {
-	return *m_impl->m_request_body;
+	return m_impl->m_request_body;
 }
 
 template <core_concepts::exec Exec>
@@ -202,7 +202,7 @@ auto basic_client_exchange<Exec>::wait_reply(Token &&token)
 template <core_concepts::exec Exec>
 auto basic_client_exchange<Exec>::reply_body() noexcept -> body_reader_t&
 {
-	return *m_impl->m_reply_body;
+	return m_impl->m_reply_body;
 }
 
 template <core_concepts::exec Exec>
@@ -216,8 +216,8 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token) requires
 		auto state = m_impl->m_state->release_duplex(token);
 		if( not token )
 		{
-			m_impl->m_request_body->detach();
-			m_impl->m_reply_body->detach();
+			m_impl->m_request_body.detach();
+			m_impl->m_reply_body.detach();
 		}
 		return channel_t(m_impl->m_exec, std::move(state));
 	}
@@ -229,8 +229,8 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token) requires
 		if( error )
 			return expected_value_or_throw(sys_expected<channel_t>(sys_unexpected(error)));
 
-		m_impl->m_request_body->detach();
-		m_impl->m_reply_body->detach();
+		m_impl->m_request_body.detach();
+		m_impl->m_reply_body.detach();
 
 		return channel_t(m_impl->m_exec, std::move(state));
 	}
@@ -248,8 +248,8 @@ auto basic_client_exchange<Exec>::release_duplex(Token &&token) requires
 			{
 				if( not error )
 				{
-					owner->m_request_body->detach();
-					owner->m_reply_body->detach();
+					owner->m_request_body.detach();
+					owner->m_reply_body.detach();
 				}
 				std::move(handler) (
 					error, channel_t(executor, std::move(channel))

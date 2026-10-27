@@ -167,8 +167,8 @@ class RIWO_DECL_HIDDEN v2_reader_adapter final : public body_reader_adapter
 	RIWO_DISABLE_COPY_MOVE(v2_reader_adapter)
 
 public:
-	explicit v2_reader_adapter(std::weak_ptr<v2_stream> owner) :
-		m_owner(std::move(owner)) {}
+	explicit v2_reader_adapter(v2_stream &owner) :
+		m_owner(std::addressof(owner)) {}
 
 	[[nodiscard]] body_read_result read_some_sync(mutable_buffer buffer, error_code &error) noexcept override;
 	void read_some(mutable_buffer buffer, read_handler_t handler) override;
@@ -179,18 +179,16 @@ public:
 	void cancel() noexcept override;
 
 private:
-	std::weak_ptr<v2_stream> m_owner {};
+	v2_stream *m_owner = nullptr;
 };
-
-using v2_reader_adapter_ptr = std::shared_ptr<v2_reader_adapter>;
 
 class RIWO_DECL_HIDDEN v2_writer_adapter final : public body_writer_adapter
 {
 	RIWO_DISABLE_COPY_MOVE(v2_writer_adapter)
 
 public:
-	explicit v2_writer_adapter(std::weak_ptr<v2_stream> owner) :
-		m_owner(std::move(owner)) {}
+	explicit v2_writer_adapter(v2_stream &owner) :
+		m_owner(std::addressof(owner)) {}
 
 	[[nodiscard]] size_t write_sync(const_buffer buffer, error_code &error) noexcept override;
 	void write(const_buffer buffer, write_handler_t handler) override;
@@ -201,10 +199,8 @@ public:
 	void cancel() noexcept override;
 
 private:
-	std::weak_ptr<v2_stream> m_owner {};
+	v2_stream *m_owner = nullptr;
 };
-
-using v2_writer_adapter_ptr = std::shared_ptr<v2_writer_adapter>;
 
 class RIWO_DECL_HIDDEN v2_stream final : public session_stream,
 	public std::enable_shared_from_this<v2_stream>
@@ -230,11 +226,16 @@ public:
 		return m_request;
 	}
 
-	[[nodiscard]] std::shared_ptr<body_reader_state> inbound_body() const noexcept override {
-		return m_inbound;
+	[[nodiscard]] std::shared_ptr<body_reader_state> inbound_body() const noexcept override
+	{
+		auto *self = const_cast<v2_stream*>(this);
+		return {self->shared_from_this(), std::addressof(self->m_inbound)};
 	}
-	[[nodiscard]] std::shared_ptr<body_writer_state> outbound_body() const noexcept override {
-		return m_outbound;
+
+	[[nodiscard]] std::shared_ptr<body_writer_state> outbound_body() const noexcept override
+	{
+		auto *self = const_cast<v2_stream*>(this);
+		return {self->shared_from_this(), std::addressof(self->m_outbound)};
 	}
 
 	[[nodiscard]] response_head wait_response_sync(error_code &error) noexcept override;
@@ -269,7 +270,7 @@ public:
 	}
 
 public:
-	std::shared_ptr<v2_session> m_session {};
+	v2_session_ptr m_session {};
 	request_head m_request {};
 
 	body_spec m_spec;
@@ -277,11 +278,11 @@ public:
 
 	stream_extension m_extension {};
 
-	v2_reader_adapter_ptr m_reader_adapter {};
-	v2_writer_adapter_ptr m_writer_adapter {};
+	v2_reader_adapter m_reader_adapter;
+	v2_writer_adapter m_writer_adapter;
 
-	http_exp::detail::body_reader_state_ptr m_inbound {};
-	http_exp::detail::body_writer_state_ptr m_outbound {};
+	body_reader_state m_inbound {};
+	body_writer_state m_outbound {};
 
 	std::deque<std::vector<std::byte>> m_inbound_chunks {};
 	size_t m_inbound_offset = 0;
@@ -304,7 +305,7 @@ public:
 
 	struct pending_write
 	{
-		std::vector<std::byte> bytes {};
+		const_buffer buffer {};
 		body_writer_adapter::write_handler_t handler {};
 	};
 	std::deque<pending_write> m_pending_writes {};
@@ -339,7 +340,7 @@ public:
 	v2_session(connection_ptr transport, client_session_config config,
 		asio::ip::tcp::endpoint remote, asio::ip::tcp::endpoint local) :
 		m_exec(transport->get_executor()), m_strand(asio::make_strand(m_exec)),
-		m_transport(std::move(transport)), m_config(std::move(config)),
+		m_transport(std::move(transport)), m_config(config),
 		m_remote(std::move(remote)), m_local(std::move(local)),
 		m_peer_max_streams(m_config.h2.max_concurrent_streams) {}
 
@@ -532,7 +533,7 @@ public:
 				}
 			}
 			error_code error {};
-			auto value = self->submit(std::move(head), std::move(spec), error);
+			auto value = self->submit(std::move(head), spec, error);
 
 			if( not error )
 				self->write_pump();
@@ -714,33 +715,27 @@ public:
 	void write(const v2_stream_ptr &value, const const_buffer &buffer,
 		body_writer_adapter::write_handler_t handler)
 	{
-		auto bytes = std::vector<std::byte>(buffer.size());
-		if( buffer.size() != 0 )
-			std::memcpy(bytes.data(), buffer.data(), buffer.size());
-
 		auto self = shared_from_this();
-		asio::post(m_strand, [self = std::move(self),
-			value, bytes = std::move(bytes), handler = std::move(handler)
-		]() mutable
+		asio::post(m_strand,
+		[self = std::move(self), value, buffer, handler = std::move(handler)]() mutable
 		{
 			if( value->m_terminal_error )
 				return std::move(handler)(value->m_terminal_error, 0);
 
-			if( bytes.size() > self->m_config.h2.outbound_stream_buffer )
+			if( buffer.size() > self->m_config.h2.outbound_stream_buffer )
 			{
 				return std::move(handler) (
 					make_error_code(errc::buffer_limit_exceeded), 0
 				);
 			}
-			if( value->m_outbound_size + bytes.size() > self->m_config.h2.outbound_stream_buffer or
-				self->m_outbound_buffered + bytes.size() > self->m_config.h2.outbound_connection_buffer )
+			if( value->m_outbound_size + buffer.size() > self->m_config.h2.outbound_stream_buffer or
+				self->m_outbound_buffered + buffer.size() > self->m_config.h2.outbound_connection_buffer )
 			{
-				value->m_pending_writes.emplace_back(
-					std::move(bytes), std::move(handler));
+				value->m_pending_writes.emplace_back(buffer, std::move(handler));
 				return ;
 			}
-			const auto size = bytes.size();
-			self->enqueue(*value, std::move(bytes));
+			const auto size = buffer.size();
+			self->enqueue(*value, buffer);
 
 			(void)nghttp2_session_resume_data(self->m_native, value->m_id);
 			self->write_pump();
@@ -998,17 +993,45 @@ private:
 		if( static_cast<size_t>(size) > m_config.h2.outbound_connection_buffer )
 			return fail(make_error_code(errc::buffer_limit_exceeded));
 
-		m_writing = true;
-		auto wire = std::make_shared<std::vector<std::byte>>(static_cast<size_t>(size));
+		const auto batch_limit = std::min<size_t>(
+			64 * 1024, m_config.h2.outbound_connection_buffer
+		);
+		const auto peer_frame_size = static_cast<size_t>(
+			nghttp2_session_get_remote_settings(m_native, NGHTTP2_SETTINGS_MAX_FRAME_SIZE)
+		);
+		auto expected = static_cast<size_t>(size);
+		const uint8_t *write_data = data;
 
-		std::memcpy(wire->data(), data, wire->size());
+		if( nghttp2_session_want_write(m_native) != 0 and expected + peer_frame_size + 9 <= batch_limit )
+		{
+			m_write_buffer.assign(data, data + expected);
+			while( nghttp2_session_want_write(m_native) != 0 and
+				   m_write_buffer.size() + peer_frame_size + 9 <= batch_limit )
+			{
+				const uint8_t *next = nullptr;
+				const auto next_size = nghttp2_api::session_mem_send(m_native, &next);
+
+				if( next_size < 0 )
+					return fail(protocol_error());
+
+				if( next_size == 0 )
+					break;
+
+				m_write_buffer.insert(m_write_buffer.end(),
+					next, next + static_cast<size_t>(next_size)
+				);
+			}
+			write_data = m_write_buffer.data();
+			expected = m_write_buffer.size();
+		}
+		m_writing = true;
 		auto self = shared_from_this();
 
-		m_transport->write(buffer(*wire), asio::bind_executor(m_strand,
-			[self = std::move(self), wire](const error_code &error, size_t written) mutable
+		m_transport->write(const_buffer(write_data, expected), asio::bind_executor(m_strand,
+			[self = std::move(self), expected](const error_code &error, size_t written) mutable
 			{
 				self->m_writing = false;
-				if( error or written != wire->size() )
+				if( error or written != expected )
 				{
 					self->fail(error ? error : protocol_error());
 					return ;
@@ -1157,6 +1180,38 @@ private:
 		catch(...) {}
 	}
 
+	void receive_body(v2_stream &value, const uint8_t *data, size_t size)
+	{
+		const auto direct = value.m_pending_read_handler and value.m_pending_read_buffer ?
+			std::min(size, value.m_pending_read_buffer->size()) : 0;
+
+		const auto queued = size - direct;
+		std::vector<std::byte> remainder(queued);
+
+		if( queued != 0 )
+		{
+			std::memcpy(remainder.data(), data + direct, queued);
+			value.m_inbound_chunks.emplace_back(std::move(remainder));
+
+			value.m_inbound_size += queued;
+			m_inbound_buffered += queued;
+		}
+		value.m_inbound_total += size;
+		if( direct == 0 )
+			return ;
+
+		auto target = *value.m_pending_read_buffer;
+		auto handler = std::move(value.m_pending_read_handler);
+		value.m_pending_read_buffer.reset();
+
+		std::memcpy(target.data(), data, direct);
+		consume(value, direct);
+
+		std::move(handler)(error_code{}, body_read_result {
+			.bytes = direct, .eof = false
+		});
+	}
+
 	[[nodiscard]] body_read_result take_body(v2_stream &value, const mutable_buffer &buffer)
 	{
 		size_t copied = 0;
@@ -1220,15 +1275,15 @@ private:
 		{
 			auto &pending = value.m_pending_writes.front();
 
-			if( value.m_outbound_size + pending.bytes.size() > m_config.h2.outbound_stream_buffer or
-				m_outbound_buffered + pending.bytes.size() > m_config.h2.outbound_connection_buffer )
+			if( value.m_outbound_size + pending.buffer.size() > m_config.h2.outbound_stream_buffer or
+				m_outbound_buffered + pending.buffer.size() > m_config.h2.outbound_connection_buffer )
 				return ;
 
 			auto item = std::move(pending);
 			value.m_pending_writes.pop_front();
 
-			const auto size = item.bytes.size();
-			enqueue(value, std::move(item.bytes));
+			const auto size = item.buffer.size();
+			enqueue(value, item.buffer);
 
 			std::move(item.handler)(error_code{}, size);
 		}
@@ -1487,15 +1542,7 @@ private:
 			return 0;
 		}
 		try {
-			std::vector<std::byte> bytes(size);
-			if( size != 0 )
-				std::memcpy(bytes.data(), data, size);
-
-			value.m_inbound_chunks.emplace_back(std::move(bytes));
-			value.m_inbound_size += size;
-			value.m_inbound_total += size;
-			self.m_inbound_buffered += size;
-			self.deliver_pending_read(value);
+			self.receive_body(value, data, size);
 		}
 		catch(...) {
 			return NGHTTP2_ERR_CALLBACK_FAILURE;
@@ -1651,6 +1698,7 @@ private:
 
 	std::unordered_map<int32_t,std::shared_ptr<v2_stream>> m_streams {};
 	std::array<std::byte,16 * 1024> m_read_buffer {};
+	std::vector<uint8_t> m_write_buffer {};
 
 	size_t m_inbound_buffered = 0;
 	size_t m_outbound_buffered = 0;
@@ -1677,7 +1725,10 @@ private:
 };
 
 v2_stream::v2_stream(std::shared_ptr<v2_session> session, request_head request, body_spec spec) :
-	m_session(std::move(session)), m_request(std::move(request)), m_spec(std::move(spec))
+	m_session(std::move(session)), m_request(std::move(request)), m_spec(std::move(spec)),
+	m_reader_adapter(*this), m_writer_adapter(*this),
+	m_inbound(m_reader_adapter, false, m_session->config().reply_limits.max_discard_body),
+	m_outbound(m_writer_adapter, m_spec, true)
 {
 
 }
@@ -1690,13 +1741,9 @@ v2_stream::~v2_stream()
 
 void v2_stream::initialize()
 {
-	m_reader_adapter = std::make_shared<v2_reader_adapter>(weak_from_this());
-	m_writer_adapter = std::make_shared<v2_writer_adapter>(weak_from_this());
-
-	m_inbound = make_body_reader_state (
-		m_reader_adapter, false, m_session->config().reply_limits.max_discard_body
-	);
-	m_outbound = make_body_writer_state(m_writer_adapter, m_spec, true);
+	auto lifetime = weak_from_this();
+	m_inbound.bind_lifetime(lifetime);
+	m_outbound.bind_lifetime(lifetime);
 }
 
 response_head v2_stream::wait_response_sync(error_code &error) noexcept
@@ -1746,7 +1793,7 @@ std::shared_ptr<duplex_state> v2_stream::open_duplex_sync
 	auto self = shared_from_this();
 
 	return make_body_duplex_state(m_session->get_executor(),
-		protocol::v2, m_inbound, m_outbound, remote, local, self,
+		protocol::v2, inbound_body(), outbound_body(), remote, local, self,
 		[weak = weak_from_this()]
 		{
 			if( auto value = weak.lock() )
@@ -1773,7 +1820,9 @@ void v2_stream::cancel() noexcept
 
 body_read_result v2_reader_adapter::read_some_sync(mutable_buffer buffer, error_code &error) noexcept
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 	{
 		error = aborted();
@@ -1784,15 +1833,20 @@ body_read_result v2_reader_adapter::read_some_sync(mutable_buffer buffer, error_
 
 void v2_reader_adapter::read_some(mutable_buffer buffer, read_handler_t handler)
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 		return std::move(handler)(aborted(), body_read_result{});
+
 	owner->m_session->read(owner, buffer, std::move(handler));
 }
 
 fields v2_reader_adapter::trailers_sync(error_code &error) noexcept
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 	{
 		error = aborted();
@@ -1803,21 +1857,26 @@ fields v2_reader_adapter::trailers_sync(error_code &error) noexcept
 
 void v2_reader_adapter::trailers(trailers_handler_t handler)
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 		return std::move(handler)(aborted(), fields{});
+
 	owner->m_session->trailers(owner, std::move(handler));
 }
 
 void v2_reader_adapter::cancel() noexcept
 {
-	if( auto owner = m_owner.lock() )
+	if( auto owner = m_owner ? m_owner->weak_from_this().lock() : nullptr )
 		owner->cancel();
 }
 
 size_t v2_writer_adapter::write_sync(const_buffer buffer, error_code &error) noexcept
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 	{
 		error = aborted();
@@ -1828,15 +1887,20 @@ size_t v2_writer_adapter::write_sync(const_buffer buffer, error_code &error) noe
 
 void v2_writer_adapter::write(const_buffer buffer, write_handler_t handler)
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 		return std::move(handler)(aborted(), 0);
+
 	owner->m_session->write(owner, buffer, std::move(handler));
 }
 
 void v2_writer_adapter::finish_sync(fields trailers, error_code &error) noexcept
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 	{
 		error = aborted();
@@ -1847,15 +1911,20 @@ void v2_writer_adapter::finish_sync(fields trailers, error_code &error) noexcept
 
 void v2_writer_adapter::finish(fields trailers, finish_handler_t handler)
 {
-	auto owner = m_owner.lock();
+	auto owner = m_owner ?
+		m_owner->weak_from_this().lock() : nullptr;
+
 	if( not owner )
 		return std::move(handler)(aborted());
-	owner->m_session->finish(owner, std::move(trailers), std::move(handler));
+
+	owner->m_session->finish (
+		owner, std::move(trailers), std::move(handler)
+	);
 }
 
 void v2_writer_adapter::cancel() noexcept
 {
-	if( auto owner = m_owner.lock() )
+	if( auto owner = m_owner ? m_owner->weak_from_this().lock() : nullptr )
 		owner->cancel();
 }
 

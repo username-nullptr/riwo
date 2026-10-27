@@ -61,12 +61,12 @@ public:
 public:
 	impl(executor_t executor_value, protocol protocol_value, protocol reply_protocol_value,
 		reply_head head_value, detail::body_reader_state_ptr state, std::vector<std::byte> buffered_body_value,
-		std::shared_ptr<void> owner_value, uint64_t max_buffered_body_value) :
+		std::shared_ptr<void> owner_value, uint64_t max_buffered_body_value
+	) :
 		m_exec(std::move(executor_value)), m_protocol_value(protocol_value),
 		m_reply_protocol_value(reply_protocol_value), m_head(std::move(head_value)),
-		m_body(std::make_unique<body_reader_t>(m_exec, std::move(state))),
-		m_buffered_body(std::move(buffered_body_value)), m_owner(std::move(owner_value)),
-		m_max_buffered_body(max_buffered_body_value) {}
+		m_body(m_exec, std::move(state)), m_buffered_body(std::move(buffered_body_value)),
+		m_owner(std::move(owner_value)), m_max_buffered_body(max_buffered_body_value) {}
 
 public:
 	executor_t m_exec {};
@@ -74,7 +74,7 @@ public:
 	protocol m_reply_protocol_value {};
 
 	reply_head m_head {};
-	std::unique_ptr<body_reader_t> m_body {};
+	body_reader_t m_body;
 	std::vector<std::byte> m_buffered_body {};
 
 	std::shared_ptr<void> m_owner {};
@@ -203,7 +203,7 @@ auto basic_reply<Exec>::read_all(Token &&token)
 		[state = m_impl](auto handler) mutable
 		{
 			auto value = std::make_shared<typename impl::operation>();
-			value->reader = state->m_body.get();
+			value->reader = std::addressof(state->m_body);
 			value->limit = state->m_max_buffered_body;
 			value->handler = decltype(value->handler)(std::move(handler));
 			value->start();
@@ -236,8 +236,7 @@ auto basic_reply<Exec>::save_file(File &&file, Token &&token) requires
 template <core_concepts::exec Exec>
 void basic_reply<Exec>::cancel() noexcept
 {
-	if( m_impl->m_body )
-		m_impl->m_body->cancel();
+	m_impl->m_body.cancel();
 }
 
 template <core_concepts::exec Exec>
@@ -255,7 +254,7 @@ const fields &basic_reply<Exec>::headers() const noexcept
 template <core_concepts::exec Exec>
 auto basic_reply<Exec>::body() noexcept -> body_reader_t&
 {
-	return *m_impl->m_body;
+	return m_impl->m_body;
 }
 
 template <core_concepts::exec Exec>
