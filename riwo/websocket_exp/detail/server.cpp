@@ -331,7 +331,7 @@ server_upgrade_plan make_server_upgrade_plan(request_info request,
 http_exp::server_config websocket_http_config(http_exp::server_config config)
 {
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	config.h2.enable_extended_connect = true;
+	config.v2.enable_extended_connect = true;
 #endif
 	return config;
 }

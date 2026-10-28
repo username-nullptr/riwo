@@ -111,10 +111,10 @@ request_info snapshot_request(
 		result.query_parameters = head.url.parameters();
 	result.remote_address = exchange.remote_address();
 	result.remote_port = exchange.remote_port();
-	error_code endpoint_error;
-	result.remote_endpoint = exchange.remote_endpoint(endpoint_error);
-	endpoint_error.clear();
-	result.local_endpoint = exchange.local_endpoint(endpoint_error);
+	if( auto endpoint = exchange.remote_endpoint() )
+		result.remote_endpoint = *endpoint;
+	if( auto endpoint = exchange.local_endpoint() )
+		result.local_endpoint = *endpoint;
 	return result;
 }
 

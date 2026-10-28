@@ -61,7 +61,7 @@ void concurrent_http1_pool_pressure()
 		[&](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			const auto size_text =
-				exchange.query_parameter("size").value_or("0");
+				exchange.query_parameter("size").value_or("0").to_string();
 			size_t body_size = 0;
 			const auto parsed = std::from_chars(size_text.data(),
 				size_text.data() + size_text.size(), body_size);
@@ -70,7 +70,7 @@ void concurrent_http1_pool_pressure()
 				body_size > 64 * 1024 )
 				throw std::invalid_argument("invalid stress response size");
 			const auto fill_text =
-				exchange.query_parameter("fill").value_or("x");
+				exchange.query_parameter("fill").value_or("x").to_string();
 			if( fill_text.size() != 1 )
 				throw std::invalid_argument("invalid stress response fill");
 			http::response_head head;
@@ -156,7 +156,7 @@ void http2_multiplexed_slow_consumer_pressure()
 	// 128 default-sized stream windows fit inside the configured 8 MiB
 	// connection budget; raising only the stream count would be an invalid
 	// resource configuration rather than useful pressure.
-	server_config.h2.max_concurrent_streams = 128;
+	server_config.v2.max_concurrent_streams = 128;
 	http::server service(std::move(acceptor), server_config);
 	std::atomic_size_t fast_handled {0};
 	std::atomic_bool slow_finished {false};
@@ -177,8 +177,9 @@ void http2_multiplexed_slow_consumer_pressure()
 		.on_request<http::method::get>("/fast/{id}",
 		[&](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
-			const auto id = exchange.path_parameter("id").value_or("missing");
-			const auto body = std::string("fast-") + std::string(id);
+			const auto id = exchange.path_parameter("id").value_or(
+				"missing").to_string();
+			const auto body = std::string("fast-") + id;
 			fast_handled.fetch_add(1, std::memory_order_relaxed);
 			co_await exchange.respond({http::status::ok, {}}, body,
 				riwo::use_awaitable);

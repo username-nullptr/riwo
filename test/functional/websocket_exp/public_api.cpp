@@ -145,7 +145,7 @@ void executor_bound_objects()
 	RIWO_TEST_CHECK(server.get_service_executor() == executor);
 	RIWO_TEST_CHECK(server.http_server().get_executor() == executor);
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-	RIWO_TEST_CHECK(server.config().http.h2.enable_extended_connect);
+	RIWO_TEST_CHECK(server.config().http.v2.enable_extended_connect);
 #endif
 	RIWO_TEST_CHECK(accepted.stream.get_executor() == executor);
 	RIWO_TEST_CHECK(retried.get_executor() == executor);

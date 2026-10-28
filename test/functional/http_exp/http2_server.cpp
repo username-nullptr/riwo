@@ -155,8 +155,8 @@ void invalid_resource_configuration()
 	asio::ip::tcp::acceptor acceptor(context);
 	http::server_config config;
 	config.protocols.requirement = http::protocol_requirement::v2;
-	config.h2.initial_stream_window = 128 * 1024;
-	config.h2.inbound_stream_buffer = 64 * 1024;
+	config.v2.initial_stream_window = 128 * 1024;
+	config.v2.inbound_stream_buffer = 64 * 1024;
 	http::server service(std::move(acceptor), config);
 	service.bind({riwo::ip_type::v4, 0});
 	riwo::error_code error;

@@ -421,10 +421,10 @@ void injected_acceptor_replays_initial_input()
 	{
 		RIWO_TEST_CHECK_EQ(exchange.remote_address(), "192.0.2.1");
 		RIWO_TEST_CHECK_EQ(exchange.remote_port(), 4242U);
-		riwo::error_code endpoint_error;
-		RIWO_TEST_CHECK_EQ(exchange.local_endpoint(endpoint_error),
+		auto local_endpoint = exchange.local_endpoint();
+		RIWO_TEST_CHECK(local_endpoint.has_value());
+		RIWO_TEST_CHECK_EQ(*local_endpoint,
 			asio::ip::tcp::endpoint(asio::ip::make_address("192.0.2.2"), 8080));
-		RIWO_TEST_CHECK(!endpoint_error);
 		co_await exchange.respond({http::status::ok, {}},
 			std::string_view("accepted"), riwo::use_awaitable);
 		context.stop();

@@ -39,7 +39,7 @@ public:
 		m_acceptor_wrap(std::move(acceptor_value)),
 		m_service_executor(std::move(service_executor_value)),
 		m_config(std::move(config_value)),
-		m_sessions(std::make_shared<application_session_manager>(
+		m_sessions(std::make_shared<app_session_manager>(
 			m_config.sessions)),
 		m_routes(std::make_shared<const route_table>())
 	{
@@ -49,7 +49,7 @@ public:
 		m_acceptor_wrap(std::move(acceptor_value)),
 		m_service_executor(m_acceptor_wrap.get_executor()),
 		m_config(std::move(config_value)),
-		m_sessions(std::make_shared<application_session_manager>(
+		m_sessions(std::make_shared<app_session_manager>(
 			m_config.sessions)),
 		m_routes(std::make_shared<const route_table>())
 	{
@@ -532,7 +532,7 @@ public:
 	acceptor_wrap_t m_acceptor_wrap;
 	service_executor_t m_service_executor;
 	config_t m_config;
-	std::shared_ptr<application_session_manager> m_sessions;
+	std::shared_ptr<app_session_manager> m_sessions;
 	std::atomic<std::shared_ptr<const route_table>> m_routes;
 	std::mutex m_routes_write_mutex;
 	server_error_handler_t m_server_error_handler;

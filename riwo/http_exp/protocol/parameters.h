@@ -5,6 +5,7 @@
 #define RIWO_HTTP_EXP_PROTOCOL_PARAMETERS_H
 
 #include <riwo/http_exp/global.h>
+#include <riwo/core/value.h>
 
 namespace riwo::http_exp
 {
@@ -12,7 +13,7 @@ namespace riwo::http_exp
 struct parameter
 {
 	std::string name;
-	std::string value;
+	riwo::value value;
 
 	friend bool operator== (
 		const parameter&, const parameter&
@@ -29,13 +30,11 @@ public:
 	parameter_view() = default;
 	explicit parameter_view(container_t values) noexcept;
 
-	[[nodiscard]] optional<std::string_view>
-	find_first(std::string_view name) const noexcept;
+public:
+	[[nodiscard]] optional<value> find_first(core_concepts::text_p<char> auto &&name) const;
+	[[nodiscard]] std::vector<value> find_all(core_concepts::text_p<char> auto &&name) const;
+	[[nodiscard]] bool contains(core_concepts::text_p<char> auto &&name) const noexcept;
 
-	[[nodiscard]] std::vector<std::string_view>
-	find_all(std::string_view name) const;
-
-	[[nodiscard]] bool contains(std::string_view name) const noexcept;
 	[[nodiscard]] bool empty() const noexcept;
 	[[nodiscard]] size_t size() const noexcept;
 
@@ -44,6 +43,9 @@ public:
 	[[nodiscard]] const container_t &values() const noexcept;
 
 private:
+	[[nodiscard]] optional<value> find_first_impl(std::string_view name) const;
+	[[nodiscard]] std::vector<value> find_all_impl(std::string_view name) const;
+	[[nodiscard]] bool contains_impl(std::string_view name) const noexcept;
 	container_t m_values {};
 };
 
@@ -54,6 +56,7 @@ decode_uri_component(std::string_view value, bool plus_as_space = false) noexcep
 parse_query_parameters(std::string_view query) noexcept;
 
 } //namespace riwo::http_exp
+#include <riwo/http_exp/protocol/detail/parameters.h>
 
 
 #endif //RIWO_HTTP_EXP_PROTOCOL_PARAMETERS_H

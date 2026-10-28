@@ -7,6 +7,10 @@
 #include <riwo/http_exp/session.h>
 #include <riwo/http_exp/transport/connection.h>
 
+#include <algorithm>
+#include <cctype>
+#include <unordered_set>
+
 namespace
 {
 
@@ -45,6 +49,36 @@ static_assert(std::same_as<http::ctrlr_aop,http::controller>);
 static_assert(std::same_as<http::basic_tcp_server<>,http::basic_server<>>);
 static_assert(std::same_as<http::tcp_server,http::basic_tcp_server<>>);
 static_assert(std::same_as<http::server,http::tcp_server>);
+static_assert(std::same_as<decltype(http::parameter::value),riwo::value>);
+static_assert(requires(const http::parameter_view &parameters,
+	std::string &string, std::string_view view, const char *pointer,
+	char character) {
+	{ parameters.find_first("name") } ->
+		std::same_as<riwo::optional<riwo::value>>;
+	parameters.find_first(string);
+	parameters.find_first(std::move(string));
+	parameters.find_first(view);
+	parameters.find_first(pointer);
+	parameters.find_first(character);
+	{ parameters.find_all(string) } ->
+		std::same_as<std::vector<riwo::value>>;
+	{ parameters.contains(view) } -> std::same_as<bool>;
+});
+static_assert(requires(const http::server_exchange &exchange,
+	std::string &string, std::string_view view, const char *pointer,
+	char character) {
+	{ exchange.path_parameter(string) } ->
+		std::same_as<riwo::optional<riwo::value>>;
+	exchange.path_parameter(std::move(string));
+	exchange.path_parameter(view);
+	exchange.path_parameter(pointer);
+	exchange.path_parameter(character);
+	exchange.query_parameter(string);
+	exchange.query_parameter(std::move(string));
+	exchange.query_parameter(view);
+	exchange.query_parameter(pointer);
+	exchange.query_parameter(character);
+});
 
 struct source_model
 {
@@ -153,12 +187,12 @@ static_assert(std::copyable<http::request_options>);
 static_assert(std::copyable<http::parameter>);
 static_assert(std::copyable<http::parameter_view>);
 static_assert(std::copyable<http::route_pattern>);
-static_assert(std::copyable<http::application_session_config>);
-static_assert(std::constructible_from<http::application_session_manager>);
-static_assert(requires(http::application_session &session,
-	http::application_session::timeout_handler_t handler) {
+static_assert(std::copyable<http::app_session_config>);
+static_assert(std::constructible_from<http::app_session_manager>);
+static_assert(requires(http::app_session &session,
+	http::app_session::timeout_handler_t handler) {
 	{ session.set_timeout_handler(std::move(handler)) } ->
-		std::same_as<http::application_session&>;
+		std::same_as<http::app_session&>;
 });
 static_assert(std::derived_from<http::aop,http::middleware>);
 
@@ -175,8 +209,23 @@ concept route_pattern_text = requires(Text &&text) {
 
 template <typename Text>
 concept application_attribute_text = requires(
-	http::application_session &session, Text &&text) {
+	http::app_session &session, Text &&text) {
 	session.set_attribute(std::forward<Text>(text), 1);
+	session.erase_attribute(std::forward<Text>(text));
+	session.attribute_as<int>(std::forward<Text>(text));
+	session.attribute(std::forward<Text>(text));
+};
+
+template <typename Text>
+concept app_session_manager_text = requires(
+	http::app_session_manager &sessions, Text &&text) {
+	{ sessions.get(std::forward<Text>(text)) } ->
+		std::same_as<http::app_session_ptr>;
+	{ sessions.get_or_make(std::forward<Text>(text)) } ->
+		std::same_as<http::app_session_ptr>;
+	{ sessions.erase(std::forward<Text>(text)) } -> std::same_as<bool>;
+	{ sessions.template get_or_make<http::app_session>(
+		std::forward<Text>(text)) } -> std::same_as<http::app_session_ptr>;
 };
 
 template <typename Text>
@@ -198,6 +247,11 @@ static_assert(route_pattern_text<std::string_view>);
 static_assert(!route_pattern_text<std::wstring_view>);
 static_assert(application_attribute_text<std::string_view>);
 static_assert(!application_attribute_text<std::wstring_view>);
+static_assert(app_session_manager_text<std::string>);
+static_assert(app_session_manager_text<std::string_view>);
+static_assert(app_session_manager_text<const char*>);
+static_assert(!app_session_manager_text<char>);
+static_assert(!app_session_manager_text<std::wstring_view>);
 static_assert(std::default_initializable<http::multipart_form>);
 static_assert(multipart_text<std::string_view>);
 static_assert(!multipart_text<std::wstring_view>);
@@ -293,6 +347,12 @@ static_assert(std::constructible_from<http::body_writer>);
 static_assert(std::constructible_from<http::client_exchange>);
 static_assert(std::constructible_from<http::reply>);
 static_assert(std::constructible_from<http::server_exchange>);
+static_assert(requires(const http::server_exchange &exchange) {
+	{ exchange.remote_endpoint() } ->
+		std::same_as<riwo::sys_expected<http::server_exchange::endpoint_t>>;
+	{ exchange.local_endpoint() } ->
+		std::same_as<riwo::sys_expected<http::server_exchange::endpoint_t>>;
+});
 static_assert(requires(http::server_exchange &exchange,
 	std::filesystem::path path, std::fstream &stream, std::FILE *file,
 	riwo::error_code &error) {
@@ -832,10 +892,10 @@ void moved_from_objects_are_safe()
 	RIWO_TEST_CHECK(!moved_decoder.finished());
 	(void)decoder.append({}, false);
 
-	http::application_session_manager sessions;
+	http::app_session_manager sessions;
 	auto moved_sessions = std::move(sessions);
 	RIWO_TEST_CHECK_EQ(sessions.size(), 0U);
-	RIWO_TEST_CHECK(sessions.create());
+	RIWO_TEST_CHECK(sessions.make());
 	RIWO_TEST_CHECK_EQ(moved_sessions.size(), 0U);
 
 	riwo::io_context_t context;
@@ -898,6 +958,27 @@ void moved_from_objects_are_safe()
 	assigned_server = std::move(moved_server);
 	RIWO_TEST_CHECK(moved_server.get_executor() == executor);
 	RIWO_TEST_CHECK(assigned_server.get_executor() == executor);
+}
+
+void app_session_id_contract()
+{
+	http::app_session_manager sessions;
+	std::unordered_set<std::string> ids;
+
+	for(size_t index=0; index<64; ++index)
+	{
+		auto session = sessions.make();
+		RIWO_TEST_CHECK(session);
+		if( not session ) return ;
+
+		auto id = std::string(session->id());
+		RIWO_TEST_CHECK_EQ(id.size(), 43U);
+		RIWO_TEST_CHECK(std::ranges::all_of(id, [](unsigned char value) {
+			return std::isalnum(value) or value == '-' or value == '_';
+		}));
+		RIWO_TEST_CHECK(ids.insert(std::move(id)).second);
+	}
+	RIWO_TEST_CHECK_EQ(sessions.size(), ids.size());
 }
 
 void head_convenience_contracts()
@@ -1202,6 +1283,14 @@ void fake_boundaries_and_unsupported_entry_points()
 		asio::any_io_executor(riwo::get_executor()));
 	RIWO_TEST_CHECK(default_server_exchange.get_executor() ==
 		asio::any_io_executor(riwo::get_executor()));
+	auto missing_remote_endpoint = default_server_exchange.remote_endpoint();
+	RIWO_TEST_CHECK(!missing_remote_endpoint.has_value());
+	RIWO_TEST_CHECK_EQ(missing_remote_endpoint.error(),
+		http::make_error_code(http::errc::operation_not_permitted));
+	auto missing_local_endpoint = default_server_exchange.local_endpoint();
+	RIWO_TEST_CHECK(!missing_local_endpoint.has_value());
+	RIWO_TEST_CHECK_EQ(missing_local_endpoint.error(),
+		http::make_error_code(http::errc::operation_not_permitted));
 	RIWO_TEST_CHECK(default_channel.get_executor() ==
 		asio::any_io_executor(riwo::get_executor()));
 	RIWO_TEST_CHECK(default_acceptor_wrap.get_executor() ==
@@ -1309,6 +1398,7 @@ int main(int argc, const char *const argv[])
 	return riwo::test::run(argc, argv, {
 		{"semantic value contracts", semantic_value_contracts},
 		{"moved-from objects are safe", moved_from_objects_are_safe},
+		{"application session ID contract", app_session_id_contract},
 		{"head convenience contracts", head_convenience_contracts},
 		{"cookie value contracts", cookie_value_contracts},
 		{"fake boundaries and unsupported entry points",

@@ -69,10 +69,16 @@ void semantic_helpers()
 	}
 	RIWO_TEST_CHECK(invalid_method_rejected);
 
-	auto query = http::parse_query_parameters("q=one+two&q=three&empty=");
+	auto query = http::parse_query_parameters(
+		"q=one+two&q=three&empty=&count=42");
 	RIWO_TEST_CHECK(query.has_value());
 	RIWO_TEST_CHECK_EQ(query->find_first("q").value(), "one two");
-	RIWO_TEST_CHECK_EQ(query->find_all("q").size(), 2U);
+	const auto query_values = query->find_all(std::string("q"));
+	RIWO_TEST_CHECK_EQ(query_values.size(), 2U);
+	RIWO_TEST_CHECK_EQ(query_values.front(), "one two");
+	RIWO_TEST_CHECK_EQ(query_values.back(), "three");
+	RIWO_TEST_CHECK(query->contains(std::string_view("empty")));
+	RIWO_TEST_CHECK_EQ(query->find_first("count")->to_int().value(), 42);
 
 	auto range = http::parse_range_header("bytes=0-2,-2");
 	RIWO_TEST_CHECK(range.has_value());

@@ -4,7 +4,8 @@
 #ifndef RIWO_HTTP_EXP_SERVER_H
 #define RIWO_HTTP_EXP_SERVER_H
 
-#include <riwo/http_exp/server/application_session.h>
+#include <riwo/http_exp/server/app_session.h>
+#include <riwo/http_exp/server/app_session_manager.h>
 #include <riwo/http_exp/server/acceptor_wrap.h>
 #include <riwo/http_exp/server/middleware.h>
 #include <riwo/http_exp/server/exchange.h>

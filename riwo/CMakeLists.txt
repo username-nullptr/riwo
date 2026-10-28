@@ -66,6 +66,7 @@ if (RIWO_BUILD_HTTP_EXP)
 		http_exp/protocol/detail/fields.h
 		http_exp/protocol/detail/method.h
 		http_exp/protocol/detail/multipart.h
+		http_exp/protocol/detail/parameters.h
 		http_exp/protocol/detail/request_head.h
 		http_exp/protocol/detail/response_head.h
 		DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp/protocol/detail

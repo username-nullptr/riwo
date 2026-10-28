@@ -25,30 +25,6 @@ parameter_view::parameter_view(container_t values) noexcept :
 
 }
 
-optional<std::string_view> parameter_view::find_first(std::string_view name) const noexcept
-{
-	for(const auto &value : m_values)
-		if( value.name == name )
-			return value.value;
-	return {};
-}
-
-std::vector<std::string_view> parameter_view::find_all(std::string_view name) const
-{
-	std::vector<std::string_view> result {};
-	for(const auto &[key, value] : m_values)
-	{
-		if( key == name )
-			result.emplace_back(value);
-	}
-	return result;
-}
-
-bool parameter_view::contains(std::string_view name) const noexcept
-{
-	return find_first(name).has_value();
-}
-
 bool parameter_view::empty() const noexcept
 {
 	return m_values.empty();
@@ -72,6 +48,34 @@ auto parameter_view::end() const noexcept -> const_iterator
 auto parameter_view::values() const noexcept -> const container_t&
 {
 	return m_values;
+}
+
+optional<value> parameter_view::find_first_impl(std::string_view name) const
+{
+	for(const auto &value : m_values)
+	{
+		if( value.name == name )
+			return value.value;
+	}
+	return {};
+}
+
+std::vector<value> parameter_view::find_all_impl(std::string_view name) const
+{
+	std::vector<value> result {};
+	for(const auto &[key, value] : m_values)
+	{
+		if( key == name )
+			result.emplace_back(value);
+	}
+	return result;
+}
+
+bool parameter_view::contains_impl(std::string_view name) const noexcept
+{
+	return std::ranges::any_of(m_values, [name](const auto &value) {
+		return value.name == name;
+	});
 }
 
 optional<std::string> decode_uri_component(std::string_view value, bool plus_as_space) noexcept

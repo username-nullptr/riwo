@@ -154,7 +154,7 @@ private:
 	auto made = v2::make_server_session(std::move(transport), {
 		.timeout = std::move(config.timeout),
 		.request_limits = std::move(config.request_limits),
-		.h2 = std::move(config.h2)
+		.h2 = std::move(config.v2)
 	}, std::move(initial_input));
 	if( not made )
 	{
@@ -286,9 +286,9 @@ server_connection_ptr_t accept_h1(
 
 error_code validate_server_config(const server_config &config) noexcept
 {
-	if( config.h1.max_pipeline_depth != 1 or
+	if( config.v1.max_pipeline_depth != 1 or
 		config.protocols.preference.empty() )
-		return make_error_code(config.h1.max_pipeline_depth != 1 ?
+		return make_error_code(config.v1.max_pipeline_depth != 1 ?
 			errc::operation_not_supported : errc::negotiation_failed);
 	for(auto current=config.protocols.preference.begin();
 		current!=config.protocols.preference.end(); ++current)
@@ -314,7 +314,7 @@ error_code validate_server_config(const server_config &config) noexcept
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 	if( permits_http2(config.protocols) )
 	{
-		const auto &value = config.h2;
+		const auto &value = config.v2;
 		constexpr uint32_t maximum_window = 0x7fffffffU;
 		if( value.initial_stream_window == 0 or
 			value.initial_stream_window > maximum_window or
