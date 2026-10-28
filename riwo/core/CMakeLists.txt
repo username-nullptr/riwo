@@ -102,3 +102,17 @@ if (RIWO_IO_URING_SUPPORT)
 	target_link_libraries(${target_name} PUBLIC Riwo::uring)
 	mark_as_advanced(LIBURING_INCLUDE_DIR LIBURING_LIBRARY)
 endif ()
+
+install(FILES ../core.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+# This PIMPL definition is compiled into riwo.core and is not included by any
+# public header.
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/core
+	FILES_MATCHING
+	PATTERN "*.h"
+	PATTERN "*.hpp"
+	PATTERN "*.ipp"
+	PATTERN "library_impl.ipp" EXCLUDE
+)

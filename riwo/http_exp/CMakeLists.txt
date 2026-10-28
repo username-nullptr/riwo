@@ -83,3 +83,39 @@ set(RIWO_HTTP_EXP_HTTP2_SUPPORT ${RIWO_HTTP_EXP_HTTP2_SUPPORT} PARENT_SCOPE)
 set(RIWO_HTTP_EXP_NGHTTP2_PROVIDER "${RIWO_HTTP_EXP_NGHTTP2_PROVIDER}" PARENT_SCOPE)
 set(RIWO_HTTP_EXP_NGHTTP2_VERSION "${RIWO_HTTP_EXP_NGHTTP2_VERSION}" PARENT_SCOPE)
 set(RIWO_HTTP_EXP_NGHTTP2_LINKAGE "${RIWO_HTTP_EXP_NGHTTP2_LINKAGE}" PARENT_SCOPE)
+
+install(FILES ../http_exp.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp
+	FILES_MATCHING
+	PATTERN "*.h"
+	PATTERN "*.hpp"
+	PATTERN "*.ipp"
+	PATTERN "v2.md" EXCLUDE
+	REGEX "/session/v1/" EXCLUDE
+	REGEX "/session/v2/" EXCLUDE
+	REGEX "/protocol/detail/" EXCLUDE
+	REGEX "/protocol/v1/detail/" EXCLUDE
+	REGEX "/protocol/v2/detail/nghttp2_compat[.]h$" EXCLUDE
+	REGEX "/client/detail/factory[.]h$" EXCLUDE
+	REGEX "/client/detail/request_access[.]h$" EXCLUDE
+	REGEX "/client/detail/session_pool[.]h$" EXCLUDE
+	REGEX "/transport/tcp_connection[.]h$" EXCLUDE
+	REGEX "/transport/tls_connection[.]h$" EXCLUDE
+	REGEX "/transport/preface[.]h$" EXCLUDE
+)
+# These public classes have template definitions in focused detail headers.
+# Install only those headers while keeping the remaining protocol details
+# private.
+install(FILES
+	protocol/detail/duplex_channel.h
+	protocol/detail/fields.h
+	protocol/detail/method.h
+	protocol/detail/multipart.h
+	protocol/detail/parameters.h
+	protocol/detail/request_head.h
+	protocol/detail/response_head.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp/protocol/detail
+)

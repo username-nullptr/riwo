@@ -48,3 +48,10 @@ install(FILES
 	${RIWO_WEBSOCKET_CONFIG_INCLUDE}/riwo/websocket/cxx/configs.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/websocket/cxx
 )
+install(FILES ../websocket.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/websocket
+	FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp"
+)

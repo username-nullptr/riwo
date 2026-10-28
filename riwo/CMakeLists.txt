@@ -3,92 +3,37 @@
 
 include(project)
 
-
-function(riwo_install_module_headers module)
-	install(FILES ${module}.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo)
-	install(DIRECTORY ${module}/
-		DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/${module}
-		FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp"
-		${ARGN}
-	)
-endfunction()
-
-
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES core.h)
 add_subdirectory(core)
-# This PIMPL definition is compiled into riwo.core and is not included by any
-# public header.
-riwo_install_module_headers(core
-	PATTERN "library_impl.ipp" EXCLUDE
-)
 
 if (RIWO_BUILD_CORO)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES coro.h)
 	add_subdirectory(coro)
-	riwo_install_module_headers(coro)
 endif ()
 
 if (RIWO_BUILD_HTTP)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES http.h)
 	add_subdirectory(http)
-	# The base parser is an implementation detail used only by the client and
-	# server parser translation units. Other detail headers contain public
-	# template definitions and must remain in the install tree.
-	riwo_install_module_headers(http
-		REGEX "/protocol/utils/core/parser[.]h$" EXCLUDE
-		REGEX "/protocol/utils/core/detail/parser[.]h$" EXCLUDE
-	)
 endif ()
 
 if (RIWO_BUILD_HTTP_EXP)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES http_exp.h)
 	add_subdirectory(http_exp)
-
-	riwo_install_module_headers(http_exp
-		PATTERN "v2.md" EXCLUDE
-		REGEX "/session/v1/" EXCLUDE
-		REGEX "/session/v2/" EXCLUDE
-		REGEX "/protocol/detail/" EXCLUDE
-		REGEX "/protocol/v1/detail/" EXCLUDE
-		REGEX "/protocol/v2/detail/nghttp2_compat[.]h$" EXCLUDE
-		REGEX "/client/detail/factory[.]h$" EXCLUDE
-		REGEX "/client/detail/request_access[.]h$" EXCLUDE
-		REGEX "/client/detail/session_pool[.]h$" EXCLUDE
-		REGEX "/transport/tcp_connection[.]h$" EXCLUDE
-		REGEX "/transport/tls_connection[.]h$" EXCLUDE
-		REGEX "/transport/preface[.]h$" EXCLUDE
-	)
-	# These public classes have template definitions in focused detail headers.
-	# Install only those headers while keeping the remaining protocol details
-	# private.
-	install(FILES
-		http_exp/protocol/detail/duplex_channel.h
-		http_exp/protocol/detail/fields.h
-		http_exp/protocol/detail/method.h
-		http_exp/protocol/detail/multipart.h
-		http_exp/protocol/detail/parameters.h
-		http_exp/protocol/detail/request_head.h
-		http_exp/protocol/detail/response_head.h
-		DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http_exp/protocol/detail
-	)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES websocket.h)
 	add_subdirectory(websocket)
-	riwo_install_module_headers(websocket)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET_EXP)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES websocket_exp.h)
 	add_subdirectory(websocket_exp)
-	riwo_install_module_headers(websocket_exp)
 endif ()
 
 if (RIWO_BUILD_UTILITIES)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES utils.h)
 	add_subdirectory(utils)
-	riwo_install_module_headers(utils)
 endif ()
 
 if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)

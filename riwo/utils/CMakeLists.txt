@@ -98,3 +98,10 @@ install(FILES
 	${RIWO_UTILS_CONFIG_INCLUDE}/riwo/utils/cxx/configs.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/utils/cxx
 )
+install(FILES ../utils.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/utils
+	FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp"
+)
