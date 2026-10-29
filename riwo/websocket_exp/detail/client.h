@@ -479,9 +479,10 @@ co_open(http_exp::basic_client<Exec> *http_client, connect_request request,
 				use_extended_connect);
 			if( not prepared ) co_return std::tuple {
 				prepared.error(), std::move(result)};
-			auto [open_error, exchange_value] = co_await http_client->open(
+			auto open_result = co_await http_client->open(
 				std::move(prepared->request), std::move(prepared->spec),
 				asio::as_tuple(asio::use_awaitable_t<Exec>{}));
+			auto &[open_error, exchange_value] = open_result;
 			if( open_error ) co_return std::tuple {
 				cancellation_error(cancellation->cancelled(), open_error),
 				std::move(result)};
@@ -489,8 +490,9 @@ co_open(http_exp::basic_client<Exec> *http_client, connect_request request,
 				http_exp::basic_client_exchange<Exec>>(
 					std::move(exchange_value));
 			cancellation->activate(exchange);
-			auto [head_error, reply_head_value] = co_await exchange->wait_reply(
+			auto reply_result = co_await exchange->wait_reply(
 				asio::as_tuple(asio::use_awaitable_t<Exec>{}));
+			auto &[head_error, reply_head_value] = reply_result;
 			cancellation->clear(exchange);
 			if( head_error ) co_return std::tuple {
 				cancellation_error(cancellation->cancelled(), head_error),
@@ -527,8 +529,9 @@ co_open(http_exp::basic_client<Exec> *http_client, connect_request request,
 					decision.error, std::move(result)};
 			}
 			cancellation->activate(exchange);
-			auto [channel_error, channel] = co_await exchange->release_duplex(
+			auto release_result = co_await exchange->release_duplex(
 				asio::as_tuple(asio::use_awaitable_t<Exec>{}));
+			auto &[channel_error, channel] = release_result;
 			cancellation->clear(exchange);
 			if( channel_error ) co_return std::tuple {
 				cancellation_error(cancellation->cancelled(), channel_error),

@@ -21,7 +21,13 @@ using server_accept_handler_t = std::function <
 	void(error_code,session_stream_ptr,request_head)
 >;
 
-class RIWO_DECL_HIDDEN server_connection
+class
+#ifdef __GNUC__
+ RIWO_HTTP_EXP_API
+#else //__GNUC__
+ RIWO_DECL_HIDDEN
+#endif //__GNUC__
+server_connection
 {
 	RIWO_DISABLE_COPY_MOVE(server_connection)
 

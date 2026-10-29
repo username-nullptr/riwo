@@ -39,8 +39,9 @@ void websocket_round_trip(bool use_http2, bool compression)
 	{
 		for(;;)
 		{
-			auto [error, message] = co_await accepted.stream.read<std::string>(
+			auto result = co_await accepted.stream.read<std::string>(
 				asio::as_tuple(riwo::use_awaitable));
+			auto &[error, message] = result;
 			if( error ) break;
 			if( message.type == ws::message_type::text )
 				co_await accepted.stream.write_text(message.body,
@@ -137,8 +138,9 @@ void websocket_round_trip(bool use_http2, bool compression)
 		asio::co_spawn(context,
 		[&stream, overlap]() -> riwo::awaitable<void>
 		{
-			auto [error, response] = co_await stream.read<std::string>(
+			auto read_result = co_await stream.read<std::string>(
 				asio::as_tuple(riwo::use_awaitable));
+			auto &[error, response] = read_result;
 			overlap->error = error;
 			if( not error ) overlap->body = response.body;
 			overlap->done = true;
@@ -160,8 +162,9 @@ void websocket_round_trip(bool use_http2, bool compression)
 				riwo::use_awaitable);
 			RIWO_TEST_CHECK_EQ(response.body, payload);
 		}
-		auto [close_error, close_info] = co_await stream.close(
+		auto close_result = co_await stream.close(
 			asio::as_tuple(riwo::use_awaitable));
+		auto &[close_error, close_info] = close_result;
 		RIWO_TEST_CHECK(not close_error);
 		RIWO_TEST_CHECK(close_info.clean);
 		service.stop();
@@ -259,8 +262,9 @@ void redirect_and_external_client()
 		auto accepted = co_await ws::upgrade(exchange, riwo::use_awaitable);
 		for(;;)
 		{
-			auto [error, message] = co_await accepted.stream.read<std::string>(
+			auto read_result = co_await accepted.stream.read<std::string>(
 				asio::as_tuple(riwo::use_awaitable));
+			auto &[error, message] = read_result;
 			if( error ) break;
 			co_await accepted.stream.write_text(message.body,
 				riwo::use_awaitable);
@@ -279,9 +283,10 @@ void redirect_and_external_client()
 	{
 		ws::open_diagnostics diagnostics;
 		ws::connect_request limited(riwo::url(base + "/redirect"));
-		auto [redirect_error, idle] = co_await ws::open(http_client,
+		auto open_result = co_await ws::open(http_client,
 			std::move(limited), diagnostics,
 			asio::as_tuple(riwo::use_awaitable));
+		auto &[redirect_error, idle] = open_result;
 		RIWO_TEST_CHECK_EQ(redirect_error,
 			ws::make_error_code(ws::errc::redirect_limit_exceeded));
 		RIWO_TEST_CHECK(not idle.is_open());

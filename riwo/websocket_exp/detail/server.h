@@ -295,9 +295,10 @@ co_upgrade(http_exp::basic_server_exchange<Exec> *exchange,
 				std::move(result)};
 		}
 
-		auto [accept_error, channel] = co_await exchange->accept_duplex(
+		auto accept_result = co_await exchange->accept_duplex(
 			std::move(plan.response),
 			asio::as_tuple(asio::use_awaitable_t<Exec>{}));
+		auto &[accept_error, channel] = accept_result;
 		if( accept_error ) co_return std::tuple {
 			accept_error, std::move(result)};
 		result.handshake.subprotocol =
