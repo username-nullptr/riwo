@@ -254,6 +254,12 @@ void wildcard_matching()
 	RIWO_TEST_CHECK(riwo::wildcard_match("riwo/??re.h", "riwo/core.h") > 0);
 	RIWO_TEST_CHECK_EQ(riwo::wildcard_match("*.cpp", "README.md"), -1);
 	RIWO_TEST_CHECK_EQ(riwo::wildcard_match("", ""), 0);
+	RIWO_TEST_CHECK(riwo::wildcard_match("?", "x") <
+		riwo::wildcard_match("*", "x"));
+	RIWO_TEST_CHECK(riwo::wildcard_match("??", "xy") <
+		riwo::wildcard_match("*", "xy"));
+	RIWO_TEST_CHECK(riwo::wildcard_match("*a?", "xay") <
+		riwo::wildcard_match("*a*", "xay"));
 }
 
 void sha1_vectors()

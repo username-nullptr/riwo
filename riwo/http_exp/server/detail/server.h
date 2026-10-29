@@ -426,6 +426,7 @@ private:
 
 			bool selected_direct = false;
 			size_t best_specificity = 0;
+			size_t best_wildcard_rank = 0;
 
 			for(auto &candidate : routes->routes)
 			{
@@ -433,9 +434,13 @@ private:
 				if( not match )
 					continue;
 
-				if( path_matches.empty() or match->specificity > best_specificity )
+				const bool more_specific = path_matches.empty() or match->specificity > best_specificity or (
+					match->specificity == best_specificity and match->wildcard_rank < best_wildcard_rank
+				);
+				if( more_specific )
 				{
 					best_specificity = match->specificity;
+					best_wildcard_rank = match->wildcard_rank;
 					path_matches.clear();
 
 					selected = nullptr;
@@ -443,7 +448,7 @@ private:
 
 					selected_direct = false;
 				}
-				if( match->specificity != best_specificity )
+				if( match->specificity != best_specificity or match->wildcard_rank != best_wildcard_rank )
 					continue;
 
 				path_matches.emplace_back(&candidate);

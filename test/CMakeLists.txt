@@ -94,7 +94,8 @@ function(add_riwo_test_program test_target source library)
 	)
 	if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 		target_link_libraries(${test_target} PRIVATE riwo.test.sanitizer)
-	elseif (RIWO_BUILD_FUZZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+
+	elseif (RIWO_BUILD_TEST_FUZZ AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 		# Clang fuzz builds instrument Riwo libraries for libFuzzer. Stress
 		# executables need the matching ASan/UBSan runtime, but must retain their
 		# own main() instead of linking the libFuzzer driver.
@@ -116,15 +117,14 @@ endfunction()
 
 
 function(configure_riwo_sanitized_test test_name)
-	if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN OR
-		RIWO_BUILD_FUZZERS)
+	if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN OR RIWO_BUILD_TEST_FUZZ)
 		set_property(TEST ${test_name} APPEND PROPERTY LABELS sanitizer)
 		set_property(TEST ${test_name} PROPERTY RUN_SERIAL TRUE)
 
 		set_property(TEST ${test_name} APPEND PROPERTY FAIL_REGULAR_EXPRESSION
 			"AddressSanitizer" "LeakSanitizer" "ThreadSanitizer" "runtime error:"
 		)
-		if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_BUILD_FUZZERS)
+		if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_BUILD_TEST_FUZZ)
 			set(riwo_asan_options
 				"detect_leaks=0:halt_on_error=1:abort_on_error=1"
 			)
@@ -231,13 +231,15 @@ function(add_riwo_performance_test name source library)
 endfunction()
 
 
-if (RIWO_BUILD_FUZZERS)
+if (RIWO_BUILD_TEST_FUZZ)
 	add_subdirectory(fuzz)
+
 	if (RIWO_BUILD_STRESS_TESTS)
 		add_subdirectory(stress)
 	endif ()
+
 	message(STATUS
-		"${PRO_NAME}: Functional and Performance suites disabled in the fuzzer build."
+		"${PRO_NAME}: Functional and Performance suites disabled in the fuzz test build."
 	)
 else ()
 	add_subdirectory(functional)

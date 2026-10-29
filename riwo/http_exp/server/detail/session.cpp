@@ -84,8 +84,6 @@ private:
 	v1_server_loop_ptr m_loop {};
 };
 
-using v1_server_connection_ptr = std::shared_ptr<v1_server_connection>;
-
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
 
 [[nodiscard]] bool permits_http2(const protocol_policy &policy) noexcept
@@ -200,7 +198,7 @@ public:
 		const auto h1 = permits_http1(m_config.protocols);
 
 #if RIWO_HTTP_EXP_HTTP2_SUPPORT
-		if( const auto allow_h2 = permits_http2(m_config.protocols) )
+		if( permits_http2(m_config.protocols) )
 		{
 			m_transport->set_read_timeout(m_config.timeout.header);
 			auto self = shared_from_this();

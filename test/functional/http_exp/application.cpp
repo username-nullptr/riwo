@@ -184,6 +184,20 @@ void note_service_workflow()
 			co_await exchange.respond({http::status::ok, {}},
 				std::string_view("disabled"), riwo::use_awaitable);
 		})
+			.on_request<http::method::get>("/hello/?/{name}/?",
+			[](http::server_exchange &exchange) -> riwo::awaitable<void>
+			{
+				const auto name = exchange.path_parameters().find_first("name");
+				const auto response = "question:" + name.value().to_string();
+				co_await exchange.respond({http::status::ok, {}},
+					response, riwo::use_awaitable);
+			})
+			.on_request<http::method::get>("/hello/*/{name}/*",
+			[](http::server_exchange &exchange) -> riwo::awaitable<void>
+			{
+				co_await exchange.respond({http::status::ok, {}},
+					std::string_view("star"), riwo::use_awaitable);
+			})
 		.on_default(
 		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
@@ -208,6 +222,11 @@ void note_service_workflow()
 		RIWO_TEST_CHECK_EQ(health.headers().find_first("content-type").value(),
 			"application/json");
 		RIWO_TEST_CHECK_EQ(buffered_body(health), R"({"status":"ok"})");
+
+			auto prioritized = co_await client.fetch(http::request(http::method::get,
+				base + "/hello/a/b/c"), riwo::use_awaitable);
+			RIWO_TEST_CHECK_EQ(prioritized.status(), http::status::ok);
+			RIWO_TEST_CHECK_EQ(buffered_body(prioritized), "question:b");
 
 		http::request unauthorized(http::method::post, base + "/notes");
 		unauthorized.set_body("private draft");

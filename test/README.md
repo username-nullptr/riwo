@@ -12,7 +12,7 @@ enabled in the same build.
 | CMake | Do option constraints, exports, and installed consumers work? | `RIWO_BUILD_TEST_CMAKE=ON` | `cmake` |
 | Interoperability | Does HTTP/WebSocket work with an available independent implementation? | discovered within Functional | `interop` |
 | Stress | Does correctness survive concurrency, saturation, and repeated lifecycle work? | `RIWO_BUILD_STRESS_TESTS=ON` | `stress` |
-| Fuzz | Do malformed inputs and call sequences expose failures? | `RIWO_BUILD_FUZZERS=ON` | `fuzz` |
+| Fuzz | Do malformed inputs and call sequences expose failures? | `RIWO_BUILD_TEST_FUZZ=ON` | `fuzz` |
 | Performance | What throughput and latency does this build produce? | `RIWO_BUILD_PERFORMANCE_TESTS=ON` | `performance` |
 | Sanitizer | Do Functional/Stress runs expose memory, UB, or race failures? | sanitizer option below | `sanitizer` |
 
@@ -101,14 +101,15 @@ optional UDP soft-bus pressure.
 
 ## Fuzz profile
 
-Fuzzing is a dedicated libFuzzer build. Clang enables ASan + UBSan; native
-MSVC enables its experimental libFuzzer + ASan support. The profile does not
-add Functional or Performance sources. Clang builds may additionally enable
-the Stress suite.
+Fuzz testing uses a dedicated build. Clang enables libFuzzer with ASan + UBSan;
+native MSVC enables its experimental libFuzzer + ASan support. GCC has no
+libFuzzer runtime, so its build runs the same harnesses through a deterministic
+standalone driver with ASan + UBSan. The profile does not add Functional or
+Performance sources. Clang builds may additionally enable the Stress suite.
 
 ```sh
 cmake -S . -B build-fuzz -DBUILD_TESTING=ON \
-  -DRIWO_BUILD_FUZZERS=ON \
+  -DRIWO_BUILD_TEST_FUZZ=ON \
   -DRIWO_BUILD_STRESS_TESTS=ON \
   -DCMAKE_CXX_COMPILER=clang++ \
   -DRIWO_BUILD_HTTP=ON \
@@ -126,7 +127,7 @@ Studio developer prompt:
 
 ```bat
 cmake -S . -B build-msvc-fuzz -G Ninja ^
-  -DBUILD_TESTING=ON -DRIWO_BUILD_FUZZERS=ON ^
+  -DBUILD_TESTING=ON -DRIWO_BUILD_TEST_FUZZ=ON ^
   -DRIWO_BUILD_STATIC=ON ^
   -DRIWO_BUILD_HTTP=ON -DRIWO_BUILD_HTTP_EXP=ON ^
   -DRIWO_BUILD_WEBSOCKET=ON -DRIWO_BUILD_UTILITIES=ON ^
@@ -141,10 +142,29 @@ UBSan. Use `RelWithDebInfo`; unoptimized Debug + ASan can exceed the per-input
 timeout even for small inputs. Keep a Clang fuzz build for undefined behavior
 coverage and cross-toolchain validation.
 
+GNU uses the same harness sources and seed corpora without requiring Clang.
+Each target runs every corpus file, deterministic boundary inputs, and
+`RIWO_FUZZ_SMOKE_RUNS` reproducible mutations. This is a regression and
+compiler-compatibility test, not coverage-guided fuzzing:
+
+```sh
+cmake -S . -B build-gnu-fuzz -DBUILD_TESTING=ON \
+  -DRIWO_BUILD_TEST_FUZZ=ON \
+  -DCMAKE_CXX_COMPILER=g++ \
+  -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_HTTP_EXP=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_UTILITIES=ON \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build-gnu-fuzz --parallel
+ctest --test-dir build-gnu-fuzz -L fuzz-regression --output-on-failure
+```
+
 Targets and CTest names are `riwo.fuzz.<module>.<harness>`; executables are
 written to `build-fuzz/output/fuzz/`. Seed corpora and dictionaries live in
 `test/fuzz/`. CMake copies corpora into the build tree and keeps crash
-artifacts below `build-fuzz/test/fuzz/artifacts/`.
+artifacts below `build-fuzz/test/fuzz/artifacts/`. GNU failures leave the exact
+current input at `artifacts/<module>-<harness>/last-input`.
 
 The HTTP_EXP HTTP/1 parser fuzzers compare contiguous and fragmented parsing
 within the experimental codec itself. They require `RIWO_BUILD_HTTP_EXP=ON`
@@ -157,6 +177,15 @@ build-fuzz/output/fuzz/riwo.fuzz.core.public-api \
   -max_total_time=300 \
   -artifact_prefix=build-fuzz/test/fuzz/artifacts/core-public-api/ \
   build-fuzz/test/fuzz/corpus/core-public-api/
+```
+
+Run a GNU regression with additional mutations directly:
+
+```sh
+build-gnu-fuzz/output/fuzz/riwo.fuzz.core.public-api \
+  --corpus=build-gnu-fuzz/test/fuzz/corpus/core-public-api \
+  --runs=10000 --seed=1 --max-len=4096 \
+  --artifact=build-gnu-fuzz/test/fuzz/artifacts/core-public-api/last-input
 ```
 
 ## Performance profile
@@ -271,7 +300,7 @@ CMake rejects rather than silently weakening these requests:
 - ASan/UBSan and TSan together;
 - either sanitizer with LTO;
 - Performance with either sanitizer;
-- Fuzz without a Clang or MSVC libFuzzer runtime;
+- Fuzz without a supported compiler or available sanitizer runtime;
 - Fuzz combined with sanitizer options, Performance, or examples;
 - Fuzz combined with Stress under a compiler other than Clang.
 

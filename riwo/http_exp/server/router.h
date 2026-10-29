@@ -14,7 +14,11 @@ struct route_match
 {
 	parameter_view path_parameters;
 	size_t specificity = 0;
+
+	// Lower values are more specific among routes with equal specificity.
+	size_t wildcard_rank = 0;
 };
+
 // Patterns are matched against the path only (never the query). `*` matches
 // zero or more path characters, `?` one path character, and `{name}` one
 // non-empty path segment. Literal routes always outrank patterns.

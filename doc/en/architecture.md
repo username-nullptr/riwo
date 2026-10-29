@@ -40,7 +40,7 @@ lower modules, and CMake publishes those dependencies transitively.
 | `test/functional/` | Deterministic API contracts | Default behavioral verification |
 | `test/cmake/` | Configuration and install-consumer contracts | Validates the integration boundary |
 | `test/stress/` | Concurrency and repeated-lifecycle pressure | Opt-in |
-| `test/fuzz/` | Input and operation-sequence exploration | Dedicated Clang/libFuzzer build |
+| `test/fuzz/` | Input and operation-sequence exploration | Dedicated Clang/MSVC libFuzzer or GCC regression build |
 | `test/performance/` | Measurements without fixed pass/fail thresholds | Opt-in Release build |
 | `doc/en/`, `doc/zh_CN/` | Conceptual and integration guides | Mirrored by topic and source module |
 

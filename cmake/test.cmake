@@ -10,8 +10,8 @@ option(RIWO_ENABLE_TEST_SANITIZERS
 option(RIWO_ENABLE_TEST_TSAN
 	"-- ${PRO_NAME}: Enable TSan for functional and stress tests." OFF
 )
-option(RIWO_BUILD_FUZZERS
-	"-- ${PRO_NAME}: Build libFuzzer API and input harnesses." OFF
+option(RIWO_BUILD_TEST_FUZZ
+	"-- ${PRO_NAME}: Build fuzz tests and input harnesses." OFF
 )
 option(RIWO_BUILD_STRESS_TESTS
 	"-- ${PRO_NAME}: Build high-pressure stability tests." OFF
@@ -118,7 +118,7 @@ endif ()
 # cache entries intact for normal builds and shadow them only in this sanitizer
 # or fuzzer configure. With CMP0141 NEW, newly-created targets take their
 # debug-information format from this variable instead of the flags below.
-if (MSVC AND (RIWO_BUILD_FUZZERS OR RIWO_ENABLE_TEST_SANITIZERS))
+if (MSVC AND (RIWO_BUILD_TEST_FUZZ OR RIWO_ENABLE_TEST_SANITIZERS))
 	foreach(riwo_msvc_flags_var
 		CMAKE_C_FLAGS_DEBUG
 		CMAKE_C_FLAGS_RELWITHDEBINFO
@@ -146,44 +146,45 @@ if (MSVC AND (RIWO_BUILD_FUZZERS OR RIWO_ENABLE_TEST_SANITIZERS))
 	endif ()
 endif ()
 
-if (RIWO_BUILD_FUZZERS)
+if (RIWO_BUILD_TEST_FUZZ)
 	if (NOT BUILD_TESTING)
-		message(FATAL_ERROR "${PRO_NAME}: Fuzzers require BUILD_TESTING=ON.")
+		message(FATAL_ERROR "${PRO_NAME}: Fuzz tests require BUILD_TESTING=ON.")
 	endif ()
 
 	if (RIWO_BUILD_PERFORMANCE_TESTS)
 		message(FATAL_ERROR
-			"${PRO_NAME}: Fuzzers cannot be combined with performance tests."
+			"${PRO_NAME}: Fuzz tests cannot be combined with performance tests."
 		)
 	endif ()
 
-	if (NOT MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	if (NOT MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES
+		"^(AppleClang|Clang|GNU)$")
 		message(FATAL_ERROR
-			"${PRO_NAME}: Fuzzers require Clang or MSVC libFuzzer."
+			"${PRO_NAME}: Fuzz tests require Clang, MSVC, or GCC."
 		)
 	endif ()
 
 	if (RIWO_BUILD_STRESS_TESTS AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 		message(FATAL_ERROR
-			"${PRO_NAME}: Fuzzers can combine with stress tests only under Clang."
+			"${PRO_NAME}: Fuzz tests can combine with stress tests only under Clang."
 		)
 	endif ()
 
 	if (MSVC AND NOT RIWO_BUILD_STATIC)
 		message(FATAL_ERROR
-			"${PRO_NAME}: MSVC fuzzers require RIWO_BUILD_STATIC=ON."
+			"${PRO_NAME}: MSVC fuzz tests require RIWO_BUILD_STATIC=ON."
 		)
 	endif ()
 
 	if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 		message(FATAL_ERROR
-			"${PRO_NAME}: Fuzzer instrumentation cannot be combined with test sanitizer options."
+			"${PRO_NAME}: Fuzz instrumentation cannot be combined with test sanitizer options."
 		)
 	endif ()
 
 	if (RIWO_BUILD_EXAMPLES)
 		message(FATAL_ERROR
-			"${PRO_NAME}: Fuzzers use a dedicated build; disable examples."
+			"${PRO_NAME}: Fuzz tests use a dedicated build; disable examples."
 		)
 	endif ()
 
@@ -193,16 +194,33 @@ if (RIWO_BUILD_FUZZERS)
 	set(riwo_saved_required_link_options "${CMAKE_REQUIRED_LINK_OPTIONS}")
 	set(riwo_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
 
-	set(riwo_fuzzer_source
-		"#include <cstddef>\n#include <cstdint>\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }"
-	)
+	set(RIWO_FUZZER_STANDALONE FALSE)
 	if (MSVC)
+		string(CONCAT riwo_fuzzer_source
+			"#include <cstddef>\n"
+			"#include <cstdint>\n"
+			"extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }"
+		)
 		set(riwo_fuzzer_compile_flags
 			/fsanitize=fuzzer /fsanitize=address /Zi
 		)
 		set(riwo_fuzzer_link_options /DEBUG /INCREMENTAL:NO)
 
+	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		set(RIWO_FUZZER_STANDALONE TRUE)
+		set(riwo_fuzzer_source "int main() { return 0; }")
+		set(riwo_fuzzer_compile_flags
+			-fsanitize=address,undefined -fno-omit-frame-pointer
+			-fno-sanitize-recover=all
+		)
+		set(riwo_fuzzer_link_options -fsanitize=address,undefined)
+
 	else ()
+		string(CONCAT riwo_fuzzer_source
+			"#include <cstddef>\n"
+			"#include <cstdint>\n"
+			"extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }"
+		)
 		set(riwo_fuzzer_compile_flags
 			-fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
 		)
@@ -230,17 +248,17 @@ if (RIWO_BUILD_FUZZERS)
 	)
 	unset(RIWO_FUZZER_INSTRUMENTATION_AVAILABLE CACHE)
 
-	check_cxx_source_compiles(
+	check_cxx_source_compiles (
 		"${riwo_fuzzer_source}"
 		RIWO_FUZZER_INSTRUMENTATION_AVAILABLE
 	)
-
 	# Some Linux compiler-rt packages build libFuzzer against libstdc++ even
 	# when Clang and libc++ are installed together. In that case the driver can
 	# compile the probe but cannot link the fuzzer runtime with libc++. Place the
 	# packaged runtime after ASan and satisfy only its private ABI dependency.
 	unset(RIWO_FUZZER_COMPAT_RUNTIME_AVAILABLE CACHE)
 	unset(RIWO_FUZZER_RUNTIME_LIBRARY)
+
 	if (NOT RIWO_FUZZER_INSTRUMENTATION_AVAILABLE AND
 		RIWO_USE_LIBCXX AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 		execute_process(
@@ -261,13 +279,13 @@ if (RIWO_BUILD_FUZZERS)
 				ERROR_QUIET
 			)
 		endif ()
+
 		string(REGEX MATCH "^[^-]+" riwo_clang_runtime_arch
 			"${riwo_clang_target}"
 		)
 		set(riwo_fuzzer_runtime_candidate
 			"${riwo_clang_runtime_dir}/libclang_rt.fuzzer-${riwo_clang_runtime_arch}.a"
 		)
-
 		if (riwo_clang_runtime_dir_result EQUAL 0 AND
 			EXISTS "${riwo_fuzzer_runtime_candidate}")
 			set(riwo_fuzzer_compat_compile_flags
@@ -289,10 +307,11 @@ if (RIWO_BUILD_FUZZERS)
 			if (RIWO_USE_LLD)
 				list(APPEND CMAKE_REQUIRED_LINK_OPTIONS -fuse-ld=lld)
 			endif ()
+
 			set(CMAKE_REQUIRED_LIBRARIES
 				"${riwo_fuzzer_runtime_candidate}" -Wl,-lstdc++
 			)
-			check_cxx_source_compiles(
+			check_cxx_source_compiles (
 				"${riwo_fuzzer_source}"
 				RIWO_FUZZER_COMPAT_RUNTIME_AVAILABLE
 			)
@@ -307,14 +326,21 @@ if (RIWO_BUILD_FUZZERS)
 			endif ()
 		endif ()
 	endif ()
+
 	set(CMAKE_REQUIRED_FLAGS "${riwo_saved_required_flags}")
 	set(CMAKE_REQUIRED_LINK_OPTIONS ${riwo_saved_required_link_options})
 	set(CMAKE_REQUIRED_LIBRARIES ${riwo_saved_required_libraries})
 
 	if (NOT RIWO_FUZZER_INSTRUMENTATION_AVAILABLE)
-		message(FATAL_ERROR
-			"${PRO_NAME}: libFuzzer is unavailable for the selected compiler and C++ runtime."
-		)
+		if (RIWO_FUZZER_STANDALONE)
+			message(FATAL_ERROR
+				"${PRO_NAME}: ASan/UBSan are unavailable for the GNU fuzz build."
+			)
+		else ()
+			message(FATAL_ERROR
+				"${PRO_NAME}: libFuzzer is unavailable for the selected compiler and C++ runtime."
+			)
+		endif ()
 	endif ()
 endif ()
 

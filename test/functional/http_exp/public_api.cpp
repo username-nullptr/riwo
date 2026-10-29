@@ -862,6 +862,34 @@ void moved_from_objects_are_safe()
 	RIWO_TEST_CHECK(moved_pattern.text().empty());
 	RIWO_TEST_CHECK(pattern.match("/items/42").has_value());
 
+	http::route_pattern wildcard("/assets/*");
+	RIWO_TEST_CHECK(wildcard.match("/assets/").has_value());
+	RIWO_TEST_CHECK(wildcard.match("/assets/css/app.css").has_value());
+	RIWO_TEST_CHECK(!wildcard.match("/asset/css/app.css"));
+
+	http::route_pattern single_character("/items/?");
+	RIWO_TEST_CHECK(single_character.match("/items/1").has_value());
+	RIWO_TEST_CHECK(!single_character.match("/items/"));
+	RIWO_TEST_CHECK(!single_character.match("/items/12"));
+
+	http::route_pattern parameters("/users/{id}/posts/{post}");
+	const auto parameter_match = parameters.match("/users/alice/posts/42");
+	RIWO_TEST_CHECK(parameter_match.has_value());
+	RIWO_TEST_CHECK_EQ(parameter_match->path_parameters.find_first("id").value(), "alice");
+	RIWO_TEST_CHECK_EQ(parameter_match->path_parameters.find_first("post").value(), "42");
+	RIWO_TEST_CHECK(!parameters.match("/users//posts/42"));
+	RIWO_TEST_CHECK(!parameters.match("/users/alice/posts/"));
+	RIWO_TEST_CHECK(!parameters.match("/users/alice/archive/posts/42"));
+
+	http::route_pattern constrained("/hello/?/{name}/?");
+	http::route_pattern wildcard_remainders("/hello/*/{name}/*");
+	const auto constrained_match = constrained.match("/hello/a/b/c");
+	const auto wildcard_match = wildcard_remainders.match("/hello/a/b/c");
+	RIWO_TEST_CHECK(constrained_match.has_value());
+	RIWO_TEST_CHECK(wildcard_match.has_value());
+	RIWO_TEST_CHECK_EQ(constrained_match->specificity, wildcard_match->specificity);
+	RIWO_TEST_CHECK(constrained_match->wildcard_rank < wildcard_match->wildcard_rank);
+
 	http::request source_request(http::method::post,
 		"http://example.test/resource");
 	source_request.set_body("body");

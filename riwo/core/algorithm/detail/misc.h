@@ -140,6 +140,33 @@ auto to_percent_encoding(const Str &str, StrArg &&exclude, StrArg &&include, cha
 	return result;
 }
 
+// Lower ranks are more specific. Any number of constrained characters is
+// preferred over an unconstrained wildcard; among rules with the same star
+// count, each additional '?' increases specificity.
+constexpr int32_t wildcard_match_rank
+(size_t star_count, size_t question_count, size_t str_len) noexcept
+{
+	if( star_count == 0 and question_count == 0 )
+		return 0;
+
+	if( str_len == std::numeric_limits<size_t>::max() )
+		return std::numeric_limits<int32_t>::max();
+
+	constexpr auto max_rank = static_cast<size_t>(std::numeric_limits<int32_t>::max());
+	const auto star_scale = str_len + 1;
+
+	if( star_count > (max_rank - 1) / star_scale )
+		return std::numeric_limits<int32_t>::max();
+
+	auto rank = size_t(1) + star_count * star_scale;
+	const auto unmatched_characters = str_len - std::min(question_count, str_len);
+
+	if( rank > max_rank - unmatched_characters )
+		return std::numeric_limits<int32_t>::max();
+
+	return static_cast<int32_t>(rank + unmatched_characters);
+}
+
 template <concepts::any_text_p Str, concepts::text_p<strtls::get_char_t<Str>> StrArg>
 int32_t wildcard_match(const Str &rule, const StrArg &str)
 {
@@ -183,20 +210,18 @@ int32_t wildcard_match(const Str &rule, const StrArg &str)
 	if( rule_pos != rule_len )
 		return -1;
 
-	size_t unit_weight = 0;
+	size_t star_count = 0;
+	size_t question_count = 0;
+
 	for(auto ch : rule_view)
 	{
 		if( ch == 0x3F/*?*/ )
-			++unit_weight;
+			++question_count;
 
 		else if( ch == 0x2A/***/ )
-			unit_weight += 2;
+			++star_count;
 	}
-	if( unit_weight != 0 and
-		str_len > static_cast<size_t>(std::numeric_limits<int32_t>::max()) / unit_weight )
-		return std::numeric_limits<int32_t>::max();
-
-	return static_cast<int32_t>(str_len * unit_weight);
+	return wildcard_match_rank(star_count, question_count, str_len);
 }
 
 } //namespace riwo

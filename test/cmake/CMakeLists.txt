@@ -330,17 +330,17 @@ if (MSVC)
 			"RIWO_ENABLE_TEST_TSAN=ON"
 	)
 	add_riwo_configure_case(msvc-fuzzer-requires-static
-		ERROR "MSVC fuzzers require RIWO_BUILD_STATIC=ON"
+		ERROR "MSVC fuzz tests require RIWO_BUILD_STATIC=ON"
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_TEST_FUZZ=ON"
 			"RIWO_BUILD_STATIC=OFF"
 	)
 	add_riwo_configure_case(msvc-fuzzer-with-stress
-		ERROR "Fuzzers can combine with stress tests only under Clang"
+		ERROR "Fuzz tests can combine with stress tests only under Clang"
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_TEST_FUZZ=ON"
 			"RIWO_BUILD_STATIC=ON"
 			"RIWO_BUILD_STRESS_TESTS=ON"
 	)
@@ -350,7 +350,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	add_riwo_configure_case(clang-fuzzer-with-stress SUCCESS
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_TEST_FUZZ=ON"
 			"RIWO_BUILD_STRESS_TESTS=ON"
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=OFF"
@@ -364,7 +364,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	add_riwo_configure_case(http-exp-fuzzer-without-http SUCCESS
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_TEST_FUZZ=ON"
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=ON"
 			"RIWO_BUILD_HTTP=OFF"
@@ -377,6 +377,22 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	)
 endif ()
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	add_riwo_configure_case(gnu-fuzzer-core SUCCESS
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_TEST_FUZZ=ON"
+			"RIWO_BUILD_EXAMPLES=OFF"
+			"RIWO_BUILD_CORO=OFF"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_HTTP_EXP=OFF"
+			"RIWO_BUILD_WEBSOCKET=OFF"
+			"RIWO_BUILD_WEBSOCKET_EXP=OFF"
+			"RIWO_BUILD_UTILITIES=OFF"
+		COMPONENTS core
+	)
+endif ()
+
 add_riwo_configure_case(performance-with-sanitizer
 	ERROR "Performance tests cannot be combined with test sanitizers"
 	OPTIONS
@@ -385,16 +401,20 @@ add_riwo_configure_case(performance-with-sanitizer
 		"RIWO_ENABLE_TEST_SANITIZERS=ON"
 )
 add_riwo_configure_case(fuzzer-without-testing
-	ERROR "Fuzzers require BUILD_TESTING=ON"
-	OPTIONS "RIWO_BUILD_FUZZERS=ON"
+	ERROR "Fuzz tests require BUILD_TESTING=ON"
+	OPTIONS "RIWO_BUILD_TEST_FUZZ=ON"
 )
 add_riwo_configure_case(fuzzer-with-performance
-	ERROR "Fuzzers cannot be combined with performance tests"
+	ERROR "Fuzz tests cannot be combined with performance tests"
 	OPTIONS
 		"BUILD_TESTING=ON"
-		"RIWO_BUILD_FUZZERS=ON"
+		"RIWO_BUILD_TEST_FUZZ=ON"
 		"RIWO_BUILD_STATIC=ON"
 		"RIWO_BUILD_PERFORMANCE_TESTS=ON"
+)
+add_riwo_configure_case(fuzzer-old-option-name
+	ERROR "RIWO_BUILD_FUZZERS was renamed to RIWO_BUILD_TEST_FUZZ"
+	OPTIONS "RIWO_BUILD_FUZZERS=ON"
 )
 add_riwo_configure_case(invalid-positive-integer
 	ERROR "RIWO_FUNCTIONAL_REPEAT must be a positive integer"
@@ -522,10 +542,10 @@ else ()
 	set(riwo_consumer_configuration "${CMAKE_BUILD_TYPE}")
 endif ()
 
-# A fuzzer build adds private sanitizer instrumentation directly to the Riwo
+# A fuzz test build adds private sanitizer instrumentation directly to the Riwo
 # archives.  It is a dedicated harness configuration rather than an installable
 # package configuration, so validate installation in all other test builds.
-if (NOT RIWO_BUILD_FUZZERS)
+if (NOT RIWO_BUILD_TEST_FUZZ)
 	# Use the common launcher so sanitizer process settings (notably TSan's
 	# setarch -R personality) are inherited by the nested consumer CTest.
 	add_riwo_ctest(riwo.cmake.install-consumer

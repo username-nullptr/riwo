@@ -21,8 +21,9 @@
 namespace riwo::http_exp::detail { namespace
 {
 
-constexpr bool h2_client_session_available =
-	RIWO_HTTP_EXP_HTTP2_SUPPORT != 0;
+#if RIWO_OPENSSL_SUPPORT
+constexpr bool h2_client_session_available = RIWO_HTTP_EXP_HTTP2_SUPPORT != 0;
+#endif //RIWO_OPENSSL_SUPPORT
 
 [[nodiscard]] std::vector<asio::ip::tcp::endpoint> resolve_with_timeout
 (const asio::any_io_executor &executor, std::string_view host, uint16_t port,
