@@ -10,7 +10,7 @@ option(RIWO_ENABLE_TEST_SANITIZERS
 option(RIWO_ENABLE_TEST_TSAN
 	"-- ${PRO_NAME}: Enable TSan for functional and stress tests." OFF
 )
-option(RIWO_BUILD_TEST_FUZZ
+option(RIWO_BUILD_FUZZ_TESTS
 	"-- ${PRO_NAME}: Build fuzz tests and input harnesses." OFF
 )
 option(RIWO_BUILD_STRESS_TESTS
@@ -19,7 +19,7 @@ option(RIWO_BUILD_STRESS_TESTS
 option(RIWO_BUILD_PERFORMANCE_TESTS
 	"-- ${PRO_NAME}: Build performance-sensitive benchmarks." OFF
 )
-option(RIWO_BUILD_TEST_CMAKE
+option(RIWO_BUILD_CMAKE_TESTS
 	"-- ${PRO_NAME}: Test CMake option constraints and the installed package." OFF
 )
 set(RIWO_FUNCTIONAL_REPEAT 3 CACHE STRING
@@ -94,7 +94,7 @@ if (RIWO_ENABLE_TEST_SANITIZERS AND RIWO_ENABLE_TEST_TSAN)
 	)
 endif ()
 
-if (RIWO_BUILD_TEST_CMAKE AND NOT BUILD_TESTING)
+if (RIWO_BUILD_CMAKE_TESTS AND NOT BUILD_TESTING)
 	message(FATAL_ERROR
 		"${PRO_NAME}: CMake integration tests require BUILD_TESTING=ON."
 	)
@@ -118,7 +118,7 @@ endif ()
 # cache entries intact for normal builds and shadow them only in this sanitizer
 # or fuzzer configure. With CMP0141 NEW, newly-created targets take their
 # debug-information format from this variable instead of the flags below.
-if (MSVC AND (RIWO_BUILD_TEST_FUZZ OR RIWO_ENABLE_TEST_SANITIZERS))
+if (MSVC AND (RIWO_BUILD_FUZZ_TESTS OR RIWO_ENABLE_TEST_SANITIZERS))
 	foreach(riwo_msvc_flags_var
 		CMAKE_C_FLAGS_DEBUG
 		CMAKE_C_FLAGS_RELWITHDEBINFO
@@ -146,7 +146,7 @@ if (MSVC AND (RIWO_BUILD_TEST_FUZZ OR RIWO_ENABLE_TEST_SANITIZERS))
 	endif ()
 endif ()
 
-if (RIWO_BUILD_TEST_FUZZ)
+if (RIWO_BUILD_FUZZ_TESTS)
 	if (NOT BUILD_TESTING)
 		message(FATAL_ERROR "${PRO_NAME}: Fuzz tests require BUILD_TESTING=ON.")
 	endif ()

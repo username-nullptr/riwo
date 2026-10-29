@@ -9,10 +9,10 @@ enabled in the same build.
 | Suite | Question it answers | Enable | CTest label |
 | --- | --- | --- | --- |
 | Functional | Does public behavior work deterministically? | `BUILD_TESTING=ON` | `functional` |
-| CMake | Do option constraints, exports, and installed consumers work? | `RIWO_BUILD_TEST_CMAKE=ON` | `cmake` |
+| CMake | Do option constraints, exports, and installed consumers work? | `RIWO_BUILD_CMAKE_TESTS=ON` | `cmake` |
 | Interoperability | Does HTTP/WebSocket work with an available independent implementation? | discovered within Functional | `interop` |
 | Stress | Does correctness survive concurrency, saturation, and repeated lifecycle work? | `RIWO_BUILD_STRESS_TESTS=ON` | `stress` |
-| Fuzz | Do malformed inputs and call sequences expose failures? | `RIWO_BUILD_TEST_FUZZ=ON` | `fuzz` |
+| Fuzz | Do malformed inputs and call sequences expose failures? | `RIWO_BUILD_FUZZ_TESTS=ON` | `fuzz` |
 | Performance | What throughput and latency does this build produce? | `RIWO_BUILD_PERFORMANCE_TESTS=ON` | `performance` |
 | Sanitizer | Do Functional/Stress runs expose memory, UB, or race failures? | sanitizer option below | `sanitizer` |
 
@@ -42,7 +42,7 @@ owns each public behavior.
 
 ## CMake and installation profile
 
-`RIWO_BUILD_TEST_CMAKE` is disabled by default. Enable it together with
+`RIWO_BUILD_CMAKE_TESTS` is disabled by default. Enable it together with
 `BUILD_TESTING` to check:
 
 - every Core/Coroutines/HTTP/WebSocket/Utilities enablement combination;
@@ -54,7 +54,7 @@ owns each public behavior.
 
 ```sh
 cmake -S . -B build-cmake-test -DBUILD_TESTING=ON \
-  -DRIWO_BUILD_TEST_CMAKE=ON
+  -DRIWO_BUILD_CMAKE_TESTS=ON
 cmake --build build-cmake-test --parallel
 ctest --test-dir build-cmake-test -L cmake --output-on-failure
 ```
@@ -109,7 +109,7 @@ Performance sources. Clang builds may additionally enable the Stress suite.
 
 ```sh
 cmake -S . -B build-fuzz -DBUILD_TESTING=ON \
-  -DRIWO_BUILD_TEST_FUZZ=ON \
+  -DRIWO_BUILD_FUZZ_TESTS=ON \
   -DRIWO_BUILD_STRESS_TESTS=ON \
   -DCMAKE_CXX_COMPILER=clang++ \
   -DRIWO_BUILD_HTTP=ON \
@@ -127,7 +127,7 @@ Studio developer prompt:
 
 ```bat
 cmake -S . -B build-msvc-fuzz -G Ninja ^
-  -DBUILD_TESTING=ON -DRIWO_BUILD_TEST_FUZZ=ON ^
+  -DBUILD_TESTING=ON -DRIWO_BUILD_FUZZ_TESTS=ON ^
   -DRIWO_BUILD_STATIC=ON ^
   -DRIWO_BUILD_HTTP=ON -DRIWO_BUILD_HTTP_EXP=ON ^
   -DRIWO_BUILD_WEBSOCKET=ON -DRIWO_BUILD_UTILITIES=ON ^
@@ -149,7 +149,7 @@ compiler-compatibility test, not coverage-guided fuzzing:
 
 ```sh
 cmake -S . -B build-gnu-fuzz -DBUILD_TESTING=ON \
-  -DRIWO_BUILD_TEST_FUZZ=ON \
+  -DRIWO_BUILD_FUZZ_TESTS=ON \
   -DCMAKE_CXX_COMPILER=g++ \
   -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_HTTP_EXP=ON \

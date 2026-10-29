@@ -13,6 +13,11 @@ route_pattern::route_pattern(core_concepts::text_p<char> auto &&pattern) :
 
 }
 
+optional<route_match> route_pattern::match(const core_concepts::text_p<char> auto &path) const noexcept
+{
+	return match_impl(strtls::to_view(path));
+}
+
 } //namespace riwo::http_exp
 
 

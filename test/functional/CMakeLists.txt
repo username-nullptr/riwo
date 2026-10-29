@@ -43,11 +43,19 @@ if (RIWO_BUILD_HTTP_EXP)
 	add_riwo_test(http_exp.body http_exp/body.cpp riwo.http_exp)
 	add_riwo_test(http_exp.http1 http_exp/http1.cpp riwo.http_exp)
 	add_riwo_test(http_exp.session-pool http_exp/session_pool.cpp riwo.http_exp)
-	# session_pool is private and hidden.  Compile its implementation into the
-	# white-box test instead of reaching across the shared-library boundary.
-	target_sources(riwo.test.http_exp.session-pool PRIVATE
-		${PROJECT_SOURCE_DIR}/riwo/http_exp/client/detail/session_pool.cpp
-	)
+	# Static builds expose the private implementation to the test through the
+	# archive.  Adding another copy here would make symbol selection depend on
+	# the linker and could pair session_pool with the test-only null factory.
+	# Shared builds cannot reach hidden symbols, so only those builds own a
+	# private implementation copy and its matching factory stub.
+	if (NOT RIWO_BUILD_STATIC)
+		target_sources(riwo.test.http_exp.session-pool PRIVATE
+			${PROJECT_SOURCE_DIR}/riwo/http_exp/client/detail/session_pool.cpp
+		)
+		target_compile_definitions(riwo.test.http_exp.session-pool PRIVATE
+			RIWO_TEST_PRIVATE_SESSION_POOL=1
+		)
+	endif ()
 
 	# This white-box test owns a private implementation copy so it does not
 	# reach across the shared-library boundary for hidden symbols.

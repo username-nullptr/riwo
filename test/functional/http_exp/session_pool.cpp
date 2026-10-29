@@ -10,9 +10,12 @@
 #include <riwo/http_exp/session/client_session.h>
 #include <riwo/http_exp/session/session_stream.h>
 
-// This test compiles a private copy of session_pool.cpp.  Direct tests always
-// inject fake_factory; the production default factory remains exercised through
-// the public client tests in the shared library.
+// Shared-library tests compile a private copy of session_pool.cpp because its
+// symbols are hidden. Direct tests always inject fake_factory; the production
+// default factory remains exercised through the public client tests in the
+// shared library. Static builds use the implementation and factory in the
+// linked archive so they do not contain competing definitions.
+#if defined(RIWO_TEST_PRIVATE_SESSION_POOL)
 namespace riwo::http_exp::detail
 {
 session_factory_ptr make_default_session_factory()
@@ -20,6 +23,7 @@ session_factory_ptr make_default_session_factory()
 	return {};
 }
 } //namespace riwo::http_exp::detail
+#endif
 
 namespace
 {

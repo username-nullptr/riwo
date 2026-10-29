@@ -35,13 +35,17 @@ public:
 	route_pattern &operator=(route_pattern &&other) noexcept;
 
 public:
-	[[nodiscard]] optional<route_match> match(std::string_view path) const noexcept;
+	[[nodiscard]] optional<route_match> match (
+		const core_concepts::text_p<char> auto &path
+	) const noexcept;
+
 	[[nodiscard]] std::string_view text() const noexcept;
 	[[nodiscard]] bool exact() const noexcept;
 
 private:
 	class impl;
 	[[nodiscard]] static std::shared_ptr<const impl> compile(std::string pattern);
+	[[nodiscard]] optional<route_match> match_impl(std::string_view path) const noexcept;
 	std::shared_ptr<const impl> m_impl {};
 };
 

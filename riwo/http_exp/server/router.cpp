@@ -15,7 +15,6 @@ struct route_element
 {
 	route_element_kind kind {};
 	char character = '\0';
-	size_t argument_index = 0;
 };
 
 } //namespace
@@ -34,7 +33,6 @@ public:
 	size_t specificity = 0;
 	size_t star_count = 0;
 	size_t question_count = 0;
-	bool exact = true;
 };
 
 std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pattern)
@@ -45,8 +43,7 @@ std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pa
 	auto result = std::make_shared<impl>();
 	result->text = std::move(pattern);
 
-	std::vector<route_element> elements;
-	elements.reserve(result->text.size());
+	result->elements.reserve(result->text.size());
 	std::unordered_set<std::string> names;
 
 	for(size_t index=0; index<result->text.size(); ++index)
@@ -54,15 +51,13 @@ std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pa
 		const auto current = result->text[index];
 		if( current == '*' )
 		{
-			elements.push_back({.kind = route_element_kind::remainder});
+			result->elements.push_back({.kind = route_element_kind::remainder});
 			result->star_count += 1;
-			result->exact = false;
 		}
 		else if( current == '?' )
 		{
-			elements.push_back({.kind = route_element_kind::any});
+			result->elements.push_back({.kind = route_element_kind::any});
 			result->question_count += 1;
-			result->exact = false;
 		}
 		else if( current == '{' )
 		{
@@ -75,11 +70,7 @@ std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pa
 				invalid_argument::loc_throw("riwo::http_exp::route_pattern: invalid or duplicate argument");
 
 			result->argument_names.emplace_back(std::move(name));
-			elements.push_back({
-				.kind = route_element_kind::parameter,
-				.argument_index = result->argument_names.size() - 1
-			});
-			result->exact = false;
+			result->elements.push_back({.kind = route_element_kind::parameter});
 			index = close;
 		}
 		else
@@ -87,7 +78,7 @@ std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pa
 			if( current == '}' )
 				invalid_argument::loc_throw("riwo::http_exp::route_pattern: unmatched '}'");
 
-			elements.push_back({
+			result->elements.push_back ({
 				.kind = route_element_kind::literal,
 				.character = current
 			});
@@ -96,10 +87,8 @@ std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pa
 	}
 	result->specificity += result->argument_names.size();
 
-	if( result->exact )
-		result->specificity += size_t(1) << 30U;
-
-	result->elements = std::move(elements);
+	if( result->star_count == 0 and result->question_count == 0 and result->argument_names.empty() )
+		result->specificity += static_cast<size_t>(1) << 30U;
 	return result;
 }
 
@@ -129,25 +118,15 @@ std::string_view route_pattern::text() const noexcept
 
 bool route_pattern::exact() const noexcept
 {
-	return m_impl and m_impl->exact;
+	return m_impl and m_impl->star_count == 0 and
+		m_impl->question_count == 0 and m_impl->argument_names.empty();
 }
 
-optional<route_match> route_pattern::match(std::string_view path) const noexcept
+optional<route_match> route_pattern::match_impl(std::string_view path) const noexcept
 {
 	if( not m_impl )
 		return {};
 	try {
-		if( m_impl->exact )
-		{
-			if( path != m_impl->text )
-				return {};
-
-			return route_match {
-				.path_parameters = {},
-				.specificity = m_impl->specificity,
-				.wildcard_rank = 0
-			};
-		}
 		if( m_impl->argument_names.empty() )
 		{
 			const auto wildcard_rank = wildcard_match(m_impl->text, path);
@@ -163,7 +142,7 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 		const auto path_size = path.size();
 		const auto width = path_size + 1;
 
-		std::vector<unsigned char> matches(width * (m_impl->elements.size() + 1));
+		std::vector<uint8_t> matches(width * (m_impl->elements.size() + 1));
 		matches[m_impl->elements.size() * width + path_size] = 1;
 
 		std::vector segment_ends(width, path_size);
@@ -185,7 +164,7 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 
 			if( element.kind == route_element_kind::remainder )
 			{
-				unsigned char suffix_match = 0;
+				uint8_t suffix_match = 0;
 				for(size_t position=width; position-- > 0; )
 				{
 					suffix_match |= matches[next_row + position];
@@ -219,7 +198,10 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 		if( not matches[0] )
 			return {};
 
-		std::vector<std::pair<size_t,size_t>> captures(m_impl->argument_names.size());
+		parameter_view::container_t parameters {};
+		parameters.reserve(m_impl->argument_names.size());
+
+		size_t argument_index = 0;
 		size_t path_position = 0;
 
 		for(size_t index=0; index<m_impl->elements.size(); ++index)
@@ -243,25 +225,18 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 					if( matches[next_row + position] )
 						path_position = position;
 				}
-				captures[element.argument_index] = {begin, path_position};
+				auto decoded = decode_uri_component (
+					path.substr(begin, path_position - begin), false
+				);
+				if( not decoded )
+					return {};
+
+				parameters.emplace_back (
+					m_impl->argument_names[argument_index++], std::move(*decoded)
+				);
 			}
 			else
 				++path_position;
-		}
-		parameter_view::container_t parameters {};
-		parameters.reserve(m_impl->argument_names.size());
-
-		for(size_t index=0; index<m_impl->argument_names.size(); ++index)
-		{
-			const auto [begin, end] = captures[index];
-			auto decoded = decode_uri_component(path.substr(begin, end - begin), false);
-
-			if( not decoded )
-				return {};
-
-			parameters.emplace_back (
-				m_impl->argument_names[index], std::move(*decoded)
-			);
 		}
 		return route_match {
 			.path_parameters = parameter_view(std::move(parameters)),

@@ -310,7 +310,7 @@ add_riwo_configure_case(performance-without-testing
 )
 add_riwo_configure_case(cmake-tests-without-testing
 	ERROR "CMake integration tests require BUILD_TESTING=ON"
-	OPTIONS "RIWO_BUILD_TEST_CMAKE=ON"
+	OPTIONS "RIWO_BUILD_CMAKE_TESTS=ON"
 )
 add_riwo_configure_case(sanitizers-mutually-exclusive
 	ERROR "ASan/UBSan and TSan cannot be enabled together"
@@ -333,14 +333,14 @@ if (MSVC)
 		ERROR "MSVC fuzz tests require RIWO_BUILD_STATIC=ON"
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_TEST_FUZZ=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
 			"RIWO_BUILD_STATIC=OFF"
 	)
 	add_riwo_configure_case(msvc-fuzzer-with-stress
 		ERROR "Fuzz tests can combine with stress tests only under Clang"
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_TEST_FUZZ=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
 			"RIWO_BUILD_STATIC=ON"
 			"RIWO_BUILD_STRESS_TESTS=ON"
 	)
@@ -350,7 +350,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	add_riwo_configure_case(clang-fuzzer-with-stress SUCCESS
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_TEST_FUZZ=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
 			"RIWO_BUILD_STRESS_TESTS=ON"
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=OFF"
@@ -364,7 +364,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 	add_riwo_configure_case(http-exp-fuzzer-without-http SUCCESS
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_TEST_FUZZ=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=ON"
 			"RIWO_BUILD_HTTP=OFF"
@@ -381,7 +381,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	add_riwo_configure_case(gnu-fuzzer-core SUCCESS
 		OPTIONS
 			"BUILD_TESTING=ON"
-			"RIWO_BUILD_TEST_FUZZ=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=OFF"
 			"RIWO_BUILD_HTTP=OFF"
@@ -402,19 +402,15 @@ add_riwo_configure_case(performance-with-sanitizer
 )
 add_riwo_configure_case(fuzzer-without-testing
 	ERROR "Fuzz tests require BUILD_TESTING=ON"
-	OPTIONS "RIWO_BUILD_TEST_FUZZ=ON"
+	OPTIONS "RIWO_BUILD_FUZZ_TESTS=ON"
 )
 add_riwo_configure_case(fuzzer-with-performance
 	ERROR "Fuzz tests cannot be combined with performance tests"
 	OPTIONS
 		"BUILD_TESTING=ON"
-		"RIWO_BUILD_TEST_FUZZ=ON"
+		"RIWO_BUILD_FUZZ_TESTS=ON"
 		"RIWO_BUILD_STATIC=ON"
 		"RIWO_BUILD_PERFORMANCE_TESTS=ON"
-)
-add_riwo_configure_case(fuzzer-old-option-name
-	ERROR "RIWO_BUILD_FUZZERS was renamed to RIWO_BUILD_TEST_FUZZ"
-	OPTIONS "RIWO_BUILD_FUZZERS=ON"
 )
 add_riwo_configure_case(invalid-positive-integer
 	ERROR "RIWO_FUNCTIONAL_REPEAT must be a positive integer"
@@ -545,7 +541,7 @@ endif ()
 # A fuzz test build adds private sanitizer instrumentation directly to the Riwo
 # archives.  It is a dedicated harness configuration rather than an installable
 # package configuration, so validate installation in all other test builds.
-if (NOT RIWO_BUILD_TEST_FUZZ)
+if (NOT RIWO_BUILD_FUZZ_TESTS)
 	# Use the common launcher so sanitizer process settings (notably TSan's
 	# setarch -R personality) are inherited by the nested consumer CTest.
 	add_riwo_ctest(riwo.cmake.install-consumer

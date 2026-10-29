@@ -208,6 +208,12 @@ concept route_pattern_text = requires(Text &&text) {
 };
 
 template <typename Text>
+concept route_pattern_match_text = requires(
+	const http::route_pattern &pattern, const Text &text) {
+	{ pattern.match(text) } -> std::same_as<riwo::optional<http::route_match>>;
+};
+
+template <typename Text>
 concept application_attribute_text = requires(
 	http::app_session &session, Text &&text) {
 	session.set_attribute(std::forward<Text>(text), 1);
@@ -245,6 +251,11 @@ static_assert(!method_string<char>);
 static_assert(!method_string<std::wstring_view>);
 static_assert(route_pattern_text<std::string_view>);
 static_assert(!route_pattern_text<std::wstring_view>);
+static_assert(route_pattern_match_text<std::string>);
+static_assert(route_pattern_match_text<std::string_view>);
+static_assert(route_pattern_match_text<const char*>);
+static_assert(route_pattern_match_text<char>);
+static_assert(!route_pattern_match_text<std::wstring_view>);
 static_assert(application_attribute_text<std::string_view>);
 static_assert(!application_attribute_text<std::wstring_view>);
 static_assert(app_session_manager_text<std::string>);
@@ -887,6 +898,7 @@ void moved_from_objects_are_safe()
 	const auto wildcard_match = wildcard_remainders.match("/hello/a/b/c");
 	RIWO_TEST_CHECK(constrained_match.has_value());
 	RIWO_TEST_CHECK(wildcard_match.has_value());
+	RIWO_TEST_CHECK_EQ(wildcard_match->path_parameters.find_first("name").value(), "b");
 	RIWO_TEST_CHECK_EQ(constrained_match->specificity, wildcard_match->specificity);
 	RIWO_TEST_CHECK(constrained_match->wildcard_rank < wildcard_match->wildcard_rank);
 

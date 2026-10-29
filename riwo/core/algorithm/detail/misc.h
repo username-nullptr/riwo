@@ -158,7 +158,7 @@ constexpr int32_t wildcard_match_rank
 	if( star_count > (max_rank - 1) / star_scale )
 		return std::numeric_limits<int32_t>::max();
 
-	auto rank = size_t(1) + star_count * star_scale;
+	auto rank = static_cast<size_t>(1) + star_count * star_scale;
 	const auto unmatched_characters = str_len - std::min(question_count, str_len);
 
 	if( rank > max_rank - unmatched_characters )
