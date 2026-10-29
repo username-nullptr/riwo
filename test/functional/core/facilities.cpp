@@ -782,6 +782,14 @@ void mime_detection()
 	riwo::test::temporary_directory directory;
 	const auto text = directory.path() / "sample.txt";
 	const auto png = directory.path() / "sample.bin";
+	const auto avif = directory.path() / "sample-avif.bin";
+	const auto sqlite = directory.path() / "sample-sqlite.bin";
+	const auto zstd = directory.path() / "sample-zstd.bin";
+	const auto woff2 = directory.path() / "sample-woff2.bin";
+	const auto arrow = directory.path() / "sample-arrow.bin";
+	const auto glb = directory.path() / "sample-glb.bin";
+	const auto ktx2 = directory.path() / "sample-ktx2.bin";
+	const auto parquet = directory.path() / "sample-parquet.bin";
 	{
 		std::ofstream stream(text, std::ios::binary);
 		stream << "plain UTF-8 text\n";
@@ -791,11 +799,170 @@ void mime_detection()
 		const unsigned char signature[] {0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
 		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
 	}
+	{
+		std::ofstream stream(avif, std::ios::binary);
+		const unsigned char signature[] {0, 0, 0, 24, 'f', 't', 'y', 'p', 'a', 'v', 'i', 'f'};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
+	{
+		std::ofstream stream(sqlite, std::ios::binary);
+		const char signature[] = "SQLite format 3";
+		stream.write(signature, sizeof(signature));
+	}
+	{
+		std::ofstream stream(zstd, std::ios::binary);
+		const unsigned char signature[] {0x28, 0xb5, 0x2f, 0xfd};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
+	{
+		std::ofstream stream(woff2, std::ios::binary);
+		const unsigned char signature[] {'w', 'O', 'F', '2', 0};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
+	{
+		std::ofstream stream(arrow, std::ios::binary);
+		const unsigned char signature[] {'A', 'R', 'R', 'O', 'W', '1', 0};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
+	{
+		std::ofstream stream(glb, std::ios::binary);
+		const unsigned char signature[] {'g', 'l', 'T', 'F', 2, 0, 0, 0};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
+	{
+		std::ofstream stream(ktx2, std::ios::binary);
+		const unsigned char signature[]
+			{0xab, 'K', 'T', 'X', ' ', '2', '0', 0xbb, 0x0d, 0x0a, 0x1a, 0x0a};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
+	{
+		std::ofstream stream(parquet, std::ios::binary);
+		const unsigned char signature[] {'P', 'A', 'R', '1', 0};
+		stream.write(reinterpret_cast<const char*>(signature), sizeof(signature));
+	}
 
 	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(text), "text/plain");
 	RIWO_TEST_CHECK(riwo::mime_type::is_text(text));
 	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(png, true), "image/png");
 	RIWO_TEST_CHECK(riwo::mime_type::is_binary(png));
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(avif, true), "image/avif");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(sqlite, true), "application/vnd.sqlite3");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(zstd, true), "application/zstd");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(woff2, true), "font/woff2");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(arrow, true), "application/vnd.apache.arrow.file");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(glb, true), "model/gltf-binary");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(ktx2, true), "image/ktx2");
+	RIWO_TEST_CHECK_EQ(riwo::mime_type::get(parquet, true), "application/vnd.apache.parquet");
+
+	const std::pair<const char*,const char*> known_types[]
+	{
+		{"sample.AAC", "audio/aac"},
+		{"sample.abw", "application/x-abiword"},
+		{"sample.apk", "application/vnd.android.package-archive"},
+		{"sample.arrow", "application/vnd.apache.arrow.file"},
+		{"sample.arrows", "application/vnd.apache.arrow.stream"},
+		{"sample.ass", "text/x-ssa"},
+		{"sample.atomcat", "application/atomcat+xml"},
+		{"sample.atomsvc", "application/atomsvc+xml"},
+		{"sample.avci", "image/avci"},
+		{"sample.avcs", "image/avcs"},
+		{"sample.avif", "image/avif"},
+		{"sample.azw", "application/vnd.amazon.ebook"},
+		{"sample.br", "application/x-brotli"},
+		{"sample.bz", "application/x-bzip"},
+		{"sample.cer", "application/pkix-cert"},
+		{"sample.cjs", "application/javascript"},
+		{"sample.cose", "application/cose"},
+		{"sample.crl", "application/pkix-crl"},
+		{"sample.cwt", "application/cwt"},
+		{"sample.dbk", "application/docbook+xml"},
+		{"sample.e57", "model/e57"},
+		{"sample.exi", "application/exi"},
+		{"sample.geojson", "application/geo+json"},
+		{"sample.glb", "model/gltf-binary"},
+		{"sample.gltf", "model/gltf+json"},
+		{"sample.HEIC", "image/heic"},
+		{"sample.heics", "image/heic-sequence"},
+		{"sample.heif", "image/heif"},
+		{"sample.heifs", "image/heif-sequence"},
+		{"sample.hjif", "haptics/hjif"},
+		{"sample.hmpg", "haptics/hmpg"},
+		{"sample.img", "application/octet-stream"},
+		{"sample.ink", "application/inkml+xml"},
+		{"sample.inkml", "application/inkml+xml"},
+		{"sample.ipfix", "application/ipfix"},
+		{"sample.ivs", "haptics/ivs"},
+		{"sample.jpeg", "image/jpeg"},
+		{"sample.jph", "image/jph"},
+		{"sample.jphc", "image/jphc"},
+		{"sample.jsonl", "application/x-ndjson"},
+		{"sample.jxl", "image/jxl"},
+		{"sample.jxs", "image/jxs"},
+		{"sample.jxsc", "image/jxsc"},
+		{"sample.jxsi", "image/jxsi"},
+		{"sample.jxss", "image/jxss"},
+		{"sample.ktx2", "image/ktx2"},
+		{"sample.m3u8", "application/vnd.apple.mpegurl"},
+		{"sample.m4a", "audio/mp4"},
+		{"sample.m4v", "video/mp4"},
+		{"sample.map", "application/json"},
+		{"sample.mathml", "application/mathml+xml"},
+		{"sample.midi", "audio/midi"},
+		{"sample.mjs", "text/javascript"},
+		{"sample.mpkg", "application/vnd.apple.installer+xml"},
+		{"sample.mrcx", "application/marcxml+xml"},
+		{"sample.myd", "application/x-mysql-misam-data"},
+		{"sample.myi", "application/x-mysql-misam-compressed-index"},
+		{"sample.ndjson", "application/x-ndjson"},
+		{"sample.obj", "model/obj"},
+		{"sample.otf", "font/otf"},
+		{"sample.p12", "application/pkcs12"},
+		{"sample.p7c", "application/pkcs7-mime"},
+		{"sample.p7m", "application/pkcs7-mime"},
+		{"sample.p7s", "application/pkcs7-signature"},
+		{"sample.p8", "application/pkcs8"},
+		{"sample.parquet", "application/vnd.apache.parquet"},
+		{"sample.pem", "application/x-pem-file"},
+		{"sample.pfx", "application/pkcs12"},
+		{"sample.sqlite", "application/vnd.sqlite3"},
+		{"sample.sig", "application/pgp-signature"},
+		{"sample.smil", "application/smil+xml"},
+		{"sample.srt", "application/x-subrip"},
+		{"sample.ssa", "text/x-ssa"},
+		{"sample.svelte", "text/x-svelte"},
+		{"sample.stl", "model/stl"},
+		{"sample.tei", "application/tei+xml"},
+		{"sample.teicorpus", "application/tei+xml"},
+		{"sample.tif", "image/tiff"},
+		{"sample.tsx", "text/tsx"},
+		{"sample.ttc", "font/collection"},
+		{"sample.ttf", "font/ttf"},
+		{"sample.usdz", "model/vnd.usdz+zip"},
+		{"sample.vue", "text/x-vue"},
+		{"sample.wasm", "application/wasm"},
+		{"sample.weba", "audio/webm"},
+		{"sample.webmanifest", "application/manifest+json"},
+		{"sample.webvtt", "text/vtt"},
+		{"sample.woff", "font/woff"},
+		{"sample.woff2", "font/woff2"},
+		{"sample.wsz", "interface/x-winamp-skin"},
+		{"sample.xul", "application/vnd.mozilla.xul+xml"},
+		{"sample.xxx", "application/octet-stream"},
+		{"sample.z", "application/x-compress"},
+		{"sample.zst", "application/zstd"}
+	};
+	for(const auto &[file_name,expected] : known_types)
+		RIWO_TEST_CHECK_EQ(riwo::mime_type::get(file_name), expected);
+
+	for(const auto &[suffix,type] : riwo::mime_type::mapping::suffix())
+	{
+		bool lowercase = true;
+		for(const auto ch : suffix)
+			lowercase = lowercase and not (ch >= 'A' and ch <= 'Z');
+		RIWO_TEST_CHECK(lowercase);
+		RIWO_TEST_CHECK(not type.empty());
+		RIWO_TEST_CHECK(type.find('/') != std::string::npos);
+	}
 }
 
 void application_environment()
