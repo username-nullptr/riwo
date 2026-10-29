@@ -258,6 +258,6 @@ else ()
 	endif ()
 endif ()
 
-if (RIWO_BUILD_CMAKE_TESTS)
+if (RIWO_BUILD_TEST_CMAKE)
 	add_subdirectory(cmake)
 endif ()

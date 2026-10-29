@@ -4,10 +4,6 @@
 option(BUILD_TESTING
 	"-- ${PRO_NAME}: Build tests." OFF
 )
-option(RIWO_BUILD_CMAKE_TESTS
-	"-- ${PRO_NAME}: Test CMake option constraints and the installed package."
-	${BUILD_TESTING}
-)
 option(RIWO_ENABLE_TEST_SANITIZERS
 	"-- ${PRO_NAME}: Enable ASan and, where available, UBSan for functional and stress tests." OFF
 )
@@ -22,6 +18,9 @@ option(RIWO_BUILD_STRESS_TESTS
 )
 option(RIWO_BUILD_PERFORMANCE_TESTS
 	"-- ${PRO_NAME}: Build performance-sensitive benchmarks." OFF
+)
+option(RIWO_BUILD_TEST_CMAKE
+	"-- ${PRO_NAME}: Test CMake option constraints and the installed package." OFF
 )
 set(RIWO_FUNCTIONAL_REPEAT 3 CACHE STRING
 	"Execution count for each Riwo functional test case (positive integer)."
@@ -95,7 +94,7 @@ if (RIWO_ENABLE_TEST_SANITIZERS AND RIWO_ENABLE_TEST_TSAN)
 	)
 endif ()
 
-if (RIWO_BUILD_CMAKE_TESTS AND NOT BUILD_TESTING)
+if (RIWO_BUILD_TEST_CMAKE AND NOT BUILD_TESTING)
 	message(FATAL_ERROR
 		"${PRO_NAME}: CMake integration tests require BUILD_TESTING=ON."
 	)

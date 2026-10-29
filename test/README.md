@@ -9,7 +9,7 @@ enabled in the same build.
 | Suite | Question it answers | Enable | CTest label |
 | --- | --- | --- | --- |
 | Functional | Does public behavior work deterministically? | `BUILD_TESTING=ON` | `functional` |
-| CMake | Do option constraints, exports, and installed consumers work? | `RIWO_BUILD_CMAKE_TESTS=ON` | `cmake` |
+| CMake | Do option constraints, exports, and installed consumers work? | `RIWO_BUILD_TEST_CMAKE=ON` | `cmake` |
 | Interoperability | Does HTTP/WebSocket work with an available independent implementation? | discovered within Functional | `interop` |
 | Stress | Does correctness survive concurrency, saturation, and repeated lifecycle work? | `RIWO_BUILD_STRESS_TESTS=ON` | `stress` |
 | Fuzz | Do malformed inputs and call sequences expose failures? | `RIWO_BUILD_FUZZERS=ON` | `fuzz` |
@@ -42,7 +42,8 @@ owns each public behavior.
 
 ## CMake and installation profile
 
-`RIWO_BUILD_CMAKE_TESTS` follows `BUILD_TESTING` by default. This suite checks:
+`RIWO_BUILD_TEST_CMAKE` is disabled by default. Enable it together with
+`BUILD_TESTING` to check:
 
 - every Core/Coroutines/HTTP/WebSocket/Utilities enablement combination;
 - rejection of invalid module, provider, sanitizer, fuzz, and numeric options;
@@ -52,7 +53,8 @@ owns each public behavior.
   and execution against both `Riwo::` and compatibility targets.
 
 ```sh
-cmake -S . -B build-cmake-test -DBUILD_TESTING=ON
+cmake -S . -B build-cmake-test -DBUILD_TESTING=ON \
+  -DRIWO_BUILD_TEST_CMAKE=ON
 cmake --build build-cmake-test --parallel
 ctest --test-dir build-cmake-test -L cmake --output-on-failure
 ```

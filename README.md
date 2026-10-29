@@ -8,12 +8,12 @@ application utilities without requiring applications to adopt every module.
 
 ```text
 riwo.core
-└── riwo.coro
-    ├── riwo.http
-    │   └── riwo.websocket
-    ├── riwo.http_exp
-    │   └── riwo.websocket_exp
-    └── riwo.utils
+├── riwo.coro
+│   ├── riwo.http
+│   │   └── riwo.websocket
+│   └── riwo.utils
+└── riwo.http_exp
+    └── riwo.websocket_exp
 ```
 
 | Module | Build switch | Default | Primary include | Source-tree target |

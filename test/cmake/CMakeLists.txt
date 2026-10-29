@@ -162,13 +162,13 @@ foreach(coro OFF ON)
 	endforeach()
 endforeach()
 
-add_riwo_configure_case(http-exp-without-coro
-	ERROR "<HTTP_EXP> module depends on <Coroutine> module"
+add_riwo_configure_case(http-exp-without-coro SUCCESS
 	OPTIONS
 		"RIWO_BUILD_CORO=OFF"
 		"RIWO_BUILD_HTTP=OFF"
 		"RIWO_BUILD_HTTP_EXP=ON"
 		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core http_exp
 )
 add_riwo_configure_case(http-exp-standalone SUCCESS
 	OPTIONS
@@ -310,7 +310,7 @@ add_riwo_configure_case(performance-without-testing
 )
 add_riwo_configure_case(cmake-tests-without-testing
 	ERROR "CMake integration tests require BUILD_TESTING=ON"
-	OPTIONS "RIWO_BUILD_CMAKE_TESTS=ON"
+	OPTIONS "RIWO_BUILD_TEST_CMAKE=ON"
 )
 add_riwo_configure_case(sanitizers-mutually-exclusive
 	ERROR "ASan/UBSan and TSan cannot be enabled together"

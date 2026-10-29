@@ -69,10 +69,7 @@ option(RIWO_BUILD_HTTP_EXP
 set(RIWO_HTTP_EXP_SUPPORT ${RIWO_BUILD_HTTP_EXP})
 
 if (RIWO_BUILD_HTTP_EXP)
-	if (NOT RIWO_BUILD_CORO)
-		message(FATAL_ERROR "${PRO_NAME}: <HTTP_EXP> module depends on <Coroutine> module.")
-		unset(RIWO_BUILD_HTTP_EXP)
-	elseif (RIWO_OPENSSL_SUPPORT)
+	if (RIWO_OPENSSL_SUPPORT)
 		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS_EXP>.")
 	else ()
 		message(STATUS "${PRO_NAME}: Build module <HTTP_EXP>.")
