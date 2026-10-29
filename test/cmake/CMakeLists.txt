@@ -329,6 +329,52 @@ if (MSVC)
 			"BUILD_TESTING=ON"
 			"RIWO_ENABLE_TEST_TSAN=ON"
 	)
+	add_riwo_configure_case(msvc-fuzzer-requires-static
+		ERROR "MSVC fuzzers require RIWO_BUILD_STATIC=ON"
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_STATIC=OFF"
+	)
+	add_riwo_configure_case(msvc-fuzzer-with-stress
+		ERROR "Fuzzers can combine with stress tests only under Clang"
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_STATIC=ON"
+			"RIWO_BUILD_STRESS_TESTS=ON"
+	)
+endif ()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	add_riwo_configure_case(clang-fuzzer-with-stress SUCCESS
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_STRESS_TESTS=ON"
+			"RIWO_BUILD_EXAMPLES=OFF"
+			"RIWO_BUILD_CORO=OFF"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_HTTP_EXP=OFF"
+			"RIWO_BUILD_WEBSOCKET=OFF"
+			"RIWO_BUILD_WEBSOCKET_EXP=OFF"
+			"RIWO_BUILD_UTILITIES=OFF"
+		COMPONENTS core
+	)
+	add_riwo_configure_case(http-exp-fuzzer-without-http SUCCESS
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZERS=ON"
+			"RIWO_BUILD_EXAMPLES=OFF"
+			"RIWO_BUILD_CORO=ON"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_HTTP_EXP=ON"
+			"RIWO_EXP_HTTP2_SUPPORT=OFF"
+			"RIWO_BUILD_WEBSOCKET=OFF"
+			"RIWO_BUILD_WEBSOCKET_EXP=OFF"
+			"RIWO_BUILD_UTILITIES=OFF"
+		COMPONENTS core coro http_exp
+	)
 endif ()
 
 add_riwo_configure_case(performance-with-sanitizer
@@ -341,6 +387,14 @@ add_riwo_configure_case(performance-with-sanitizer
 add_riwo_configure_case(fuzzer-without-testing
 	ERROR "Fuzzers require BUILD_TESTING=ON"
 	OPTIONS "RIWO_BUILD_FUZZERS=ON"
+)
+add_riwo_configure_case(fuzzer-with-performance
+	ERROR "Fuzzers cannot be combined with performance tests"
+	OPTIONS
+		"BUILD_TESTING=ON"
+		"RIWO_BUILD_FUZZERS=ON"
+		"RIWO_BUILD_STATIC=ON"
+		"RIWO_BUILD_PERFORMANCE_TESTS=ON"
 )
 add_riwo_configure_case(invalid-positive-integer
 	ERROR "RIWO_FUNCTIONAL_REPEAT must be a positive integer"

@@ -99,25 +99,54 @@ optional UDP soft-bus pressure.
 
 ## Fuzz profile
 
-Fuzzing is a dedicated Clang/libFuzzer + ASan + UBSan build. It does not add
-Functional, Stress, or Performance sources.
+Fuzzing is a dedicated libFuzzer build. Clang enables ASan + UBSan; native
+MSVC enables its experimental libFuzzer + ASan support. The profile does not
+add Functional or Performance sources. Clang builds may additionally enable
+the Stress suite.
 
 ```sh
 cmake -S . -B build-fuzz -DBUILD_TESTING=ON \
   -DRIWO_BUILD_FUZZERS=ON \
+  -DRIWO_BUILD_STRESS_TESTS=ON \
   -DCMAKE_CXX_COMPILER=clang++ \
   -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-fuzz --parallel
 ctest --test-dir build-fuzz -L fuzz --output-on-failure
+ctest --test-dir build-fuzz -L stress --output-on-failure
 ```
+
+Native MSVC uses `/fsanitize=fuzzer` and `/fsanitize=address`. From a Visual
+Studio developer prompt:
+
+```bat
+cmake -S . -B build-msvc-fuzz -G Ninja ^
+  -DBUILD_TESTING=ON -DRIWO_BUILD_FUZZERS=ON ^
+  -DRIWO_BUILD_STATIC=ON ^
+  -DRIWO_BUILD_HTTP=ON -DRIWO_BUILD_HTTP_EXP=ON ^
+  -DRIWO_BUILD_WEBSOCKET=ON -DRIWO_BUILD_UTILITIES=ON ^
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build-msvc-fuzz --parallel
+ctest --test-dir build-msvc-fuzz -L fuzz --output-on-failure
+```
+
+MSVC fuzzing requires static Riwo libraries so the instrumented library code
+and libFuzzer runtime are linked into one executable. It includes ASan but not
+UBSan. Use `RelWithDebInfo`; unoptimized Debug + ASan can exceed the per-input
+timeout even for small inputs. Keep a Clang fuzz build for undefined behavior
+coverage and cross-toolchain validation.
 
 Targets and CTest names are `riwo.fuzz.<module>.<harness>`; executables are
 written to `build-fuzz/output/fuzz/`. Seed corpora and dictionaries live in
 `test/fuzz/`. CMake copies corpora into the build tree and keeps crash
 artifacts below `build-fuzz/test/fuzz/artifacts/`.
+
+The HTTP_EXP HTTP/1 parser fuzzers compare contiguous and fragmented parsing
+within the experimental codec itself. They require `RIWO_BUILD_HTTP_EXP=ON`
+but do not build or link the legacy HTTP module.
 
 Run a longer campaign directly:
 
@@ -240,8 +269,9 @@ CMake rejects rather than silently weakening these requests:
 - ASan/UBSan and TSan together;
 - either sanitizer with LTO;
 - Performance with either sanitizer;
-- Fuzz without Clang/libFuzzer;
-- Fuzz combined with sanitizer options, Stress, Performance, or examples.
+- Fuzz without a Clang or MSVC libFuzzer runtime;
+- Fuzz combined with sanitizer options, Performance, or examples;
+- Fuzz combined with Stress under a compiler other than Clang.
 
 Use a separate build directory for Functional, sanitizer, fuzz, and performance
 profiles so their instrumentation and optimization settings do not mix.

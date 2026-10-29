@@ -27,8 +27,8 @@ public:
 	using reader_state_ptr = std::shared_ptr<detail::body_reader_state>;
 
 public:
-	basic_body_reader()
-		requires core_concepts::match_sched<io_executor_t,executor_t>;
+	basic_body_reader() requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_body_reader(Exec0 &&executor)

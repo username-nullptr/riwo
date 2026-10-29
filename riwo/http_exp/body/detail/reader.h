@@ -101,16 +101,16 @@ body_reader_state_ptr make_body_reader_state (
 } //namespace detail
 
 template <core_concepts::exec Exec>
-basic_body_reader<Exec>::basic_body_reader()
-	requires core_concepts::match_sched<io_executor_t,executor_t> :
+basic_body_reader<Exec>::basic_body_reader() requires
+	core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_body_reader(executor_t(riwo::get_executor()))
 {
 
 }
 
 template <core_concepts::exec Exec>
-basic_body_reader<Exec>::basic_body_reader(detail::body_reader_state_ptr state)
-	requires core_concepts::match_sched<io_executor_t,executor_t> :
+basic_body_reader<Exec>::basic_body_reader(detail::body_reader_state_ptr state) requires
+	core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_body_reader(executor_t(riwo::get_executor()), std::move(state))
 {
 
@@ -118,8 +118,8 @@ basic_body_reader<Exec>::basic_body_reader(detail::body_reader_state_ptr state)
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
-basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor)
-	requires core_concepts::match_sched<Exec0,executor_t> :
+basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor) requires
+	core_concepts::match_sched<Exec0,executor_t> :
 	basic_body_reader(std::forward<Exec0>(executor), detail::make_body_reader_state())
 {
 
@@ -127,8 +127,9 @@ basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
-basic_body_reader<Exec>::basic_body_reader(Exec0 &&executor, detail::body_reader_state_ptr state)
-	requires core_concepts::match_sched<Exec0,executor_t> :
+basic_body_reader<Exec>::basic_body_reader
+(Exec0 &&executor, detail::body_reader_state_ptr state) requires
+	core_concepts::match_sched<Exec0,executor_t> :
 	m_state(state ? std::move(state) : detail::make_body_reader_state()),
 	m_exec(get_executor_helper(std::forward<Exec0>(executor)))
 {

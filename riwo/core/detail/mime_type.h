@@ -59,7 +59,7 @@ template <typename FS>
 			return "text/plain";
 	}
 	auto mime_type = search(mapping::signatures(), buf, size);
-	if( mime_type.empty() and size > 4 )
+	if( mime_type == "unknown" and size > 4 )
 		mime_type = search(mapping::signatures_offset4(), buf + 4, size - 4);
 	return mime_type;
 }

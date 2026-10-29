@@ -126,14 +126,14 @@ try
 		co_await respond_text(exchange, std::string(4096, 'R'));
 	})
 #endif
-	.set_default_handler(
+	.on_default(
 	[](http::server_exchange &exchange) -> riwo::awaitable<void>
 	{
 		co_await respond_text (
 			exchange, "Not found\n", http::status::not_found
 		);
 	})
-	.set_server_error_handler([](riwo::error_code error)
+	.on_server_error([](riwo::error_code error)
 	{
 		std::cerr << "Server error: " << error.message() << '\n';
 		return true;

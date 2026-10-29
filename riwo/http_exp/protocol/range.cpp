@@ -179,6 +179,9 @@ try
 		if( not complete )
 			return sys_unexpected(complete.error());
 
+		if( *complete > std::numeric_limits<size_t>::max() )
+			return sys_unexpected(make_system_error_code(std::errc::result_out_of_range));
+
 		result.complete_length = *complete;
 		return result;
 	}
@@ -201,6 +204,11 @@ try
 	if( *last < *first )
 		return sys_unexpected(invalid());
 
+	if( *first > std::numeric_limits<size_t>::max() or
+		*last > std::numeric_limits<size_t>::max() or
+		(*first == 0 and *last == std::numeric_limits<size_t>::max()) )
+		return sys_unexpected(make_system_error_code(std::errc::result_out_of_range));
+
 	result.satisfied = true;
 	result.first = *first;
 	result.last = *last;
@@ -211,6 +219,9 @@ try
 		auto complete = decimal(complete_text);
 		if( not complete )
 			return sys_unexpected(complete.error());
+
+		if( *complete > std::numeric_limits<size_t>::max() )
+			return sys_unexpected(make_system_error_code(std::errc::result_out_of_range));
 
 		if( *complete <= result.last )
 			return sys_unexpected(invalid());

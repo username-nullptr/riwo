@@ -33,15 +33,16 @@ public:
 	using client_session_ptr = std::shared_ptr<client_session>;
 
 public:
-	explicit basic_client(config_t config = {})
-		requires core_concepts::match_sched<io_executor_t,executor_t>;
+	explicit basic_client(config_t config = {}) requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
 
 	explicit basic_client(client_session_ptr session, config_t config = {})
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	explicit basic_client (
 		std::shared_ptr<basic_transport_connector<executor_t>> connector, config_t config = {}
-	) requires core_concepts::match_sched<io_executor_t,executor_t>;
+	) requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_client(Exec0 &&executor, config_t config = {}) requires (

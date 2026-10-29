@@ -15,7 +15,7 @@ option(RIWO_ENABLE_TEST_TSAN
 	"-- ${PRO_NAME}: Enable TSan for functional and stress tests." OFF
 )
 option(RIWO_BUILD_FUZZERS
-	"-- ${PRO_NAME}: Build Clang libFuzzer API and input harnesses." OFF
+	"-- ${PRO_NAME}: Build libFuzzer API and input harnesses." OFF
 )
 option(RIWO_BUILD_STRESS_TESTS
 	"-- ${PRO_NAME}: Build high-pressure stability tests." OFF
@@ -114,24 +114,71 @@ if (RIWO_BUILD_PERFORMANCE_TESTS AND
 	)
 endif ()
 
+# MSVC AddressSanitizer is incompatible with the run-time checks and
+# Edit-and-Continue flags that CMake may add to Debug configurations. Keep the
+# cache entries intact for normal builds and shadow them only in this sanitizer
+# or fuzzer configure. With CMP0141 NEW, newly-created targets take their
+# debug-information format from this variable instead of the flags below.
+if (MSVC AND (RIWO_BUILD_FUZZERS OR RIWO_ENABLE_TEST_SANITIZERS))
+	foreach(riwo_msvc_flags_var
+		CMAKE_C_FLAGS_DEBUG
+		CMAKE_C_FLAGS_RELWITHDEBINFO
+		CMAKE_CXX_FLAGS_DEBUG
+		CMAKE_CXX_FLAGS_RELWITHDEBINFO
+	)
+		if (DEFINED ${riwo_msvc_flags_var})
+			set(riwo_msvc_flags "${${riwo_msvc_flags_var}}")
+
+			string(REGEX REPLACE
+				"(^|[ \t])(/|-)RTC[1csu]*([ \t]|$)" " "
+				riwo_msvc_flags "${riwo_msvc_flags}"
+			)
+			string(REGEX REPLACE
+				"(^|[ \t])/ZI([ \t]|$)" "\\1/Zi\\2"
+				riwo_msvc_flags "${riwo_msvc_flags}"
+			)
+			string(STRIP "${riwo_msvc_flags}" riwo_msvc_flags)
+			set(${riwo_msvc_flags_var} "${riwo_msvc_flags}")
+		endif ()
+	endforeach()
+
+	if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.25)
+		set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
+	endif ()
+endif ()
+
 if (RIWO_BUILD_FUZZERS)
 	if (NOT BUILD_TESTING)
 		message(FATAL_ERROR "${PRO_NAME}: Fuzzers require BUILD_TESTING=ON.")
 	endif ()
 
-	if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-		message(FATAL_ERROR "${PRO_NAME}: Fuzzers require Clang libFuzzer.")
+	if (RIWO_BUILD_PERFORMANCE_TESTS)
+		message(FATAL_ERROR
+			"${PRO_NAME}: Fuzzers cannot be combined with performance tests."
+		)
+	endif ()
+
+	if (NOT MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+		message(FATAL_ERROR
+			"${PRO_NAME}: Fuzzers require Clang or MSVC libFuzzer."
+		)
+	endif ()
+
+	if (RIWO_BUILD_STRESS_TESTS AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+		message(FATAL_ERROR
+			"${PRO_NAME}: Fuzzers can combine with stress tests only under Clang."
+		)
+	endif ()
+
+	if (MSVC AND NOT RIWO_BUILD_STATIC)
+		message(FATAL_ERROR
+			"${PRO_NAME}: MSVC fuzzers require RIWO_BUILD_STATIC=ON."
+		)
 	endif ()
 
 	if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 		message(FATAL_ERROR
 			"${PRO_NAME}: Fuzzer instrumentation cannot be combined with test sanitizer options."
-		)
-	endif ()
-
-	if (RIWO_BUILD_STRESS_TESTS OR RIWO_BUILD_PERFORMANCE_TESTS)
-		message(FATAL_ERROR
-			"${PRO_NAME}: Fuzzers use a dedicated build; disable stress and performance tests."
 		)
 	endif ()
 
@@ -142,27 +189,39 @@ if (RIWO_BUILD_FUZZERS)
 	endif ()
 
 	include(CheckCXXSourceCompiles)
+
 	set(riwo_saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
 	set(riwo_saved_required_link_options "${CMAKE_REQUIRED_LINK_OPTIONS}")
 	set(riwo_saved_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+
 	set(riwo_fuzzer_source
 		"#include <cstddef>\n#include <cstdint>\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }"
 	)
-	set(riwo_fuzzer_compile_flags
-		-fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
-	)
-	set(riwo_fuzzer_link_options -fsanitize=fuzzer,address,undefined)
-	if (RIWO_USE_LIBCXX)
-		list(APPEND riwo_fuzzer_compile_flags -stdlib=libc++)
-		list(APPEND riwo_fuzzer_link_options -stdlib=libc++)
+	if (MSVC)
+		set(riwo_fuzzer_compile_flags
+			/fsanitize=fuzzer /fsanitize=address /Zi
+		)
+		set(riwo_fuzzer_link_options /DEBUG /INCREMENTAL:NO)
+
+	else ()
+		set(riwo_fuzzer_compile_flags
+			-fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
+		)
+		set(riwo_fuzzer_link_options -fsanitize=fuzzer,address,undefined)
+
+		if (RIWO_USE_LIBCXX)
+			list(APPEND riwo_fuzzer_compile_flags -stdlib=libc++)
+			list(APPEND riwo_fuzzer_link_options -stdlib=libc++)
+		endif ()
+
+		if (RIWO_USE_LLD)
+			list(APPEND riwo_fuzzer_link_options -fuse-ld=lld)
+		endif ()
 	endif ()
-	if (RIWO_USE_LLD)
-		list(APPEND riwo_fuzzer_link_options -fuse-ld=lld)
-	endif ()
+
 	string(JOIN " " riwo_fuzzer_compile_flags_string
 		${riwo_fuzzer_compile_flags}
 	)
-
 	set(CMAKE_REQUIRED_FLAGS
 		"${riwo_saved_required_flags} ${riwo_fuzzer_compile_flags_string}"
 	)
@@ -255,7 +314,7 @@ if (RIWO_BUILD_FUZZERS)
 
 	if (NOT RIWO_FUZZER_INSTRUMENTATION_AVAILABLE)
 		message(FATAL_ERROR
-			"${PRO_NAME}: Clang libFuzzer is unavailable for the selected C++ runtime."
+			"${PRO_NAME}: libFuzzer is unavailable for the selected compiler and C++ runtime."
 		)
 	endif ()
 endif ()
@@ -283,39 +342,6 @@ if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 		message(FATAL_ERROR
 			"${PRO_NAME}: Test sanitizers require MSVC, GCC, or Clang."
 		)
-	endif ()
-
-	# MSVC AddressSanitizer is incompatible with the run-time checks and
-	# Edit-and-Continue flags that CMake may add to Debug configurations.  Keep
-	# the cache entries intact for normal builds and shadow them only in this
-	# sanitizer configure.  With CMP0141 NEW, newly-created targets take their
-	# debug-information format from this variable instead of the flags below.
-	if (MSVC)
-		foreach(riwo_msvc_flags_var
-			CMAKE_C_FLAGS_DEBUG
-			CMAKE_C_FLAGS_RELWITHDEBINFO
-			CMAKE_CXX_FLAGS_DEBUG
-			CMAKE_CXX_FLAGS_RELWITHDEBINFO
-		)
-			if (DEFINED ${riwo_msvc_flags_var})
-				set(riwo_msvc_flags "${${riwo_msvc_flags_var}}")
-
-				string(REGEX REPLACE
-					"(^|[ \t])(/|-)RTC[1csu]*([ \t]|$)" " "
-					riwo_msvc_flags "${riwo_msvc_flags}"
-				)
-				string(REGEX REPLACE
-					"(^|[ \t])/ZI([ \t]|$)" "\\1/Zi\\2"
-					riwo_msvc_flags "${riwo_msvc_flags}"
-				)
-				string(STRIP "${riwo_msvc_flags}" riwo_msvc_flags)
-				set(${riwo_msvc_flags_var} "${riwo_msvc_flags}")
-			endif ()
-		endforeach()
-
-		if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.25)
-			set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
-		endif ()
 	endif ()
 
 	include(CheckCXXSourceCompiles)

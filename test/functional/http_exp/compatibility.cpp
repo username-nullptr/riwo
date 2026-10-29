@@ -320,7 +320,7 @@ void application_compatibility_for(http::protocol_requirement requirement,
 		RIWO_TEST_CHECK_EQ(downloaded, 10U);
 		RIWO_TEST_CHECK_EQ(download_total, 10U);
 		RIWO_TEST_CHECK_EQ(file.headers().find_first("content-type").value(),
-			"text/plain; charset=utf-8");
+			"text/plain");
 		RIWO_TEST_CHECK(file.headers().find_first("etag").has_value());
 		auto absolute_file = co_await client.fetch(http::request(
 			http::method::get, base + "/asset-absolute"), riwo::use_awaitable);

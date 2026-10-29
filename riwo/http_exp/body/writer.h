@@ -22,8 +22,8 @@ public:
 	using writer_state_ptr = std::shared_ptr<detail::body_writer_state>;
 
 public:
-	basic_body_writer()
-		requires core_concepts::match_sched<io_executor_t,executor_t>;
+	basic_body_writer() requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
 	explicit basic_body_writer(Exec0 &&exec)

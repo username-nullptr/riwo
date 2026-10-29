@@ -98,16 +98,16 @@ body_writer_state_ptr make_body_writer_state (
 } //namespace detail
 
 template <core_concepts::exec Exec>
-basic_body_writer<Exec>::basic_body_writer()
-	requires core_concepts::match_sched<io_executor_t,executor_t> :
+basic_body_writer<Exec>::basic_body_writer() requires
+	core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_body_writer(executor_t(riwo::get_executor()))
 {
 
 }
 
 template <core_concepts::exec Exec>
-basic_body_writer<Exec>::basic_body_writer(detail::body_writer_state_ptr state)
-	requires core_concepts::match_sched<io_executor_t,executor_t> :
+basic_body_writer<Exec>::basic_body_writer(detail::body_writer_state_ptr state) requires
+	core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_body_writer(executor_t(riwo::get_executor()), std::move(state))
 {
 
@@ -115,8 +115,8 @@ basic_body_writer<Exec>::basic_body_writer(detail::body_writer_state_ptr state)
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
-basic_body_writer<Exec>::basic_body_writer(Exec0 &&exec)
-	requires core_concepts::match_sched<Exec0,executor_t> :
+basic_body_writer<Exec>::basic_body_writer(Exec0 &&exec) requires
+	core_concepts::match_sched<Exec0,executor_t> :
 	basic_body_writer(std::forward<Exec0>(exec), detail::make_body_writer_state())
 {
 
@@ -124,8 +124,9 @@ basic_body_writer<Exec>::basic_body_writer(Exec0 &&exec)
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
-basic_body_writer<Exec>::basic_body_writer(Exec0 &&exec, detail::body_writer_state_ptr state)
-	requires core_concepts::match_sched<Exec0,executor_t> :
+basic_body_writer<Exec>::basic_body_writer
+(Exec0 &&exec, detail::body_writer_state_ptr state) requires
+	core_concepts::match_sched<Exec0,executor_t> :
 	m_state(state ? std::move(state) : detail::make_body_writer_state()),
 	m_exec(get_executor_helper(std::forward<Exec0>(exec)))
 {

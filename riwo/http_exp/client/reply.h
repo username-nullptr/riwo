@@ -28,25 +28,22 @@ public:
 
 public:
 	template <typename Exec0>
-	explicit basic_reply(Exec0 &&executor)
-		requires core_concepts::match_sched<Exec0,executor_t>;
+	explicit basic_reply(Exec0 &&executor) requires
+		core_concepts::match_sched<Exec0,executor_t>;
 
-	basic_reply(protocol selected_protocol, reply_head head,
-		detail::body_reader_state_ptr body,
-		std::vector<std::byte> buffered_body = {},
-		std::shared_ptr<void> owner = {},
-		uint64_t max_buffered_body = 8U * 1024U * 1024U,
-		protocol reply_protocol = protocol::v1_1)
-		requires core_concepts::match_sched<io_executor_t,executor_t>;
+	basic_reply(protocol selected_protocol, reply_head head, detail::body_reader_state_ptr body,
+		std::vector<std::byte> buffered_body = {}, std::shared_ptr<void> owner = {},
+		uint64_t max_buffered_body = 8U * 1024U * 1024U, protocol reply_protocol = protocol::v1_1
+	) requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	basic_reply(Exec0 &&executor, protocol selected_protocol,
-		reply_head head, detail::body_reader_state_ptr body,
-		std::vector<std::byte> buffered_body = {},
-		std::shared_ptr<void> owner = {},
-		uint64_t max_buffered_body = 8U * 1024U * 1024U,
-		protocol reply_protocol = protocol::v1_1)
-		requires core_concepts::match_sched<Exec0,executor_t>;
+	basic_reply(Exec0 &&executor, protocol selected_protocol, reply_head head,
+		detail::body_reader_state_ptr body, std::vector<std::byte> buffered_body = {},
+		std::shared_ptr<void> owner = {}, uint64_t max_buffered_body = 8U * 1024U * 1024U,
+		protocol reply_protocol = protocol::v1_1
+	) requires
+		core_concepts::match_sched<Exec0,executor_t>;
 
 	basic_reply() requires
 		core_concepts::match_sched<io_executor_t,executor_t>;

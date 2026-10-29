@@ -6,6 +6,7 @@
 
 #include <riwo/http_exp/protocol/detail/syntax.h>
 #include <riwo/http_exp/protocol/compression.h>
+#include <riwo/http_exp/protocol/conditional.h>
 
 #include <riwo/http_exp/session/session_stream.h>
 

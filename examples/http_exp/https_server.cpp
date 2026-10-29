@@ -46,7 +46,7 @@ try
 			"Hello over TLS\n", riwo::use_awaitable
 		);
 	})
-	.set_server_error_handler([](riwo::error_code error)
+	.on_server_error([](riwo::error_code error)
 	{
 		std::cerr << "Server error: " << error.message() << '\n';
 		return true;

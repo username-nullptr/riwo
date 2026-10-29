@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 #include "wire.h"
-#include <riwo/http_exp/protocol/detail/syntax.h>
 #include <riwo/core/utils/string_tools.h>
+
+#include <riwo/http_exp/protocol/detail/syntax.h>
+#include <riwo/http_exp/protocol/range.h>
 
 namespace riwo::http_exp::v1::detail { namespace
 {
@@ -18,11 +20,117 @@ namespace riwo::http_exp::v1::detail { namespace
 	if( value.empty() )
 		return false;
 
-	return std::ranges::none_of(value, [](unsigned char byte)
+	return value.find(',') == std::string_view::npos and
+		std::ranges::none_of(value, [](unsigned char byte)
+		{
+			return byte <= 0x20U or byte == 0x7fU or byte == '/' or
+				   byte == '?' or byte == '#' or byte == '@';
+		});
+}
+
+[[nodiscard]] bool valid_request_cookie(std::string_view value) noexcept
+{
+	bool found = false;
+	for(;;)
 	{
-		return byte <= 0x20U or byte == 0x7fU or byte == '/' or
-			   byte == '?' or byte == '#' or byte == '@';
-	});
+		const auto semicolon = value.find(';');
+		const auto item = http_exp::detail::trim_ows(value.substr(0, semicolon));
+
+		if( not item.empty() )
+		{
+			found = true;
+			if( item.find('=') == std::string_view::npos )
+				return false;
+		}
+		if( semicolon == std::string_view::npos )
+			return found;
+
+		value.remove_prefix(semicolon + 1);
+	}
+}
+
+[[nodiscard]] bool valid_response_cookie(std::string_view value) noexcept
+{
+	for(;;)
+	{
+		const auto semicolon = value.find(';');
+		const auto item = http_exp::detail::trim_ows(value.substr(0, semicolon));
+
+		if( not item.empty() )
+			return item.find('=') != std::string_view::npos;
+
+		if( semicolon == std::string_view::npos )
+			return false;
+
+		value.remove_prefix(semicolon + 1);
+	}
+}
+
+[[nodiscard]] bool legacy_status_code(uint16_t value) noexcept
+{
+	switch( value )
+	{
+	case 100: case 101: case 102:
+	case 200: case 201: case 202: case 203: case 204: case 205:
+	case 206: case 207: case 208: case 226:
+	case 300: case 301: case 302: case 303: case 304: case 305:
+	case 307: case 308:
+	case 400: case 401: case 402: case 403: case 404: case 405:
+	case 406: case 407: case 408: case 409: case 410: case 411:
+	case 412: case 413: case 414: case 415: case 416: case 417:
+	case 421: case 422: case 423: case 424: case 426: case 428:
+	case 429: case 431: case 451:
+	case 500: case 501: case 502: case 503: case 504: case 505:
+	case 506: case 507: case 508: case 510: case 511:
+		return true;
+
+	default: break;
+	}
+	return false;
+}
+
+[[nodiscard]] bool valid_partial_response_fields(uint16_t code, const fields &values) noexcept
+{
+	size_t content_range_count = 0;
+	size_t content_type_count = 0;
+
+	for(const auto &[name, value] : values)
+	{
+		ignore_unused(value);
+		if( equal_ci(name, "Content-Range") )
+			++content_range_count;
+
+		else if( equal_ci(name, "Content-Type") )
+			++content_type_count;
+	}
+	if( content_range_count > 1 )
+		return false;
+
+	const auto content_range_value = values.find_first("Content-Range");
+	if( code == status::range_not_satisfiable )
+	{
+		if( not content_range_value )
+			return true;
+
+		const auto range = parse_content_range(*content_range_value);
+		return range and range->unit == "bytes" and not range->satisfied;
+	}
+	if( code != status::partial_content )
+		return true;
+
+	if( content_type_count == 1 )
+	{
+		if( const auto content_type = values.find_first("Content-Type") )
+		{
+			if( parse_multipart_byte_ranges_boundary(*content_type) )
+				return true;
+		}
+	}
+	if( not content_range_value )
+		return false;
+
+	const auto range = parse_content_range(*content_range_value);
+	return range and range->unit == "bytes" and range->satisfied;
 }
 
 [[nodiscard]] std::string authority_from_url(const url &value)
@@ -65,14 +173,14 @@ namespace riwo::http_exp::v1::detail { namespace
 
 void append_fields(std::string &result, const fields &values, bool skip_framing)
 {
-	for(const auto &value : values)
+	for(const auto &[key, value] : values)
 	{
-		if( skip_framing and framing_header(value.name) )
+		if( skip_framing and framing_header(key) )
 			continue;
 
-		result += value.name;
+		result += key;
 		result += ": ";
-		result += value.value.to_string();
+		result += value.to_string();
 		result += "\r\n";
 	}
 }
@@ -98,6 +206,7 @@ struct parsed_fields
 	optional<uint64_t> content_length {};
 
 	bool chunked = false;
+	bool transfer_encoding = false;
 	bool close = false;
 };
 
@@ -138,20 +247,29 @@ try
 
 		if( equal_ci(name, "Content-Length") )
 		{
+			if( result.content_length )
+				return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
 			uint64_t length = 0;
 			auto parsed = std::from_chars(value.data(), value.data() + value.size(), length);
 
-			if( parsed.ec != std::errc{} or parsed.ptr != value.data() + value.size() or
-				(result.content_length and *result.content_length != length) )
+			if( parsed.ec != std::errc{} or parsed.ptr != value.data() + value.size() )
+				return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
+			if( length > std::numeric_limits<size_t>::max() )
 				return sys_unexpected(make_error_code(errc::connection_protocol_error));
 
 			result.content_length = length;
 		}
 		else if( equal_ci(name, "Transfer-Encoding") )
 		{
+			if( result.transfer_encoding )
+				return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
 			if( not equal_ci(http_exp::detail::trim_ows(value), "chunked") )
 				return sys_unexpected(make_error_code(errc::connection_protocol_error));
 
+			result.transfer_encoding = true;
 			result.chunked = true;
 		}
 		else if( equal_ci(name, "Connection") )
@@ -305,8 +423,12 @@ try
 	parsed_request result {};
 	result.head.method = method(line.substr(0, first));
 
+	if( not result.head.method.known() )
+		return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
 	const auto raw_target = line.substr(first + 1, last - first - 1);
-	if( raw_target.empty() or
+
+	if( raw_target.empty() or raw_target.find('#') != std::string_view::npos or
 		raw_target.find_first_of(std::string_view(" \t\r\n")) != std::string_view::npos )
 		return sys_unexpected(make_error_code(errc::invalid_target));
 
@@ -324,6 +446,9 @@ try
 			++host_count;
 			host_value = value.to_string();
 		}
+		if( (equal_ci(key, "Cookie") or equal_ci(key, "Set-Cookie")) and
+			not valid_request_cookie(value.to_string()) )
+			return sys_unexpected(make_error_code(errc::invalid_field_value));
 	}
 	if( host_count > 1 )
 		return sys_unexpected(make_error_code(errc::connection_protocol_error));
@@ -334,7 +459,23 @@ try
 	if( host_count == 1 and not valid_host_value(host_value) )
 		return sys_unexpected(make_error_code(errc::invalid_field_value));
 
-	if( raw_target.starts_with("http://") or raw_target.starts_with("https://") )
+	const auto known_method = *result.head.method.known();
+	if( known_method == method::connect )
+	{
+		if( raw_target.find('/') != std::string_view::npos or
+			raw_target.find(':') == std::string_view::npos )
+			return sys_unexpected(make_error_code(errc::invalid_target));
+
+		result.head.target = std::string(raw_target);
+		result.head.authority = std::string(raw_target);
+	}
+	else if( raw_target == "*" )
+	{
+		if( known_method != method::options )
+			return sys_unexpected(make_error_code(errc::invalid_target));
+		result.head.target = "*";
+	}
+	else if( raw_target.starts_with("http://") or raw_target.starts_with("https://") )
 	{
 		url target_url {std::string(raw_target)};
 		if( not target_url.is_valid() or target_url.host().empty() or target_url.has_fragment() )
@@ -355,11 +496,17 @@ try
 	}
 	else
 	{
+		if( not raw_target.starts_with('/') )
+			return sys_unexpected(make_error_code(errc::invalid_target));
+
 		result.head.target = std::string(raw_target);
 		if( host_count == 1 )
 			result.head.authority = std::string(host_value);
 	}
 	result.close = parsed->close or result.version == protocol::v1_0;
+	if( parsed->chunked and result.version != protocol::v1_1 )
+		return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
 	if( parsed->chunked )
 		result.framing = body_framing::chunked;
 
@@ -409,11 +556,26 @@ sys_expected<parsed_response> parse_response
 		if( code_result.ec != std::errc{} or code_result.ptr != code_text.data() + code_text.size() )
 			return sys_unexpected(make_error_code(errc::invalid_status));
 
+		if( not legacy_status_code(code) )
+			return sys_unexpected(make_error_code(errc::invalid_status));
+
 		auto parsed = parse_fields(wire.substr(line_end + 2), limits);
 		if( not parsed )
 			return sys_unexpected(parsed.error());
 
-		parsed_response result;
+		for(const auto &[key, value] : parsed->values)
+		{
+			if( (equal_ci(key, "Cookie") or equal_ci(key, "Set-Cookie")) and
+				not valid_response_cookie(value.to_string()) )
+				return sys_unexpected(make_error_code(errc::invalid_field_value));
+		}
+		if( not valid_partial_response_fields(code, parsed->values) )
+			return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
+		if( parsed->chunked and *parsed_version != protocol::v1_1 )
+			return sys_unexpected(make_error_code(errc::connection_protocol_error));
+
+		parsed_response result {};
 		result.head.status = status(code);
 		result.head.headers = std::move(parsed->values);
 

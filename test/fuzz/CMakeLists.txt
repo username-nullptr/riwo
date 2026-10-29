@@ -9,7 +9,17 @@ function(add_riwo_fuzzer module name source library)
 	riwo_enable_strict_warnings(${target})
 	target_link_libraries(${target} PRIVATE ${library})
 
-	if (RIWO_FUZZER_RUNTIME_LIBRARY)
+	if (MSVC)
+		target_compile_options(${target} PRIVATE
+			/fsanitize=fuzzer
+			/fsanitize=address
+			/Zi
+		)
+		target_link_options(${target} PRIVATE
+			/DEBUG
+			/INCREMENTAL:NO
+		)
+	elseif (RIWO_FUZZER_RUNTIME_LIBRARY)
 		target_compile_options(${target} PRIVATE
 			-fsanitize=fuzzer-no-link,address,undefined
 			-fno-omit-frame-pointer
@@ -65,24 +75,46 @@ function(add_riwo_fuzzer module name source library)
 	endif ()
 
 	add_riwo_ctest(${target} $<TARGET_FILE:${target}> ${fuzzer_arguments})
+	set(fuzzer_environment
+		"ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1"
+	)
+	if (NOT MSVC)
+		list(APPEND fuzzer_environment
+			"UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+		)
+	endif ()
+
 	set_tests_properties(${target} PROPERTIES
 		LABELS "fuzz;sanitizer"
 		RUN_SERIAL TRUE
 		TIMEOUT 60
-		ENVIRONMENT
-			"ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+		ENVIRONMENT "${fuzzer_environment}"
 	)
 endfunction()
 
-foreach(target riwo.core riwo.coro riwo.http riwo.websocket riwo.utils)
+
+foreach(target riwo.core riwo.coro riwo.http riwo.http_exp riwo.websocket riwo.utils)
 	if (TARGET ${target})
-		target_compile_options(${target} PRIVATE
-			-fsanitize=fuzzer-no-link,address,undefined
-			-fno-omit-frame-pointer
-		)
-		target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+		if (MSVC)
+			target_compile_options(${target} PRIVATE
+				/fsanitize=fuzzer
+				/fsanitize=address
+				/Zi
+			)
+			target_link_options(${target} PRIVATE
+				/DEBUG
+				/INCREMENTAL:NO
+			)
+		else ()
+			target_compile_options(${target} PRIVATE
+				-fsanitize=fuzzer-no-link,address,undefined
+				-fno-omit-frame-pointer
+			)
+			target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+		endif ()
 	endif ()
 endforeach()
+
 
 add_riwo_fuzzer(core url core_url.cpp riwo.core
 	CORPUS corpus/core DICTIONARY dictionaries/core.dict
@@ -111,6 +143,17 @@ if (RIWO_BUILD_HTTP)
 	)
 	add_riwo_fuzzer(http public-api http_public_api.cpp riwo.http
 		CORPUS corpus/http-values DICTIONARY dictionaries/http.dict
+	)
+endif ()
+
+if (RIWO_BUILD_HTTP_EXP)
+	add_riwo_fuzzer(http_exp request-parser http_exp_request_parser.cpp
+		riwo.http_exp
+		CORPUS corpus/http-request DICTIONARY dictionaries/http.dict
+	)
+	add_riwo_fuzzer(http_exp response-parser http_exp_response_parser.cpp
+		riwo.http_exp
+		CORPUS corpus/http-response DICTIONARY dictionaries/http.dict
 	)
 endif ()
 

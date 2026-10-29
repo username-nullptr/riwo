@@ -359,6 +359,14 @@ void string_tools()
 	RIWO_TEST_CHECK(riwo::strtls::is_alpha("Riwo"));
 	RIWO_TEST_CHECK(not riwo::strtls::is_alpha("Riwo1"));
 	RIWO_TEST_CHECK(riwo::strtls::is_digit("012345"));
+	const std::string high_byte(1, static_cast<char>(0xD0));
+	riwo::ignore_unused(
+		riwo::strtls::is_alpha(high_byte),
+		riwo::strtls::is_digit(high_byte),
+		riwo::strtls::is_rlnum(high_byte),
+		riwo::strtls::is_alnum(high_byte)
+	);
+	RIWO_TEST_CHECK(not riwo::strtls::is_ascii(high_byte));
 	RIWO_TEST_CHECK_EQ(*riwo::strtls::to_int32("-42"), -42);
 	RIWO_TEST_CHECK_EQ(*riwo::strtls::to_uint32("2a", 16), 42U);
 	RIWO_TEST_CHECK(not riwo::strtls::to_int32("12x"));

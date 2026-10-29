@@ -184,7 +184,7 @@ void note_service_workflow()
 			co_await exchange.respond({http::status::ok, {}},
 				std::string_view("disabled"), riwo::use_awaitable);
 		})
-		.set_default_handler(
+		.on_default(
 		[](http::server_exchange &exchange) -> riwo::awaitable<void>
 		{
 			co_await exchange.respond({http::status::not_found, {}},

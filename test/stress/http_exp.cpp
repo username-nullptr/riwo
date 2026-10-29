@@ -79,11 +79,11 @@ void concurrent_http1_pool_pressure()
 			co_await exchange.respond(std::move(head),
 				std::string(body_size, fill_text.front()), riwo::use_awaitable);
 		})
-		.set_server_error_handler([&](riwo::error_code) {
+		.on_server_error([&](riwo::error_code) {
 			server_errors.fetch_add(1, std::memory_order_relaxed);
 			return true;
 		})
-		.set_service_error_handler([&](http::server_exchange &,
+		.on_service_error([&](http::server_exchange &,
 			const std::exception&) {
 			server_errors.fetch_add(1, std::memory_order_relaxed);
 			return true;
@@ -184,11 +184,11 @@ void http2_multiplexed_slow_consumer_pressure()
 			co_await exchange.respond({http::status::ok, {}}, body,
 				riwo::use_awaitable);
 		})
-		.set_server_error_handler([&](riwo::error_code) {
+		.on_server_error([&](riwo::error_code) {
 			server_errors.fetch_add(1, std::memory_order_relaxed);
 			return true;
 		})
-		.set_service_error_handler([&](http::server_exchange &,
+		.on_service_error([&](http::server_exchange &,
 			const std::exception&) {
 			server_errors.fetch_add(1, std::memory_order_relaxed);
 			return true;

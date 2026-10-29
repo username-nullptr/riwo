@@ -1259,7 +1259,7 @@ void fake_boundaries_and_unsupported_entry_points()
 	native_acceptor_wrap acceptor_wrap{
 		native_acceptor_wrap::acceptor_t(context)};
 	native_server native_service(std::move(acceptor_wrap));
-	native_service.set_default_handler(native_server_handler);
+	native_service.on_default(native_server_handler);
 	native_acceptor_wrap split_acceptor_wrap{
 		native_acceptor_wrap::acceptor_t(context)};
 	auto strand = asio::make_strand(context);
@@ -1369,9 +1369,9 @@ void server_facade_contract()
 		.on_request<http::method::get>(events_path, streaming_server_handler)
 		.on_request(http::method("SUBSCRIBE"),
 			std::move(custom_events_path), server_handler)
-		.set_default_handler(server_handler)
-		.set_server_error_handler([](riwo::error_code) { return true; })
-		.set_service_error_handler([](http::server_exchange&,
+		.on_default(server_handler)
+		.on_server_error([](riwo::error_code) { return true; })
+		.on_service_error([](http::server_exchange&,
 			const std::exception&) { return true; });
 
 	riwo::error_code error;

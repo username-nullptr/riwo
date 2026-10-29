@@ -107,8 +107,8 @@ void buffered_limit_recovery_for(http::protocol_requirement requirement,
 		})
 		// The limited client intentionally abandons the first response.  That is
 		// an expected per-exchange failure, not a test-server failure.
-		.set_server_error_handler([](riwo::error_code) { return true; })
-		.set_service_error_handler([](http::server_exchange &,
+		.on_server_error([](riwo::error_code) { return true; })
+		.on_service_error([](http::server_exchange &,
 			const std::exception&) { return true; })
 		.start();
 
@@ -191,8 +191,8 @@ void header_timeout_and_recovery()
 			co_await exchange.respond({http::status::ok, {}},
 				std::string_view("ready"), riwo::use_awaitable);
 		})
-		.set_server_error_handler([](riwo::error_code) { return true; })
-		.set_service_error_handler([](http::server_exchange &,
+		.on_server_error([](riwo::error_code) { return true; })
+		.on_service_error([](http::server_exchange &,
 			const std::exception&) { return true; })
 		.start();
 

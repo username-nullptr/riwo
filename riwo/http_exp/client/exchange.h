@@ -49,7 +49,8 @@ public:
 	template <typename Exec0>
 	basic_client_exchange(Exec0 &&executor,
 		session_stream_ptr stream, cookie_jar_ptr cookies = {}, url origin = {}
-	) requires core_concepts::match_sched<Exec0,executor_t>;
+	) requires
+		core_concepts::match_sched<Exec0,executor_t>;
 
 	basic_client_exchange() requires
 		core_concepts::match_sched<io_executor_t,executor_t>;

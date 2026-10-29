@@ -81,11 +81,11 @@ void prior_knowledge_server_and_multiplexing()
 			co_await exchange.respond({}, std::string_view("fast"),
 				riwo::use_awaitable);
 		})
-		.set_server_error_handler([](riwo::error_code error) {
+		.on_server_error([](riwo::error_code error) {
 			std::cerr << "HTTP/2 server error: " << error.message() << '\n';
 			return false;
 		})
-		.set_service_error_handler([](http::server_exchange &,
+		.on_service_error([](http::server_exchange &,
 			const std::exception &error) {
 			std::cerr << "HTTP/2 service error: " << error.what() << '\n';
 			return false;

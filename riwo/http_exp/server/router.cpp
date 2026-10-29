@@ -4,20 +4,7 @@
 #include "router.h"
 #include <regex>
 
-namespace riwo::http_exp
-{
-
-class route_pattern::impl
-{
-public:
-	std::string text;
-	std::regex expression;
-	std::vector<std::string> argument_names;
-	size_t specificity = 0;
-	bool exact = true;
-};
-
-namespace
+namespace riwo::http_exp { namespace
 {
 
 [[nodiscard]] bool regex_special(char value) noexcept
@@ -28,17 +15,32 @@ namespace
 
 } //namespace
 
-std::shared_ptr<const route_pattern::impl>
-route_pattern::compile(std::string pattern)
+class RIWO_DECL_HIDDEN route_pattern::impl
+{
+	RIWO_DISABLE_COPY_MOVE(impl)
+
+public:
+	impl() = default;
+
+	std::string text {};
+	std::regex expression {};
+	std::vector<std::string> argument_names {};
+
+	size_t specificity = 0;
+	bool exact = true;
+};
+
+std::shared_ptr<const route_pattern::impl> route_pattern::compile(std::string pattern)
 {
 	if( pattern.empty() or not pattern.starts_with('/') )
-		invalid_argument::loc_throw(
-			"riwo::http_exp::route_pattern: pattern must start with '/'");
+		invalid_argument::loc_throw("riwo::http_exp::route_pattern: pattern must start with '/'");
 
-	auto result = std::make_shared<route_pattern::impl>();
+	auto result = std::make_shared<impl>();
 	result->text = std::move(pattern);
+
 	std::string expression = "^";
 	std::unordered_set<std::string> names;
+
 	for(size_t index=0; index<result->text.size(); ++index)
 	{
 		const auto current = result->text[index];
@@ -56,44 +58,52 @@ route_pattern::compile(std::string pattern)
 		{
 			const auto close = result->text.find('}', index + 1);
 			if( close == std::string::npos or close == index + 1 )
-				invalid_argument::loc_throw(
-					"riwo::http_exp::route_pattern: invalid path argument");
+				invalid_argument::loc_throw("riwo::http_exp::route_pattern: invalid path argument");
+
 			auto name = result->text.substr(index + 1, close - index - 1);
-			if( name.find_first_of("{}/") != std::string::npos or
-				not names.emplace(name).second )
-				invalid_argument::loc_throw(
-					"riwo::http_exp::route_pattern: invalid or duplicate argument");
+			if( name.find_first_of("{}/") != std::string::npos or not names.emplace(name).second )
+				invalid_argument::loc_throw("riwo::http_exp::route_pattern: invalid or duplicate argument");
+
 			result->argument_names.emplace_back(std::move(name));
 			expression += "([^/]+)";
+
 			result->exact = false;
 			index = close;
 		}
 		else
 		{
 			if( current == '}' )
-				invalid_argument::loc_throw(
-					"riwo::http_exp::route_pattern: unmatched '}'");
+				invalid_argument::loc_throw("riwo::http_exp::route_pattern: unmatched '}'");
+
 			if( regex_special(current) )
 				expression.push_back('\\');
+
 			expression.push_back(current);
 			result->specificity += 4;
 		}
 	}
 	expression += '$';
 	result->specificity += result->argument_names.size();
+
 	if( result->exact )
 		result->specificity += size_t(1) << 30U;
+
 	result->expression = std::regex(expression,
-		std::regex_constants::ECMAScript | std::regex_constants::optimize);
+		std::regex_constants::ECMAScript | std::regex_constants::optimize
+	);
 	return result;
 }
 
 route_pattern::~route_pattern() = default;
+
 route_pattern::route_pattern(const route_pattern&) = default;
+
 route_pattern &route_pattern::operator=(const route_pattern&) = default;
+
 route_pattern::route_pattern(route_pattern &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
+
 }
 
 route_pattern &route_pattern::operator=(route_pattern &&other) noexcept
@@ -103,10 +113,13 @@ route_pattern &route_pattern::operator=(route_pattern &&other) noexcept
 	return *this;
 }
 
-std::string_view route_pattern::text() const noexcept {
+std::string_view route_pattern::text() const noexcept
+{
 	return m_impl ? std::string_view(m_impl->text) : std::string_view{};
 }
-bool route_pattern::exact() const noexcept {
+
+bool route_pattern::exact() const noexcept
+{
 	return m_impl and m_impl->exact;
 }
 
@@ -114,31 +127,33 @@ optional<route_match> route_pattern::match(std::string_view path) const noexcept
 {
 	if( not m_impl )
 		return {};
-	try
-	{
-		std::match_results<std::string_view::const_iterator> matches;
-		if( not std::regex_match(path.begin(), path.end(), matches,
-			m_impl->expression) )
+	try {
+		std::match_results<std::string_view::const_iterator> matches {};
+		if( not std::regex_match(path.begin(), path.end(), matches, m_impl->expression) )
 			return {};
-		parameter_view::container_t parameters;
+
+		parameter_view::container_t parameters {};
 		parameters.reserve(m_impl->argument_names.size());
+
 		for(size_t index=0; index<m_impl->argument_names.size(); ++index)
 		{
-			auto decoded = decode_uri_component(std::string_view(
-				matches[index + 1].first, matches[index + 1].second), false);
+			auto decoded = decode_uri_component (
+				std::string_view(matches[index + 1].first, matches[index + 1].second), false
+			);
 			if( not decoded )
 				return {};
-			parameters.emplace_back(m_impl->argument_names[index],
-				std::move(*decoded));
+
+			parameters.emplace_back (
+				m_impl->argument_names[index], std::move(*decoded)
+			);
 		}
 		return route_match {
 			.path_parameters = parameter_view(std::move(parameters)),
 			.specificity = m_impl->specificity
 		};
 	}
-	catch(...) {
-		return {};
-	}
+	catch(...) {}
+	return {};
 }
 
 } //namespace riwo::http_exp

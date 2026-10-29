@@ -495,7 +495,7 @@ public:
 		if( install_handler )
 		{
 			std::weak_ptr<impl> weak = this->shared_from_this();
-			m_http_server.set_default_handler(
+			m_http_server.on_default(
 			[weak](context_t &context) -> awaitable<void>
 			{
 				if( auto self = weak.lock() )
@@ -860,7 +860,7 @@ public:
 		auto selected = options.value_or(config_snapshot().default_upgrade);
 		auto handler = std::make_shared<std::remove_cvref_t<Func>>(
 			std::forward<Func>(func));
-		m_http_server.set_default_handler(
+		m_http_server.on_default(
 		[handler, selected = std::move(selected)]
 		(context_t &context) mutable -> awaitable<void>
 		{
@@ -1109,7 +1109,7 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::unbound_connection(std::string_view path)
 	-> basic_server&
 {
-	if( path.empty() ) m_impl->m_http_server.set_default_handler(
+	if( path.empty() ) m_impl->m_http_server.on_default(
 		[](context_t&) -> awaitable<void> { co_return; });
 	else m_impl->m_http_server.unbound_request(path);
 	return *this;
@@ -1119,7 +1119,7 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::on_server_error(
 	server_error_handler_t handler) -> basic_server&
 {
-	m_impl->m_http_server.set_server_error_handler(std::move(handler));
+	m_impl->m_http_server.on_server_error(std::move(handler));
 	return *this;
 }
 
@@ -1127,7 +1127,7 @@ template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::on_service_error(
 	service_error_handler_t handler) -> basic_server&
 {
-	m_impl->m_http_server.set_service_error_handler(std::move(handler));
+	m_impl->m_http_server.on_service_error(std::move(handler));
 	return *this;
 }
 
