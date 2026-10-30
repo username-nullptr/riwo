@@ -5,6 +5,7 @@
 #include "test.h"
 
 #include <riwo/websocket_exp/client.h>
+#include <riwo/websocket_exp/detail/permessage_deflate.h>
 #include <riwo/websocket_exp/protocol/generator.h>
 #include <riwo/websocket_exp/protocol/parser.h>
 #include <riwo/websocket_exp/server.h>
@@ -23,16 +24,18 @@ constexpr size_t codec_iteration_count = 5'000 * riwo::test::performance_scale;
 constexpr size_t message_iteration_count = 200 * riwo::test::performance_scale;
 #endif
 constexpr size_t large_message_iteration_count = message_iteration_count / 20;
+constexpr size_t compression_iteration_count = 20'000 * riwo::test::performance_scale;
 constexpr size_t warmup_count = 10;
 
 template <typename Function>
-void report_median(std::string_view name, size_t iterations, Function &&function)
+void report_median(std::string_view name, size_t iterations, Function &&function,
+	std::string_view unit = "frame")
 {
 	std::array<std::chrono::steady_clock::duration,3> samples {};
 	for(auto &sample : samples)
 		sample = function(iterations);
 	std::ranges::sort(samples);
-	riwo::test::print_performance_result(name, iterations, samples[1], "frame");
+	riwo::test::print_performance_result(name, iterations, samples[1], unit);
 }
 
 [[nodiscard]] ws::server_config make_server_config()
@@ -104,6 +107,54 @@ void frame_codec_throughput()
 	report_median("WebSocket_EXP frame parse, 4 KiB (median of 3)",
 		codec_iteration_count, measure_parse);
 }
+
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+void compression_state_reuse()
+{
+	std::vector<std::byte> source(512);
+	for(size_t index = 0; index < source.size(); ++index)
+		source[index] = static_cast<std::byte>((index * 17) & 0x3F);
+	const std::array input {
+		riwo::const_buffer(source.data(), source.size())
+	};
+
+	auto expected = ws::detail::deflate_message(input, 15, 1);
+	RIWO_TEST_CHECK(expected.has_value());
+
+	auto measure_one_shot = [&](size_t iterations)
+	{
+		const auto begin = std::chrono::steady_clock::now();
+		for(size_t index = 0; index < iterations; ++index)
+		{
+			auto compressed = ws::detail::deflate_message(input, 15, 1);
+			RIWO_TEST_CHECK(compressed.has_value());
+			RIWO_TEST_CHECK_EQ(*compressed, *expected);
+		}
+		return std::chrono::steady_clock::now() - begin;
+	};
+
+	ws::detail::permessage_deflater deflater;
+	RIWO_TEST_CHECK(not deflater.reset(15, 1));
+	auto measure_reused = [&](size_t iterations)
+	{
+		const auto begin = std::chrono::steady_clock::now();
+		for(size_t index = 0; index < iterations; ++index)
+		{
+			auto compressed = deflater.deflate(input);
+			RIWO_TEST_CHECK(compressed.has_value());
+			RIWO_TEST_CHECK_EQ(*compressed, *expected);
+		}
+		return std::chrono::steady_clock::now() - begin;
+	};
+
+	measure_one_shot(warmup_count);
+	report_median("WebSocket_EXP deflate init/end per message (median of 3)",
+		compression_iteration_count, measure_one_shot, "message");
+	measure_reused(warmup_count);
+	report_median("WebSocket_EXP reused deflater state (median of 3)",
+		compression_iteration_count, measure_reused, "message");
+}
+#endif
 
 void message_loopback_throughput()
 {
@@ -199,6 +250,9 @@ int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
 		{"WebSocket_EXP frame codec throughput", frame_codec_throughput},
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+		{"WebSocket_EXP compression state reuse", compression_state_reuse},
+#endif
 		{"WebSocket_EXP message loopback throughput", message_loopback_throughput},
 	});
 }

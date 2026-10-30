@@ -238,6 +238,19 @@ void test_masking()
 	RIWO_TEST_CHECK_EQ(destination[1], source[1] ^ key.bytes[0]);
 	RIWO_TEST_CHECK_EQ(destination[2], source[2] ^ key.bytes[1]);
 
+	std::array<std::byte,8> overlapping {
+		std::byte {0x01}, std::byte {0x02}, std::byte {0x03}, std::byte {0x04},
+		std::byte {0x05}, std::byte {0x06}, std::byte {0x07}, std::byte {0x08}
+	};
+	const auto original = overlapping;
+	copied = ws::mask_copy (
+		riwo::mutable_buffer(overlapping.data() + 1, 6),
+		riwo::const_buffer(overlapping.data(), 6), key
+	);
+	RIWO_TEST_CHECK(copied.has_value());
+	for(size_t index = 0; index < 6; ++index)
+		RIWO_TEST_CHECK_EQ(overlapping[index + 1], original[index] ^ key.bytes[index & 3]);
+
 	std::array<std::byte,2> too_small {std::byte {0xAA}, std::byte {0xBB}};
 	copied = ws::mask_copy (
 		riwo::mutable_buffer(too_small.data(), too_small.size()),

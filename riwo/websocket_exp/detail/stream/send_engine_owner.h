@@ -22,8 +22,8 @@ public:
 	[[nodiscard]] virtual send_engine &send_side() noexcept = 0;
 	[[nodiscard]] virtual asio::any_io_executor send_executor() const noexcept = 0;
 
-	virtual void start_transport_write(prepared_frame frame,
-		wire_frame_kind kind, std::shared_ptr<send_operation> operation
+	virtual void start_transport_write(const prepared_frame &frame,
+		wire_frame_kind kind, send_operation_ptr operation
 	) noexcept = 0;
 
 	virtual void handle_send_failure(error_code error) noexcept = 0;

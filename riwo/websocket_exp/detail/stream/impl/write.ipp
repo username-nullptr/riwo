@@ -53,13 +53,16 @@ size_t basic_stream<Exec>::impl::write
 		return 0;
 	}
 	size_t body_transferred = 0;
-	for(const auto &frame : *prepared)
+	for(size_t index = 0; index < prepared->size(); ++index)
 	{
+		const auto &frame = (*prepared)[index];
 		const auto wire_transferred = write_prepared(frame, error);
+
 		if( error )
 		{
 			if( frame.application_size == frame.payload_size )
 				body_transferred += wire_transferred;
+
 			fail(error);
 			return body_transferred;
 		}
@@ -87,9 +90,14 @@ size_t basic_stream<Exec>::impl::write_prepared
 		error = make_system_error_code(std::errc::operation_in_progress);
 		return 0;
 	}
-	const auto wire_size = m_connection->write (
-		std::span(frame.buffers), error
-	);
+	size_t wire_size = 0;
+	try {
+		detail::prepared_frame_buffers buffers(frame);
+		wire_size = m_connection->write(buffers.get(), error);
+	}
+	catch(...) {
+		error = exception_error(std::current_exception());
+	}
 	const auto payload_size = wire_size > frame.header_size ?
 		std::min(frame.payload_size, wire_size - frame.header_size) : 0;
 

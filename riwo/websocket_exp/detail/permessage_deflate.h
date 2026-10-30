@@ -30,6 +30,30 @@ struct permessage_deflate_runtime
 	uint8_t incoming_window_bits = 15;
 };
 
+class RIWO_WEBSOCKET_EXP_API permessage_deflater
+{
+	RIWO_DISABLE_COPY(permessage_deflater)
+
+public:
+	permessage_deflater() noexcept;
+	~permessage_deflater();
+
+	permessage_deflater(permessage_deflater&&) noexcept;
+	permessage_deflater &operator=(permessage_deflater&&) noexcept;
+
+	[[nodiscard]] error_code reset(uint8_t window_bits, int compression_level) noexcept;
+
+	// Reuses the initialized zlib state, but starts each message with a clean
+	// dictionary so preparing a later-cancelled write cannot desynchronize peers.
+	[[nodiscard]] sys_expected<std::vector<std::byte>> deflate (
+		std::span<const const_buffer> buffers
+	) noexcept;
+
+private:
+	struct impl;
+	std::unique_ptr<impl> m_impl {};
+};
+
 class RIWO_WEBSOCKET_EXP_API permessage_inflater
 {
 	RIWO_DISABLE_COPY(permessage_inflater)

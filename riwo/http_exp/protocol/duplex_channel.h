@@ -6,13 +6,12 @@
 
 #include <riwo/http_exp/error.h>
 
-namespace riwo::http_exp { namespace detail
-{
-
+namespace riwo::http_exp { namespace detail {
 class duplex_state;
-struct duplex_io_access;
-
 } //namespace detail
+
+class duplex_channel_io;
+using duplex_channel_io_ptr = std::shared_ptr<duplex_channel_io>;
 /**
  * A protocol-independent byte stream detached from one HTTP exchange.
  *
@@ -74,14 +73,30 @@ public:
 	[[nodiscard]] endpoint_t remote_endpoint(error_code &error) const noexcept;
 	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept;
 
-private:
-	friend struct detail::duplex_io_access;
+	[[nodiscard]] duplex_channel_io_ptr next_layer() noexcept;
 
+private:
+	friend class io_access;
 	duplex_state_ptr m_state {};
 	executor_t m_exec {};
 };
 
 using duplex_channel = basic_duplex_channel<>;
+
+class RIWO_HTTP_EXP_API duplex_channel_io
+{
+	RIWO_DISABLE_COPY_MOVE(duplex_channel_io)
+
+public:
+	using io_handler_t =
+		asio::any_completion_handler<void(error_code, size_t)>;
+
+	duplex_channel_io() = default;
+	virtual ~duplex_channel_io() = default;
+
+	virtual void read_some(mutable_buffer buffer, io_handler_t handler) = 0;
+	virtual void write(std::span<const const_buffer> buffers, io_handler_t handler) = 0;
+};
 
 } //namespace riwo::http_exp
 #include <riwo/http_exp/protocol/detail/duplex_channel.h>

@@ -218,11 +218,9 @@ void basic_stream<Exec>::impl::adopt
 		m_extensions = std::move(options.negotiated_extensions);
 		m_connection = std::move(connection);
 
-		m_stream_transport.reset(m_connection,
-			&impl::start_async_transport_read,
-			&impl::start_async_transport_write
-		);
+		m_stream_transport.reset(m_connection->next_layer());
 		m_state = connection_state::open;
+
 		if( auto started = start_automatic_ping(); not started )
 		{
 			error = started.error();

@@ -14,11 +14,44 @@ struct prepared_frame
 {
 	std::shared_ptr<std::vector<std::byte>> wire {};
 	std::shared_ptr<std::vector<std::byte>> payload_owner {};
-	std::vector<const_buffer> buffers {};
+
+	std::array<std::byte,14> header {};
+	const_buffer payload {};
+	std::vector<const_buffer> additional_payloads {};
 
 	size_t header_size = 0;
 	size_t payload_size = 0;
 	size_t application_size = 0;
+};
+
+class RIWO_WEBSOCKET_EXP_API prepared_frame_buffers
+{
+public:
+	explicit prepared_frame_buffers(const prepared_frame &frame);
+	[[nodiscard]] std::span<const const_buffer> get() const noexcept;
+
+private:
+	std::array<const_buffer,2> m_inline {};
+	std::vector<const_buffer> m_overflow {};
+	std::span<const const_buffer> m_buffers {};
+};
+
+struct RIWO_WEBSOCKET_EXP_API prepared_message
+{
+	optional<prepared_frame> first {};
+	std::vector<prepared_frame> additional {};
+
+	[[nodiscard]] bool empty() const noexcept;
+	[[nodiscard]] size_t size() const noexcept;
+
+	[[nodiscard]] prepared_frame &front() noexcept;
+	[[nodiscard]] const prepared_frame &front() const noexcept;
+
+	[[nodiscard]] prepared_frame &operator[](size_t index) noexcept;
+	[[nodiscard]] const prepared_frame &operator[](size_t index) const noexcept;
+
+	void reserve(size_t count);
+	void push_back(prepared_frame frame);
 };
 
 class RIWO_WEBSOCKET_EXP_API frame_builder
@@ -43,7 +76,7 @@ public:
 		const close_frame &frame
 	) const noexcept;
 
-	[[nodiscard]] sys_expected<std::vector<prepared_frame>> prepare_message (
+	[[nodiscard]] sys_expected<prepared_message> prepare_message (
 		message_type type, std::span<const const_buffer> buffers, write_options options = {}
 	) const noexcept;
 
@@ -61,6 +94,9 @@ private:
 
 	compression_config m_compression_config {};
 	permessage_deflate_runtime m_compression {};
+
+	mutable permessage_deflater m_deflater {};
+	error_code m_deflater_error {};
 };
 
 } //namespace riwo::websocket_exp::detail

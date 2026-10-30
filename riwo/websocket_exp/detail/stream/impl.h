@@ -184,16 +184,10 @@ public:
 		const std::vector<std::byte> &payload
 	) noexcept override;
 
-	void start_transport_write(prepared_frame frame,
+	void start_transport_write(const prepared_frame &frame,
 		detail::wire_frame_kind kind, detail::send_operation_ptr operation
 	) noexcept override;
 
-	static void start_async_transport_read(void *connection,
-		const mutable_buffer &buffer, io_handler_t handler
-	);
-	static void start_async_transport_write(void *connection,
-		std::span<const const_buffer> buffers, io_handler_t handler
-	);
 	void handle_send_failure(error_code error) noexcept override;
 	void handle_wire_frame_sent(detail::wire_frame_kind kind) noexcept override;
 

@@ -3,12 +3,88 @@
 
 #include <riwo/websocket_exp/detail/stream/frame_builder.h>
 #include <riwo/websocket_exp/detail/permessage_deflate.h>
-#include <riwo/core/algorithm/secure_random.h>
+
 #include <riwo/websocket_exp/protocol/detail/utf8.h>
 #include <riwo/websocket_exp/protocol/generator.h>
 
+#include <riwo/core/algorithm/secure_random.h>
+
 namespace riwo::websocket_exp::detail
 {
+
+prepared_frame_buffers::prepared_frame_buffers(const prepared_frame &frame)
+{
+	if( frame.wire )
+	{
+		m_inline[0] = const_buffer(frame.wire->data(), frame.wire->size());
+		m_buffers = std::span(m_inline.data(), 1);
+	}
+	else if( frame.additional_payloads.empty() )
+	{
+		m_inline[0] = const_buffer(frame.header.data(), frame.header_size);
+		m_inline[1] = frame.payload;
+		m_buffers = std::span(m_inline.data(), frame.payload.size() == 0 ? 1 : 2);
+	}
+	else
+	{
+		m_overflow.reserve(frame.additional_payloads.size() + 2);
+		m_overflow.emplace_back(frame.header.data(), frame.header_size);
+		m_overflow.push_back(frame.payload);
+		m_overflow.insert(m_overflow.end(),
+			frame.additional_payloads.begin(), frame.additional_payloads.end()
+		);
+		m_buffers = m_overflow;
+	}
+}
+
+std::span<const const_buffer> prepared_frame_buffers::get() const noexcept
+{
+	return m_buffers;
+}
+
+bool prepared_message::empty() const noexcept
+{
+	return not first.has_value();
+}
+
+size_t prepared_message::size() const noexcept
+{
+	return first ? additional.size() + 1 : 0;
+}
+
+prepared_frame &prepared_message::front() noexcept
+{
+	return *first;
+}
+
+const prepared_frame &prepared_message::front() const noexcept
+{
+	return *first;
+}
+
+prepared_frame &prepared_message::operator[](size_t index) noexcept
+{
+	return index == 0 ? *first : additional[index - 1];
+}
+
+const prepared_frame &prepared_message::operator[](size_t index) const noexcept
+{
+	return index == 0 ? *first : additional[index - 1];
+}
+
+void prepared_message::reserve(size_t count)
+{
+	if( count > 1 )
+		additional.reserve(count - 1);
+}
+
+void prepared_message::push_back(prepared_frame frame)
+{
+	if( not first )
+		first = std::move(frame);
+	else
+		additional.push_back(std::move(frame));
+}
 
 frame_builder::frame_builder
 (role local_role, const stream_config &config, std::span<const extension> extensions) noexcept
@@ -30,6 +106,16 @@ frame_builder &frame_builder::reset
 	auto compression = make_permessage_deflate_runtime(extensions, local_role);
 	m_compression = compression ?
 		*compression : permessage_deflate_runtime {};
+
+	m_deflater_error.clear();
+	if( m_compression.enabled )
+	{
+		m_deflater_error = m_deflater.reset (
+			m_compression.outgoing_window_bits, m_compression_config.level
+		);
+	}
+	else
+		m_deflater = permessage_deflater {};
 
 	return *this;
 }
@@ -64,48 +150,34 @@ sys_expected<prepared_frame> frame_builder::prepare_control
 		if( not encoded )
 			return sys_unexpected(encoded.error());
 
-		const bool borrowed = borrow_payload and
-			not header.mask and payload.size() != 0;
+		const bool borrowed = borrow_payload and not header.mask;
+		prepared_frame result {};
 
-		auto wire = std::make_shared<std::vector<std::byte>>(
-			encoded->size + (borrowed ? 0 : payload.size())
-		);
-		std::memcpy(wire->data(), encoded->buffer().data(), encoded->size);
+		result.header_size = encoded->size;
+		result.payload_size = payload.size();
+		result.application_size = payload.size();
+
 		if( borrowed )
 		{
-			prepared_frame result;
-			result.wire = std::move(wire);
-
-			result.buffers = {
-				const_buffer(result.wire->data(), result.wire->size()),
-				payload
-			};
-			result.header_size = encoded->size;
-			result.payload_size = payload.size();
-			result.application_size = payload.size();
+			std::memcpy(result.header.data(), encoded->buffer().data(), encoded->size);
+			result.payload = payload;
 			return result;
 		}
+		result.wire = std::make_shared<std::vector<std::byte>>(
+			encoded->size + payload.size()
+		);
+		std::memcpy(result.wire->data(), encoded->buffer().data(), encoded->size);
 		if( header.mask )
 		{
 			auto copied = mask_copy (
-				mutable_buffer(wire->data() + encoded->size, payload.size()),
+				mutable_buffer(result.wire->data() + encoded->size, payload.size()),
 				payload, *header.mask
 			);
 			if( not copied )
 				return sys_unexpected(copied.error());
 		}
 		else if( payload.size() != 0 )
-			std::memcpy(wire->data() + encoded->size, payload.data(), payload.size());
-
-		prepared_frame result;
-		result.wire = std::move(wire);
-
-		result.buffers = {
-			const_buffer(result.wire->data(), result.wire->size())
-		};
-		result.header_size = encoded->size;
-		result.payload_size = payload.size();
-		result.application_size = payload.size();
+			std::memcpy(result.wire->data() + encoded->size, payload.data(), payload.size());
 		return result;
 	}
 	catch(const std::bad_alloc&) {
@@ -155,27 +227,23 @@ sys_expected<prepared_frame> frame_builder::prepare_data_frame
 		if( not encoded )
 			return sys_unexpected(encoded.error());
 
-		const bool borrowed = borrow_payload and
-			not header.mask and payload.size() != 0;
-
-		auto wire = std::make_shared<std::vector<std::byte>>(
-			encoded->size + (borrowed ? 0 : payload.size())
-		);
-		std::memcpy(wire->data(), encoded->buffer().data(), encoded->size);
-
+		const bool borrowed = borrow_payload and not header.mask;
 		prepared_frame result {};
-		result.wire = std::move(wire);
+
 		result.header_size = encoded->size;
 		result.payload_size = payload.size();
 		result.application_size = payload.size();
 
 		if( borrowed )
 		{
-			result.buffers = {
-				const_buffer(result.wire->data(), result.wire->size()), payload
-			};
+			std::memcpy(result.header.data(), encoded->buffer().data(), encoded->size);
+			result.payload = payload;
 			return result;
 		}
+		result.wire = std::make_shared<std::vector<std::byte>>(
+			encoded->size + payload.size()
+		);
+		std::memcpy(result.wire->data(), encoded->buffer().data(), encoded->size);
 		if( header.mask )
 		{
 			auto copied = mask_copy (
@@ -187,10 +255,6 @@ sys_expected<prepared_frame> frame_builder::prepare_data_frame
 		}
 		else if( payload.size() != 0 )
 			std::memcpy(result.wire->data() + encoded->size, payload.data(), payload.size());
-
-		result.buffers = {
-			const_buffer(result.wire->data(), result.wire->size())
-		};
 		return result;
 	}
 	catch(const std::bad_alloc&) {
@@ -200,7 +264,7 @@ sys_expected<prepared_frame> frame_builder::prepare_data_frame
 	return sys_unexpected(make_system_error_code(std::errc::io_error));
 }
 
-sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
+sys_expected<prepared_message> frame_builder::prepare_message
 (message_type type, std::span<const const_buffer> buffers, write_options options) const noexcept
 {
 	try {
@@ -257,9 +321,10 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 
 		if( compress )
 		{
-			auto compressed = deflate_message(buffers,
-				m_compression.outgoing_window_bits, m_compression_config.level
-			);
+			if( m_deflater_error )
+				return sys_unexpected(m_deflater_error);
+
+			auto compressed = m_deflater.deflate(buffers);
 			if( not compressed )
 				return sys_unexpected(compressed.error());
 
@@ -274,17 +339,18 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 		const auto wire_body_size = transformed_owner ?
 			transformed_owner->size() : body_size;
 
-		std::vector<prepared_frame> frames {};
+		prepared_message frames {};
 		const auto frame_count = wire_body_size == 0 or
 			m_fragment_size == 0 ? 1 : 1 + (wire_body_size - 1) / m_fragment_size;
 
-		if( frame_count > frames.max_size() )
+		if( frame_count > frames.additional.max_size() )
 			return sys_unexpected(make_system_error_code(std::errc::value_too_large));
 		frames.reserve(frame_count);
 
 		size_t offset = 0;
 		size_t buffer_index = 0;
 		size_t buffer_offset = 0;
+
 		bool first = true;
 		do {
 			const auto remaining = wire_body_size - offset;
@@ -329,17 +395,16 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 			prepared.application_size = compress ?
 				(header.fin ? body_size : 0) : payload_size;
 
-			prepared.wire = std::make_shared<std::vector<std::byte>>(
-				encoded->size + (header.mask ? payload_size : 0)
-			);
-			std::memcpy(prepared.wire->data(), encoded->buffer().data(), encoded->size);
+			if( header.mask )
+			{
+				prepared.wire = std::make_shared<std::vector<std::byte>>(
+					encoded->size + payload_size
+				);
+				std::memcpy(prepared.wire->data(), encoded->buffer().data(), encoded->size);
+			}
+			else
+				std::memcpy(prepared.header.data(), encoded->buffer().data(), encoded->size);
 
-			const auto payload_buffer_count = std::min(payload_buffers.size(), payload_size);
-			prepared.buffers.reserve(header.mask ? 1 : payload_buffer_count + 1);
-
-			prepared.buffers.emplace_back(prepared.wire->data(),
-				header.mask ? prepared.wire->size() : encoded->size
-			);
 			size_t frame_offset = 0;
 			while(frame_offset < payload_size)
 			{
@@ -368,12 +433,18 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 						return sys_unexpected(copied.error());
 				}
 				else
-					prepared.buffers.emplace_back(data, size);
+				{
+					const_buffer segment(data, size);
+					if( prepared.payload.size() == 0 )
+						prepared.payload = segment;
+					else
+						prepared.additional_payloads.push_back(segment);
+				}
 
 				frame_offset += size;
 				buffer_offset += size;
 			}
-			frames.emplace_back(std::move(prepared));
+			frames.push_back(std::move(prepared));
 			offset += payload_size;
 			first = false;
 		}

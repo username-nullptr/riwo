@@ -26,7 +26,7 @@ struct prepared_data_frame
 struct send_operation
 {
 	send_kind kind = send_kind::data;
-	std::vector<prepared_frame> frames {};
+	prepared_message frames {};
 
 	std::shared_ptr<std::vector<std::byte>> payload_owner {};
 	asio::any_completion_handler<void(error_code,size_t)> completion {};

@@ -33,7 +33,7 @@ public:
 
 	[[nodiscard]] sys_expected<prepared_frame> prepare_close(const close_frame &frame) const noexcept;
 
-	[[nodiscard]] sys_expected<std::vector<prepared_frame>> prepare_message (
+	[[nodiscard]] sys_expected<prepared_message> prepare_message (
 		message_type type, std::span<const const_buffer> buffers, write_options options = {}
 	) const noexcept;
 
@@ -91,8 +91,9 @@ public:
 
 	// Transport is owned by stream::impl.  The engine only records the active
 	// frame and consumes its completion to advance the outbound state machine.
-	void complete_wire_frame(const prepared_frame &frame, wire_frame_kind kind,
-		const send_operation_ptr &operation, error_code error, size_t wire_size
+	void complete_wire_frame(size_t header_size, size_t payload_size,
+		size_t application_size, wire_frame_kind kind, const send_operation_ptr &operation,
+		error_code error, size_t wire_size
 	) noexcept;
 
 private:
@@ -121,7 +122,7 @@ private:
 	void install_send_cancellation(const send_operation_ptr &operation);
 	void cancel_queued_send(uint64_t id) noexcept;
 
-	void start_wire_frame(prepared_frame frame, wire_frame_kind kind,
+	void start_wire_frame(const prepared_frame &frame, wire_frame_kind kind,
 		send_operation_ptr operation = {}
 	) noexcept;
 

@@ -10,6 +10,22 @@
 namespace riwo::websocket_exp::detail
 {
 
+struct RIWO_DECL_HIDDEN permessage_deflater::impl
+{
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	z_stream m_stream {};
+#endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	bool m_initialized = false;
+
+	~impl()
+	{
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+		if( m_initialized )
+			deflateEnd(&m_stream);
+#endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	}
+};
+
 struct RIWO_DECL_HIDDEN permessage_inflater::impl
 {
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
@@ -125,8 +141,147 @@ bool response_matches_offer
 	return true;
 }
 
+sys_expected<std::vector<std::byte>> deflate_stream
+(z_stream &stream, std::span<const const_buffer> buffers) noexcept
+{
+	sys_expected<std::vector<std::byte>> result = std::vector<std::byte>{};
+	try {
+		size_t input_size = 0;
+		for(const auto &buffer : buffers)
+		{
+			if( buffer.size() != 0 and buffer.data() == nullptr )
+				return result.despair(make_system_error_code(std::errc::invalid_argument));
+
+			if( buffer.size() > std::numeric_limits<size_t>::max() - input_size )
+				return result.despair(make_system_error_code(std::errc::value_too_large));
+
+			input_size += buffer.size();
+		}
+		if( input_size <= std::numeric_limits<uLong>::max() )
+			result->reserve(deflateBound(&stream, static_cast<uLong>(input_size)));
+
+		std::array<std::byte, 16 * 1024> output {};
+		auto pump = [&](int flush) -> bool
+		{
+			do {
+				stream.next_out = reinterpret_cast<Bytef*>(output.data());
+				stream.avail_out = static_cast<uInt>(output.size());
+
+				if( const auto code = ::deflate(&stream, flush); code != Z_OK )
+					return false;
+
+				const auto produced = output.size() - stream.avail_out;
+				result->insert(result->end(), output.begin(),
+					output.begin() + static_cast<ptrdiff_t>(produced)
+				);
+			}
+			while( stream.avail_in != 0 or stream.avail_out == 0 );
+			return true;
+		};
+
+		for(const auto &buffer : buffers)
+		{
+			auto *input = static_cast<const std::byte*>(buffer.data());
+			auto remaining = buffer.size();
+			while( remaining != 0 )
+			{
+				const auto size = static_cast<uInt>(std::min<size_t>(
+					remaining, std::numeric_limits<uInt>::max()
+				));
+				stream.next_in = reinterpret_cast<Bytef*>(
+					const_cast<std::byte*>(input)
+				);
+				stream.avail_in = size;
+				if( not pump(Z_NO_FLUSH) )
+					return result.despair(make_system_error_code(std::errc::io_error));
+
+				input += size;
+				remaining -= size;
+			}
+		}
+		stream.next_in = nullptr;
+		stream.avail_in = 0;
+
+		if( not pump(Z_SYNC_FLUSH) )
+			return result.despair(make_system_error_code(std::errc::io_error));
+
+		constexpr std::array trailer {
+			std::byte {0x00}, std::byte {0x00},
+			std::byte {0xFF}, std::byte {0xFF}
+		};
+		if( result->size() < trailer.size() or
+			not std::equal(trailer.begin(), trailer.end(), result->end() - trailer.size()) )
+			return result.despair(make_system_error_code(std::errc::io_error));
+
+		result->resize(result->size() - trailer.size());
+		return result;
+	}
+	catch(const std::bad_alloc&) {
+		return result.despair(make_system_error_code(std::errc::not_enough_memory));
+	}
+	catch(...) {
+		return result.despair(make_system_error_code(std::errc::io_error));
+	}
+}
+
 } //namespace
 #endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+
+permessage_deflater::permessage_deflater() noexcept = default;
+
+permessage_deflater::~permessage_deflater() = default;
+
+permessage_deflater::permessage_deflater(permessage_deflater&&) noexcept = default;
+
+permessage_deflater &permessage_deflater::operator=(permessage_deflater&&) noexcept = default;
+
+error_code permessage_deflater::reset(uint8_t window_bits, int compression_level) noexcept
+{
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	if( window_bits < 8 or window_bits > 15 or compression_level < -1 or compression_level > 9 )
+		return make_system_error_code(std::errc::invalid_argument);
+	try {
+		auto state = std::make_unique<impl>();
+
+		if( const auto zlib_window_bits = window_bits == 8 ? 9 : window_bits;
+			deflateInit2(&state->m_stream, compression_level, Z_DEFLATED,
+				-static_cast<int>(zlib_window_bits), 8, Z_DEFAULT_STRATEGY
+			) != Z_OK )
+			return make_system_error_code(std::errc::io_error);
+
+		state->m_initialized = true;
+		m_impl = std::move(state);
+		return {};
+	}
+	catch(const std::bad_alloc&) {
+		return make_system_error_code(std::errc::not_enough_memory);
+	}
+	catch(...) {}
+	return make_system_error_code(std::errc::io_error);
+
+#else //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	ignore_unused(window_bits, compression_level);
+	return make_error_code(errc::unsupported_extension);
+#endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+}
+
+sys_expected<std::vector<std::byte>>
+permessage_deflater::deflate(std::span<const const_buffer> buffers) noexcept
+{
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	if( not m_impl or not m_impl->m_initialized )
+		return sys_unexpected(make_system_error_code(std::errc::io_error));
+
+	auto result = deflate_stream(m_impl->m_stream, buffers);
+	if( deflateReset(&m_impl->m_stream) != Z_OK )
+		return sys_unexpected(make_system_error_code(std::errc::io_error));
+	return result;
+
+#else //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+	ignore_unused(buffers);
+	return sys_unexpected(make_error_code(errc::unsupported_extension));
+#endif //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
+}
 
 permessage_inflater::permessage_inflater() noexcept = default;
 
@@ -218,7 +373,9 @@ sys_expected<std::vector<std::byte>> permessage_inflater::inflate_chunk
 						max_output_size - std::min(result.size(), max_output_size) )
 						return make_error_code(errc::message_too_big);
 
-					result.insert(result.end(), output.begin(), output.begin() + produced);
+					result.insert(result.end(), output.begin(),
+						output.begin() + static_cast<ptrdiff_t>(produced)
+					);
 					if( code == Z_BUF_ERROR and produced == 0 )
 					{
 						if( m_impl->m_stream.avail_in != 0 )
@@ -418,99 +575,32 @@ sys_expected<permessage_deflate_runtime> make_permessage_deflate_runtime
 sys_expected<std::vector<std::byte>> deflate_message
 (std::span<const const_buffer> buffers, uint8_t window_bits, int compression_level) noexcept
 {
-	sys_expected<std::vector<std::byte>> result = std::vector<std::byte>{};
 #if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
-	try {
-		if( window_bits < 8 or window_bits > 15 or compression_level < -1 or compression_level > 9 )
-			return result.despair(make_system_error_code(std::errc::invalid_argument));
+	if( window_bits < 8 or window_bits > 15 or
+		compression_level < -1 or compression_level > 9 )
+		return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
-		const auto zlib_window_bits = window_bits == 8 ? 9 : window_bits;
-		z_stream stream {};
+	const auto zlib_window_bits = window_bits == 8 ? 9 : window_bits;
+	z_stream stream {};
 
-		if( deflateInit2(&stream, compression_level, Z_DEFLATED,
-			-static_cast<int>(zlib_window_bits), 8, Z_DEFAULT_STRATEGY) != Z_OK )
-			return result.despair(make_system_error_code(std::errc::io_error));
+	if( deflateInit2(&stream, compression_level, Z_DEFLATED,
+			-static_cast<int>(zlib_window_bits), 8, Z_DEFAULT_STRATEGY
+		) != Z_OK )
+		return sys_unexpected(make_system_error_code(std::errc::io_error));
 
-		struct guard_t
-		{
-			z_stream &stream;
-			~guard_t() {
-				deflateEnd(&stream);
-			}
+	struct guard_t
+	{
+		z_stream &stream;
+		~guard_t() {
+			deflateEnd(&stream);
 		}
-		guard {stream};
-
-		result = std::vector<std::byte>{};
-		std::array<std::byte, 16 * 1024> output {};
-
-		auto pump = [&](int flush) -> bool
-		{
-			do {
-				stream.next_out = reinterpret_cast<Bytef*>(output.data());
-				stream.avail_out = static_cast<uInt>(output.size());
-				const auto code = deflate(&stream, flush);
-
-				if( code != Z_OK )
-					return false;
-
-				const auto produced = output.size() - stream.avail_out;
-				result->insert(result->end(), output.begin(), output.begin() + produced);
-			}
-			while( stream.avail_in != 0 or stream.avail_out == 0 );
-			return true;
-		};
-
-		for(const auto &buffer : buffers)
-		{
-			if( buffer.size() != 0 and buffer.data() == nullptr )
-				return result.despair(make_system_error_code(std::errc::invalid_argument));
-
-			auto *input = static_cast<const std::byte*>(buffer.data());
-			auto remaining = buffer.size();
-
-			while( remaining != 0 )
-			{
-				const auto size = static_cast<uInt>(std::min<size_t>(
-					remaining, std::numeric_limits<uInt>::max())
-				);
-				stream.next_in = reinterpret_cast<Bytef*>(const_cast<std::byte*>(input));
-				stream.avail_in = size;
-
-				if( not pump(Z_NO_FLUSH) )
-					return result.despair(make_system_error_code(std::errc::io_error));
-
-				input += size;
-				remaining -= size;
-			}
-		}
-		stream.next_in = nullptr;
-		stream.avail_in = 0;
-
-		if( not pump(Z_SYNC_FLUSH) )
-			return result.despair(make_system_error_code(std::errc::io_error));
-
-		constexpr std::array trailer {
-			std::byte {0x00}, std::byte {0x00},
-			std::byte {0xFF}, std::byte {0xFF}
-		};
-		if( result->size() < trailer.size() or
-			not std::equal(trailer.begin(), trailer.end(), result->end() - trailer.size()) )
-			return result.despair(make_system_error_code(std::errc::io_error));
-
-		result->resize(result->size() - trailer.size());
-		return result;
 	}
-	catch(const std::bad_alloc&) {
-		result.despair(make_system_error_code(std::errc::not_enough_memory));
-	}
-	catch(...) {
-		result.despair(make_system_error_code(std::errc::io_error));
-	}
-	return result;
+	guard {stream};
+	return deflate_stream(stream, buffers);
 
 #else //RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 	ignore_unused(buffers, window_bits, compression_level);
-	return result.despair(make_error_code(errc::unsupported_extension));
+	return sys_unexpected(make_error_code(errc::unsupported_extension));
 #endif //!RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 }
 

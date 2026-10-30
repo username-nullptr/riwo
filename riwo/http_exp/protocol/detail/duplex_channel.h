@@ -11,26 +11,18 @@
 namespace riwo::http_exp::detail
 {
 
-class RIWO_HTTP_EXP_API duplex_state
+class RIWO_HTTP_EXP_API duplex_state : public duplex_channel_io
 {
 	RIWO_DISABLE_COPY_MOVE(duplex_state)
 
 public:
-	using io_handler_t = asio::any_completion_handler<void(error_code,size_t)>;
 	using close_handler_t = asio::any_completion_handler<void(error_code)>;
 	using endpoint_t = asio::ip::tcp::endpoint;
-
 	duplex_state() = default;
-	virtual ~duplex_state() = default;
 
 public:
 	[[nodiscard]] virtual size_t read_some_sync(mutable_buffer, error_code&) noexcept = 0;
-	virtual void read_some(mutable_buffer, io_handler_t) = 0;
-
 	[[nodiscard]] virtual size_t write_sync(std::span<const const_buffer>, error_code&) noexcept = 0;
-	// The descriptor sequence is borrowed only for this initiation call. The
-	// described byte ranges remain borrowed until the completion handler runs.
-	virtual void write(std::span<const const_buffer>, io_handler_t) = 0;
 
 	virtual void close_sync(error_code&) noexcept = 0;
 	virtual void close(close_handler_t) = 0;
@@ -46,33 +38,6 @@ public:
 };
 
 using duplex_state_ptr = std::shared_ptr<duplex_state>;
-
-struct duplex_io_access
-{
-	template <core_concepts::exec Exec>
-	static void read(basic_duplex_channel<Exec> &channel,
-		mutable_buffer buffer, duplex_state::io_handler_t handler)
-	{
-		if( not channel.m_state )
-		{
-			std::move(handler)(make_error_code(errc::operation_not_permitted), 0);
-			return ;
-		}
-		channel.m_state->read_some(buffer, std::move(handler));
-	}
-
-	template <core_concepts::exec Exec>
-	static void write(basic_duplex_channel<Exec> &channel,
-		std::span<const const_buffer> buffers, duplex_state::io_handler_t handler)
-	{
-		if( not channel.m_state )
-		{
-			std::move(handler)(make_error_code(errc::operation_not_permitted), 0);
-			return ;
-		}
-		channel.m_state->write(buffers, std::move(handler));
-	}
-};
 
 } //namespace riwo::http_exp::detail
 
@@ -373,6 +338,12 @@ auto basic_duplex_channel<Exec>::local_endpoint(error_code &error) const noexcep
 
 	error = make_error_code(errc::operation_not_permitted);
 	return {};
+}
+
+template <core_concepts::exec Exec>
+duplex_channel_io_ptr basic_duplex_channel<Exec>::next_layer() noexcept
+{
+	return m_state;
 }
 
 } //namespace riwo::http_exp

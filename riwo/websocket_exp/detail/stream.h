@@ -432,11 +432,25 @@ auto basic_stream<Exec>::write
 (message_type type, const const_buffer &body, write_options options, Token &&token)
 	requires completion_token_v<Token, size_t>
 {
-	return write(type, std::span(&body, 1), options,
-		std::forward<Token>(token)
-	);
+	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> or
+		is_detached_v<token_unbound_t<Token>> )
+	{
+		return write(type, std::span(&body, 1), options,
+			std::forward<Token>(token)
+		);
+	}
+	else
+	{
+		return initiate_io<size_t>(get_executor(),
+			[self = m_impl, type, body, options]<typename T0>(T0 &&completion_token) mutable
+			{
+				self->async_write_message(type, std::span(&body, 1), options,
+					{}, std::forward<T0>(completion_token)
+				);
+			}, std::forward<Token>(token)
+		);
+	}
 }
-
 
 template <core_concepts::exec Exec>
 template <typename Token>

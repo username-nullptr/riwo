@@ -1635,6 +1635,14 @@ void test_invalid_compressed_payload()
 		};
 		auto compressed = ws::detail::deflate_message(input);
 		RIWO_TEST_CHECK(compressed.has_value());
+		ws::detail::permessage_deflater reused_deflater;
+		RIWO_TEST_CHECK(not reused_deflater.reset(15, -1));
+		auto reused_first = reused_deflater.deflate(input);
+		auto reused_second = reused_deflater.deflate(input);
+		RIWO_TEST_CHECK(reused_first.has_value());
+		RIWO_TEST_CHECK(reused_second.has_value());
+		RIWO_TEST_CHECK_EQ(*reused_first, *compressed);
+		RIWO_TEST_CHECK_EQ(*reused_second, *compressed);
 		auto inflated = ws::detail::inflate_message(*compressed, 0);
 		RIWO_TEST_CHECK(inflated.has_value());
 		RIWO_TEST_CHECK_EQ(*inflated, exact_block);

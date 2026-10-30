@@ -27,28 +27,9 @@ awaitable<std::tuple<error_code,size_t>> basic_stream<Exec>::impl::async_read_tr
 
 template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::start_transport_write
-(prepared_frame frame, detail::wire_frame_kind kind, detail::send_operation_ptr operation) noexcept
+(const prepared_frame &frame, detail::wire_frame_kind kind, detail::send_operation_ptr operation) noexcept
 {
-	m_stream_transport.start_write(send_owner(), std::move(frame), kind,
-		std::move(operation));
-}
-
-template <core_concepts::exec Exec>
-void basic_stream<Exec>::impl::start_async_transport_read
-(void *connection, const mutable_buffer &buffer, io_handler_t handler)
-{
-	auto &channel = *static_cast<connection_t*>(connection);
-	http_exp::detail::duplex_io_access::read(
-		channel, buffer, std::move(handler));
-}
-
-template <core_concepts::exec Exec>
-void basic_stream<Exec>::impl::start_async_transport_write
-(void *connection, std::span<const const_buffer> buffers, io_handler_t handler)
-{
-	auto &channel = *static_cast<connection_t*>(connection);
-	http_exp::detail::duplex_io_access::write(
-		channel, buffers, std::move(handler));
+	m_stream_transport.start_write(send_owner(), frame, kind, operation);
 }
 
 template <core_concepts::exec Exec>

@@ -11,48 +11,57 @@ stream_transport::stream_transport() noexcept = default;
 
 stream_transport::~stream_transport() = default;
 
-void stream_transport::reset
-(std::shared_ptr<void> connection, read_fn_t read_fn, write_fn_t write_fn) noexcept
+void stream_transport::reset(http_exp::detail::duplex_state_ptr connection) noexcept
 {
 	m_connection = std::move(connection);
-	m_read_fn = read_fn;
-	m_write_fn = write_fn;
 }
 
 awaitable<std::tuple<error_code,size_t>>
 stream_transport::async_read(std::shared_ptr<std::vector<std::byte>> storage)
 {
 	auto connection = m_connection;
-	auto read_fn = m_read_fn;
 	auto token = asio::as_tuple(asio::use_awaitable);
 
 	co_return co_await asio::async_initiate<decltype(token),void(error_code,size_t)>(
-	[connection = std::move(connection), storage = std::move(storage), read_fn]
+	[connection = std::move(connection), storage = std::move(storage)]
 	(auto next_handler) mutable
 	{
-		read_fn(connection.get(),
-			mutable_buffer(storage->data(), storage->size()),
+		connection->read_some(mutable_buffer(storage->data(), storage->size()),
 			io_handler_t(std::move(next_handler))
 		);
-	}, token);
+	},
+	token);
 }
 
 void stream_transport::start_write(const send_engine_owner_ptr &owner,
-	prepared_frame frame, wire_frame_kind kind, const send_operation_ptr &operation) noexcept
+	const prepared_frame &frame, wire_frame_kind kind, const send_operation_ptr &operation) noexcept
 {
 	try {
-		auto buffers = std::span<const const_buffer>(frame.buffers);
-		io_handler_t handler([owner, frame, kind, operation](error_code error, size_t wire_size) mutable
+		const auto header_size = frame.header_size;
+		const auto payload_size = frame.payload_size;
+		const auto application_size = frame.application_size;
+
+		auto wire_lifetime = operation ?
+			std::shared_ptr<std::vector<std::byte>>{} : frame.wire;
+
+		prepared_frame_buffers buffers(frame);
+
+		io_handler_t handler([owner, wire_lifetime = std::move(wire_lifetime),
+			header_size, payload_size, application_size, kind, operation]
+		(error_code error, size_t wire_size) mutable
 		{
+			ignore_unused(wire_lifetime);
 			owner->send_side().complete_wire_frame (
-				frame, kind, operation, error, wire_size
+				header_size, payload_size, application_size,
+				kind, operation, error, wire_size
 			);
 		});
-		m_write_fn(m_connection.get(), buffers, std::move(handler));
+		m_connection->write(buffers.get(), std::move(handler));
 	}
 	catch(...)
 	{
-		owner->send_side().complete_wire_frame(frame, kind,
+		owner->send_side().complete_wire_frame(frame.header_size,
+			frame.payload_size, frame.application_size, kind,
 			operation, exception_error(std::current_exception()), 0
 		);
 	}
