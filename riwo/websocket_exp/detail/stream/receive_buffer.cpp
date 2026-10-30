@@ -64,8 +64,10 @@ mutable_buffer receive_buffer::available_data() noexcept
 	if( m_pending_offset < m_pending_data.size() )
 	{
 		const auto available = m_pending_data.size() - m_pending_offset;
+
 		const auto size = m_read_buffer ?
 			std::min(available, m_read_buffer->size()) : available;
+
 		return {
 			m_pending_data.data() + m_pending_offset,
 			size
@@ -187,8 +189,8 @@ sys_expected<optional<received_event>> receive_buffer::consume(receive_target ta
 				return sys_unexpected(make_error_code(errc::message_too_big));
 		}
 	}
-	optional<message_chunk> chunk;
-	std::vector<std::byte> decoded_payload;
+	optional<message_chunk> chunk {};
+	std::vector<std::byte> decoded_payload {};
 
 	bool decoded_payload_owned = false;
 	bool compression_finalized = false;
@@ -319,7 +321,8 @@ sys_expected<optional<received_event>> receive_buffer::consume(receive_target ta
 		else
 		{
 			m_message_body.insert(m_message_body.end(),
-				decoded_payload.begin(), decoded_payload.end());
+				decoded_payload.begin(), decoded_payload.end()
+			);
 			m_message_size = m_message_body.size();
 		}
 	}
@@ -352,7 +355,8 @@ sys_expected<optional<received_event>> receive_buffer::consume(receive_target ta
 			{
 				event.chunk_storage = std::move(decoded_payload);
 				chunk->body = const_buffer(event.chunk_storage.data(),
-					event.chunk_storage.size());
+					event.chunk_storage.size()
+				);
 			}
 			event.chunk = chunk;
 			return optional(std::move(event));

@@ -24,10 +24,9 @@ stream_transport::async_read(std::shared_ptr<std::vector<std::byte>> storage)
 {
 	auto connection = m_connection;
 	auto read_fn = m_read_fn;
-
 	auto token = asio::as_tuple(asio::use_awaitable);
-	co_return co_await asio::async_initiate<decltype(token),
-		void(error_code,size_t)>(
+
+	co_return co_await asio::async_initiate<decltype(token),void(error_code,size_t)>(
 	[connection = std::move(connection), storage = std::move(storage), read_fn]
 	(auto next_handler) mutable
 	{
@@ -38,8 +37,8 @@ stream_transport::async_read(std::shared_ptr<std::vector<std::byte>> storage)
 	}, token);
 }
 
-void stream_transport::start_write(const std::shared_ptr<send_engine_owner> &owner,
-	prepared_frame frame, wire_frame_kind kind, const std::shared_ptr<send_operation> &operation) noexcept
+void stream_transport::start_write(const send_engine_owner_ptr &owner,
+	prepared_frame frame, wire_frame_kind kind, const send_operation_ptr &operation) noexcept
 {
 	try {
 		auto buffers = std::span<const const_buffer>(frame.buffers);

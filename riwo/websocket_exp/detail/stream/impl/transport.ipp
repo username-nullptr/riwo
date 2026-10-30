@@ -27,7 +27,7 @@ awaitable<std::tuple<error_code,size_t>> basic_stream<Exec>::impl::async_read_tr
 
 template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::start_transport_write
-(prepared_frame frame, detail::wire_frame_kind kind, std::shared_ptr<detail::send_operation> operation) noexcept
+(prepared_frame frame, detail::wire_frame_kind kind, detail::send_operation_ptr operation) noexcept
 {
 	m_stream_transport.start_write(send_owner(), std::move(frame), kind,
 		std::move(operation));
@@ -57,6 +57,7 @@ void basic_stream<Exec>::impl::close_transport(error_code &error, bool cancel_fi
 		return ;
 	}
 	m_transport_closed = true;
+
 	if( cancel_first )
 		m_connection->cancel();
 	m_connection->close(error);

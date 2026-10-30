@@ -13,9 +13,13 @@ class receive_engine;
 
 class RIWO_WEBSOCKET_EXP_API receive_engine_owner
 {
+	RIWO_DISABLE_COPY_MOVE(receive_engine_owner)
+
 public:
+	receive_engine_owner() = default;
 	virtual ~receive_engine_owner() = default;
 
+public:
 	[[nodiscard]] virtual std::shared_ptr<receive_engine_owner> receive_owner() noexcept = 0;
 	[[nodiscard]] virtual std::weak_ptr<receive_engine_owner> weak_receive_owner() noexcept = 0;
 
@@ -64,6 +68,8 @@ public:
 		const std::exception_ptr &exception, error_code error
 	) noexcept = 0;
 };
+
+using receive_engine_owner_ptr = std::shared_ptr<receive_engine_owner>;
 
 } //namespace riwo::websocket_exp::detail
 

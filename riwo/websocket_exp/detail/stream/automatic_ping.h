@@ -16,7 +16,9 @@ class RIWO_WEBSOCKET_EXP_API automatic_ping final :
 	using payload_t = std::array<std::byte,8>;
 
 public:
+	using ptr_t = std::shared_ptr<automatic_ping>;
 	using io_handler_t = asio::any_completion_handler<void(error_code,size_t)>;
+
 	using write_fn_t = void (*)(void*, const const_buffer&, io_handler_t);
 	using fail_fn_t = void (*)(void*, error_code) noexcept;
 
@@ -57,6 +59,8 @@ private:
 	size_t m_consecutive_timeouts = 0;
 	bool m_active = false;
 };
+
+using automatic_ping_ptr = automatic_ping::ptr_t;
 
 } //namespace riwo::websocket_exp::detail
 

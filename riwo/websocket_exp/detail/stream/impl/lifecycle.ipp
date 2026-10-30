@@ -32,8 +32,8 @@ void basic_stream<Exec>::impl::shutdown(error_code &error) noexcept
 	if( m_state == connection_state::closed )
 	{
 		m_receive_engine.complete_read_waiter(asio::error::operation_aborted);
-
 		complete_close_waiters(asio::error::operation_aborted);
+
 		error.clear();
 		return ;
 	}
@@ -53,7 +53,7 @@ void basic_stream<Exec>::impl::shutdown(error_code &error) noexcept
 	m_send_engine.clear_protocol_frames();
 
 	m_protocol_failure_active = false;
-	error_code close_error;
+	error_code close_error {};
 	close_transport(close_error, true);
 
 	m_close_result = retained_close_info(false);
@@ -86,7 +86,7 @@ void basic_stream<Exec>::impl::finish_protocol_failure(bool cancel_transport) no
 	m_send_engine.clear_protocol_close();
 	m_protocol_failure_active = false;
 
-	error_code close_error;
+	error_code close_error {};
 	close_transport(close_error, cancel_transport);
 
 	m_close_result = retained_close_info(false);
@@ -133,7 +133,7 @@ void basic_stream<Exec>::impl::begin_protocol_failure(error_code error, bool syn
 	}
 	if( synchronous and m_send_engine.ready_for_sync_protocol_write() )
 	{
-		error_code write_error;
+		error_code write_error {};
 		ignore_unused(write_prepared(*prepared, write_error));
 
 		if( write_error )
@@ -165,7 +165,7 @@ void basic_stream<Exec>::impl::fail(error_code error) noexcept
 	m_send_engine.clear_protocol_frames();
 
 	m_protocol_failure_active = false;
-	error_code close_error;
+	error_code close_error {};
 
 	close_transport(close_error, true);
 	complete_close_waiters(m_error);
@@ -174,7 +174,7 @@ void basic_stream<Exec>::impl::fail(error_code error) noexcept
 template <core_concepts::exec Exec>
 error_code basic_stream<Exec>::impl::finish_receive_eof() noexcept
 {
-	error_code close_error;
+	error_code close_error {};
 	close_transport(close_error);
 
 	if( close_error )

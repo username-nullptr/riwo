@@ -40,7 +40,9 @@ public:
 	[[nodiscard]] virtual bool send_transport_ready() const noexcept = 0;
 	[[nodiscard]] virtual bool protocol_failure_active() const noexcept = 0;
 };
+using send_engine_owner_ptr = std::shared_ptr<send_engine_owner>;
 
 } //namespace riwo::websocket_exp::detail
+
 
 #endif //RIWO_WEBSOCKET_EXP_DETAIL_STREAM_SEND_ENGINE_OWNER_H

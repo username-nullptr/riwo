@@ -12,9 +12,9 @@ namespace riwo::websocket_exp::detail
 
 struct prepared_frame
 {
-	std::shared_ptr<std::vector<std::byte>> wire;
-	std::shared_ptr<std::vector<std::byte>> payload_owner;
-	std::vector<const_buffer> buffers;
+	std::shared_ptr<std::vector<std::byte>> wire {};
+	std::shared_ptr<std::vector<std::byte>> payload_owner {};
+	std::vector<const_buffer> buffers {};
 
 	size_t header_size = 0;
 	size_t payload_size = 0;
@@ -31,6 +31,7 @@ public:
 	frame_builder(role local_role, const stream_config &config,
 		std::span<const extension> extensions = {}) noexcept;
 
+public:
 	frame_builder &reset(role local_role, const stream_config &config,
 		std::span<const extension> extensions = {}) noexcept;
 

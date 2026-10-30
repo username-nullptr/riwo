@@ -29,8 +29,8 @@ public:
 	[[nodiscard]] awaitable<std::tuple<error_code,size_t>>
 	async_read(std::shared_ptr<std::vector<std::byte>> storage);
 
-	void start_write(const std::shared_ptr<send_engine_owner> &owner,
-		prepared_frame frame, wire_frame_kind kind, const std::shared_ptr<send_operation> &operation
+	void start_write(const send_engine_owner_ptr &owner,
+		prepared_frame frame, wire_frame_kind kind, const send_operation_ptr &operation
 	) noexcept;
 
 private:

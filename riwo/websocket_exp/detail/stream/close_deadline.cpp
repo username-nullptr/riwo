@@ -12,8 +12,8 @@ struct RIWO_DECL_HIDDEN close_deadline::operation
 		timer(exec), owner(std::move(owner)), callback(callback) {}
 
 	asio::steady_timer timer;
-	std::weak_ptr<void> owner;
-	callback_t callback;
+	std::weak_ptr<void> owner {};
+	callback_t callback {};
 };
 
 close_deadline::close_deadline() noexcept = default;

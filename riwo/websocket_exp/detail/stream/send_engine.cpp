@@ -384,7 +384,7 @@ void send_engine::async_write_message
 		);
 		return ;
 	}
-	std::shared_ptr<send_operation> operation;
+	send_operation_ptr operation {};
 	try
 	{
 		operation = std::make_shared<send_operation>();
@@ -465,7 +465,7 @@ void send_engine::async_write_data_frame
 		);
 		return ;
 	}
-	std::shared_ptr<send_operation> operation;
+	send_operation_ptr operation {};
 	try
 	{
 		operation = std::make_shared<send_operation>();
@@ -544,7 +544,7 @@ size_t send_engine::write_data_frame
 		m_owner.handle_send_failure(error);
 		return transferred;
 	}
-	send_operation transition;
+	send_operation transition {};
 	transition.explicit_data_frame = true;
 
 	transition.next_message_type = prepared->next_message_type;
@@ -575,7 +575,7 @@ void send_engine::async_write_control
 		);
 		return ;
 	}
-	std::shared_ptr<send_operation> operation;
+	send_operation_ptr operation {};
 	try {
 		operation = std::make_shared<send_operation>();
 		operation->kind = send_kind::application_control;
@@ -659,7 +659,7 @@ void send_engine::async_wait_written(void_handler_t completion)
 		);
 		return ;
 	}
-	std::shared_ptr<write_waiter> waiter;
+	write_waiter_ptr waiter {};
 	bool queued = false;
 	try {
 		auto associated_allocator = asio::get_associated_allocator(completion);
@@ -704,8 +704,8 @@ void send_engine::async_wait_written(void_handler_t completion)
 		{
 			if( queued )
 			{
-				auto it = std::ranges::find(m_write_waiters, waiter);
-				if( it != m_write_waiters.end() )
+				if( auto it = std::ranges::find(m_write_waiters, waiter);
+					it != m_write_waiters.end() )
 					m_write_waiters.erase(it);
 			}
 			deliver_write_waiter(waiter, error);
@@ -724,8 +724,8 @@ void send_engine::async_wait_written(void_handler_t completion)
 		{
 			if( queued )
 			{
-				auto it = std::ranges::find(m_write_waiters, waiter);
-				if( it != m_write_waiters.end() )
+				if( auto it = std::ranges::find(m_write_waiters, waiter);
+					it != m_write_waiters.end() )
 					m_write_waiters.erase(it);
 			}
 			deliver_write_waiter(waiter, error);
@@ -740,7 +740,7 @@ void send_engine::async_wait_written(void_handler_t completion)
 }
 
 void send_engine::complete_wire_frame(const prepared_frame &frame, wire_frame_kind kind,
-	const std::shared_ptr<send_operation> &operation, error_code error, size_t wire_size) noexcept
+	const send_operation_ptr &operation, error_code error, size_t wire_size) noexcept
 {
 	m_wire_write_active = false;
 	const bool shutdown = not m_owner.send_transport_ready();
@@ -835,8 +835,7 @@ bool send_engine::queue_has_capacity(send_kind kind, size_t payload_size) const 
 		return false;
 
 	if( kind == send_kind::data and
-		payload_size > m_max_queued_write_bytes -
-			std::min(m_queued_write_bytes, m_max_queued_write_bytes) )
+		payload_size > m_max_queued_write_bytes - std::min(m_queued_write_bytes, m_max_queued_write_bytes) )
 		return false;
 	return true;
 }
@@ -875,7 +874,7 @@ void send_engine::complete_write_waiters()
 }
 
 void send_engine::deliver_write_waiter
-(const std::shared_ptr<write_waiter> &waiter, error_code error, bool clear_slot) noexcept
+(const write_waiter_ptr &waiter, error_code error, bool clear_slot) noexcept
 {
 	if( not waiter or not waiter->completion )
 		return ;
@@ -909,7 +908,7 @@ void send_engine::cancel_write_waiter(uint64_t id) noexcept
 }
 
 void send_engine::deliver_send_completion
-(const std::shared_ptr<send_operation> &operation, error_code error) noexcept
+(const send_operation_ptr &operation, error_code error) noexcept
 {
 	if( not operation->completion )
 		return ;
@@ -925,7 +924,7 @@ void send_engine::deliver_send_completion
 }
 
 void send_engine::complete_send_operation
-(const std::shared_ptr<send_operation> &operation, error_code error) noexcept
+(const send_operation_ptr &operation, error_code error) noexcept
 {
 	if( not error and operation->explicit_data_frame )
 		commit_data_frame(*operation);
@@ -948,7 +947,7 @@ void send_engine::commit_data_frame(send_operation &operation) noexcept
 	m_outgoing_utf8 = std::move(operation.next_utf8);
 }
 
-void send_engine::install_send_cancellation(const std::shared_ptr<send_operation> &operation)
+void send_engine::install_send_cancellation(const send_operation_ptr &operation)
 {
 	auto slot = asio::get_associated_cancellation_slot(operation->completion);
 	if( not slot.is_connected() )
@@ -1002,15 +1001,14 @@ void send_engine::cancel_queued_send(uint64_t id) noexcept
 }
 
 void send_engine::start_wire_frame
-(prepared_frame frame, wire_frame_kind kind, std::shared_ptr<send_operation> operation) noexcept
+(prepared_frame frame, wire_frame_kind kind, send_operation_ptr operation) noexcept
 {
 	m_wire_write_active = true;
 	m_owner.start_transport_write(std::move(frame), kind, std::move(operation));
 }
 
 
-error_code send_engine::enqueue_send_operation
-(std::shared_ptr<send_operation> operation) noexcept
+error_code send_engine::enqueue_send_operation(send_operation_ptr operation) noexcept
 {
 	if( not busy() )
 	{

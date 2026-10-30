@@ -568,7 +568,9 @@ class RIWO_WEBSOCKET_EXP_TAPI basic_client<Exec>::impl :
 
 	struct open_completion_handler
 	{
-		using cancellation_slot_t = asio::cancellation_slot;
+		using cancellation_slot_type = asio::cancellation_slot;
+		using cancellation_slot_t = cancellation_slot_type;
+
 		open_operation_ptr operation {};
 
 		[[nodiscard]] cancellation_slot_t get_cancellation_slot() const noexcept {
@@ -582,17 +584,17 @@ class RIWO_WEBSOCKET_EXP_TAPI basic_client<Exec>::impl :
 public:
 	impl(executor_type executor_value, config_t config_value) :
 		m_exec(std::move(executor_value)),
+		m_config(validate_config(std::move(config_value))),
 		m_http(m_exec, detail::websocket_http_config(m_config.http,
 			m_config.handshake_timeout
 		)),
-		m_config(validate_config(std::move(config_value))),
 		m_use_extended_connect(detail::extended_connect(m_config.http)) {}
 
 	impl(http_client_t &&http_client, config_t config_value) :
 		m_exec(http_client.get_executor()),
-		m_http(std::move(http_client)),
 		m_config(validate_config(std::move(config_value))),
-		m_use_extended_connect(detail::extended_connect(http_client.config())) {}
+		m_http(std::move(http_client)),
+		m_use_extended_connect(detail::extended_connect(m_http.config())) {}
 
 public:
 	template <typename Token>
@@ -749,9 +751,9 @@ public:
 
 public:
 	executor_t m_exec {};
-	http_client_t m_http;
-
 	config_t m_config {};
+
+	http_client_t m_http;
 	bool m_use_extended_connect = false;
 
 	std::atomic_size_t m_pending_open_count {0};

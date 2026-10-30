@@ -48,6 +48,8 @@ struct send_operation
 	optional<utf8_validator> next_utf8 {};
 };
 
+using send_operation_ptr = std::shared_ptr<send_operation>;
+
 struct write_waiter
 {
 	uint64_t id = 0;
@@ -55,6 +57,8 @@ struct write_waiter
 
 	asio::any_completion_handler<void(error_code)> completion {};
 };
+
+using write_waiter_ptr = std::shared_ptr<write_waiter>;
 
 enum class wire_frame_kind : uint8_t
 {

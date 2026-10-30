@@ -192,9 +192,9 @@ template <typename Exec, typename Token>
 	return asio::async_initiate<token_t,void(error_code,result_t)>([
 		operation_exec, active_client = &client, active_factory = std::move(request_factory),
 		active_options = std::move(options)
-	](auto completion_handler) mutable
+	]<typename Handler>(Handler completion_handler) mutable
 	{
-		using handler_t = decltype(completion_handler);
+		using handler_t = Handler;
 		auto error_result = [operation_exec]() mutable {
 			return result_t(operation_exec);
 		};

@@ -51,7 +51,7 @@ sys_expected<prepared_frame> frame_builder::prepare_control
 		if( m_role == role::client )
 		{
 			masking_key key;
-			auto random = ::riwo::secure_random_bytes (
+			auto random = secure_random_bytes (
 				mutable_buffer(key.bytes.data(), key.bytes.size())
 			);
 			if( not random )
@@ -142,7 +142,7 @@ sys_expected<prepared_frame> frame_builder::prepare_data_frame
 		if( m_role == role::client )
 		{
 			masking_key key;
-			auto random = ::riwo::secure_random_bytes (
+			auto random = secure_random_bytes (
 				mutable_buffer(key.bytes.data(), key.bytes.size())
 			);
 			if( not random )
@@ -163,7 +163,7 @@ sys_expected<prepared_frame> frame_builder::prepare_data_frame
 		);
 		std::memcpy(wire->data(), encoded->buffer().data(), encoded->size);
 
-		prepared_frame result;
+		prepared_frame result {};
 		result.wire = std::move(wire);
 		result.header_size = encoded->size;
 		result.payload_size = payload.size();
@@ -208,7 +208,7 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
 		size_t body_size = 0;
-		utf8_validator utf8;
+		utf8_validator utf8 {};
 
 		for(const auto &buffer : buffers)
 		{
@@ -251,8 +251,8 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 			compress = type == message_type::text ?
 				m_compression_config.compress_text : m_compression_config.compress_binary;
 		}
-		std::shared_ptr<std::vector<std::byte>> transformed_owner;
-		std::vector<const_buffer> transformed_buffers;
+		std::shared_ptr<std::vector<std::byte>> transformed_owner {};
+		std::vector<const_buffer> transformed_buffers {};
 		std::span<const const_buffer> payload_buffers = buffers;
 
 		if( compress )
@@ -274,7 +274,7 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 		const auto wire_body_size = transformed_owner ?
 			transformed_owner->size() : body_size;
 
-		std::vector<prepared_frame> frames;
+		std::vector<prepared_frame> frames {};
 		const auto frame_count = wire_body_size == 0 or
 			m_fragment_size == 0 ? 1 : 1 + (wire_body_size - 1) / m_fragment_size;
 
@@ -304,7 +304,7 @@ sys_expected<std::vector<prepared_frame>> frame_builder::prepare_message
 			if( m_role == role::client )
 			{
 				masking_key key;
-				auto random = ::riwo::secure_random_bytes (
+				auto random = secure_random_bytes (
 					mutable_buffer(key.bytes.data(), key.bytes.size())
 				);
 				if( not random )

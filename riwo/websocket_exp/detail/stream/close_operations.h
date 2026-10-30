@@ -18,6 +18,8 @@ struct close_wait_operation
 	> completion {};
 };
 
+using close_wait_operation_ptr = std::shared_ptr<close_wait_operation>;
+
 } //namespace riwo::websocket_exp::detail
 
 

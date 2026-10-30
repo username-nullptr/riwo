@@ -4,10 +4,9 @@
 #ifndef RIWO_WEBSOCKET_EXP_DETAIL_HANDSHAKE_IO_H
 #define RIWO_WEBSOCKET_EXP_DETAIL_HANDSHAKE_IO_H
 
-#include <riwo/core/async_expected.h>
 #include <riwo/websocket_exp/cxx/attributes.h>
-#include <riwo/websocket_exp/cxx/concepts.h>
 #include <riwo/websocket_exp/types.h>
+#include <riwo/core/async_expected.h>
 
 namespace riwo::websocket_exp::detail
 {
@@ -21,27 +20,25 @@ effective_handshake_timeout(std::chrono::milliseconds timeout) noexcept
 }
 
 template <typename Value, typename Exec>
-[[nodiscard]] auto handshake_fallback(const Exec &exec,
-	[[maybe_unused]] optional<stream_config> fallback_config)
+[[nodiscard]] RIWO_WEBSOCKET_EXP_TAPI auto handshake_fallback
+(const Exec &exec, [[maybe_unused]] optional<stream_config> fallback_config)
 {
 	if constexpr( std::constructible_from<Value,const Exec&,stream_config> )
 	{
-		return [exec, fallback_config = std::move(fallback_config)]() mutable -> Value
-		{
+		return [exec, fallback_config]() mutable -> Value {
 			return Value(exec, fallback_config.value_or(stream_config{}));
 		};
 	}
 	else
 	{
-		return [exec]() mutable -> Value
-		{
+		return [exec]() mutable -> Value {
 			return Value(exec);
 		};
 	}
 }
 
 template <typename Value, typename Exec, typename Initiator, typename Handler>
-void start_handshake_io(const Exec &exec, Initiator initiation,
+RIWO_WEBSOCKET_EXP_TAPI void start_handshake_io(const Exec &exec, Initiator initiation,
 	std::chrono::nanoseconds timeout, optional<stream_config> fallback_config, Handler &&handler)
 {
 	riwo::initiate_timed_io<Value>(exec, std::move(initiation), timeout,
@@ -55,8 +52,8 @@ template <typename Value, typename Exec, typename Initiator, typename Token>
 	std::chrono::milliseconds timeout, optional<stream_config> fallback_config, Token &&token)
 {
 	const auto effective_timeout = effective_handshake_timeout(timeout);
-	return riwo::initiate_timed_io<Value>(exec, std::move(initiation),
-		effective_timeout,
+	return riwo::initiate_timed_io<Value>(exec,
+		std::move(initiation), effective_timeout,
 		handshake_fallback<Value>(exec, std::move(fallback_config)),
 		std::forward<Token>(token)
 	);

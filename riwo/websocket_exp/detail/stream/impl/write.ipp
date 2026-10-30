@@ -99,9 +99,9 @@ size_t basic_stream<Exec>::impl::write_prepared
 }
 
 template <core_concepts::exec Exec>
-void basic_stream<Exec>::impl::async_write_message(message_type type, std::span<const const_buffer> buffers,
-	write_options options, std::shared_ptr<std::vector<std::byte>> payload_owner,
-	io_handler_t handler)
+void basic_stream<Exec>::impl::async_write_message
+(message_type type, std::span<const const_buffer> buffers, write_options options,
+	std::shared_ptr<std::vector<std::byte>> payload_owner, io_handler_t handler)
 {
 	m_send_engine.async_write_message(type, buffers, options,
 		std::move(payload_owner), std::move(handler)

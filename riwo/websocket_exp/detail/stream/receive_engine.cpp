@@ -304,7 +304,7 @@ void receive_engine::async_read_message(message_handler_t completion)
 		);
 		return ;
 	}
-	std::shared_ptr<read_wait_operation> waiter;
+	read_wait_operation_ptr waiter {};
 	try {
 		auto associated_allocator = asio::get_associated_allocator(completion);
 
@@ -345,7 +345,7 @@ void receive_engine::async_read_message(message_handler_t completion)
 			self->receive_side().complete_read_waiter(error);
 		else
 		{
-			riwo::post_completion(self->receive_executor(),
+			post_completion(self->receive_executor(),
 				std::move(completion), error, message{}
 			);
 		}
@@ -462,7 +462,7 @@ void receive_engine::async_read_frame(frame_handler_t completion)
 		);
 		return ;
 	}
-	std::shared_ptr<frame_read_wait_operation> waiter;
+	frame_read_wait_operation_ptr waiter {};
 	try {
 		auto associated_allocator = asio::get_associated_allocator(completion);
 
@@ -614,7 +614,7 @@ void receive_engine::start_close_receive() noexcept
 	m_read_active = true;
 	auto self = m_owner.receive_owner();
 	try {
-		auto operation = [](std::shared_ptr<receive_engine_owner> owner) -> awaitable<error_code>
+		auto operation = [](receive_engine_owner_ptr owner) -> awaitable<error_code>
 		{
 			for(;;)
 			{

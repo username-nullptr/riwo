@@ -16,6 +16,8 @@ struct read_wait_operation
 	asio::cancellation_signal cancellation {};
 };
 
+using read_wait_operation_ptr = std::shared_ptr<read_wait_operation>;
+
 struct frame_read_wait_operation
 {
 	uint64_t id = 0;
@@ -23,12 +25,16 @@ struct frame_read_wait_operation
 	asio::cancellation_signal cancellation {};
 };
 
+using frame_read_wait_operation_ptr = std::shared_ptr<frame_read_wait_operation>;
+
 struct consume_wait_operation
 {
 	uint64_t id = 0;
 	asio::any_completion_handler<void(error_code,message_info)> completion {};
 	asio::cancellation_signal cancellation {};
 };
+
+using consume_wait_operation_ptr = std::shared_ptr<consume_wait_operation>;
 
 } //namespace riwo::websocket_exp::detail
 

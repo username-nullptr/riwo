@@ -17,7 +17,7 @@ struct client_config
 	std::chrono::milliseconds handshake_timeout {30000};
 };
 
-struct connect_request
+struct RIWO_WEBSOCKET_EXP_API connect_request
 {
 	url endpoint {};
 	http_exp::fields headers {};

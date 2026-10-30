@@ -10,11 +10,6 @@ close_wait_queue::close_wait_queue() noexcept = default;
 
 close_wait_queue::~close_wait_queue() = default;
 
-bool close_wait_queue::notified() const noexcept
-{
-	return m_notified;
-}
-
 void close_wait_queue::set_callback(closed_callback callback)
 {
 	m_callback = std::move(callback);
@@ -36,7 +31,7 @@ void close_wait_queue::notify(const close_info &result) noexcept
 bool close_wait_queue::add
 (handler_t completion, asio::any_io_executor exec, std::weak_ptr<void> owner, cancel_fn_t cancel_fn) noexcept
 {
-	std::shared_ptr<close_wait_operation> waiter;
+	close_wait_operation_ptr waiter {};
 	try {
 		auto associated_allocator = asio::get_associated_allocator(completion);
 		using allocator_t = std::allocator_traits
@@ -128,6 +123,11 @@ void close_wait_queue::complete(error_code error, const close_info &result) noex
 		}
 		catch(...) {}
 	}
+}
+
+bool close_wait_queue::notified() const noexcept
+{
+	return m_notified;
 }
 
 } //namespace riwo::websocket_exp::detail
