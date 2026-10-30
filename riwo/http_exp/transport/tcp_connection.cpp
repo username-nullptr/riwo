@@ -133,26 +133,6 @@ void tcp_connection::write(const_buffer buffer, io_handler_t handler)
 	);
 }
 
-void tcp_connection::write(std::span<const const_buffer> buffers, io_handler_t handler)
-{
-	detail::const_buffer_sequence sequence(buffers);
-	if( not m_impl->m_write_timeout )
-	{
-		asio::async_write(m_impl->m_socket,
-			std::move(sequence), std::move(handler));
-		return ;
-	}
-	detail::start_timed_io(shared_from_this(),
-		m_impl->m_exec, *m_impl->m_write_timeout, std::move(handler),
-		[socket = &m_impl->m_socket, sequence = std::move(sequence)]
-		(auto completion) mutable
-		{
-			asio::async_write(*socket,
-				std::move(sequence), std::move(completion));
-		}
-	);
-}
-
 size_t tcp_connection::read_some_sync(const mutable_buffer &buffer, error_code &error) noexcept
 {
 	error.clear();
@@ -265,6 +245,25 @@ auto tcp_connection::local_endpoint(error_code &error) const noexcept -> endpoin
 asio::ip::tcp::socket &tcp_connection::socket() noexcept
 {
 	return m_impl->m_socket;
+}
+
+void tcp_connection::write_span(std::span<const const_buffer> buffers, io_handler_t handler)
+{
+	detail::const_buffer_sequence sequence(buffers);
+	if( not m_impl->m_write_timeout )
+	{
+		asio::async_write(m_impl->m_socket, sequence, std::move(handler));
+		return ;
+	}
+	detail::start_timed_io(shared_from_this(),
+		m_impl->m_exec, *m_impl->m_write_timeout, std::move(handler),
+		[socket = &m_impl->m_socket, sequence = std::move(sequence)]
+		(auto completion) mutable
+		{
+			asio::async_write(*socket,
+				std::move(sequence), std::move(completion));
+		}
+	);
 }
 
 } //namespace riwo::http_exp

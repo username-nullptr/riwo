@@ -25,7 +25,7 @@ public:
 
 	void read_some(mutable_buffer buffer, io_handler_t handler) override;
 	void write(const_buffer buffer, io_handler_t handler) override;
-	void write(std::span<const const_buffer> buffers, io_handler_t handler) override;
+	using connection::write;
 
 	[[nodiscard]] size_t read_some_sync(const mutable_buffer &buffer, error_code &error) noexcept override;
 	[[nodiscard]] size_t write_sync(const const_buffer &buffer, error_code &error) noexcept override;
@@ -44,6 +44,9 @@ public:
 	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept override;
 
 	[[nodiscard]] asio::ip::tcp::socket &socket() noexcept;
+
+protected:
+	void write_span(std::span<const const_buffer> buffers, io_handler_t handler) override;
 
 private:
 	class impl;

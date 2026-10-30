@@ -26,31 +26,7 @@ void connection::connect_async(std::string_view host, uint16_t port, close_handl
 
 void connection::write(std::span<const const_buffer> buffers, io_handler_t handler)
 {
-	size_t total = 0;
-	for(const auto &value : buffers)
-	{
-		if( value.size() > std::numeric_limits<size_t>::max() - total )
-		{
-			std::move(handler)(
-				make_system_error_code(std::errc::value_too_large), 0);
-			return ;
-		}
-		total += value.size();
-	}
-	auto bytes = std::make_shared<std::vector<std::byte>>(total);
-	size_t offset = 0;
-	for(const auto &value : buffers)
-	{
-		if( value.size() != 0 )
-			std::memcpy(bytes->data() + offset, value.data(), value.size());
-		offset += value.size();
-	}
-	write(buffer(*bytes),
-	[bytes, handler = std::move(handler)](error_code error, size_t size) mutable
-	{
-		RIWO_UNUSED(bytes);
-		std::move(handler)(error, size);
-	});
+	write_span(buffers, std::move(handler));
 }
 
 size_t connection::read_some_sync(const mutable_buffer&, error_code &error) noexcept
@@ -90,6 +66,37 @@ auto connection::local_endpoint(error_code &error) const noexcept -> endpoint_t
 {
 	error = make_error_code(errc::operation_not_supported);
 	return {};
+}
+
+void connection::write_span(std::span<const const_buffer> buffers, io_handler_t handler)
+{
+	size_t total = 0;
+	for(const auto &value : buffers)
+	{
+		if( value.size() > std::numeric_limits<size_t>::max() - total )
+		{
+			std::move(handler) (
+				make_system_error_code(std::errc::value_too_large), 0
+			);
+			return ;
+		}
+		total += value.size();
+	}
+	auto bytes = std::make_shared<std::vector<std::byte>>(total);
+	size_t offset = 0;
+
+	for(const auto &value : buffers)
+	{
+		if( value.size() != 0 )
+			std::memcpy(bytes->data() + offset, value.data(), value.size());
+		offset += value.size();
+	}
+	write(buffer(*bytes),
+	[bytes, handler = std::move(handler)](error_code error, size_t size) mutable
+	{
+		RIWO_UNUSED(bytes);
+		std::move(handler)(error, size);
+	});
 }
 
 } //namespace riwo::http_exp

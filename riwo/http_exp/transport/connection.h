@@ -35,9 +35,8 @@ public:
 	virtual void read_some(mutable_buffer buffer, io_handler_t handler) = 0;
 	virtual void write(const_buffer buffer, io_handler_t handler) = 0;
 
-	// Implementations that support gather writes should override this overload.
-	// The default keeps custom single-buffer transports source-compatible.
-	virtual void write(std::span<const const_buffer> buffers, io_handler_t handler);
+	void write(std::span<const const_buffer> buffers, io_handler_t handler);
+
 
 	// Synchronous completion is used by the existing synchronous public API and
 	// by the pool's non-waiting fast path. Custom transports may keep the
@@ -57,6 +56,9 @@ public:
 
 	[[nodiscard]] virtual endpoint_t remote_endpoint(error_code &error) const noexcept;
 	[[nodiscard]] virtual endpoint_t local_endpoint(error_code &error) const noexcept;
+
+protected:
+	virtual void write_span(std::span<const const_buffer> buffers, io_handler_t handler);
 };
 
 using connection_ptr = std::shared_ptr<connection>;

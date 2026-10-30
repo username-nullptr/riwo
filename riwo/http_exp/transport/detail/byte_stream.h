@@ -201,6 +201,7 @@ public:
 	void write(const_buffer buffer, connection::io_handler_t handler) override {
 		m_stream.write(buffer, std::move(handler));
 	}
+	using connection::write;
 
 	[[nodiscard]] size_t write_sync(const const_buffer &buffer, error_code &error) noexcept override
 	{

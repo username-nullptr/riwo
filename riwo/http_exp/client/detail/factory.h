@@ -25,7 +25,7 @@ public:
 
 using session_factory_ptr = std::shared_ptr<session_factory>;
 
-[[nodiscard]] RIWO_DECL_HIDDEN
+[[nodiscard]] RIWO_HTTP_EXP_API
 session_factory_ptr make_default_session_factory();
 
 } //namespace riwo::http_exp::detail
