@@ -4,6 +4,7 @@
 #include "tls_connection.h"
 
 #if RIWO_OPENSSL_SUPPORT
+#include "detail/buffer_sequence.h"
 #include "detail/timeout.h"
 
 namespace riwo::http_exp
@@ -60,6 +61,26 @@ void tls_connection::write(const_buffer buffer, io_handler_t handler)
 		m_impl->m_exec, *m_impl->m_write_timeout, std::move(handler),
 		[socket = &m_impl->m_socket, buffer](auto completion) mutable {
 			asio::async_write(*socket, buffer, std::move(completion));
+		}
+	);
+}
+
+void tls_connection::write(std::span<const const_buffer> buffers, io_handler_t handler)
+{
+	detail::const_buffer_sequence sequence(buffers);
+	if( not m_impl->m_write_timeout )
+	{
+		asio::async_write(m_impl->m_socket,
+			std::move(sequence), std::move(handler));
+		return ;
+	}
+	detail::start_timed_io(shared_from_this(),
+		m_impl->m_exec, *m_impl->m_write_timeout, std::move(handler),
+		[socket = &m_impl->m_socket, sequence = std::move(sequence)]
+		(auto completion) mutable
+		{
+			asio::async_write(*socket,
+				std::move(sequence), std::move(completion));
 		}
 	);
 }

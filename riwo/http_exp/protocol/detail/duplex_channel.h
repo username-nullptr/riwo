@@ -28,6 +28,8 @@ public:
 	virtual void read_some(mutable_buffer, io_handler_t) = 0;
 
 	[[nodiscard]] virtual size_t write_sync(std::span<const const_buffer>, error_code&) noexcept = 0;
+	// The descriptor sequence is borrowed only for this initiation call. The
+	// described byte ranges remain borrowed until the completion handler runs.
 	virtual void write(std::span<const const_buffer>, io_handler_t) = 0;
 
 	virtual void close_sync(error_code&) noexcept = 0;
@@ -45,6 +47,33 @@ public:
 
 using duplex_state_ptr = std::shared_ptr<duplex_state>;
 
+struct duplex_io_access
+{
+	template <core_concepts::exec Exec>
+	static void read(basic_duplex_channel<Exec> &channel,
+		mutable_buffer buffer, duplex_state::io_handler_t handler)
+	{
+		if( not channel.m_state )
+		{
+			std::move(handler)(make_error_code(errc::operation_not_permitted), 0);
+			return ;
+		}
+		channel.m_state->read_some(buffer, std::move(handler));
+	}
+
+	template <core_concepts::exec Exec>
+	static void write(basic_duplex_channel<Exec> &channel,
+		std::span<const const_buffer> buffers, duplex_state::io_handler_t handler)
+	{
+		if( not channel.m_state )
+		{
+			std::move(handler)(make_error_code(errc::operation_not_permitted), 0);
+			return ;
+		}
+		channel.m_state->write(buffers, std::move(handler));
+	}
+};
+
 } //namespace riwo::http_exp::detail
 
 namespace riwo::http_exp
@@ -59,7 +88,7 @@ basic_duplex_channel<Exec>::basic_duplex_channel()
 }
 
 template <core_concepts::exec Exec>
-basic_duplex_channel<Exec>::basic_duplex_channel(std::shared_ptr<detail::duplex_state> state)
+basic_duplex_channel<Exec>::basic_duplex_channel(duplex_state_ptr state)
 	requires core_concepts::match_sched<io_executor_t,executor_t> :
 	basic_duplex_channel(executor_t(riwo::get_executor()), std::move(state))
 {
@@ -77,8 +106,7 @@ basic_duplex_channel<Exec>::basic_duplex_channel(Exec0 &&executor)
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
-basic_duplex_channel<Exec>::basic_duplex_channel
-(Exec0 &&executor, std::shared_ptr<detail::duplex_state> state)
+basic_duplex_channel<Exec>::basic_duplex_channel(Exec0 &&executor, duplex_state_ptr state)
 	requires core_concepts::match_sched<Exec0,executor_t> :
 	m_state(std::move(state)),
 	m_exec(get_executor_helper(std::forward<Exec0>(executor)))

@@ -6,8 +6,12 @@
 
 #include <riwo/http_exp/error.h>
 
-namespace riwo::http_exp { namespace detail {
+namespace riwo::http_exp { namespace detail
+{
+
 class duplex_state;
+struct duplex_io_access;
+
 } //namespace detail
 /**
  * A protocol-independent byte stream detached from one HTTP exchange.
@@ -35,12 +39,11 @@ public:
 	explicit basic_duplex_channel(Exec0 &&executor)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
-	explicit basic_duplex_channel(std::shared_ptr<detail::duplex_state> state)
+	explicit basic_duplex_channel(duplex_state_ptr state)
 		requires core_concepts::match_sched<io_executor_t,executor_t>;
 
 	template <typename Exec0>
-	basic_duplex_channel(Exec0 &&executor,
-		std::shared_ptr<detail::duplex_state> state)
+	basic_duplex_channel(Exec0 &&executor, duplex_state_ptr state)
 		requires core_concepts::match_sched<Exec0,executor_t>;
 
 	basic_duplex_channel(basic_duplex_channel &&other) noexcept;
@@ -72,6 +75,8 @@ public:
 	[[nodiscard]] endpoint_t local_endpoint(error_code &error) const noexcept;
 
 private:
+	friend struct detail::duplex_io_access;
+
 	duplex_state_ptr m_state {};
 	executor_t m_exec {};
 };

@@ -81,6 +81,10 @@ if (RIWO_BUILD_WEBSOCKET_EXP)
 		riwo.websocket_exp)
 	add_riwo_test(websocket_exp.protocol websocket_exp/protocol.cpp
 		riwo.websocket_exp)
+	add_riwo_test(websocket_exp.stream websocket_exp/stream.cpp
+		riwo.websocket_exp)
+	add_riwo_test(websocket_exp.reliability websocket_exp/reliability.cpp
+		riwo.websocket_exp)
 	add_riwo_test(websocket_exp.client-server websocket_exp/client_server.cpp
 		riwo.websocket_exp)
 endif ()

@@ -134,7 +134,8 @@ function(add_riwo_fuzzer module name source library)
 endfunction()
 
 
-foreach(target riwo.core riwo.coro riwo.http riwo.http_exp riwo.websocket riwo.utils)
+foreach(target riwo.core riwo.coro riwo.http riwo.http_exp riwo.websocket
+	riwo.websocket_exp riwo.utils)
 	if (TARGET ${target})
 		if (MSVC)
 			target_compile_options(${target} PRIVATE
@@ -215,6 +216,21 @@ if (RIWO_BUILD_WEBSOCKET)
 		CORPUS corpus/websocket-handshake DICTIONARY dictionaries/websocket.dict
 	)
 	add_riwo_fuzzer(websocket public-api websocket_public_api.cpp riwo.websocket
+		CORPUS corpus/websocket-values DICTIONARY dictionaries/websocket.dict
+	)
+endif ()
+
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	add_riwo_fuzzer(websocket_exp frame-parser
+		websocket_exp_frame_parser.cpp riwo.websocket_exp
+		CORPUS corpus/websocket-frame DICTIONARY dictionaries/websocket.dict
+	)
+	add_riwo_fuzzer(websocket_exp handshake-parser
+		websocket_exp_handshake_parser.cpp riwo.websocket_exp
+		CORPUS corpus/websocket-handshake DICTIONARY dictionaries/websocket.dict
+	)
+	add_riwo_fuzzer(websocket_exp public-api
+		websocket_exp_public_api.cpp riwo.websocket_exp
 		CORPUS corpus/websocket-values DICTIONARY dictionaries/websocket.dict
 	)
 endif ()

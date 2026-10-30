@@ -28,6 +28,10 @@ if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_performance_test(websocket websocket.cpp riwo.websocket)
 endif ()
 
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	add_riwo_performance_test(websocket-exp websocket_exp.cpp riwo.websocket_exp)
+endif ()
+
 if (RIWO_BUILD_UTILITIES)
 	add_riwo_performance_test(logger logger.cpp riwo.utils)
 	add_riwo_performance_test(signal-slot signal_slot.cpp riwo.utils)

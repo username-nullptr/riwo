@@ -29,6 +29,7 @@ cmake -S . -B build-test -DBUILD_TESTING=ON \
   -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET_EXP=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Debug
 cmake --build build-test --parallel
@@ -86,6 +87,7 @@ cmake -S . -B build-stress -DBUILD_TESTING=ON \
   -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_HTTP_EXP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET_EXP=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-stress --parallel
@@ -95,9 +97,9 @@ ctest --test-dir build-stress -L stress --output-on-failure
 CTest names are `riwo.stress.<area>`. Entries run serially at the CTest level;
 the test executables create their own internal concurrency. Coverage includes
 Core queues/locks and fallback joining threads, coroutine synchronization,
-repeated HTTP/WebSocket connections, HTTP_EXP HTTP/1 pool concurrency and
-HTTP/2 multiplexing with a stalled consumer, utility lifecycle/fanout, and
-optional UDP soft-bus pressure.
+repeated HTTP/WebSocket and WebSocket_EXP connections, HTTP_EXP HTTP/1 pool
+concurrency and HTTP/2 multiplexing with a stalled consumer, utility
+lifecycle/fanout, and optional UDP soft-bus pressure.
 
 ## Fuzz profile
 
@@ -198,6 +200,7 @@ cmake -S . -B build-perf -DBUILD_TESTING=ON \
   -DRIWO_HTTP_ZLIB_SUPPORT=ON \
   -DRIWO_HTTP_EXP_ZLIB_SUPPORT=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET_EXP=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build-perf --parallel
@@ -205,9 +208,9 @@ ctest --test-dir build-perf -L performance -V
 ```
 
 CTest names are `riwo.performance.<area>`. The suite measures Core
-algorithms/queues/locks, coroutine primitives, HTTP, WebSocket, logging,
-signal/slot, and soft bus. When both HTTP implementations are enabled, the
-`http-exp` test runs matched sequential and concurrent HTTP/1.1 loopback,
+algorithms/queues/locks, coroutine primitives, HTTP, WebSocket, WebSocket_EXP,
+logging, signal/slot, and soft bus. When both HTTP implementations are enabled,
+the `http-exp` test runs matched sequential and concurrent HTTP/1.1 loopback,
 request/response head, and—when both implementations enable zlib—gzip
 workloads. The gzip coverage includes 512 B and 64 KiB one-shot round trips,
 reused codec state, and real HTTP compression-policy comparisons for dynamic

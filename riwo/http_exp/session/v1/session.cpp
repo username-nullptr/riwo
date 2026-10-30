@@ -150,26 +150,7 @@ public:
 
 	void write(std::span<const const_buffer> buffers, io_handler_t handler) override
 	{
-		size_t total = 0;
-		for(const auto &buffer : buffers)
-			total += buffer.size();
-
-		auto bytes = std::make_shared<std::vector<std::byte>>(total);
-		size_t offset = 0;
-
-		for(const auto &buffer : buffers)
-		{
-			if( buffer.size() != 0 )
-				std::memcpy(bytes->data() + offset, buffer.data(), buffer.size());
-			offset += buffer.size();
-		}
-
-		m_connection->transport->write(buffer(*bytes),
-		[bytes, handler = std::move(handler)](error_code error, size_t size) mutable
-		{
-			RIWO_UNUSED(bytes);
-			std::move(handler)(error, size);
-		});
+		m_connection->transport->write(buffers, std::move(handler));
 	}
 
 	void close_sync(error_code &error) noexcept override

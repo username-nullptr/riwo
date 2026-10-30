@@ -24,6 +24,10 @@ if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_stress_test(websocket websocket.cpp riwo.websocket)
 endif ()
 
+if (RIWO_BUILD_WEBSOCKET_EXP)
+	add_riwo_stress_test(websocket_exp websocket_exp.cpp riwo.websocket_exp)
+endif ()
+
 if (RIWO_BUILD_UTILITIES)
 	add_riwo_stress_test(utils utils.cpp riwo.utils)
 	if (RIWO_BUILD_UTILITIES_SBUS_UDP)

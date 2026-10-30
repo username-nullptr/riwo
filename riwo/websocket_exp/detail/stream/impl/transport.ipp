@@ -37,15 +37,18 @@ template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::start_async_transport_read
 (void *connection, const mutable_buffer &buffer, io_handler_t handler)
 {
-	static_cast<connection_t*>(connection)->read_some(
-		buffer, std::move(handler));
+	auto &channel = *static_cast<connection_t*>(connection);
+	http_exp::detail::duplex_io_access::read(
+		channel, buffer, std::move(handler));
 }
 
 template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::start_async_transport_write
 (void *connection, std::span<const const_buffer> buffers, io_handler_t handler)
 {
-	static_cast<connection_t*>(connection)->write(buffers, std::move(handler));
+	auto &channel = *static_cast<connection_t*>(connection);
+	http_exp::detail::duplex_io_access::write(
+		channel, buffers, std::move(handler));
 }
 
 template <core_concepts::exec Exec>

@@ -1369,6 +1369,18 @@ void fake_boundaries_and_unsupported_entry_points()
 	fake_session session(executor);
 	RIWO_TEST_CHECK(transport.get_executor() == executor);
 	RIWO_TEST_CHECK_EQ(session.available_stream_capacity(), 1U);
+	const std::array<riwo::const_buffer,2> scatter_buffers {
+		{{"abc", 3}, {"def", 3}}
+	};
+	size_t scatter_written = 0;
+	static_cast<http::connection&>(transport).write(
+		std::span<const riwo::const_buffer>(scatter_buffers),
+	[&](riwo::error_code error, size_t size)
+	{
+		RIWO_TEST_CHECK(!error);
+		scatter_written = size;
+	});
+	RIWO_TEST_CHECK_EQ(scatter_written, 6U);
 
 	http::client client(executor, config);
 	RIWO_TEST_CHECK(client.get_executor() == executor);
