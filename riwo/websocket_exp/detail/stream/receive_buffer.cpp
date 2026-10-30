@@ -14,13 +14,13 @@ void receive_buffer::reset(role local_role, const stream_config &config,
 {
 	auto compression = make_permessage_deflate_runtime(extensions, local_role);
 	if( not compression )
-		throw system_error(compression.error());
+		system_error::loc_throw(compression.error());
 
 	if( compression->enabled )
 	{
 		if( auto error = m_inflater.reset(compression->incoming_window_bits,
 			compression->incoming_no_context_takeover) )
-			throw system_error(error);
+			system_error::loc_throw(error);
 	}
 	frame_codec_config codec_config {
 		.local_role = local_role, .max_frame_size = config.max_frame_size

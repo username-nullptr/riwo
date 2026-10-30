@@ -194,6 +194,38 @@ void unopened_stream_completions()
 	RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::not_open));
 }
 
+void moved_from_objects_are_safe()
+{
+	riwo::io_context_t context;
+	const auto executor = context.get_executor();
+
+	native_stream stream(executor);
+	auto moved_stream = std::move(stream);
+	RIWO_TEST_CHECK(stream.get_executor() == executor);
+	RIWO_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);
+	RIWO_TEST_CHECK(moved_stream.get_executor() == executor);
+
+	native_stream assigned_stream(executor);
+	assigned_stream = std::move(moved_stream);
+	RIWO_TEST_CHECK(moved_stream.get_executor() == executor);
+	RIWO_TEST_CHECK_EQ(moved_stream.state(), ws::connection_state::idle);
+	RIWO_TEST_CHECK(assigned_stream.get_executor() == executor);
+
+	native_client client(executor);
+	auto moved_client = std::move(client);
+	RIWO_TEST_CHECK(client.get_executor() == executor);
+	RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
+	RIWO_TEST_CHECK(client.http_client().get_executor() == executor);
+	RIWO_TEST_CHECK(moved_client.get_executor() == executor);
+
+	native_client assigned_client(executor);
+	assigned_client = std::move(moved_client);
+	RIWO_TEST_CHECK(moved_client.get_executor() == executor);
+	RIWO_TEST_CHECK_EQ(moved_client.pending_open_count(), 0U);
+	RIWO_TEST_CHECK(moved_client.http_client().get_executor() == executor);
+	RIWO_TEST_CHECK(assigned_client.get_executor() == executor);
+}
+
 } //namespace
 
 int main(int argc, const char *const argv[])
@@ -203,5 +235,6 @@ int main(int argc, const char *const argv[])
 		{"executor-bound public objects", executor_bound_objects},
 		{"invalid open completion", invalid_open_completion},
 		{"unopened stream completions", unopened_stream_completions},
+		{"moved-from objects are safe", moved_from_objects_are_safe},
 	});
 }

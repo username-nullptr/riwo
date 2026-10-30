@@ -6,6 +6,7 @@
 #include <riwo/websocket_exp/protocol/generator.h>
 #include <riwo/websocket_exp/protocol/handshake.h>
 #include <riwo/websocket_exp/protocol/parser.h>
+#include <riwo/websocket_exp/protocol/detail/utf8.h>
 
 namespace ws = riwo::websocket_exp;
 
@@ -682,12 +683,12 @@ void test_frame_codec_chunk_corpus()
 		std::byte {0x56}, std::byte {0x78},
 	}};
 
-	for( const auto sender_role : {ws::role::client, ws::role::server} )
+	for(const auto sender_role : {ws::role::client, ws::role::server})
 	{
-		for( const auto payload_size : payload_sizes )
+		for(const auto payload_size : payload_sizes)
 		{
 			std::vector<std::byte> payload(payload_size);
-			for( size_t index = 0; index < payload.size(); ++index )
+			for(size_t index = 0; index < payload.size(); ++index)
 				payload[index] = static_cast<std::byte>((index * 37U + 11U) & 0xFFU);
 
 			ws::frame_header header {
@@ -713,7 +714,7 @@ void test_frame_codec_chunk_corpus()
 					wire.data() + encoded->size, payload.size()), *header.mask);
 			}
 
-			for( const auto chunk_size : chunk_sizes )
+			for(const auto chunk_size : chunk_sizes)
 			{
 				ws::frame_parser parser(ws::frame_codec_config {
 					.local_role = sender_role == ws::role::client ?
@@ -762,6 +763,44 @@ void test_frame_codec_chunk_corpus()
 	}
 }
 
+void test_moved_from_protocol_objects_are_safe()
+{
+	ws::frame_parser parser({
+		.local_role = ws::role::server,
+		.max_frame_size = 1024,
+	});
+	auto moved_parser = std::move(parser);
+	RIWO_TEST_CHECK(parser.config().local_role == ws::role::client);
+	RIWO_TEST_CHECK_EQ(parser.config().max_frame_size, 16U * 1024U * 1024U);
+
+	std::array wire {std::byte{0x82}, std::byte{0x00}};
+	auto parsed = parser.parse(riwo::buffer(wire));
+	RIWO_TEST_CHECK(parsed.has_value());
+	RIWO_TEST_CHECK(parsed->header_ready);
+	RIWO_TEST_CHECK(parsed->frame_finished);
+	RIWO_TEST_CHECK(!parser.failed());
+	RIWO_TEST_CHECK(moved_parser.config().local_role == ws::role::server);
+
+	ws::frame_parser assigned_parser({.local_role = ws::role::client});
+	assigned_parser = std::move(moved_parser);
+	RIWO_TEST_CHECK(moved_parser.config().local_role == ws::role::client);
+	RIWO_TEST_CHECK(!moved_parser.failed());
+	RIWO_TEST_CHECK(assigned_parser.config().local_role == ws::role::server);
+
+	ws::detail::utf8_validator validator;
+	RIWO_TEST_CHECK(validator.consume("\xE4\xB8\xAD"));
+	auto moved_validator = std::move(validator);
+	RIWO_TEST_CHECK(validator.complete());
+	RIWO_TEST_CHECK(validator.consume("text"));
+	RIWO_TEST_CHECK(moved_validator.complete());
+
+	ws::detail::utf8_validator assigned_validator;
+	assigned_validator = std::move(moved_validator);
+	RIWO_TEST_CHECK(moved_validator.complete());
+	RIWO_TEST_CHECK(moved_validator.consume("reused"));
+	RIWO_TEST_CHECK(assigned_validator.complete());
+}
+
 } //namespace
 
 int main(int argc, const char *const argv[])
@@ -782,5 +821,7 @@ int main(int argc, const char *const argv[])
 		{"frame parser errors", test_frame_parser_errors},
 		{"frame fragmentation state", test_frame_fragmentation_state},
 		{"frame codec chunk corpus", test_frame_codec_chunk_corpus},
+		{"moved-from protocol objects are safe",
+			test_moved_from_protocol_objects_are_safe},
 	});
 }

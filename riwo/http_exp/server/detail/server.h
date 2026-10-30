@@ -883,8 +883,7 @@ auto basic_server<Exec,ServiceExec>::start
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::serve
-(basic_negotiated_transport<executor_t> transport) -> basic_server&
+auto basic_server<Exec,ServiceExec>::serve(negotiated_transport_t transport) -> basic_server&
 {
 	error_code error;
 	serve(std::move(transport), error);
@@ -896,7 +895,7 @@ auto basic_server<Exec,ServiceExec>::serve
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 auto basic_server<Exec,ServiceExec>::serve
-(basic_negotiated_transport<executor_t> transport, error_code &error) noexcept -> basic_server&
+(negotiated_transport_t transport, error_code &error) noexcept -> basic_server&
 {
 	m_impl->serve_transport(std::move(transport), error);
 	return *this;

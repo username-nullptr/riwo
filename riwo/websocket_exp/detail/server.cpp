@@ -27,6 +27,30 @@ bool server_deadline_expired(
 	return std::chrono::steady_clock::now() >= deadline;
 }
 
+bool header_has_token
+(const http_exp::fields &headers, std::string_view name, std::string_view wanted) noexcept
+{
+	for(const auto &field : headers.find_all(name))
+	{
+		std::string_view value = field.value.to_string();
+		while( not value.empty() )
+		{
+			auto comma = value.find(',');
+			auto token = value.substr(0, comma);
+			while( not token.empty() and (token.front() == ' ' or
+				token.front() == '\t') ) token.remove_prefix(1);
+			while( not token.empty() and (token.back() == ' ' or
+				token.back() == '\t') ) token.remove_suffix(1);
+			if( server_equal_ci(token, wanted) )
+				return true;
+			if( comma == std::string_view::npos )
+				break;
+			value.remove_prefix(comma + 1);
+		}
+	}
+	return false;
+}
+
 bool valid_rejection_status(http_exp::status status) noexcept
 {
 	const auto value = status.code();
@@ -88,7 +112,7 @@ void select_server_subprotocol(server_upgrade_plan &plan,
 			plan.response_message.subprotocol = options.subprotocol_selector(
 				plan.request, plan.opening.subprotocols);
 		else
-			for( const auto &offered : plan.opening.subprotocols )
+			for(const auto &offered : plan.opening.subprotocols)
 				if( std::ranges::find(options.supported_subprotocols, offered) !=
 					options.supported_subprotocols.end() )
 				{
@@ -103,7 +127,8 @@ void validate_server_subprotocol(server_upgrade_plan &plan,
 	const upgrade_options &options,
 	std::chrono::steady_clock::time_point deadline) noexcept
 {
-	if( not plan.accepted ) return;
+	if( not plan.accepted )
+		return ;
 	if( server_deadline_expired(deadline) )
 		return reject_upgrade(plan,
 			asio::error::make_error_code(asio::error::timed_out));
@@ -129,9 +154,9 @@ void select_server_extensions(server_upgrade_plan &plan,
 			plan.response_message.extensions = options.extension_selector(
 				plan.request, plan.opening.extensions);
 		else if( not options.supported_extensions.empty() )
-			for( const auto &offered : plan.opening.extensions )
+			for(const auto &offered : plan.opening.extensions)
 			{
-				for( const auto &policy : options.supported_extensions )
+				for(const auto &policy : options.supported_extensions)
 					if( auto selected = negotiate_permessage_deflate(
 						offered, policy) )
 					{
@@ -139,7 +164,8 @@ void select_server_extensions(server_upgrade_plan &plan,
 							std::move(*selected)};
 						break;
 					}
-				if( not plan.response_message.extensions.empty() ) break;
+				if( not plan.response_message.extensions.empty() )
+					break;
 			}
 	}
 	catch(...) { reject_selector_exception(plan, std::current_exception()); }
@@ -149,7 +175,8 @@ void validate_server_extensions(server_upgrade_plan &plan,
 	const upgrade_options &options,
 	std::chrono::steady_clock::time_point deadline) noexcept
 {
-	if( not plan.accepted ) return;
+	if( not plan.accepted )
+		return ;
 	if( not plan.response_message.extensions.empty() and
 		(not supported_extension_response(plan.response_message.extensions,
 			plan.opening.extensions) or options.supported_extensions.empty()) )
@@ -164,19 +191,21 @@ void finalize_server_upgrade_plan(server_upgrade_plan &plan,
 	const upgrade_options &options,
 	std::chrono::steady_clock::time_point deadline) noexcept
 {
-	if( not plan.accepted ) return;
+	if( not plan.accepted )
+		return ;
 	try {
 		if( server_deadline_expired(deadline) )
 			return reject_upgrade(plan,
 				asio::error::make_error_code(asio::error::timed_out));
 		auto headers = make_opening_response_headers(plan.opening,
 			plan.response_message, plan.request.version);
-		if( not headers ) return reject_upgrade(plan, headers.error());
+		if( not headers )
+			return reject_upgrade(plan, headers.error());
 		plan.response = {};
 		plan.response.headers = options.response_headers;
 		erase_protocol_response_headers(plan.response.headers);
 		const bool h2 = server_is_h2(plan.request.version);
-		for( const auto &field : *headers )
+		for(const auto &field : *headers)
 		{
 			if( not h2 and (server_equal_ci(field.name, "Connection") or
 				server_equal_ci(field.name, "Upgrade")) )
@@ -185,7 +214,8 @@ void finalize_server_upgrade_plan(server_upgrade_plan &plan,
 		}
 		plan.response.status = h2 ? http_exp::status::ok :
 			http_exp::status::switching_protocols;
-		if( not h2 ) plan.response.upgrade_protocol = "websocket";
+		if( not h2 )
+			plan.response.upgrade_protocol = "websocket";
 		plan.accepted = true;
 		plan.error.clear();
 	}
@@ -201,7 +231,8 @@ void complete_server_upgrade_plan(server_upgrade_plan &plan,
 {
 	select_server_subprotocol(plan, options);
 	validate_server_subprotocol(plan, options, deadline);
-	if( not plan.accepted ) return;
+	if( not plan.accepted )
+		return ;
 	select_server_extensions(plan, options);
 	validate_server_extensions(plan, options, deadline);
 	finalize_server_upgrade_plan(plan, options, deadline);
@@ -343,7 +374,7 @@ server_config validate_server_config(server_config config)
 			std::chrono::milliseconds::zero() or
 		config.default_upgrade.stream.compression.level < -1 or
 		config.default_upgrade.stream.compression.level > 9 )
-		throw std::invalid_argument(
+		invalid_argument::loc_throw(
 			"riwo::websocket_exp::basic_server: invalid stream config");
 	config.http = websocket_http_config(std::move(config.http));
 	return config;

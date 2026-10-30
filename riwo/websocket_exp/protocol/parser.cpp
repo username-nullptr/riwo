@@ -9,9 +9,11 @@ namespace riwo::websocket_exp
 
 class RIWO_DECL_HIDDEN frame_parser::impl
 {
+	RIWO_DISABLE_COPY_MOVE(impl)
+
 public:
-	explicit impl(frame_codec_config value) :
-		m_config(value) {}
+	explicit impl(const frame_codec_config &config) :
+		m_config(config) {}
 
 	[[nodiscard]] size_t expected_header_size() const noexcept
 	{
@@ -138,7 +140,7 @@ public:
 	}
 
 public:
-	frame_codec_config m_config;
+	frame_codec_config m_config {};
 	frame_header m_header {};
 
 	std::array<std::byte,14> m_header_storage {};
@@ -150,7 +152,7 @@ public:
 	error_code m_error {};
 };
 
-frame_parser::frame_parser(frame_codec_config config) :
+frame_parser::frame_parser(const frame_codec_config &config) :
 	m_impl(new impl(config))
 {
 
@@ -162,7 +164,7 @@ frame_parser::~frame_parser()
 }
 
 frame_parser::frame_parser(frame_parser &&other) noexcept :
-	m_impl(std::exchange(other.m_impl, nullptr))
+	m_impl(std::exchange(other.m_impl, new impl(frame_codec_config{})))
 {
 
 }
@@ -172,20 +174,19 @@ frame_parser &frame_parser::operator=(frame_parser &&other) noexcept
 	if( this == &other )
 		return *this;
 
+	auto replacement = std::make_unique<impl>(frame_codec_config{});
 	delete m_impl;
-	m_impl = std::exchange(other.m_impl, nullptr);
+
+	m_impl = std::exchange(other.m_impl, replacement.release());
 	return *this;
 }
 
 sys_expected<frame_parse_result> frame_parser::parse(const mutable_buffer &input) noexcept
 {
-	if( not m_impl )
-		return sys_unexpected(make_system_error_code(std::errc::operation_not_permitted));
-
 	if( m_impl->m_error )
 		return sys_unexpected(m_impl->m_error);
 
-	frame_parse_result result;
+	frame_parse_result result {};
 	auto *data = static_cast<std::byte*>(input.data());
 	size_t input_offset = 0;
 
@@ -238,7 +239,7 @@ sys_expected<frame_parse_result> frame_parser::parse(const mutable_buffer &input
 		}
 	}
 	const auto available = input.size() - input_offset;
-	const auto count = static_cast<size_t>(std::min<uint64_t> (
+	const auto count = static_cast<size_t>(std::min<uint64_t>(
 		m_impl->m_payload_remaining, available
 	));
 	if( count != 0 )
@@ -258,36 +259,31 @@ sys_expected<frame_parse_result> frame_parser::parse(const mutable_buffer &input
 
 const frame_header &frame_parser::header() const noexcept
 {
-	static const frame_header empty;
-	return m_impl ? m_impl->m_header : empty;
+	return m_impl->m_header;
 }
 
 uint64_t frame_parser::payload_remaining() const noexcept
 {
-	return m_impl ? m_impl->m_payload_remaining : 0;
+	return m_impl->m_payload_remaining;
 }
 
 frame_codec_config frame_parser::config() const noexcept
 {
-	return m_impl ? m_impl->m_config : frame_codec_config {};
+	return m_impl->m_config;
 }
 
 bool frame_parser::failed() const noexcept
 {
-	return not m_impl or static_cast<bool>(m_impl->m_error);
+	return static_cast<bool>(m_impl->m_error);
 }
 
 error_code frame_parser::last_error() const noexcept
 {
-	return m_impl ? m_impl->m_error :
-		make_system_error_code(std::errc::operation_not_permitted);
+	return m_impl->m_error;
 }
 
 frame_parser &frame_parser::reset() noexcept
 {
-	if( not m_impl )
-		return *this;
-
 	m_impl->m_header = {};
 	m_impl->m_header_storage = {};
 	m_impl->m_header_size = 0;

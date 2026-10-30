@@ -26,7 +26,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 		server_config.http.protocols.requirement =
 			http::protocol_requirement::v2;
 #else
-		return;
+		return ;
 #endif
 	}
 	else
@@ -154,7 +154,7 @@ void websocket_round_trip(bool use_http2, bool compression)
 		}
 		RIWO_TEST_CHECK(not overlap->error);
 		RIWO_TEST_CHECK_EQ(overlap->body, first);
-		for( int index = 0; index < 2; ++index )
+		for(int index = 0; index < 2; ++index)
 		{
 			const auto payload = std::format("websocket-exp-{}", index);
 			co_await stream.write_text(payload, riwo::use_awaitable);

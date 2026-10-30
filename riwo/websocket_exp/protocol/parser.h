@@ -24,7 +24,7 @@ class RIWO_WEBSOCKET_EXP_API frame_parser
 	RIWO_DISABLE_COPY(frame_parser)
 
 public:
-	explicit frame_parser(frame_codec_config config);
+	explicit frame_parser(const frame_codec_config &config);
 	~frame_parser();
 
 	frame_parser(frame_parser &&other) noexcept;

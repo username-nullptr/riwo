@@ -40,7 +40,9 @@ public:
 
 	using config_t = server_config;
 	using protocol_t = asio::ip::tcp;
+
 	using socket_t = asio::basic_stream_socket<protocol_t,executor_t>;
+	using negotiated_transport_t = basic_negotiated_transport<executor_t>;
 
 	using acceptor_wrap_t = basic_acceptor_wrap<executor_t>;
 	using acceptor_t = acceptor_wrap_t::acceptor_t;
@@ -142,8 +144,8 @@ public:
 	basic_server &start(ServiceExec0 &&service_executor, error_code &error) noexcept
 		requires core_concepts::match_sched<ServiceExec0,service_executor_t>;
 
-	basic_server &serve(basic_negotiated_transport<executor_t> transport);
-	basic_server &serve(basic_negotiated_transport<executor_t> transport, error_code &error) noexcept;
+	basic_server &serve(negotiated_transport_t transport);
+	basic_server &serve(negotiated_transport_t transport, error_code &error) noexcept;
 
 	basic_server &cancel() noexcept;
 	basic_server &stop() noexcept;

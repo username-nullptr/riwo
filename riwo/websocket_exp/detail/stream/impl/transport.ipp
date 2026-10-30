@@ -57,7 +57,8 @@ void basic_stream<Exec>::impl::close_transport(error_code &error, bool cancel_fi
 		return ;
 	}
 	m_transport_closed = true;
-	if( cancel_first ) m_connection->cancel();
+	if( cancel_first )
+		m_connection->cancel();
 	m_connection->close(error);
 }
 
