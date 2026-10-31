@@ -6,6 +6,7 @@
 
 #include <riwo/core/cxx/attributes.h>
 #include <source_location>
+#include <filesystem>
 #include <exception>
 #include <format>
 
@@ -104,6 +105,26 @@ public:
 	);
 	static void loc_throw(const std::error_code &ec, std::string_view msg,
 		std::source_location loc = std::source_location::current()
+	);
+};
+
+class RIWO_CORE_VAPI filesystem_error : public std::filesystem::filesystem_error
+{
+public:
+	using std::filesystem::filesystem_error::filesystem_error;
+	~filesystem_error() noexcept override = default;
+
+public:
+	static void loc_throw(std::string_view msg, const std::error_code &ec,
+		std::source_location loc = std::source_location::current()
+	);
+	static void loc_throw(std::string_view msg,
+		const std::filesystem::path &path, const std::error_code &ec,
+		std::source_location loc = std::source_location::current()
+	);
+	static void loc_throw(std::string_view msg,
+		const std::filesystem::path &path1, const std::filesystem::path &path2,
+		const std::error_code &ec, std::source_location loc = std::source_location::current()
 	);
 };
 

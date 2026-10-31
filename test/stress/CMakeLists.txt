@@ -16,8 +16,16 @@ if (RIWO_BUILD_HTTP)
 	add_riwo_stress_test(http http.cpp riwo.http)
 endif ()
 
+if (RIWO_BUILD_EXP_HTTP)
+	add_riwo_stress_test(exp_http exp_http.cpp riwo.exp_http)
+endif ()
+
 if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_stress_test(websocket websocket.cpp riwo.websocket)
+endif ()
+
+if (RIWO_BUILD_EXP_WEBSOCKET)
+	add_riwo_stress_test(exp_websocket exp_websocket.cpp riwo.exp_websocket)
 endif ()
 
 if (RIWO_BUILD_UTILITIES)

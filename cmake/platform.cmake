@@ -51,6 +51,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 			list(APPEND riwo_clang_required_link_options -fuse-ld=lld)
 		endif ()
 
+		list(APPEND riwo_clang_required_flags -std=c++20)
 		string(JOIN " " riwo_clang_required_flags_string
 			${riwo_clang_required_flags}
 		)
@@ -67,14 +68,34 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 			"#include <string>\nint main() { std::string value; return value.size(); }"
 			RIWO_CLANG_TOOLCHAIN_OPTIONS_AVAILABLE
 		)
-		set(CMAKE_REQUIRED_FLAGS "${riwo_saved_required_flags}")
-		set(CMAKE_REQUIRED_LINK_OPTIONS ${riwo_saved_required_link_options})
-
 		if (NOT RIWO_CLANG_TOOLCHAIN_OPTIONS_AVAILABLE)
 			message(FATAL_ERROR
 				"${PRO_NAME}: Requested Clang runtime/linker options are unavailable."
 			)
 		endif ()
+
+		if (RIWO_USE_LIBCXX)
+			unset(RIWO_LIBCXX_ATOMIC_SHARED_PTR_AVAILABLE CACHE)
+			string(CONCAT riwo_libcxx_atomic_shared_ptr_source
+				"#include <atomic>\n"
+				"#include <memory>\n"
+				"int main() { std::atomic<std::shared_ptr<int>> value{std::make_shared<int>(1)};\n"
+				"auto copy = value.load(); value.store(copy); return *copy - 1; }"
+			)
+			check_cxx_source_compiles (
+				"${riwo_libcxx_atomic_shared_ptr_source}"
+				RIWO_LIBCXX_ATOMIC_SHARED_PTR_AVAILABLE
+			)
+			unset(riwo_libcxx_atomic_shared_ptr_source)
+			if (NOT RIWO_LIBCXX_ATOMIC_SHARED_PTR_AVAILABLE)
+				message(FATAL_ERROR
+					"${PRO_NAME}: RIWO_USE_LIBCXX requires libc++ support for C++20 std::atomic<std::shared_ptr<T>>."
+				)
+			endif ()
+		endif ()
+
+		set(CMAKE_REQUIRED_FLAGS "${riwo_saved_required_flags}")
+		set(CMAKE_REQUIRED_LINK_OPTIONS ${riwo_saved_required_link_options})
 	endif ()
 
 	if (RIWO_USE_LIBCXX)
@@ -87,7 +108,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 
 	if (RIWO_USE_LLD)
 		message(STATUS "${PRO_NAME}: Use clang lld.")
-		set(CMAKE_EXE_LINKER_FLAGS -fuse-ld=lld)
+		add_link_options(-fuse-ld=lld)
 	endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

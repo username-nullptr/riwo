@@ -35,6 +35,7 @@ void http_loopback_throughput()
 		[](server::context_t &request_context) -> riwo::awaitable<void>
 		{
 			constexpr std::string_view body = "ok";
+			request_context.response().set_auto_compression(false);
 			co_await request_context.response().write(
 				asio::buffer(body), riwo::use_awaitable
 			);
@@ -42,6 +43,7 @@ void http_loopback_throughput()
 		.on_request<method::get>("/benchmark-large",
 		[&large_body](server::context_t &request_context) -> riwo::awaitable<void>
 		{
+			request_context.response().set_auto_compression(false);
 			co_await request_context.response().write(
 				asio::buffer(large_body), riwo::use_awaitable
 			);
@@ -64,19 +66,32 @@ void http_loopback_throughput()
 				const auto begin = std::chrono::steady_clock::now();
 				for(size_t index = 0; index < iterations; ++index)
 				{
-					client::req_info request_info(target);
-					if( close )
-						request_info.arg.set_header(header::connection, "close");
-					auto request = co_await requester.request_get(
-						std::move(request_info), riwo::use_awaitable);
-					RIWO_TEST_CHECK(request);
-					RIWO_TEST_CHECK_EQ(
-						co_await request->wait_reply(riwo::use_awaitable), status::ok
-					);
-					RIWO_TEST_CHECK_EQ(
-						co_await request->reply()->read<std::string>(riwo::use_awaitable),
-						expected_body
-					);
+					for(size_t attempt = 0; attempt != 2; ++attempt)
+					{
+						try
+						{
+							client::req_info request_info(target);
+							if( close )
+								request_info.arg.set_header(
+									header::connection, "close");
+							auto request = co_await requester.request_get(
+								std::move(request_info), riwo::use_awaitable);
+							RIWO_TEST_CHECK(request);
+							RIWO_TEST_CHECK_EQ(
+								co_await request->wait_reply(riwo::use_awaitable),
+								status::ok);
+							RIWO_TEST_CHECK_EQ(
+								co_await request->reply()->read<std::string>(
+									riwo::use_awaitable), expected_body);
+							break;
+						}
+						catch(const std::system_error&)
+						{
+							if( attempt != 0 )
+								throw;
+							requester = client(context.get_executor());
+						}
+					}
 				}
 				co_return std::chrono::steady_clock::now() - begin;
 			};

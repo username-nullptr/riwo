@@ -43,3 +43,19 @@ install(FILES
 	${RIWO_HTTP_CONFIG_INCLUDE}/riwo/http/cxx/configs.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http/cxx
 )
+
+install(FILES ../http.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+# The base parser is an implementation detail used only by the client and
+# server parser translation units. Other detail headers contain public
+# template definitions and must remain in the install tree.
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http
+	FILES_MATCHING
+	PATTERN "*.h"
+	PATTERN "*.hpp"
+	PATTERN "*.ipp"
+	REGEX "/protocol/utils/core/parser[.]h$" EXCLUDE
+	REGEX "/protocol/utils/core/detail/parser[.]h$" EXCLUDE
+)

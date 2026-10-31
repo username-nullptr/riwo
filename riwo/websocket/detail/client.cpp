@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/websocket/client.h>
+#include <riwo/core/algorithm/secure_random.h>
+#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::websocket
 {
@@ -44,24 +46,7 @@ namespace detail
 
 bool ascii_equal_case_insensitive(std::string_view lhs, std::string_view rhs) noexcept
 {
-	if( lhs.size() != rhs.size() )
-		return false;
-
-	for(size_t index=0; index<lhs.size(); ++index)
-	{
-		auto left = static_cast<unsigned char>(lhs[index]);
-		auto right = static_cast<unsigned char>(rhs[index]);
-
-		if( left >= 'A' and left <= 'Z' )
-			left = static_cast<unsigned char>(left + ('a' - 'A'));
-
-		if( right >= 'A' and right <= 'Z' )
-			right = static_cast<unsigned char>(right + ('a' - 'A'));
-
-		if( left != right )
-			return false;
-	}
-	return true;
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 bool websocket_owned_request_header(std::string_view name) noexcept

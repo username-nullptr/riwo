@@ -1,0 +1,26 @@
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-License-Identifier: MIT
+
+#ifndef RIWO_EXP_WEBSOCKET_DETAIL_STREAM_CLOSE_OPERATIONS_H
+#define RIWO_EXP_WEBSOCKET_DETAIL_STREAM_CLOSE_OPERATIONS_H
+
+#include <riwo/experimental/websocket/types.h>
+
+namespace riwo::experimental::websocket::detail
+{
+
+struct close_wait_operation
+{
+	uint64_t id = 0;
+
+	asio::any_completion_handler <
+		void(error_code,close_info)
+	> completion {};
+};
+
+using close_wait_operation_ptr = std::shared_ptr<close_wait_operation>;
+
+} //namespace riwo::experimental::websocket::detail
+
+
+#endif //RIWO_EXP_WEBSOCKET_DETAIL_STREAM_CLOSE_OPERATIONS_H

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/http/client/detail/proxy.h>
+#include <riwo/core/utils/string_tools.h>
 #include <riwo/core/system/app_utls.h>
+#include <riwo/core/algorithm/base64.h>
 #include <riwo/core/algorithm/misc.h>
 
 namespace riwo::http::detail { namespace
@@ -17,24 +19,7 @@ struct RIWO_DECL_HIDDEN proxy_environment
 
 [[nodiscard]] bool ascii_equal_case_insensitive(std::string_view lhs, std::string_view rhs) noexcept
 {
-	if( lhs.size() != rhs.size() )
-		return false;
-
-	for(size_t i = 0; i < lhs.size(); ++i)
-	{
-		auto left = static_cast<unsigned char>(lhs[i]);
-		auto right = static_cast<unsigned char>(rhs[i]);
-
-		if( left >= 'A' and left <= 'Z' )
-			left = static_cast<unsigned char>(left + ('a' - 'A'));
-
-		if( right >= 'A' and right <= 'Z' )
-			right = static_cast<unsigned char>(right + ('a' - 'A'));
-
-		if( left != right )
-			return false;
-	}
-	return true;
+	return strtls::ascii_equal(lhs, rhs, false);
 }
 
 [[nodiscard]] optional<std::string> environment_value(std::initializer_list<std::string_view> names)
@@ -253,33 +238,6 @@ parse_proxy_environment(std::string text) noexcept
 	return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 }
 
-[[nodiscard]] std::string base64_encode(std::string_view input)
-{
-	static constexpr std::string_view alphabet =
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-	std::string output	;
-	output.reserve((input.size() + 2) / 3 * 4);
-
-	for(size_t offset = 0; offset < input.size(); offset += 3)
-	{
-		uint32_t value = static_cast<uint32_t>(static_cast<unsigned char>(input[offset])) << 16U;
-
-		if( offset + 1 < input.size() )
-			value |= static_cast<uint32_t>(static_cast<unsigned char>(input[offset + 1])) << 8U;
-
-		if( offset + 2 < input.size() )
-			value |= static_cast<uint32_t>(static_cast<unsigned char>(input[offset + 2]));
-
-		output += alphabet[(value >> 18) & 0x3F];
-		output += alphabet[(value >> 12) & 0x3F];
-
-		output += offset + 1 < input.size() ? alphabet[(value >> 6) & 0x3F] : '=';
-		output += offset + 2 < input.size() ? alphabet[value & 0x3F] : '=';
-	}
-	return output;
-}
-
 [[nodiscard]] sys_expected<std::string> basic_authorization
 (std::string_view username, std::string_view password) noexcept
 {
@@ -287,7 +245,7 @@ parse_proxy_environment(std::string text) noexcept
 		if( username.find(':') != std::string_view::npos )
 			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
-		return "Basic " + base64_encode (
+		return "Basic " + riwo::base64_encode (
 			std::string(username) + ":" + std::string(password)
 		);
 	}

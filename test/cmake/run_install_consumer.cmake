@@ -97,6 +97,16 @@ function(make_consumer_configure_command output_variable binary_dir)
 		list(APPEND command "-DCMAKE_TOOLCHAIN_FILE=${TEST_TOOLCHAIN_FILE}")
 	endif ()
 
+	# A project may use a custom vcpkg triplet whose runtime ABI differs from
+	# vcpkg's default triplet.  Keep the nested installed-package consumer on
+	# the same triplet so app-local deployment searches the directory that
+	# contains the DLLs used to build Riwo (including nghttp2.dll).
+	if (TEST_VCPKG_TARGET_TRIPLET)
+		list(APPEND command
+			"-DVCPKG_TARGET_TRIPLET=${TEST_VCPKG_TARGET_TRIPLET}"
+		)
+	endif ()
+
 	if (TEST_BUILD_TYPE)
 		list(APPEND command "-DCMAKE_BUILD_TYPE=${TEST_BUILD_TYPE}")
 	endif ()

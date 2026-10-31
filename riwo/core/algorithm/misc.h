@@ -19,11 +19,19 @@ template <concepts::any_text_p Str, concepts::text_p<strtls::get_char_t<Str>> St
 	const Str &str, StrArg &&exclude = {}, StrArg &&include = {}, char percent = '%'
 );
 
+// Lower ranks are more specific. Any number of constrained characters is
+// preferred over an unconstrained wildcard; among rules with the same star
+// count, each additional '?' increases specificity.
+[[nodiscard]] constexpr int32_t wildcard_match_rank (
+	size_t star_count, size_t question_count, size_t str_len
+) noexcept;
 /*
  * return:
  *   <0: Completely mismatched.
  *   =0: equality.
  *   >0: The smaller the value is, the higher the matching degree will be.
+ *       Among wildcard rules, fewer '*' outranks more '*'; when the counts
+ *       are equal, more '?' outranks fewer '?'.
  */
 template <concepts::any_text_p Str, concepts::text_p<strtls::get_char_t<Str>> StrArg>
 [[nodiscard]] RIWO_CORE_TAPI int32_t wildcard_match (

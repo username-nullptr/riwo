@@ -1,6 +1,12 @@
 # SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 # SPDX-License-Identifier: MIT
 
+# GCC 16 can report a false positive from libstdc++ shared_ptr construction at
+# -O2. Keep the suppression scoped to the module registry translation unit.
+set_property(SOURCE modules.cpp APPEND PROPERTY COMPILE_OPTIONS
+	"$<$<CXX_COMPILER_ID:GNU>:-Wno-array-bounds>"
+)
+
 set(target_name riwo.utils)
 add_project(${target_name} riwo.coro)
 
@@ -97,4 +103,11 @@ include_directories(${RIWO_UTILS_CONFIG_INCLUDE})
 install(FILES
 	${RIWO_UTILS_CONFIG_INCLUDE}/riwo/utils/cxx/configs.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/utils/cxx
+)
+install(FILES ../utils.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/utils
+	FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp"
 )

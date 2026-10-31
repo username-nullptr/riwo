@@ -267,6 +267,37 @@ void posted_completion_uses_immediate_executor()
 	RIWO_TEST_CHECK(completed);
 }
 
+void timed_io_uses_fallback_after_start_failure()
+{
+	riwo::io_context_t context;
+	bool initiating = true;
+	bool completed = false;
+	bool fallback_called = false;
+
+	riwo::initiate_timed_io<int>(context.get_executor(),
+		[](auto) { throw std::runtime_error("start failure"); },
+		1s,
+		[&]
+		{
+			fallback_called = true;
+			return 42;
+		},
+		[&](riwo::error_code error, int value)
+		{
+			RIWO_TEST_CHECK(not initiating);
+			RIWO_TEST_CHECK(error == std::errc::io_error);
+			RIWO_TEST_CHECK_EQ(value, 42);
+			completed = true;
+		}
+	);
+	initiating = false;
+
+	RIWO_TEST_CHECK(not completed);
+	context.run();
+	RIWO_TEST_CHECK(fallback_called);
+	RIWO_TEST_CHECK(completed);
+}
+
 void periodic_timer()
 {
 	riwo::io_context_t context;
@@ -359,6 +390,8 @@ int main(int argc, const char *const argv[])
 		{"async work never completes inline", async_work_never_completes_inline},
 		{"posted completion uses immediate executor",
 			posted_completion_uses_immediate_executor},
+		{"timed I/O uses fallback after start failure",
+			timed_io_uses_fallback_after_start_failure},
 		{"periodic timer", periodic_timer},
 		{"cross-thread periodic cancellation", cross_thread_periodic_cancellation},
 		{"awaitable and absolute work", awaitable_and_absolute_work},

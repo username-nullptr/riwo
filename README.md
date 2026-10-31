@@ -8,10 +8,12 @@ application utilities without requiring applications to adopt every module.
 
 ```text
 riwo.core
-└── riwo.coro
-    ├── riwo.http
-    │   └── riwo.websocket
-    └── riwo.utils
+├── riwo.coro
+│   ├── riwo.http
+│   │   └── riwo.websocket
+│   └── riwo.utils
+└── riwo.exp_http
+    └── riwo.exp_websocket
 ```
 
 | Module | Build switch | Default | Primary include | Source-tree target |
@@ -19,7 +21,9 @@ riwo.core
 | Core | always built | ON | `<riwo/core.h>` | `riwo.core` |
 | Coroutines | `RIWO_BUILD_CORO` | ON | `<riwo/coro.h>` | `riwo.coro` |
 | HTTP | `RIWO_BUILD_HTTP` | OFF | `<riwo/http.h>` | `riwo.http` |
+| HTTP (experimental) | `RIWO_BUILD_EXP_HTTP` | OFF | `<riwo/experimental/http.h>` | `riwo.exp_http` |
 | WebSocket | `RIWO_BUILD_WEBSOCKET` | OFF | `<riwo/websocket.h>` | `riwo.websocket` |
+| WebSocket (experimental) | `RIWO_BUILD_EXP_WEBSOCKET` | OFF | `<riwo/experimental/websocket.h>` | `riwo.exp_websocket` |
 | Utilities | `RIWO_BUILD_UTILITIES` | OFF | `<riwo/utils.h>` | `riwo.utils` |
 
 Link each module your application uses directly. CMake propagates that

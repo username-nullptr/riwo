@@ -13,7 +13,6 @@
 #include <riwo/http/client/detail/proxy.h>
 
 #include <riwo/websocket/detail/permessage_deflate.h>
-#include <riwo/websocket/detail/secure_random.h>
 #include <riwo/websocket/detail/handshake_io.h>
 
 namespace riwo::websocket { namespace detail

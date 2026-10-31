@@ -12,6 +12,27 @@ namespace riwo::strtls { namespace detail
 {
 
 template <concepts::character CharT>
+[[nodiscard]] constexpr int ctype_value(CharT c) noexcept
+{
+	using unsigned_t = std::make_unsigned_t<std::remove_cv_t<CharT>>;
+	const auto value = static_cast<unsigned_t>(c);
+
+	if constexpr( sizeof(unsigned_t) > sizeof(unsigned char) )
+	{
+		if( value > std::numeric_limits<unsigned char>::max() )
+			return EOF;
+	}
+	return static_cast<unsigned char>(value);
+}
+
+template <concepts::character CharT>
+[[nodiscard]] constexpr bool is_ascii_character(CharT c) noexcept
+{
+	using unsigned_t = std::make_unsigned_t<std::remove_cv_t<CharT>>;
+	return static_cast<unsigned_t>(c) <= 0x7F;
+}
+
+template <concepts::character CharT>
 [[nodiscard]] RIWO_CORE_TAPI std::basic_string<CharT> ascii_transition(const concepts::any_text auto &text)
 {
 	using Text = decltype(text);
@@ -186,7 +207,7 @@ std::basic_string<CharT> to_string(concepts::floating_p auto &&value) noexcept
 	return oss.str();
 }
 
-decltype(auto) to_string(concepts::any_text_p auto &&text) noexcept
+constexpr decltype(auto) to_string(concepts::any_text_p auto &&text) noexcept
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
@@ -200,7 +221,7 @@ decltype(auto) to_string(concepts::any_text_p auto &&text) noexcept
 		return std::basic_string<char_t>(std::forward<Text>(text));
 }
 
-decltype(auto) to_view(concepts::any_text_p auto &&text) noexcept
+constexpr decltype(auto) to_view(concepts::any_text_p auto &&text) noexcept
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
@@ -216,11 +237,9 @@ decltype(auto) to_view(concepts::any_text_p auto &&text) noexcept
 
 bool is_alpha(const concepts::any_string_p auto &str) noexcept
 {
-	auto _str = detail::ascii_transition<char>(str);
-
 	using Str = decltype(str);
 	if constexpr( concepts::character<Str> )
-		return std::isalpha(str);
+		return std::isalpha(detail::ctype_value(str)) != 0;
 	else
 	{
 		using char_t = get_char_t<Str>;
@@ -228,14 +247,14 @@ bool is_alpha(const concepts::any_string_p auto &str) noexcept
 
 #if RIWO_STD_CXX < 23
 		string_view_t view(str);
-		return std::all_of(view.begin(), view.end(), [](auto c){
-			return std::isalpha(c);
+		return std::all_of(view.begin(), view.end(), [](auto c) {
+			return std::isalpha(detail::ctype_value(c)) != 0;
 		});
-#else
-		return std::ranges::all_of(string_view_t(str), [](auto c){
-			return std::isalpha(c);
+#else //RIWO_STD_CXX
+		return std::ranges::all_of(string_view_t(str), [](auto c) {
+			return std::isalpha(detail::ctype_value(c)) != 0;
 		});
-#endif
+#endif //RIWO_STD_CXX
 	}
 }
 
@@ -243,7 +262,7 @@ bool is_digit(const concepts::any_string_p auto &str) noexcept
 {
 	using Str = decltype(str);
 	if constexpr( concepts::character<Str> )
-		return std::isdigit(str);
+		return std::isdigit(detail::ctype_value(str)) != 0;
 	else
 	{
 		using char_t = get_char_t<Str>;
@@ -252,13 +271,13 @@ bool is_digit(const concepts::any_string_p auto &str) noexcept
 #if RIWO_STD_CXX < 23
 		string_view_t view(str);
 		return std::all_of(view.begin(), view.end(), [](auto c){
-			return std::isdigit(c);
+			return std::isdigit(detail::ctype_value(c)) != 0;
 		});
-#else
+#else //RIWO_STD_CXX
 		return std::ranges::all_of(string_view_t(str), [](auto c){
-			return std::isdigit(c);
+			return std::isdigit(detail::ctype_value(c)) != 0;
 		});
-#endif
+#endif //RIWO_STD_CXX
 	}
 }
 
@@ -266,7 +285,7 @@ bool is_rlnum(const concepts::any_string_p auto &str) noexcept
 {
 	using Str = decltype(str);
 	if constexpr( concepts::character<Str> )
-		return std::isdigit(str);
+		return std::isdigit(detail::ctype_value(str)) != 0;
 	else
 	{
 		using char_t = get_char_t<Str>;
@@ -279,16 +298,17 @@ bool is_rlnum(const concepts::any_string_p auto &str) noexcept
 		auto it = view.begin();
 		if( *it == 0x2D/*-*/ or *it == 0x2B/*+*/ )
 			++it;
+
 		if( it == view.end() )
 			return false;
 
-		if( not std::isdigit(*it) )
+		if( not std::isdigit(detail::ctype_value(*it)) )
 			return false;
 
 		bool dot = false;
 		for(++it; it!=view.end(); ++it)
 		{
-			if( not std::isdigit(*it) )
+			if( not std::isdigit(detail::ctype_value(*it)) )
 			{
 				if( *it == 0x2E/*.*/ and not dot )
 					dot = true;
@@ -304,7 +324,7 @@ bool is_alnum(const concepts::any_string_p auto &str) noexcept
 {
 	using Str = decltype(str);
 	if constexpr( concepts::character<Str> )
-		return std::isalnum(str);
+		return std::isalnum(detail::ctype_value(str)) != 0;
 	else
 	{
 		using char_t = get_char_t<Str>;
@@ -313,13 +333,13 @@ bool is_alnum(const concepts::any_string_p auto &str) noexcept
 #if RIWO_STD_CXX < 23
 		string_view_t view(str);
 		return std::all_of(view.begin(), view.end(), [](auto c){
-			return std::isalnum(c);
+			return std::isalnum(detail::ctype_value(c)) != 0;
 		});
-#else
+#else //RIWO_STD_CXX
 		return std::ranges::all_of(string_view_t(str), [](auto c){
-			return std::isalnum(c);
+			return std::isalnum(detail::ctype_value(c)) != 0;
 		});
-#endif
+#endif //RIWO_STD_CXX
 	}
 }
 
@@ -327,7 +347,7 @@ bool is_ascii(const concepts::any_string_p auto &str) noexcept
 {
 	using Str = decltype(str);
 	if constexpr( concepts::character<Str> )
-		return str <= 0x7F;
+		return detail::is_ascii_character(str);
 	else
 	{
 		using char_t = get_char_t<Str>;
@@ -336,13 +356,13 @@ bool is_ascii(const concepts::any_string_p auto &str) noexcept
 #if RIWO_STD_CXX < 23
 		string_view_t view(str);
 		return std::all_of(view.begin(), view.end(), [](auto c){
-			return c <= 0x7F;
+			return detail::is_ascii_character(c);
 		});
-#else
+#else //RIWO_STD_CXX
 		return std::ranges::all_of(string_view_t(str), [](auto c){
-			return c <= 0x7F;
+			return detail::is_ascii_character(c);
 		});
-#endif
+#endif //RIWO_STD_CXX
 	}
 }
 
@@ -647,38 +667,66 @@ template <concepts::floating_p T>
 	return detail::try_to_booltot<char_t,T>(_text);
 }
 
-auto to_lower(concepts::any_text_p auto &&text)
+constexpr auto to_lower(concepts::any_text_p auto &&text)
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
 	using char_t = get_char_t<text_t>;
 
 	if constexpr( concepts::character<text_t> )
-		return static_cast<char_t>(std::tolower(text));
+	{
+		return text >= static_cast<char_t>('A') and text <= static_cast<char_t>('Z') ?
+			static_cast<char_t>(text + static_cast<char_t>('a' - 'A')) : text;
+	}
 	else
 	{
 		std::basic_string<char_t> result(std::forward<Text>(text));
 		for(auto &c : result)
-			c = static_cast<char_t>(std::tolower(c));
+			c = to_lower(c);
 		return result;
 	}
 }
 
-auto to_upper(concepts::any_text_p auto &&text)
+constexpr auto to_upper(concepts::any_text_p auto &&text)
 {
 	using Text = decltype(text);
 	using text_t = std::remove_cvref_t<Text>;
 	using char_t = get_char_t<text_t>;
 
 	if constexpr( concepts::character<text_t> )
-		return static_cast<char_t>(std::toupper(text));
+	{
+		return text >= static_cast<char_t>('a') and text <= static_cast<char_t>('z') ?
+			static_cast<char_t>(text - static_cast<char_t>('a' - 'A')) : text;
+	}
 	else
 	{
 		std::basic_string<char_t> result(std::forward<Text>(text));
 		for(auto &c : result)
-			c = static_cast<char_t>(std::toupper(c));
+			c = to_upper(c);
 		return result;
 	}
+}
+
+template <concepts::any_text_p Left, concepts::text_p<get_char_t<Left>> Right>
+constexpr bool ascii_equal(const Left &left, const Right &right, bool cs) noexcept
+{
+	const auto left_view = to_view(left);
+	const auto right_view = to_view(right);
+
+	if( left_view.size() != right_view.size() )
+		return false;
+	if( cs )
+		return std::ranges::equal(left_view, right_view);
+
+	return std::ranges::equal(left_view, right_view, [](auto lhs, auto rhs) {
+		return to_lower(lhs) == to_lower(rhs);
+	});
+}
+
+template <concepts::any_text_p Left, concepts::text_p<get_char_t<Left>> Right>
+constexpr bool ascii_inequal(const Left &left, const Right &right, bool cs) noexcept
+{
+	return not ascii_equal(left, right, cs);
 }
 
 template <concepts::any_string_p Str>

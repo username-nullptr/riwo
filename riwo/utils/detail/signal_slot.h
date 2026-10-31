@@ -1521,7 +1521,7 @@ auto signal_base<Derived,Func>::connect(Slots&&...funcs) noexcept -> derived_t&
 
 template <typename Derived, concepts::std_func_temp Func>
 template <typename Obj, typename...Slots>
-auto signal_base<Derived,Func>::connect(Obj &&observer_arg, Slots&&...slots) -> derived_t&
+auto signal_base<Derived,Func>::connect(Obj &&observer_arg, Slots&&...funcs) -> derived_t&
 	requires is_obj_slots_def_v<Obj,Slots...>
 {
 	if( not observer_arg )
@@ -1547,7 +1547,7 @@ auto signal_base<Derived,Func>::connect(Obj &&observer_arg, Slots&&...slots) -> 
 		else
 			state->template connect<slot_mode::sync>(observer, std::forward<Slot>(func));
 	};
-	(connect_slot(std::forward<Slots>(slots)), ...);
+	(connect_slot(std::forward<Slots>(funcs)), ...);
 
 	state->rebuild_snapshot_locked();
 	return static_cast<derived_t&>(*this);

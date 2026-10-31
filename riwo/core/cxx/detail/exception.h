@@ -110,6 +110,27 @@ inline void system_error::loc_throw(const std::error_code &ec, std::string_view 
 	}
 }
 
+inline void filesystem_error::loc_throw
+(std::string_view msg, const std::error_code &ec, std::source_location loc)
+{
+	if( ec )
+		throw filesystem_error(with_location(msg, loc), ec);
+}
+
+inline void filesystem_error::loc_throw
+(std::string_view msg, const std::filesystem::path &path, const std::error_code &ec, std::source_location loc)
+{
+	if( ec )
+		throw filesystem_error(with_location(msg, loc), path, ec);
+}
+
+inline void filesystem_error::loc_throw(std::string_view msg, const std::filesystem::path &path1,
+	const std::filesystem::path &path2, const std::error_code &ec, std::source_location loc)
+{
+	if( ec )
+		throw filesystem_error(with_location(msg, loc), path1, path2, ec);
+}
+
 } //namespace riwo
 
 namespace std

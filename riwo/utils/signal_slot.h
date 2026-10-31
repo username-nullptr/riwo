@@ -62,7 +62,7 @@ public:
 			return slot_tr::arg_count <= sig_tr::arg_count and
 			[]<size_t...Is>(std::index_sequence<Is...>) consteval
 			{
-				return ([]<size_t I>() consteval
+				constexpr auto arg_compatible = []<size_t I>() consteval
 				{
 					using sig_at  = sig_tr ::template arg_type_t<I>;
 					using slot_at = slot_tr::template arg_type_t<I>;
@@ -91,8 +91,8 @@ public:
 							typename slot_tr::template arg_type_t<I>
 						>;
 					}
-				}
-				.template operator()<Is>() and ...);
+				};
+				return (arg_compatible.template operator()<Is>() and ...);
 			}
 			(std::make_index_sequence<slot_tr::arg_count>{});
 		}

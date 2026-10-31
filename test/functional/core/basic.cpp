@@ -5,6 +5,8 @@
 
 #include <riwo/core/algorithm/math.h>
 #include <riwo/core/algorithm/misc.h>
+#include <riwo/core/algorithm/base64.h>
+#include <riwo/core/algorithm/secure_random.h>
 #include <riwo/core/algorithm/sha1.h>
 #include <riwo/core/algorithm/uuid.h>
 #include <riwo/core/async_expected.h>
@@ -252,6 +254,12 @@ void wildcard_matching()
 	RIWO_TEST_CHECK(riwo::wildcard_match("riwo/??re.h", "riwo/core.h") > 0);
 	RIWO_TEST_CHECK_EQ(riwo::wildcard_match("*.cpp", "README.md"), -1);
 	RIWO_TEST_CHECK_EQ(riwo::wildcard_match("", ""), 0);
+	RIWO_TEST_CHECK(riwo::wildcard_match("?", "x") <
+		riwo::wildcard_match("*", "x"));
+	RIWO_TEST_CHECK(riwo::wildcard_match("??", "xy") <
+		riwo::wildcard_match("*", "xy"));
+	RIWO_TEST_CHECK(riwo::wildcard_match("*a?", "xay") <
+		riwo::wildcard_match("*a*", "xay"));
 }
 
 void sha1_vectors()
@@ -279,6 +287,23 @@ void sha1_vectors()
 	assigned.append("original suffix").finalize();
 	RIWO_TEST_CHECK_EQ(copied.hex(), original.hex());
 	RIWO_TEST_CHECK_EQ(assigned.hex(), original.hex());
+}
+
+void base64_and_secure_random()
+{
+	RIWO_TEST_CHECK_EQ(riwo::base64_encode(""), "");
+	RIWO_TEST_CHECK_EQ(riwo::base64_encode("f"), "Zg==");
+	RIWO_TEST_CHECK_EQ(riwo::base64_encode("fo"), "Zm8=");
+	RIWO_TEST_CHECK_EQ(riwo::base64_encode("foo"), "Zm9v");
+
+	const std::array binary {std::byte {0xFF}, std::byte {0xEE}};
+	RIWO_TEST_CHECK_EQ(riwo::base64_encode(binary), "/+4=");
+	RIWO_TEST_CHECK(riwo::secure_random_bytes(riwo::mutable_buffer {}));
+	RIWO_TEST_CHECK(not riwo::secure_random_bytes(
+		riwo::mutable_buffer(nullptr, 1)));
+
+	std::array<std::byte,32> random {};
+	RIWO_TEST_CHECK(riwo::secure_random_bytes(asio::buffer(random)));
 }
 
 void uuid_values()
@@ -329,9 +354,25 @@ void string_tools()
 	RIWO_TEST_CHECK_EQ(riwo::strtls::trimmed(" \t Riwo \r\n"), "Riwo");
 	RIWO_TEST_CHECK_EQ(riwo::strtls::to_lower("RiWo"), "riwo");
 	RIWO_TEST_CHECK_EQ(riwo::strtls::to_upper(std::string("RiWo")), "RIWO");
+	RIWO_TEST_CHECK_EQ(riwo::strtls::to_lower("HTTP-\xC0"), "http-\xC0");
+	RIWO_TEST_CHECK_EQ(riwo::strtls::to_upper("http-\xC0"), "HTTP-\xC0");
+	RIWO_TEST_CHECK(not riwo::strtls::ascii_equal("Content-Type", "content-type"));
+	RIWO_TEST_CHECK(riwo::strtls::ascii_equal("Content-Type", "content-type", false));
+	RIWO_TEST_CHECK(riwo::strtls::ascii_equal('A', 'a', false));
+	RIWO_TEST_CHECK(riwo::strtls::ascii_inequal("Content", "contents"));
+	RIWO_TEST_CHECK(riwo::strtls::ascii_inequal('A', 'a'));
+	RIWO_TEST_CHECK(not riwo::strtls::ascii_inequal("Content-Type", "content-type", false));
 	RIWO_TEST_CHECK(riwo::strtls::is_alpha("Riwo"));
 	RIWO_TEST_CHECK(not riwo::strtls::is_alpha("Riwo1"));
 	RIWO_TEST_CHECK(riwo::strtls::is_digit("012345"));
+	const std::string high_byte(1, static_cast<char>(0xD0));
+	riwo::ignore_unused(
+		riwo::strtls::is_alpha(high_byte),
+		riwo::strtls::is_digit(high_byte),
+		riwo::strtls::is_rlnum(high_byte),
+		riwo::strtls::is_alnum(high_byte)
+	);
+	RIWO_TEST_CHECK(not riwo::strtls::is_ascii(high_byte));
 	RIWO_TEST_CHECK_EQ(*riwo::strtls::to_int32("-42"), -42);
 	RIWO_TEST_CHECK_EQ(*riwo::strtls::to_uint32("2a", 16), 42U);
 	RIWO_TEST_CHECK(not riwo::strtls::to_int32("12x"));
@@ -601,6 +642,7 @@ int main(int argc, const char *const argv[])
 		{"percent encoding", percent_encoding},
 		{"wildcard matching", wildcard_matching},
 		{"SHA-1 vectors", sha1_vectors},
+		{"Base64 and secure random", base64_and_secure_random},
 		{"UUID values", uuid_values},
 		{"arithmetic and byte order", arithmetic_and_byte_order},
 		{"string tools", string_tools},

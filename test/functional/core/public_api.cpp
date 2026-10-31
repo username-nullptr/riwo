@@ -5,6 +5,7 @@
 
 #include <riwo/core/async_expected.h>
 #include <riwo/core/algorithm/math.h>
+#include <riwo/core/cxx/exception.h>
 #include <riwo/core/container.h>
 #include <riwo/core/string_deque.h>
 #include <riwo/core/string_list.h>
@@ -25,8 +26,10 @@ RIWO_DECLARE_OPERATORS_FOR_FLAGS(features);
 class parameter_owner final : public riwo::mutable_parameters<parameter_owner>
 {
 public:
-	parameter_owner() : mutable_parameters(&storage) {}
-	riwo::parameter_map storage;
+	parameter_owner() : mutable_parameters(nullptr) {
+		m_parameters = &storage;
+	}
+	riwo::parameter_map storage {};
 };
 
 void flags_and_parameters()
@@ -145,6 +148,33 @@ void optional_expected_and_async_helpers()
 	RIWO_TEST_CHECK_EQ(riwo::unwrap_async_argument(owned), "owned");
 }
 
+void filesystem_exceptions()
+{
+	const auto error = std::make_error_code(std::errc::io_error);
+	const std::filesystem::path source("source.txt");
+	const std::filesystem::path destination("destination.txt");
+
+	RIWO_TEST_CHECK_THROWS(
+		riwo::filesystem_error::loc_throw("filesystem operation", error),
+		riwo::filesystem_error);
+	try {
+		riwo::filesystem_error::loc_throw(
+			"filesystem operation", source, destination, error);
+	}
+	catch(const riwo::filesystem_error &exception)
+	{
+		RIWO_TEST_CHECK(exception.code() == error);
+		RIWO_TEST_CHECK(exception.path1() == source);
+		RIWO_TEST_CHECK(exception.path2() == destination);
+		RIWO_TEST_CHECK(std::string_view(exception.what()).find(
+			"filesystem operation") != std::string_view::npos);
+		RIWO_TEST_CHECK(std::string_view(exception.what()).find("source:") !=
+			std::string_view::npos);
+		return ;
+	}
+	RIWO_TEST_CHECK(false);
+}
+
 void formatting_and_endpoints()
 {
 	const riwo::optional<int> empty;
@@ -249,6 +279,7 @@ int main(int argc, const char *const argv[])
 		{"flags and parameters", flags_and_parameters},
 		{"value and string algorithms", value_and_string_algorithms},
 		{"optional, expected, and async helpers", optional_expected_and_async_helpers},
+		{"filesystem exceptions", filesystem_exceptions},
 		{"formatting and endpoints", formatting_and_endpoints},
 		{"application environment", application_environment},
 		{"dynamic library", dynamic_library},

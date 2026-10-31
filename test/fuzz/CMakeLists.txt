@@ -5,11 +5,37 @@ function(add_riwo_fuzzer module name source library)
 	cmake_parse_arguments(FUZZ "" "CORPUS;DICTIONARY" "" ${ARGN})
 	set(target riwo.fuzz.${module}.${name})
 
-	add_executable(${target} ${source})
+	if (RIWO_FUZZER_STANDALONE)
+		add_executable(${target} ${source}
+			${CMAKE_CURRENT_SOURCE_DIR}/standalone_main.cpp
+		)
+	else ()
+		add_executable(${target} ${source})
+	endif ()
+
 	riwo_enable_strict_warnings(${target})
 	target_link_libraries(${target} PRIVATE ${library})
 
-	if (RIWO_FUZZER_RUNTIME_LIBRARY)
+	if (MSVC)
+		target_compile_options(${target} PRIVATE
+			/fsanitize=fuzzer
+			/fsanitize=address
+			/Zi
+		)
+		target_link_options(${target} PRIVATE
+			/DEBUG
+			/INCREMENTAL:NO
+		)
+	elseif (RIWO_FUZZER_STANDALONE)
+		target_compile_options(${target} PRIVATE
+			-fsanitize=address,undefined
+			-fno-omit-frame-pointer
+			-fno-sanitize-recover=all
+		)
+		target_link_options(${target} PRIVATE
+			-fsanitize=address,undefined
+		)
+	elseif (RIWO_FUZZER_RUNTIME_LIBRARY)
 		target_compile_options(${target} PRIVATE
 			-fsanitize=fuzzer-no-link,address,undefined
 			-fno-omit-frame-pointer
@@ -39,16 +65,6 @@ function(add_riwo_fuzzer module name source library)
 	set(fuzzer_artifacts ${CMAKE_CURRENT_BINARY_DIR}/artifacts/${module}-${name})
 	file(MAKE_DIRECTORY ${fuzzer_artifacts})
 
-	set(fuzzer_arguments
-		-runs=${RIWO_FUZZ_SMOKE_RUNS}
-		-seed=${RIWO_FUZZ_SEED}
-		-max_len=${RIWO_FUZZ_MAX_LENGTH}
-		-rss_limit_mb=${RIWO_FUZZ_RSS_LIMIT_MB}
-		-timeout=${RIWO_FUZZ_TIMEOUT}
-		-use_value_profile=1
-		-print_final_stats=1
-		-artifact_prefix=${fuzzer_artifacts}/
-	)
 	if (FUZZ_CORPUS)
 		set(fuzzer_corpus ${CMAKE_CURRENT_BINARY_DIR}/corpus/${module}-${name})
 		file(MAKE_DIRECTORY ${fuzzer_corpus})
@@ -56,33 +72,100 @@ function(add_riwo_fuzzer module name source library)
 		file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/${FUZZ_CORPUS}/
 			DESTINATION ${fuzzer_corpus}
 		)
-		list(APPEND fuzzer_arguments ${fuzzer_corpus})
 	endif ()
 
-	if (FUZZ_DICTIONARY)
-		list(APPEND fuzzer_arguments
-			-dict=${CMAKE_CURRENT_SOURCE_DIR}/${FUZZ_DICTIONARY})
+	if (RIWO_FUZZER_STANDALONE)
+		if (NOT FUZZ_CORPUS)
+			message(FATAL_ERROR
+				"${PRO_NAME}: GNU fuzz target ${target} requires a corpus."
+			)
+		endif ()
+
+		set(fuzzer_arguments
+			--corpus=${fuzzer_corpus}
+			--runs=${RIWO_FUZZ_SMOKE_RUNS}
+			--seed=${RIWO_FUZZ_SEED}
+			--max-len=${RIWO_FUZZ_MAX_LENGTH}
+			--artifact=${fuzzer_artifacts}/last-input
+		)
+	else ()
+		set(fuzzer_arguments
+			-runs=${RIWO_FUZZ_SMOKE_RUNS}
+			-seed=${RIWO_FUZZ_SEED}
+			-max_len=${RIWO_FUZZ_MAX_LENGTH}
+			-rss_limit_mb=${RIWO_FUZZ_RSS_LIMIT_MB}
+			-timeout=${RIWO_FUZZ_TIMEOUT}
+			-use_value_profile=1
+			-print_final_stats=1
+			-artifact_prefix=${fuzzer_artifacts}/
+		)
+		if (FUZZ_CORPUS)
+			list(APPEND fuzzer_arguments ${fuzzer_corpus})
+		endif ()
+
+		if (FUZZ_DICTIONARY)
+			list(APPEND fuzzer_arguments
+				-dict=${CMAKE_CURRENT_SOURCE_DIR}/${FUZZ_DICTIONARY})
+		endif ()
 	endif ()
 
 	add_riwo_ctest(${target} $<TARGET_FILE:${target}> ${fuzzer_arguments})
+	set(fuzzer_environment
+		"ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1"
+	)
+	if (NOT MSVC)
+		list(APPEND fuzzer_environment
+			"UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+		)
+	endif ()
+
+	if (RIWO_FUZZER_STANDALONE)
+		set(fuzzer_labels "fuzz;fuzz-regression;sanitizer")
+	else ()
+		set(fuzzer_labels "fuzz;sanitizer")
+	endif ()
+
 	set_tests_properties(${target} PROPERTIES
-		LABELS "fuzz;sanitizer"
+		LABELS "${fuzzer_labels}"
 		RUN_SERIAL TRUE
 		TIMEOUT 60
-		ENVIRONMENT
-			"ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1"
+		ENVIRONMENT "${fuzzer_environment}"
 	)
 endfunction()
 
-foreach(target riwo.core riwo.coro riwo.http riwo.websocket riwo.utils)
+
+foreach(target riwo.core riwo.coro riwo.http riwo.exp_http riwo.websocket
+	riwo.exp_websocket riwo.utils)
 	if (TARGET ${target})
-		target_compile_options(${target} PRIVATE
-			-fsanitize=fuzzer-no-link,address,undefined
-			-fno-omit-frame-pointer
-		)
-		target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+		if (MSVC)
+			target_compile_options(${target} PRIVATE
+				/fsanitize=fuzzer
+				/fsanitize=address
+				/Zi
+			)
+			target_link_options(${target} PRIVATE
+				/DEBUG
+				/INCREMENTAL:NO
+			)
+		elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+			target_compile_options(${target} PRIVATE
+				-fsanitize=address,undefined
+				-fno-omit-frame-pointer
+				-fno-sanitize-recover=all
+			)
+			target_link_options(${target} PRIVATE
+				-fsanitize=address,undefined
+			)
+		else ()
+			target_compile_options(${target} PRIVATE
+				-fsanitize=fuzzer-no-link,address,undefined
+				-fno-omit-frame-pointer
+			)
+			target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+		endif ()
 	endif ()
 endforeach()
+
 
 add_riwo_fuzzer(core url core_url.cpp riwo.core
 	CORPUS corpus/core DICTIONARY dictionaries/core.dict
@@ -114,6 +197,17 @@ if (RIWO_BUILD_HTTP)
 	)
 endif ()
 
+if (RIWO_BUILD_EXP_HTTP)
+	add_riwo_fuzzer(exp_http request-parser exp_http_request_parser.cpp
+		riwo.exp_http
+		CORPUS corpus/http-request DICTIONARY dictionaries/http.dict
+	)
+	add_riwo_fuzzer(exp_http response-parser exp_http_response_parser.cpp
+		riwo.exp_http
+		CORPUS corpus/http-response DICTIONARY dictionaries/http.dict
+	)
+endif ()
+
 if (RIWO_BUILD_WEBSOCKET)
 	add_riwo_fuzzer(websocket frame-parser websocket_frame_parser.cpp riwo.websocket
 		CORPUS corpus/websocket-frame DICTIONARY dictionaries/websocket.dict
@@ -122,6 +216,21 @@ if (RIWO_BUILD_WEBSOCKET)
 		CORPUS corpus/websocket-handshake DICTIONARY dictionaries/websocket.dict
 	)
 	add_riwo_fuzzer(websocket public-api websocket_public_api.cpp riwo.websocket
+		CORPUS corpus/websocket-values DICTIONARY dictionaries/websocket.dict
+	)
+endif ()
+
+if (RIWO_BUILD_EXP_WEBSOCKET)
+	add_riwo_fuzzer(exp_websocket frame-parser
+		exp_websocket_frame_parser.cpp riwo.exp_websocket
+		CORPUS corpus/websocket-frame DICTIONARY dictionaries/websocket.dict
+	)
+	add_riwo_fuzzer(exp_websocket handshake-parser
+		exp_websocket_handshake_parser.cpp riwo.exp_websocket
+		CORPUS corpus/websocket-handshake DICTIONARY dictionaries/websocket.dict
+	)
+	add_riwo_fuzzer(exp_websocket public-api
+		exp_websocket_public_api.cpp riwo.exp_websocket
 		CORPUS corpus/websocket-values DICTIONARY dictionaries/websocket.dict
 	)
 endif ()

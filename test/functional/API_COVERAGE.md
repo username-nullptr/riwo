@@ -45,6 +45,48 @@ behavior rather than by implementation source file.
 - `interop/http_interop.py`: independent client/server compatibility when a local
   backend is available.
 
+## Experimental HTTP
+
+- `experimental/http/public_api.cpp`: public types, completion signatures, configuration,
+  client/server construction, and compile-time ownership contracts.
+- `experimental/http/protocol_api.cpp`: HTTP/1 and HTTP/2 incremental engines, event/action
+  flow control, codecs, public V2 diagnostics extensions, and malformed input.
+- `experimental/http/body.cpp`: body sources/readers/writers, exchange state machines,
+  request metadata, informational responses, and reply convenience operations.
+- `experimental/http/http1.cpp`: HTTP/1.0 and HTTP/1.1 loopback, buffered/file/streaming
+  bodies, trailers, slow reads, cancellation, and bodyless status responses.
+- `experimental/http/session_pool.cpp`: protocol selection, session keys/factories, pool
+  capacity/fairness/expiry, non-blocking asynchronous connector start,
+  cleartext preface detection, and keep-alive reuse.
+- `experimental/http/http2_client.cpp`: HTTP/2 prior knowledge, multiplexed streams,
+  request/response bodies and trailers, RST_STREAM/GOAWAY mapping, automatic
+  retry, redirects, and replayable-source rewind behavior.
+- `experimental/http/http2_server.cpp`: HTTP/2 prior-knowledge routing, multiplexed
+  exchanges, stream extensions, resource validation, HEAD/bodyless responses,
+  trailers, and graceful shutdown.
+- `experimental/http/application.cpp`: public-API application workflow covering routing,
+  query targets, authentication rejection and body draining, state mutation,
+  case-insensitive headers, streaming events/trailers, and 404 responses.
+- `experimental/http/reliability.cpp`: end-to-end response-buffer limits, header timeout
+  mapping, and successful pool recovery after an HTTP/1 or HTTP/2 exchange
+  fails.
+- `experimental/http/regressions.cpp`: raw HTTP/1 wire regressions for target forms,
+  OPTIONS/Allow, method rejection, 100-continue, HEAD, and invalid fields.
+- `interop/http_interop.py`: independent EXP_HTTP client/server compatibility
+  when a local backend is available.
+
+## Experimental WebSocket
+
+- `experimental/websocket/public_api.cpp`: umbrella/value types, executor propagation,
+  EXP_HTTP duplex-channel ownership, retry policy, invalid open completion, and
+  unopened stream errors.
+- `experimental/websocket/protocol.cpp`: errors, randomness, opcode/close helpers,
+  masking, frame generation/parsing, fragmentation, HTTP/1 Upgrade, and HTTP/2
+  Extended CONNECT handshakes.
+- `experimental/websocket/client_server.cpp`: HTTP/1.1 Upgrade and HTTP/2 Extended CONNECT
+  round trips, subprotocol and compression negotiation, overlapped read/write,
+  clean close, and validator rejection response preservation.
+
 ## WebSocket
 
 - `websocket/protocol.cpp`: errors, randomness, opcode/close helpers, masking,

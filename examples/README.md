@@ -11,7 +11,9 @@ Enable examples and every module you want to inspect:
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DRIWO_BUILD_HTTP=ON \
+  -DRIWO_BUILD_EXP_HTTP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
+  -DRIWO_BUILD_EXP_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DRIWO_BUILD_EXAMPLES=ON
 cmake --build build --parallel
@@ -101,6 +103,113 @@ File transfer uses a separate pair:
 `https_server` is built only with OpenSSL support. `proxy_client` requires an
 external proxy. Paths derived from request data must be validated by the
 application; `resource_root` is not a sandbox.
+
+## Experimental HTTP
+
+Requires `RIWO_BUILD_EXP_HTTP=ON`. Like the stable HTTP examples, each program
+focuses on one capability. The first programs show the everyday client/server
+API; later programs cover streaming, files, protocol engines, and custom
+transports. The same high-level API works with HTTP/1.x and, when
+`RIWO_EXP_HTTP_HTTP2_SUPPORT=1`, HTTP/2.
+
+| Program | Demonstrates | Arguments / default |
+| --- | --- | --- |
+| [`client_sync`](experimental/http/client_sync.cpp) | Minimal synchronous GET with explicit error-code handling | `[url]`; local server |
+| [`client_awaitable`](experimental/http/client_awaitable.cpp) | Minimal coroutine GET using `use_awaitable` | `[url]`; local server |
+| [`client_cookies`](experimental/http/client_cookies.cpp) | Cookie capture and resend while following a redirect | `[base-url]`; local server |
+| [`server`](experimental/http/server.cpp) | Routing, path/query parameters, cookies, redirects, buffered and streaming bodies, trailers, and optional gzip | `[port] [auto\|http1\|http2]`; 8080, auto |
+| [`client`](experimental/http/client.cpp) | Runtime client configuration, buffered upload, streamed download, trailers, optional decompression, and selected protocol | `[base-url] [auto\|http1\|http2]`; local server, auto |
+| [`server_aop`](experimental/http/server_aop.cpp) | Route middleware, controller objects, and an explicit executor | `[port]`; 8081 |
+| [`server_session`](experimental/http/server_session.cpp) | Application sessions, attributes, visit count, and session cookie | `[port]`; 8082 |
+| [`client_file`](experimental/http/client_file.cpp) | File upload/download, progress, conditional GET, Range GET | `<upload-file> [download-file] [base-url] [auto\|http1\|http2]`; local server |
+| [`proxy_client`](experimental/http/proxy_client.cpp) | HTTP/SOCKS5 proxy, CONNECT for TLS, and optional Basic auth | `[target-url] [proxy-url] [user] [password]` |
+| [`server_file`](experimental/http/server_file.cpp) | File response, ETag and Range handling, streamed upload to disk | `<download-file> [port] [upload-file] [auto\|http1\|http2]`; 8083 |
+| [`https_server`](experimental/http/https_server.cpp) | TLS acceptor with ALPN-based HTTP/1.1 or HTTP/2 selection | `<certificate.pem> <private-key.pem> [port] [auto\|http1\|http2]`; 8443 |
+| [`server_acceptor`](experimental/http/server_acceptor.cpp) | User-defined acceptor injected into the high-level server | `[port]`; 8086 |
+| [`transport`](experimental/http/transport.cpp) | User-defined asynchronous byte stream and connector injected into the high-level client | none; no socket is opened |
+| [`protocol`](experimental/http/protocol.cpp) | Socket-free request/response loop over the public HTTP/1 and optional HTTP/2 engines | none |
+
+Run the pair in separate terminals:
+
+```sh
+./build/output/examples/exp_http/server 8080 auto
+./build/output/examples/exp_http/client http://127.0.0.1:8080 auto
+```
+
+The focused client examples use the same server:
+
+```sh
+./build/output/examples/exp_http/client_sync
+./build/output/examples/exp_http/client_awaitable
+./build/output/examples/exp_http/client_cookies
+```
+
+Middleware and session behavior run as small, isolated servers:
+
+```sh
+./build/output/examples/exp_http/server_aop 8081
+./build/output/examples/exp_http/server_session 8082
+```
+
+For cleartext HTTP/2, select it explicitly on both sides:
+
+```sh
+./build/output/examples/exp_http/server 8080 http2
+./build/output/examples/exp_http/client http://127.0.0.1:8080 http2
+```
+
+Exercise the file-specific API in a separate pair. The server exposes the first
+file for download and saves uploads to the third argument:
+
+```sh
+./build/output/examples/exp_http/server_file README.md 8083 \
+  /tmp/riwo-http-exp-uploaded.md auto
+./build/output/examples/exp_http/client_file README.md \
+  /tmp/riwo-http-exp-downloaded.md http://127.0.0.1:8083 auto
+```
+
+`client_file` also performs an `If-None-Match` request and a `Range` request,
+so the output demonstrates `304` and `206` handling in addition to full file
+transfer. Run `transport` or `protocol` without a server. `server_acceptor`
+uses a real TCP socket but replaces the server's default acceptor adapter.
+
+The file pair serves and writes only command-line configured paths. If you
+extend those routes to use request-derived filenames, normalize and constrain
+the paths before opening them; `resource_root` is not a sandbox.
+
+`http2` is accepted only when nghttp2 was detected at configure time. `auto`
+uses normal scheme policy; for a plain `http://` client URL that means HTTP/1.1.
+`https_server` is built only with OpenSSL support. `proxy_client` requires an
+external HTTP or SOCKS5 proxy.
+
+## Experimental WebSocket
+
+Requires `RIWO_BUILD_EXP_WEBSOCKET=ON`, which also enables the separate
+`riwo.exp_websocket` module's dependency on `riwo.exp_http`. These examples do
+not use the stable `riwo.websocket` module.
+
+| Program | Demonstrates | Arguments / default |
+| --- | --- | --- |
+| [`server`](experimental/websocket/server.cpp) | HTTP/1 Upgrade and HTTP/2 Extended CONNECT echo service | `[port] [auto\|http1\|http2]`; 8085, auto |
+| [`client`](experimental/websocket/client.cpp) | Subprotocol, optional compression, text echo, clean close, selected handshake | `[endpoint] [http1\|http2]`; local server, http1 |
+
+Run the HTTP/1.1 pair:
+
+```sh
+./build/output/examples/exp_websocket/server 8085 auto
+./build/output/examples/exp_websocket/client ws://127.0.0.1:8085/echo http1
+```
+
+Or, when HTTP/2 support is compiled in, use Extended CONNECT:
+
+```sh
+./build/output/examples/exp_websocket/server 8085 http2
+./build/output/examples/exp_websocket/client ws://127.0.0.1:8085/echo http2
+```
+
+WebSocket_EXP and EXP_HTTP have distinct build switches, targets, headers,
+namespaces, examples, and functional test suites. WebSocket_EXP reuses only
+EXP_HTTP's protocol-neutral duplex channel and HTTP transport/session layer.
 
 ## WebSocket
 

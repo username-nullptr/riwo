@@ -4,8 +4,9 @@
 set(riwo_cmake_test_work_dir "${CMAKE_CURRENT_BINARY_DIR}/work")
 
 function(add_riwo_configure_case name)
-	cmake_parse_arguments(CASE "SUCCESS" "ERROR" "OPTIONS;COMPONENTS" ${ARGN})
-
+	cmake_parse_arguments(CASE "SUCCESS" "ASIO;ERROR;HTTP2;ZLIB"
+		"OPTIONS;COMPONENTS" ${ARGN}
+	)
 	string(MD5 case_work_id "configure-${name}")
 	string(SUBSTRING "${case_work_id}" 0 12 case_work_id)
 
@@ -32,9 +33,13 @@ function(add_riwo_configure_case name)
 			"-DTEST_RC_COMPILER=${CMAKE_RC_COMPILER}"
 			"-DTEST_MT=${CMAKE_MT}"
 			"-DTEST_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+			"-DTEST_VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}"
 			"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 			"-DTEST_EXPECT_SUCCESS=${case_expect_success}"
+			"-DTEST_EXPECT_ASIO=${CASE_ASIO}"
 			"-DTEST_EXPECT_ERROR=${CASE_ERROR}"
+			"-DTEST_EXPECT_HTTP2=${CASE_HTTP2}"
+			"-DTEST_EXPECT_ZLIB=${CASE_ZLIB}"
 			"-DTEST_OPTIONS=${case_options}"
 			"-DTEST_EXPECT_COMPONENTS=${case_components}"
 			-P "${CMAKE_CURRENT_SOURCE_DIR}/run_configure.cmake"
@@ -157,6 +162,125 @@ foreach(coro OFF ON)
 	endforeach()
 endforeach()
 
+add_riwo_configure_case(http-exp-without-coro SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=OFF"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core exp_http
+)
+add_riwo_configure_case(http-exp-standalone SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core coro exp_http
+)
+add_riwo_configure_case(http-exp-coexists-with-http SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core coro http exp_http
+)
+
+find_package(Boost CONFIG QUIET)
+if (Boost_FOUND)
+	add_riwo_configure_case(http-exp-boost-asio SUCCESS
+		ASIO BOOST
+		OPTIONS
+			"RIWO_BUILD_CORO=ON"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_EXP_HTTP=ON"
+			"RIWO_ASIO_PROVIDER=BOOST"
+			"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		COMPONENTS core coro exp_http
+	)
+endif ()
+
+add_riwo_configure_case(websocket-exp-without-http-exp
+	ERROR "<WebSocket_EXP> module depends on <EXP_HTTP> module"
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_EXP_HTTP=OFF"
+		"RIWO_BUILD_EXP_WEBSOCKET=ON"
+)
+add_riwo_configure_case(websocket-exp-standalone SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_BUILD_WEBSOCKET=OFF"
+		"RIWO_BUILD_EXP_WEBSOCKET=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	COMPONENTS core coro exp_http exp_websocket
+)
+add_riwo_configure_case(http-exp-http2-auto-unavailable SUCCESS
+	HTTP2 0
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=AUTO"
+		"CMAKE_DISABLE_FIND_PACKAGE_nghttp2=TRUE"
+		"CMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE"
+		"RIWO_NGHTTP2_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
+		"RIWO_NGHTTP2_LIBRARY=${CMAKE_COMMAND}"
+	COMPONENTS core coro exp_http
+)
+add_riwo_configure_case(http-exp-http2-required-unavailable
+	ERROR "RIWO_EXP_HTTP2_SUPPORT=ON requires an nghttp2 library"
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=ON"
+		"CMAKE_DISABLE_FIND_PACKAGE_nghttp2=TRUE"
+		"CMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE"
+		"RIWO_NGHTTP2_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
+		"RIWO_NGHTTP2_LIBRARY=${CMAKE_COMMAND}"
+)
+add_riwo_configure_case(http-exp-invalid-http2-mode
+	ERROR "RIWO_EXP_HTTP2_SUPPORT must be AUTO, ON or OFF"
+	OPTIONS "RIWO_EXP_HTTP2_SUPPORT=invalid"
+)
+set(riwo_exp_http_zlib_options
+	"RIWO_BUILD_CORO=ON"
+	"RIWO_BUILD_HTTP=OFF"
+	"RIWO_BUILD_EXP_HTTP=ON"
+	"RIWO_EXP_HTTP2_SUPPORT=OFF"
+	"RIWO_EXP_HTTP_ZLIB_SUPPORT=ON"
+	"ZLIB_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
+	"ZLIB_LIBRARY=${CMAKE_COMMAND}"
+)
+add_riwo_configure_case(http-exp-zlib-default-off SUCCESS
+	ZLIB 0
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		"CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+	COMPONENTS core coro exp_http
+)
+add_riwo_configure_case(http-exp-zlib-enabled SUCCESS
+	ZLIB 1
+	OPTIONS ${riwo_exp_http_zlib_options}
+	COMPONENTS core coro exp_http
+)
+add_riwo_configure_case(http-exp-zlib-required-unavailable
+	ERROR "ZLIB"
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		"RIWO_EXP_HTTP_ZLIB_SUPPORT=ON"
+		"CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+)
 add_riwo_configure_case(invalid-asio-provider
 	ERROR "Invalid RIWO_ASIO_PROVIDER='INVALID'"
 	OPTIONS "RIWO_ASIO_PROVIDER=invalid"
@@ -205,6 +329,68 @@ if (MSVC)
 			"BUILD_TESTING=ON"
 			"RIWO_ENABLE_TEST_TSAN=ON"
 	)
+	add_riwo_configure_case(msvc-fuzzer-requires-static
+		ERROR "MSVC fuzz tests require RIWO_BUILD_STATIC=ON"
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
+			"RIWO_BUILD_STATIC=OFF"
+	)
+	add_riwo_configure_case(msvc-fuzzer-with-stress
+		ERROR "Fuzz tests can combine with stress tests only under Clang"
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
+			"RIWO_BUILD_STATIC=ON"
+			"RIWO_BUILD_STRESS_TESTS=ON"
+	)
+endif ()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	add_riwo_configure_case(clang-fuzzer-with-stress SUCCESS
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
+			"RIWO_BUILD_STRESS_TESTS=ON"
+			"RIWO_BUILD_EXAMPLES=OFF"
+			"RIWO_BUILD_CORO=OFF"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_EXP_HTTP=OFF"
+			"RIWO_BUILD_WEBSOCKET=OFF"
+			"RIWO_BUILD_EXP_WEBSOCKET=OFF"
+			"RIWO_BUILD_UTILITIES=OFF"
+		COMPONENTS core
+	)
+	add_riwo_configure_case(http-exp-fuzzer-without-http SUCCESS
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
+			"RIWO_BUILD_EXAMPLES=OFF"
+			"RIWO_BUILD_CORO=ON"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_EXP_HTTP=ON"
+			"RIWO_EXP_HTTP2_SUPPORT=OFF"
+			"RIWO_BUILD_WEBSOCKET=OFF"
+			"RIWO_BUILD_EXP_WEBSOCKET=OFF"
+			"RIWO_BUILD_UTILITIES=OFF"
+		COMPONENTS core coro exp_http
+	)
+endif ()
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	add_riwo_configure_case(gnu-fuzzer-core SUCCESS
+		OPTIONS
+			"BUILD_TESTING=ON"
+			"RIWO_BUILD_FUZZ_TESTS=ON"
+			"RIWO_BUILD_EXAMPLES=OFF"
+			"RIWO_BUILD_CORO=OFF"
+			"RIWO_BUILD_HTTP=OFF"
+			"RIWO_BUILD_EXP_HTTP=OFF"
+			"RIWO_BUILD_WEBSOCKET=OFF"
+			"RIWO_BUILD_EXP_WEBSOCKET=OFF"
+			"RIWO_BUILD_UTILITIES=OFF"
+		COMPONENTS core
+	)
 endif ()
 
 add_riwo_configure_case(performance-with-sanitizer
@@ -215,8 +401,16 @@ add_riwo_configure_case(performance-with-sanitizer
 		"RIWO_ENABLE_TEST_SANITIZERS=ON"
 )
 add_riwo_configure_case(fuzzer-without-testing
-	ERROR "Fuzzers require BUILD_TESTING=ON"
-	OPTIONS "RIWO_BUILD_FUZZERS=ON"
+	ERROR "Fuzz tests require BUILD_TESTING=ON"
+	OPTIONS "RIWO_BUILD_FUZZ_TESTS=ON"
+)
+add_riwo_configure_case(fuzzer-with-performance
+	ERROR "Fuzz tests cannot be combined with performance tests"
+	OPTIONS
+		"BUILD_TESTING=ON"
+		"RIWO_BUILD_FUZZ_TESTS=ON"
+		"RIWO_BUILD_STATIC=ON"
+		"RIWO_BUILD_PERFORMANCE_TESTS=ON"
 )
 add_riwo_configure_case(invalid-positive-integer
 	ERROR "RIWO_FUNCTIONAL_REPEAT must be a positive integer"
@@ -286,7 +480,23 @@ add_riwo_package_probe_case(websocket-restores-zlib
 	COMPONENTS core coro http websocket
 	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
-
+set(riwo_exp_http_zlib_static_options
+	"RIWO_BUILD_STATIC=ON"
+	${riwo_exp_http_zlib_options}
+)
+add_riwo_package_probe_case(http-exp-ignores-unrequested-zlib FOUND
+	COMPONENT coro
+	OPTIONS ${riwo_exp_http_zlib_static_options}
+	COMPONENTS core coro exp_http
+	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+)
+add_riwo_package_probe_case(http-exp-restores-zlib
+	COMPONENT exp_http
+	ERROR "dependency ZLIB"
+	OPTIONS ${riwo_exp_http_zlib_static_options}
+	COMPONENTS core coro exp_http
+	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
+)
 set(riwo_consumer_components core)
 
 foreach(component coro http websocket utils)
@@ -304,11 +514,18 @@ foreach(component coro http websocket utils)
 
 endforeach()
 
-string(JOIN "," riwo_consumer_components_arg ${riwo_consumer_components})
+if (RIWO_BUILD_EXP_HTTP)
+	list(APPEND riwo_consumer_components exp_http)
+endif ()
 
+if (RIWO_BUILD_EXP_WEBSOCKET)
+	list(APPEND riwo_consumer_components exp_websocket)
+endif ()
+
+string(JOIN "," riwo_consumer_components_arg ${riwo_consumer_components})
 set(riwo_missing_component unknown)
 
-foreach(component coro http websocket utils)
+foreach(component coro http exp_http websocket exp_websocket utils)
 	if (NOT component IN_LIST riwo_consumer_components)
 		set(riwo_missing_component ${component})
 		break()
@@ -321,10 +538,10 @@ else ()
 	set(riwo_consumer_configuration "${CMAKE_BUILD_TYPE}")
 endif ()
 
-# A fuzzer build adds private sanitizer instrumentation directly to the Riwo
+# A fuzz test build adds private sanitizer instrumentation directly to the Riwo
 # archives.  It is a dedicated harness configuration rather than an installable
 # package configuration, so validate installation in all other test builds.
-if (NOT RIWO_BUILD_FUZZERS)
+if (NOT RIWO_BUILD_FUZZ_TESTS)
 	# Use the common launcher so sanitizer process settings (notably TSan's
 	# setarch -R personality) are inherited by the nested consumer CTest.
 	add_riwo_ctest(riwo.cmake.install-consumer
@@ -343,6 +560,7 @@ if (NOT RIWO_BUILD_FUZZERS)
 		"-DTEST_RC_COMPILER=${CMAKE_RC_COMPILER}"
 		"-DTEST_MT=${CMAKE_MT}"
 		"-DTEST_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
+		"-DTEST_VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}"
 		"-DTEST_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 		"-DTEST_CONFIGURATION=${riwo_consumer_configuration}"
 		"-DTEST_VERSION=${PROJECT_VERSION}"

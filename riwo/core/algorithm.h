@@ -4,6 +4,8 @@
 #ifndef RIWO_CORE_ALGORITHM_H
 #define RIWO_CORE_ALGORITHM_H
 
+#include <riwo/core/algorithm/base64.h>
+#include <riwo/core/algorithm/secure_random.h>
 #include <riwo/core/algorithm/uuid.h>
 #include <riwo/core/algorithm/sha1.h>
 #include <riwo/core/algorithm/math.h>

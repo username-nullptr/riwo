@@ -18,14 +18,21 @@ function(riwo_add_example category name)
 		"${options}" "${one_value_args}" "${multi_value_args}" ${ARGN}
 	)
 	if(NOT EXAMPLE_SOURCES)
-		set(EXAMPLE_SOURCES "${category}/${name}.cpp")
+		if (category STREQUAL "exp_http")
+			set(source_category "experimental/http")
+		elseif (category STREQUAL "exp_websocket")
+			set(source_category "experimental/websocket")
+		else ()
+			set(source_category "${category}")
+		endif ()
+		set(EXAMPLE_SOURCES "${source_category}/${name}.cpp")
 	endif()
 
 	set(target "riwo.example.${category}.${name}")
 	add_executable(${target} ${EXAMPLE_SOURCES})
 	# riwo_enable_strict_warnings(${target})
 
-	if (category MATCHES "^(http|websocket)$")
+	if (category MATCHES "^(http|exp_http|websocket|exp_websocket)$")
 		riwo_limit_heavy_compile(${target})
 	endif ()
 
@@ -99,6 +106,33 @@ if (RIWO_BUILD_HTTP)
 	endif ()
 endif ()
 
+# Experimental HTTP API
+if (RIWO_BUILD_EXP_HTTP)
+	riwo_add_example(exp_http client           LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http client_sync      LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http client_awaitable LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http client_cookies   LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http client_file      LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http proxy_client     LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http protocol         LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http server           LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http server_acceptor  LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http server_aop       LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http server_file      LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http server_session   LIBRARIES riwo.exp_http)
+	riwo_add_example(exp_http transport        LIBRARIES riwo.exp_http)
+
+	if (RIWO_OPENSSL_SUPPORT)
+		riwo_add_example(exp_http https_server LIBRARIES riwo.exp_http)
+	endif ()
+endif ()
+
+# Experimental WebSocket API over EXP_HTTP
+if (RIWO_BUILD_EXP_WEBSOCKET)
+	riwo_add_example(exp_websocket client LIBRARIES riwo.exp_websocket)
+	riwo_add_example(exp_websocket server LIBRARIES riwo.exp_websocket)
+endif ()
+
 # WebSocket protocol
 if (RIWO_BUILD_WEBSOCKET)
 	riwo_add_example(websocket client            LIBRARIES riwo.websocket)
@@ -163,6 +197,23 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	http/server_aop.cpp
 	http/server_file.cpp
 	http/server_session.cpp
+	experimental/http/client.cpp
+	experimental/http/client_awaitable.cpp
+	experimental/http/client_cookies.cpp
+	experimental/http/client_file.cpp
+	experimental/http/client_sync.cpp
+	experimental/http/common.h
+	experimental/http/https_server.cpp
+	experimental/http/protocol.cpp
+	experimental/http/proxy_client.cpp
+	experimental/http/server.cpp
+	experimental/http/server_acceptor.cpp
+	experimental/http/server_aop.cpp
+	experimental/http/server_file.cpp
+	experimental/http/server_session.cpp
+	experimental/http/transport.cpp
+	experimental/websocket/client.cpp
+	experimental/websocket/server.cpp
 	websocket/mixed_http_client.cpp
 	websocket/mixed_http_server.cpp
 	websocket/protocol.cpp

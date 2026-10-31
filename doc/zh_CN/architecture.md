@@ -38,7 +38,7 @@ HTTP 之上的库模块。启用上层模块时必须保留下层模块，CMake 
 | `test/functional/` | 确定性 API 契约 | 默认行为验证 |
 | `test/cmake/` | 配置与安装消费端契约 | 验证集成边界 |
 | `test/stress/` | 并发与重复生命周期压力 | 按需启用 |
-| `test/fuzz/` | 输入和操作序列探索 | 独立 Clang/libFuzzer 构建 |
+| `test/fuzz/` | 输入和操作序列探索 | 独立 Clang/MSVC libFuzzer 或 GCC 回归构建 |
 | `test/performance/` | 不设固定阈值的性能测量 | 按需启用的 Release 构建 |
 | `doc/en/`、`doc/zh_CN/` | 概念与集成指南 | 按主题和源码模块镜像 |
 

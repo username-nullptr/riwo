@@ -1,0 +1,50 @@
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-License-Identifier: MIT
+
+#ifndef RIWO_EXP_HTTP_PROTOCOL_ENGINE_H
+#define RIWO_EXP_HTTP_PROTOCOL_ENGINE_H
+
+#include <riwo/experimental/http/protocol/event.h>
+
+namespace riwo::experimental::http
+{
+
+enum class protocol_role {
+	client, server
+};
+
+struct ingest_result
+{
+	size_t consumed = 0;
+	bool paused = false;
+	bool wants_write = false;
+	bool needs_input = false;
+};
+
+struct produce_result
+{
+	size_t produced = 0;
+	bool has_more = false;
+};
+
+namespace concepts
+{
+
+template<class Engine>
+concept protocol_engine = requires(Engine &engine, const_buffer input,
+	mutable_buffer output, protocol_action_t action, protocol_event_handler_t events)
+{
+	{ engine.selected_protocol() } -> std::same_as<protocol>;
+	{ engine.ingest(input, events) } -> std::same_as<sys_expected<ingest_result>>;
+
+	{ engine.finish_input(events) } -> std::same_as<sys_expected<ingest_result>>;
+	{ engine.submit(std::move(action)) } -> std::same_as<sys_expected<void>>;
+
+	{ engine.produce(output) } -> std::same_as<sys_expected<produce_result>>;
+	{ engine.wants_write() } noexcept -> std::same_as<bool>;
+};
+
+}} //namespace riwo::experimental::http::concepts
+
+
+#endif //RIWO_EXP_HTTP_PROTOCOL_ENGINE_H
