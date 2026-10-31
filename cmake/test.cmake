@@ -374,8 +374,8 @@ if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 	set(riwo_saved_required_link_options "${CMAKE_REQUIRED_LINK_OPTIONS}")
 
 	if (MSVC)
-		set(riwo_sanitizer_compile_options /fsanitize=address)
-		set(riwo_sanitizer_link_options /INCREMENTAL:NO)
+		set(riwo_sanitizer_compile_options /fsanitize=address /Zi)
+		set(riwo_sanitizer_link_options /INCREMENTAL:NO /DEBUG)
 
 	elseif (RIWO_ENABLE_TEST_SANITIZERS)
 		set(riwo_sanitizer_compile_options

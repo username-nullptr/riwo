@@ -4,6 +4,12 @@
 set(RIWO_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(RIWO_TEST_LAUNCHER)
 
+if (MSVC AND (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_BUILD_FUZZ_TESTS))
+	get_filename_component(riwo_msvc_sanitizer_runtime_dir
+		"${CMAKE_CXX_COMPILER}" DIRECTORY
+	)
+endif ()
+
 # CMake's Ninja generator relies on INCLUDE/LIB from the MSVC developer
 # environment, but CTest is often launched by an IDE or shell which does not
 # reproduce that environment. Preserve the values seen by the successful
@@ -67,6 +73,13 @@ function(add_riwo_ctest test_name)
 		set_property(TEST ${test_name} APPEND PROPERTY
 			ENVIRONMENT_MODIFICATION
 			"PATH=path_list_prepend:${riwo_gnu_runtime_dir}"
+		)
+	endif ()
+	if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.22 AND
+		riwo_msvc_sanitizer_runtime_dir)
+		set_property(TEST ${test_name} APPEND PROPERTY
+			ENVIRONMENT_MODIFICATION
+			"PATH=path_list_prepend:${riwo_msvc_sanitizer_runtime_dir}"
 		)
 	endif ()
 endfunction()

@@ -35,6 +35,19 @@ using head_read_handler_t =
 
 struct RIWO_DECL_HIDDEN connection final
 {
+	connection_ptr transport {};
+	std::string pending {};
+
+	std::unique_ptr<std::array<char,4096>> head_buffer {};
+	head_read_handler_t head_handler {};
+
+	size_t head_limit = 0;
+	mutable std::mutex state_mutex {};
+
+	bool closed = false;
+	bool detached = false;
+	bool head_reading = false;
+
 	explicit connection(asio::any_io_executor executor) :
 		transport(std::make_shared<tcp_connection>(std::move(executor))) {}
 
@@ -65,26 +78,32 @@ struct RIWO_DECL_HIDDEN connection final
 		transport->connect_async(host, port, std::move(handler));
 	}
 
-	[[nodiscard]] bool is_open() const noexcept {
+	[[nodiscard]] bool is_open() const noexcept
+	{
+		std::lock_guard lock(state_mutex);
 		return not closed and transport->is_open();
 	}
+
 	void cancel() noexcept
 	{
-		if( closed or detached )
+		if( not begin_close(false) )
 			return ;
-		closed = true;
 		transport->cancel();
 	}
 
-	connection_ptr transport {};
-	std::string pending {};
-	std::unique_ptr<std::array<char,4096>> head_buffer {};
-	head_read_handler_t head_handler {};
-	size_t head_limit = 0;
-
-	bool closed = false;
-	bool detached = false;
-	bool head_reading = false;
+	[[nodiscard]] bool begin_close(bool allow_detached) noexcept
+	{
+		std::lock_guard lock(state_mutex);
+		if( closed or (detached and not allow_detached) )
+			return false;
+		closed = true;
+		return true;
+	}
+	void detach() noexcept
+	{
+		std::lock_guard lock(state_mutex);
+		detached = true;
+	}
 };
 
 class RIWO_DECL_HIDDEN v1_duplex_state final : public duplex_state
@@ -95,7 +114,7 @@ public:
 	v1_duplex_state(std::shared_ptr<connection> value, protocol version) :
 		m_connection(std::move(value)), m_version(version)
 	{
-		m_connection->detached = true;
+		m_connection->detach();
 		m_connection->transport->set_read_timeout({});
 		m_connection->transport->set_write_timeout({});
 	}
@@ -156,29 +175,25 @@ public:
 	void close_sync(error_code &error) noexcept override
 	{
 		error.clear();
-		if( m_connection->closed )
+		if( not m_connection->begin_close(true) )
 			return ;
-
-		m_connection->closed = true;
 		m_connection->transport->cancel();
 	}
 
 	void close(close_handler_t handler) override
 	{
-		if( m_connection->closed )
+		if( not m_connection->begin_close(true) )
 		{
 			std::move(handler)(error_code{});
 			return ;
 		}
-		m_connection->closed = true;
 		m_connection->transport->close(std::move(handler));
 	}
 
 	void cancel() noexcept override
 	{
-		if( m_connection->closed )
+		if( not m_connection->begin_close(true) )
 			return ;
-		m_connection->closed = true;
 		m_connection->transport->cancel();
 	}
 
@@ -196,7 +211,7 @@ public:
 		return m_version;
 	}
 	[[nodiscard]] bool is_open() const noexcept override {
-		return not m_connection->closed and m_connection->transport->is_open();
+		return m_connection->is_open();
 	}
 
 private:
@@ -1895,7 +1910,7 @@ public:
 public:
 	[[nodiscard]] bool try_reserve_stream() noexcept override
 	{
-		if( m_in_use or m_draining or closed() )
+		if( m_in_use or m_draining.load(std::memory_order_acquire) or closed() )
 			return false;
 
 		m_in_use = true;
@@ -1911,9 +1926,9 @@ public:
 		m_in_use = false;
 		m_reserved = false;
 
-		if( not reusable or m_draining )
+		if( not reusable or m_draining.load(std::memory_order_acquire) )
 		{
-			m_draining = true;
+			m_draining.store(true, std::memory_order_release);
 			m_connection->cancel();
 		}
 		try {
@@ -1998,7 +2013,7 @@ public:
 
 	void graceful_shutdown(shutdown_handler_t handler) override
 	{
-		m_draining = true;
+		m_draining.store(true, std::memory_order_release);
 		if( not m_in_use )
 			m_connection->cancel();
 		std::move(handler)(error_code{});
@@ -2012,10 +2027,11 @@ public:
 		return m_version;
 	}
 	[[nodiscard]] size_t available_stream_capacity() const noexcept override {
-		return not m_in_use and not m_draining and not closed() ? 1 : 0;
+		return not m_in_use and
+			not m_draining.load(std::memory_order_acquire) and not closed() ? 1 : 0;
 	}
 	[[nodiscard]] bool draining() const noexcept override {
-		return m_draining;
+		return m_draining.load(std::memory_order_acquire);
 	}
 	[[nodiscard]] bool closed() const noexcept override {
 		return not m_connection->is_open();
@@ -2024,7 +2040,7 @@ public:
 private:
 	[[nodiscard]] bool begin_open(error_code &error) noexcept
 	{
-		if( closed() or m_draining )
+		if( closed() or m_draining.load(std::memory_order_acquire) )
 		{
 			error = make_error_code(errc::operation_not_permitted);
 			return false;
@@ -2073,7 +2089,7 @@ private:
 	bool m_in_use = false;
 
 	bool m_reserved = false;
-	bool m_draining = false;
+	std::atomic_bool m_draining {false};
 
 	std::function<void(bool)> m_release_handler {};
 };
@@ -2107,7 +2123,7 @@ public:
 
 		m_in_use = false;
 		if( not reusable )
-			m_draining = true;
+			m_draining.store(true, std::memory_order_release);
 		try {
 			if( m_release_handler )
 				m_release_handler(reusable);
@@ -2125,7 +2141,7 @@ public:
 			);
 			return ;
 		}
-		if( m_draining or closed() )
+		if( m_draining.load(std::memory_order_acquire) or closed() )
 		{
 			std::move(handler) (
 				make_error_code(errc::operation_not_permitted),
@@ -2218,7 +2234,7 @@ public:
 
 	void graceful_shutdown(shutdown_handler_t handler) override
 	{
-		m_draining = true;
+		m_draining.store(true, std::memory_order_release);
 		m_connection->cancel();
 		std::move(handler)(error_code{});
 	}
@@ -2231,7 +2247,7 @@ public:
 		return m_version;
 	}
 	[[nodiscard]] bool draining() const noexcept override {
-		return m_draining;
+		return m_draining.load(std::memory_order_acquire);
 	}
 	[[nodiscard]] bool closed() const noexcept override {
 		return not m_connection->is_open();
@@ -2247,7 +2263,7 @@ private:
 	protocol m_version = protocol::v1_1;
 
 	bool m_in_use = false;
-	bool m_draining = false;
+	std::atomic_bool m_draining {false};
 
 	std::function<void(bool)> m_release_handler {};
 };

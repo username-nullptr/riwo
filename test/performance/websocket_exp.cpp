@@ -24,7 +24,9 @@ constexpr size_t codec_iteration_count = 5'000 * riwo::test::performance_scale;
 constexpr size_t message_iteration_count = 200 * riwo::test::performance_scale;
 #endif
 constexpr size_t large_message_iteration_count = message_iteration_count / 20;
+#if RIWO_WEBSOCKET_EXP_ZLIB_SUPPORT
 constexpr size_t compression_iteration_count = 20'000 * riwo::test::performance_scale;
+#endif
 constexpr size_t warmup_count = 10;
 
 template <typename Function>

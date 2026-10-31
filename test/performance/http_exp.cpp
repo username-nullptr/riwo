@@ -1130,6 +1130,7 @@ void print_comparison(std::string_view name, size_t operations,
 }
 #endif
 
+#if RIWO_HTTP_EXP_ZLIB_SUPPORT
 void print_policy_comparison(std::string_view name, size_t operations,
 	duration_t baseline, duration_t optimized)
 {
@@ -1144,6 +1145,7 @@ void print_policy_comparison(std::string_view name, size_t operations,
 		<< (ratio - 1.0) * 100.0 << "%" << std::noshowpos << ", "
 		<< operations << " requests each)\n" << std::flush;
 }
+#endif
 
 void http_exp_protocol_hot_paths()
 {

@@ -46,23 +46,24 @@ void stream_transport::start_write(const send_engine_owner_ptr &owner,
 
 		prepared_frame_buffers buffers(frame);
 
-		io_handler_t handler([owner, wire_lifetime = std::move(wire_lifetime),
-			header_size, payload_size, application_size, kind, operation]
-		(error_code error, size_t wire_size) mutable
+		io_handler_t handler(asio::bind_executor(owner->send_executor(), [
+			owner, wire_lifetime = std::move(wire_lifetime), header_size,
+			payload_size, application_size, kind, operation
+		](error_code error, size_t wire_size) mutable
 		{
 			ignore_unused(wire_lifetime);
 			owner->send_side().complete_wire_frame (
 				header_size, payload_size, application_size,
 				kind, operation, error, wire_size
 			);
-		});
+		}));
 		m_connection->write(buffers.get(), std::move(handler));
 	}
 	catch(...)
 	{
 		owner->send_side().complete_wire_frame(frame.header_size,
-			frame.payload_size, frame.application_size, kind,
-			operation, exception_error(std::current_exception()), 0
+			frame.payload_size, frame.application_size, kind, operation,
+			exception_error(std::current_exception()), 0
 		);
 	}
 }

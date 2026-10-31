@@ -35,6 +35,7 @@ public:
 		request_handler_t default_handler {};
 	};
 
+public:
 	impl(acceptor_wrap_t &&acceptor_value,
 		service_executor_t service_executor_value, config_t config_value
 	) :
@@ -51,38 +52,48 @@ public:
 		m_sessions(std::make_shared<app_session_manager>(m_config.sessions)),
 		m_routes(std::make_shared<const route_table>()) {}
 
+public:
 	void start(size_t maximum, error_code &error) noexcept
 	{
 		error.clear();
-		if( m_running )
-			return ;
+		{
+			std::lock_guard lifecycle_lock(m_lifecycle_mutex);
+			if( m_running.load(std::memory_order_acquire) )
+				return ;
 
-		error = detail::validate_server_config(m_config);
-		if( error )
-			return ;
+			error = detail::validate_server_config(m_config);
+			if( error )
+				return ;
 
-		m_acceptor_wrap.acceptor().listen (
-			static_cast<int>(std::min<size_t>(maximum, std::numeric_limits<int>::max())),
-			error
-		);
-		if( error )
-			return ;
+			m_acceptor_wrap.acceptor().listen (
+				static_cast<int>(std::min<size_t>(maximum, std::numeric_limits<int>::max())),
+				error
+			);
+			if( error )
+				return ;
 
-		m_running = true;
+			m_running.store(true, std::memory_order_release);
+		}
 		accept_next();
 	}
 
 	void stop() noexcept
 	{
-		m_running = false;
-		m_acceptor_wrap.cancel();
-
-		for(auto &value : m_connections)
+		{
+			std::lock_guard lifecycle_lock(m_lifecycle_mutex);
+			m_running.store(false, std::memory_order_release);
+			m_acceptor_wrap.cancel();
+		}
+		std::vector<detail::server_connection_ptr> connections;
+		{
+			std::lock_guard connections_lock(m_connections_mutex);
+			connections.swap(m_connections);
+		}
+		for(auto &value : connections)
 		{
 			if( value )
 				value->cancel();
 		}
-		m_connections.clear();
 	}
 
 	void register_route(std::string path, std::vector<method> methods,
@@ -316,14 +327,15 @@ private:
 
 	void accept_next()
 	{
-		if( not m_running )
+		std::lock_guard lifecycle_lock(m_lifecycle_mutex);
+		if( not m_running.load(std::memory_order_acquire) )
 			return ;
 
 		auto self = this->shared_from_this();
 		m_acceptor_wrap.accept([self]
 		(error_code error, typename acceptor_wrap_t::accepted_t accepted) mutable
 		{
-			if( not self->m_running )
+			if( not self->m_running.load(std::memory_order_acquire) )
 				return ;
 
 			self->accept_next();
@@ -357,11 +369,21 @@ private:
 				}
 				self->serve(std::move(stream), std::move(request));
 			});
-			std::erase_if(self->m_connections,
-			[](const detail::server_connection_ptr &value) {
-				return not value or value->closed();
-			});
-			self->m_connections.emplace_back(std::move(connection));
+			bool tracked = false;
+			{
+				std::lock_guard connections_lock(self->m_connections_mutex);
+				std::erase_if(self->m_connections,
+				[](const detail::server_connection_ptr &value) {
+					return not value or value->closed();
+				});
+				if( self->m_running.load(std::memory_order_acquire) )
+				{
+					self->m_connections.emplace_back(std::move(connection));
+					tracked = true;
+				}
+			}
+			if( not tracked and connection )
+				connection->cancel();
 		});
 	}
 
@@ -385,12 +407,21 @@ public:
 				}
 				self->serve(std::move(stream), std::move(request));
 			});
-			std::erase_if(m_connections,
-			[](const detail::server_connection_ptr &value) {
-				return not value or value->closed();
-			});
-			if( active )
-				m_connections.emplace_back(std::move(active));
+			bool tracked = false;
+			{
+				std::lock_guard connections_lock(m_connections_mutex);
+				std::erase_if(m_connections,
+				[](const detail::server_connection_ptr &value) {
+					return not value or value->closed();
+				});
+				if( active and m_running.load(std::memory_order_acquire) )
+				{
+					m_connections.emplace_back(std::move(active));
+					tracked = true;
+				}
+			}
+			if( not tracked and active )
+				active->cancel();
 		}
 		catch(...) {
 			error = exception_error(std::current_exception());
@@ -561,12 +592,14 @@ public:
 
 	std::atomic<std::shared_ptr<const route_table>> m_routes {};
 	std::mutex m_routes_write_mutex {};
+	std::mutex m_lifecycle_mutex {};
+	std::mutex m_connections_mutex {};
 
 	server_error_handler_t m_server_error_handler {};
 	service_error_handler_t m_service_error_handler {};
 
 	std::vector<detail::server_connection_ptr> m_connections {};
-	bool m_running = false;
+	std::atomic_bool m_running {false};
 };
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>

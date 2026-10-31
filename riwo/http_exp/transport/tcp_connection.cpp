@@ -143,7 +143,9 @@ size_t tcp_connection::read_some_sync(const mutable_buffer &buffer, error_code &
 			},
 			[&]{
 				error_code ignored;
-				ignored = m_impl->m_socket.close(ignored);
+				ignored = m_impl->m_socket.shutdown (
+					asio::ip::tcp::socket::shutdown_both, ignored
+				);
 				RIWO_UNUSED(ignored);
 			},
 			error
@@ -165,7 +167,9 @@ size_t tcp_connection::write_sync(const const_buffer &buffer, error_code &error)
 			},
 			[&] {
 				error_code ignored;
-				ignored = m_impl->m_socket.close(ignored);
+				ignored = m_impl->m_socket.shutdown (
+					asio::ip::tcp::socket::shutdown_both, ignored
+				);
 				RIWO_UNUSED(ignored);
 			},
 			error
