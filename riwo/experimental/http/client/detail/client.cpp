@@ -685,14 +685,14 @@ struct send_operation : std::enable_shared_from_this<send_operation>
 	progress_observer download_progress {};
 
 	send_operation(client_state_ptr owner_value, request original_request, session_stream_ptr stream_value,
-		optional<const_buffer> body_value, body_source_ptr source_value, body_spec description,
+		const optional<const_buffer> &body_value, body_source_ptr source_value, body_spec description,
 		fields trailer_values, uint64_t max_buffered_body_value, bool auto_decompression_value,
 		retry_policy retry_values, redirect_policy redirect_values,
 		progress_observer upload_progress_value, progress_observer download_progress_value,
 		send_handler_t completion
 	) :
 		owner(std::move(owner_value)), request_value(std::move(original_request)),
-		active_stream(std::move(stream_value)), body(std::move(std::move(body_value))),
+		active_stream(std::move(stream_value)), body(body_value),
 		source(std::move(source_value)),
 		writer(active_stream ? active_stream->outbound_body() : nullptr),
 		spec(std::move(description)), trailers(std::move(trailer_values)), handler(std::move(completion)),
@@ -786,9 +786,9 @@ struct send_operation : std::enable_shared_from_this<send_operation>
 					return ;
 				}
 				self->owner->capture_cookies(self->request_value.url(), head);
-				auto body = self->active_stream->inbound_body();
+				auto inbound_body = self->active_stream->inbound_body();
 
-				if( not body )
+				if( not inbound_body )
 				{
 					self->fail(make_error_code(errc::operation_not_permitted));
 					return ;
@@ -804,25 +804,26 @@ struct send_operation : std::enable_shared_from_this<send_operation>
 				}
 				if( redirect )
 				{
-					body->set_ready();
-					self->follow_redirect(std::move(*redirect), body);
+					inbound_body->set_ready();
+					self->follow_redirect(std::move(*redirect), inbound_body);
 					return ;
 				}
-				body->set_ready();
+				inbound_body->set_ready();
 
 				if( self->download_progress )
 				{
 					const auto total = content_length(head).value_or(0);
-					body = make_progress_body_reader(std::move(body), total,
+					inbound_body = make_progress_body_reader(std::move(inbound_body), total,
 						self->download_progress);
 				}
-				body = decoded_body(std::move(body), head, self->auto_decompression);
-
+				inbound_body = decoded_body (
+					std::move(inbound_body), head, self->auto_decompression
+				);
 				auto result = send_result {
 					.selected_protocol = self->active_stream->selected_protocol(),
 					.reply_protocol = self->active_stream->response_protocol(),
 					.head = std::move(head),
-					.body = std::move(body),
+					.body = std::move(inbound_body),
 					.owner = self->active_stream,
 					.max_buffered_body = self->max_buffered_body
 				};
@@ -845,10 +846,10 @@ struct send_operation : std::enable_shared_from_this<send_operation>
 
 				if( not redirect_source )
 				{
-					auto owner = self->owner;
+					auto client_owner = self->owner;
 					auto completion = std::move(self->handler);
 
-					owner->send(std::move(next), std::move(completion));
+					client_owner->send(std::move(next), std::move(completion));
 					return ;
 				}
 				redirect_source->cancel();

@@ -50,7 +50,9 @@ function(riwo_enable_strict_warnings target)
 			-Wimplicit-fallthrough
 			$<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
 			$<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
-			$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wshadow=compatible-local>
+			# Header diagnostics are reported in consumer translation units, so
+			# check the same broad shadow policy those consumers commonly use.
+			$<$<COMPILE_LANGUAGE:CXX>:-Wshadow>
 		)
 		if (RIWO_WARNINGS_AS_ERRORS)
 			target_compile_options(${target} PRIVATE -Werror)

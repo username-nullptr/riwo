@@ -506,8 +506,8 @@ class RIWO_EXP_WEBSOCKET_TAPI basic_client<Exec>::impl :
 		open_operation(ptr_t owner_value, complete_fn_t completion) :
 			owner(std::move(owner_value)), complete_fn(completion) {}
 
-		void complete(error_code error, stream_t stream) {
-			complete_fn(*this, error, std::move(stream));
+		void complete(error_code error, stream_t next_stream) {
+			complete_fn(*this, error, std::move(next_stream));
 		}
 
 		asio::cancellation_signal cancellation {};
@@ -527,10 +527,10 @@ class RIWO_EXP_WEBSOCKET_TAPI basic_client<Exec>::impl :
 		using allocator_t = asio::associated_allocator_t<Handler>;
 		using cancellation_slot_t = asio::associated_cancellation_slot_t<Handler>;
 
-		open_handler_operation(ptr_t owner, Handler value, const executor_t &executor) :
+		open_handler_operation(ptr_t owner, Handler value, const executor_t &fallback_executor) :
 			open_operation(std::move(owner), &self_t::complete_handler),
 			handler(std::move(value)),
-			executor(asio::get_associated_executor(handler, executor)),
+			executor(asio::get_associated_executor(handler, fallback_executor)),
 			allocator(asio::get_associated_allocator(handler)),
 			slot(asio::get_associated_cancellation_slot(handler)) {}
 
@@ -550,7 +550,7 @@ class RIWO_EXP_WEBSOCKET_TAPI basic_client<Exec>::impl :
 			});
 		}
 
-		static void complete_handler(open_operation &base, error_code error, stream_t stream)
+		static void complete_handler(open_operation &base, error_code error, stream_t next_stream)
 		{
 			auto &self = static_cast<self_t&>(base);
 			if( self.slot.is_connected() )
@@ -561,8 +561,8 @@ class RIWO_EXP_WEBSOCKET_TAPI basic_client<Exec>::impl :
 			auto handler = std::move(self.handler);
 
 			asio::post(self.executor, asio::bind_allocator(self.allocator,
-				[handler = std::move(handler), error, stream = std::move(stream)]() mutable {
-					std::move(handler)(error, std::move(stream));
+				[handler = std::move(handler), error, next_stream = std::move(next_stream)]() mutable {
+					std::move(handler)(error, std::move(next_stream));
 				})
 			);
 		}
@@ -584,8 +584,8 @@ class RIWO_EXP_WEBSOCKET_TAPI basic_client<Exec>::impl :
 		[[nodiscard]] cancellation_slot_t get_cancellation_slot() const noexcept {
 			return operation->cancellation.slot();
 		}
-		void operator()(error_code error, stream_t stream) {
-			operation->complete(error, std::move(stream));
+		void operator()(error_code error, stream_t next_stream) {
+			operation->complete(error, std::move(next_stream));
 		}
 	};
 

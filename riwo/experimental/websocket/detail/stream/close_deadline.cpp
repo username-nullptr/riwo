@@ -8,12 +8,14 @@ namespace riwo::experimental::websocket::detail
 
 struct RIWO_DECL_HIDDEN close_deadline::operation
 {
-	operation(const asio::any_io_executor &exec, std::weak_ptr<void> owner, callback_t callback) :
-		timer(exec), owner(std::move(owner)), callback(callback) {}
-
 	asio::steady_timer timer;
 	std::weak_ptr<void> owner {};
 	callback_t callback {};
+
+	operation(const asio::any_io_executor &exec,
+		std::weak_ptr<void> owner_value, callback_t callback_value
+	) :
+		timer(exec), owner(std::move(owner_value)), callback(callback_value) {}
 };
 
 close_deadline::close_deadline() noexcept = default;
@@ -35,21 +37,21 @@ sys_expected<> close_deadline::start(const asio::any_io_executor &exec,
 	if( m_operation )
 		return result;
 	try {
-		auto operation = std::make_shared<struct operation>(
+		auto active_operation = std::make_shared<struct operation>(
 			exec, std::move(owner), callback
 		);
-		operation->timer.expires_after (
+		active_operation->timer.expires_after (
 			std::chrono::duration_cast<asio::steady_timer::duration>(timeout)
 		);
-		operation->timer.async_wait([operation](error_code error) noexcept
+		active_operation->timer.async_wait([active = active_operation](error_code error) noexcept
 		{
 			if( error )
 				return ;
 
-			if( auto _owner = operation->owner.lock() )
-				operation->callback(_owner.get());
+			if( auto i_owner = active->owner.lock() )
+				active->callback(i_owner.get());
 		});
-		m_operation = std::move(operation);
+		m_operation = std::move(active_operation);
 		return result;
 	}
 	catch(...)
@@ -62,11 +64,11 @@ sys_expected<> close_deadline::start(const asio::any_io_executor &exec,
 
 void close_deadline::stop() noexcept
 {
-	auto operation = std::exchange(m_operation, {});
-	if( not operation )
+	auto active_operation = std::exchange(m_operation, {});
+	if( not active_operation )
 		return ;
 	try {
-		ignore_unused(operation->timer.cancel());
+		ignore_unused(active_operation->timer.cancel());
 	}
 	catch(...) {}
 }

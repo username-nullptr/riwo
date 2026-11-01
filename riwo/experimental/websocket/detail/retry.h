@@ -180,17 +180,18 @@ co_retry_open(basic_client<Exec> *active_client, retry_open_request_factory acti
 }
 
 template <typename Exec, typename Token>
-[[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto initiate_retry_open(basic_client<Exec> &client,
+[[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto initiate_retry_open(basic_client<Exec> &target_client,
 	retry_open_request_factory request_factory, retry_open_options options, Token &&token)
 {
 	using result_t = basic_retry_open_result<Exec>;
 	using token_t = std::remove_cvref_t<Token>;
 
 	token_t completion_token(std::forward<Token>(token));
-	auto operation_exec = client.get_executor();
+	auto operation_exec = target_client.get_executor();
 
 	return asio::async_initiate<token_t,void(error_code,result_t)>([
-		operation_exec, active_client = &client, active_factory = std::move(request_factory),
+		operation_exec, active_client = &target_client,
+		active_factory = std::move(request_factory),
 		active_options = std::move(options)
 	]<typename Handler>(Handler completion_handler) mutable
 	{
@@ -218,45 +219,45 @@ template <typename Exec, typename Token>
 
 template <typename Exec, typename Token>
 auto retry_open
-(basic_client<Exec> &client, connect_request request, retry_open_options options, Token &&token)
+(basic_client<Exec> &target_client, connect_request request, retry_open_options options, Token &&token)
 	requires concepts::retry_open_token<Exec,Token>
 {
 	auto factory = detail::adapt_retry_open_request_factory (
 	[request = std::move(request)](const retry_open_context&) mutable {
 		return request;
 	});
-	return detail::initiate_retry_open(client, std::move(factory),
+	return detail::initiate_retry_open(target_client, std::move(factory),
 		std::move(options), std::forward<Token>(token)
 	);
 }
 
 template <typename Exec, typename Token>
-auto retry_open(basic_client<Exec> &client, connect_request request, Token &&token)
+auto retry_open(basic_client<Exec> &target_client, connect_request request, Token &&token)
 	requires concepts::retry_open_token<Exec,Token>
 {
-	return retry_open(client, std::move(request), retry_open_options{},
+	return retry_open(target_client, std::move(request), retry_open_options{},
 		std::forward<Token>(token)
 	);
 }
 
 template <typename Exec, typename Factory, typename Token>
 auto retry_open
-(basic_client<Exec> &client, Factory &&factory, retry_open_options options, Token &&token) requires
+(basic_client<Exec> &target_client, Factory &&factory, retry_open_options options, Token &&token) requires
 	concepts::retry_open_request_factory<Factory> and concepts::retry_open_token<Exec,Token> and
 	(not std::same_as<std::remove_cvref_t<Factory>,connect_request>)
 {
-	return detail::initiate_retry_open(client,
+	return detail::initiate_retry_open(target_client,
 		detail::adapt_retry_open_request_factory(std::forward<Factory>(factory)),
 		std::move(options), std::forward<Token>(token)
 	);
 }
 
 template <typename Exec, typename Factory, typename Token>
-auto retry_open(basic_client<Exec> &client, Factory &&factory, Token &&token) requires
+auto retry_open(basic_client<Exec> &target_client, Factory &&factory, Token &&token) requires
 	concepts::retry_open_request_factory<Factory> and concepts::retry_open_token<Exec,Token> and
 	(not std::same_as<std::remove_cvref_t<Factory>,connect_request>)
 {
-	return retry_open(client, std::forward<Factory>(factory),
+	return retry_open(target_client, std::forward<Factory>(factory),
 		retry_open_options{}, std::forward<Token>(token)
 	);
 }

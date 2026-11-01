@@ -18,7 +18,7 @@ namespace http = riwo::experimental::http;
 
 struct trace_middleware final : http::middleware
 {
-	explicit trace_middleware(std::vector<std::string> &trace) : trace(trace) {}
+	explicit trace_middleware(std::vector<std::string> &trace_values) : trace(trace_values) {}
 	riwo::awaitable<bool> before(http::server_exchange&) override {
 		trace.emplace_back("before");
 		co_return false;
@@ -42,7 +42,7 @@ struct short_circuit_middleware final : http::middleware
 
 struct exception_middleware final : http::middleware
 {
-	explicit exception_middleware(bool &seen) : seen(seen) {}
+	explicit exception_middleware(bool &seen_value) : seen(seen_value) {}
 	bool exception(http::server_exchange&, const std::exception&) override {
 		seen = true;
 		return true;

@@ -5,9 +5,9 @@
 #define RIWO_EXP_HTTP_SERVER_SERVER_H
 
 #include <riwo/experimental/http/server/acceptor_wrap.h>
-#include <riwo/experimental/http/server/config.h>
-#include <riwo/experimental/http/server/exchange.h>
 #include <riwo/experimental/http/server/middleware.h>
+#include <riwo/experimental/http/server/exchange.h>
+#include <riwo/experimental/http/server/config.h>
 #include <riwo/experimental/http/server/tls.h>
 #include <riwo/core/utils/utils.h>
 
@@ -94,24 +94,24 @@ public:
 public:
 	template <method::well_known...Methods, typename Func, typename...Middleware>
 	basic_server &on_request
-	(core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware) requires
+	(core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware_values) requires
 		concepts::request_handler<Func,service_executor_t> and
 		concepts::middleware_list<service_executor_t,Middleware...>;
 
 	template <typename Func, typename...Middleware>
 	basic_server &on_request(method request_method,
-		core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware
+		core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware_values
 	) requires
 		concepts::request_handler<Func,service_executor_t> and
 		concepts::middleware_list<service_executor_t,Middleware...>;
 
 	template <method::well_known...Methods, core_concepts::text_p<char> Path>
-	basic_server &on_request(Path &&path, controller_ptr controller);
+	basic_server &on_request(Path &&path, controller_ptr controller_value);
 
 	basic_server &on_server_error(server_error_handler_t handler);
 	basic_server &on_service_error(service_error_handler_t handler);
 
-	basic_server &use(middleware_ptr middleware);
+	basic_server &use(middleware_ptr middleware_value);
 	basic_server &set_config(config_t config);
 
 	template <typename Func>

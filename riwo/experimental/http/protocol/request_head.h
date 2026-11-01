@@ -15,8 +15,8 @@ namespace riwo::experimental::http
 class RIWO_EXP_HTTP_API request_head
 {
 public:
-	method method {
-		method::get
+	http::method method {
+		http::method::get
 	};
 	riwo::url url {};
 

@@ -104,7 +104,7 @@ public:
 	}
 
 	void register_route(std::string path, std::vector<method> methods,
-		request_handler_t handler, std::vector<middleware_ptr> middleware = {})
+		request_handler_t handler, std::vector<middleware_ptr> middleware_values = {})
 	{
 		if( path.empty() )
 			invalid_argument::loc_throw("riwo::experimental::http::server::on_request: path is empty");
@@ -134,21 +134,21 @@ public:
 		}
 		auto updated = std::make_shared<route_table>(*current);
 		updated->routes.emplace_back(std::move(compiled),
-			std::move(methods), std::move(handler), std::move(middleware)
+			std::move(methods), std::move(handler), std::move(middleware_values)
 		);
 		store_routes(std::move(updated));
 	}
 
-	void use_middleware(middleware_ptr middleware)
+	void use_middleware(middleware_ptr middleware_value)
 	{
-		if( not middleware )
+		if( not middleware_value )
 			invalid_argument::loc_throw("riwo::experimental::http::server::use: middleware is null");
 
 		std::lock_guard lock(m_routes_write_mutex);
 		auto current = load_routes();
 		auto updated = std::make_shared<route_table>(*current);
 
-		updated->middleware.emplace_back(std::move(middleware));
+		updated->middleware.emplace_back(std::move(middleware_value));
 		store_routes(std::move(updated));
 	}
 
@@ -229,8 +229,8 @@ private:
 			bool stopped = false;
 			for(; entered<chain.size(); ++entered)
 			{
-				const auto &middleware = chain[entered];
-				if( middleware and co_await middleware->before(exchange) )
+				const auto &middleware_value = chain[entered];
+				if( middleware_value and co_await middleware_value->before(exchange) )
 				{
 					++entered;
 					stopped = true;
@@ -242,17 +242,17 @@ private:
 
 			while( entered != 0 )
 			{
-				if( const auto &middleware = chain[--entered] )
-					(void)co_await middleware->after(exchange);
+				if( const auto &middleware_value = chain[--entered] )
+					(void)co_await middleware_value->after(exchange);
 			}
 		}
 		catch(const std::exception &exception)
 		{
 			while( entered != 0 )
 			{
-				const auto &middleware = chain[--entered];
+				const auto &middleware_value = chain[--entered];
 				try {
-					if( middleware and middleware->exception(exchange, exception) )
+					if( middleware_value and middleware_value->exception(exchange, exception) )
 						co_return ;
 				}
 				catch(...) {}
@@ -528,9 +528,9 @@ private:
 				auto all_methods = [routes]
 				{
 					std::vector<method> values {};
-					for(const auto &route : routes->routes)
+					for(const auto &route_entry : routes->routes)
 					{
-						for(const auto &value : route.methods)
+						for(const auto &value : route_entry.methods)
 						{
 							if( std::ranges::none_of(values, [&value](const method &item) {
 									return item == value;
@@ -712,7 +712,7 @@ auto basic_server<Exec,ServiceExec>::operator=(basic_server &&other) noexcept ->
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <method::well_known...Methods, typename Func, typename...Middleware>
 auto basic_server<Exec,ServiceExec>::on_request
-(core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware) -> basic_server&
+(core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware_values) -> basic_server&
 	requires
 	concepts::request_handler<Func,service_executor_t> and
 	concepts::middleware_list<service_executor_t,Middleware...>
@@ -722,7 +722,7 @@ auto basic_server<Exec,ServiceExec>::on_request
 		std::vector<method>{method(Methods)...},
 		request_handler_t(std::forward<Func>(func)),
 		std::vector<middleware_ptr> {
-			middleware_ptr(std::forward<Middleware>(middleware))...
+			middleware_ptr(std::forward<Middleware>(middleware_values))...
 		}
 	);
 	return *this;
@@ -731,8 +731,8 @@ auto basic_server<Exec,ServiceExec>::on_request
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Func, typename...Middleware>
 auto basic_server<Exec,ServiceExec>::on_request(method request_method,
-	core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware) -> basic_server&
-	requires
+	core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware_values
+) -> basic_server& requires
 	concepts::request_handler<Func,service_executor_t> and
 	concepts::middleware_list<service_executor_t,Middleware...>
 {
@@ -741,7 +741,7 @@ auto basic_server<Exec,ServiceExec>::on_request(method request_method,
 		std::vector{std::move(request_method)},
 		request_handler_t(std::forward<Func>(func)),
 		std::vector<middleware_ptr> {
-			middleware_ptr(std::forward<Middleware>(middleware))...
+			middleware_ptr(std::forward<Middleware>(middleware_values))...
 		}
 	);
 	return *this;
@@ -749,16 +749,16 @@ auto basic_server<Exec,ServiceExec>::on_request(method request_method,
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <method::well_known...Methods, core_concepts::text_p<char> Path>
-auto basic_server<Exec,ServiceExec>::on_request(Path &&path, controller_ptr controller) -> basic_server&
+auto basic_server<Exec,ServiceExec>::on_request(Path &&path, controller_ptr controller_value) -> basic_server&
 {
-	if( not controller )
+	if( not controller_value )
 		invalid_argument::loc_throw("riwo::experimental::http::server::on_request: controller is null");
 
-	auto handler = [controller](context_t &exchange) -> awaitable<void> {
-		co_await controller->service(exchange);
+	auto handler = [controller_value](context_t &exchange) -> awaitable<void> {
+		co_await controller_value->service(exchange);
 	};
 	return on_request<Methods...>(
-		std::forward<Path>(path), std::move(handler), std::move(controller)
+		std::forward<Path>(path), std::move(handler), std::move(controller_value)
 	);
 }
 
@@ -779,9 +779,9 @@ auto basic_server<Exec,ServiceExec>::on_service_error
 }
 
 template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
-auto basic_server<Exec,ServiceExec>::use(middleware_ptr middleware) -> basic_server&
+auto basic_server<Exec,ServiceExec>::use(middleware_ptr middleware_value) -> basic_server&
 {
-	m_impl->use_middleware(std::move(middleware));
+	m_impl->use_middleware(std::move(middleware_value));
 	return *this;
 }
 

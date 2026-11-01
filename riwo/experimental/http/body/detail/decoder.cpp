@@ -202,9 +202,9 @@ class RIWO_DECL_HIDDEN decoding_body_reader_adapter::async_operation final :
 	public std::enable_shared_from_this<async_operation>
 {
 public:
-	async_operation(decoding_body_reader_adapter_ptr owner_value,
-		mutable_buffer target, read_handler_t completion) :
-		m_owner(std::move(owner_value)), m_target(std::move(target)),
+	async_operation
+	(decoding_body_reader_adapter_ptr owner_value, mutable_buffer target, read_handler_t completion) :
+		m_owner(std::move(owner_value)), m_target(target),
 		m_handler(std::move(completion)) {}
 
 	void start() {
@@ -227,14 +227,14 @@ private:
 			m_owner->m_impl->m_source->read_some(buffer(state.m_input),
 			[self = shared_from_this()](error_code error, body_read_result read)
 			{
-				auto &state = *self->m_owner->m_impl;
+				auto &current_state = *self->m_owner->m_impl;
 				if( error )
 				{
 					self->finish(error, self->m_produced, false);
 					return ;
 				}
-				state.m_input_begin = 0;
-				state.m_input_end = read.bytes;
+				current_state.m_input_begin = 0;
+				current_state.m_input_end = read.bytes;
 
 				if( read.bytes == 0 and read.eof )
 				{
@@ -245,7 +245,7 @@ private:
 					return ;
 				}
 				if( read.eof )
-					state.m_source_eof = true;
+					current_state.m_source_eof = true;
 				self->pump();
 			});
 			return ;

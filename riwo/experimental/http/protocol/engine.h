@@ -9,9 +9,19 @@
 namespace riwo::experimental::http
 {
 
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wshadow"
+#endif //GNU
+
+// Scoped enumerators do not introduce ambiguous names in this namespace.
 enum class protocol_role {
 	client, server
 };
+
+#if defined(__GNUC__) && !defined(__clang__)
+# pragma GCC diagnostic pop
+#endif //GNU
 
 struct ingest_result
 {

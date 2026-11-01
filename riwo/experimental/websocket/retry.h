@@ -120,21 +120,21 @@ concept retry_open_token = core_concepts::exec<Exec> and
 
 template <typename Exec, typename Token = const use_awaitable_t&>
 [[nodiscard]] auto retry_open (
-	basic_client<Exec> &client, connect_request request, retry_open_options options,
+	basic_client<Exec> &target_client, connect_request request, retry_open_options options,
 	Token &&token = use_awaitable
 )
 requires concepts::retry_open_token<Exec,Token>;
 
 template <typename Exec, typename Token = const use_awaitable_t&>
 [[nodiscard]] auto retry_open (
-	basic_client<Exec> &client, connect_request request,
+	basic_client<Exec> &target_client, connect_request request,
 	Token &&token = use_awaitable
 )
 requires concepts::retry_open_token<Exec,Token>;
 
 template <typename Exec, typename Factory, typename Token = const use_awaitable_t&>
 [[nodiscard]] auto retry_open (
-	basic_client<Exec> &client, Factory &&factory, retry_open_options options,
+	basic_client<Exec> &target_client, Factory &&factory, retry_open_options options,
 	Token &&token = use_awaitable
 ) requires
 	concepts::retry_open_request_factory<Factory> and concepts::retry_open_token<Exec,Token> and
@@ -142,7 +142,7 @@ template <typename Exec, typename Factory, typename Token = const use_awaitable_
 
 template <typename Exec, typename Factory, typename Token = const use_awaitable_t&>
 [[nodiscard]] auto retry_open (
-	basic_client<Exec> &client, Factory &&factory,
+	basic_client<Exec> &target_client, Factory &&factory,
 	Token &&token = use_awaitable
 ) requires
 	concepts::retry_open_request_factory<Factory> and concepts::retry_open_token<Exec,Token> and
