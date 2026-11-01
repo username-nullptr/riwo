@@ -1087,11 +1087,11 @@ void asynchronous_upgrade_validators()
 
 			ws::connect_request invalid_selector(base + "/invalid-selector");
 			invalid_selector.subprotocols = {"selector.v1"};
-			auto invalid_selector_result = co_await client.open(
+			auto invalid_selector_attempt = co_await client.open(
 				std::move(invalid_selector), diagnostics,
 				asio::as_tuple(riwo::use_awaitable));
 			auto &[invalid_selector_error, invalid_selector_stream] =
-				invalid_selector_result;
+				invalid_selector_attempt;
 			RIWO_TEST_CHECK_EQ(invalid_selector_error,
 				ws::make_error_code(ws::errc::handshake_rejected));
 			RIWO_TEST_CHECK(not invalid_selector_stream.is_open());
@@ -1138,9 +1138,9 @@ void asynchronous_upgrade_validators()
 
 			ws::connect_request timed(base + "/timeout-async");
 			timed.handshake_timeout = std::chrono::milliseconds(250);
-			auto timeout_result = co_await client.open(
+			auto timeout_attempt = co_await client.open(
 				std::move(timed), asio::as_tuple(riwo::use_awaitable));
-			auto &[timeout_error, timed_stream] = timeout_result;
+			auto &[timeout_error, timed_stream] = timeout_attempt;
 			RIWO_TEST_CHECK(timeout_error);
 			RIWO_TEST_CHECK(not timed_stream.is_open());
 

@@ -647,8 +647,13 @@ void upgrade_rejection_preserved()
 	const auto port = service.acceptor().local_endpoint().port();
 	std::jthread server_thread([&] { context.run(); });
 	const auto response = rejection_response(port);
-	service.stop();
-	context.stop();
+	// Server state transitions must stay on the executor that owns them.  Keep
+	// stop and io_context::stop in one queued handler so the socket cannot be
+	// closed concurrently with its outstanding receive/write operations.
+	asio::post(context, [&] {
+		service.stop();
+		context.stop();
+	});
 	server_thread.join();
 
 	RIWO_TEST_CHECK(response.starts_with("HTTP/1.1 403 Forbidden\r\n"));

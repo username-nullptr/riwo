@@ -34,10 +34,10 @@ public:
 	using headers_t = http::headers;
 
 public:
-	explicit basic_request(connection_ptr connection,
+	explicit basic_request(connection_ptr connection_value,
 		std::filesystem::path resource_root = {}
 	);
-	basic_request(connection_ptr connection, parser_t &&parser,
+	basic_request(connection_ptr connection_value, parser_t &&parser,
 		std::filesystem::path resource_root = {}
 	);
 	~basic_request() override;

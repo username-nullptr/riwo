@@ -43,7 +43,6 @@ install(FILES
 	${RIWO_HTTP_CONFIG_INCLUDE}/riwo/http/cxx/configs.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/http/cxx
 )
-
 install(FILES ../http.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
 )

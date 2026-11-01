@@ -101,10 +101,10 @@ void umbrella_and_value_types()
 	upgrade.supported_subprotocols = request.subprotocols;
 	upgrade.require_subprotocol = true;
 	RIWO_TEST_CHECK(upgrade.require_subprotocol);
-	upgrade.subprotocol_selector = [](const ws::request_info &request,
+	upgrade.subprotocol_selector = [](const ws::request_info &request_info_value,
 		std::span<const std::string> offered) -> riwo::optional<std::string>
 	{
-		return request.path == "/socket" and not offered.empty() ?
+		return request_info_value.path == "/socket" and not offered.empty() ?
 			riwo::optional<std::string>(offered.front()) : riwo::nullopt;
 	};
 	upgrade.extension_selector = [](const ws::request_info&,
