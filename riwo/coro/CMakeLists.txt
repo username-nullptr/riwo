@@ -7,3 +7,10 @@ add_project(${target_name} riwo.core)
 target_compile_definitions (
 	${target_name} PRIVATE RIWO_CORO_SHARED
 )
+install(FILES ../coro.h
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo
+)
+install(DIRECTORY ./
+	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/riwo/coro
+	FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp"
+)

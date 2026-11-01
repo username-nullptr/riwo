@@ -4,14 +4,19 @@
 #if defined(__WINNT__) || defined(_WINDOWS)
 
 #define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+# define NOMINMAX
+#endif //NOMINMAX
+
 #include <riwo/core/system/app_utls.h>
 #include <Windows.h>
+
 #include <knownfolders.h>
 #include <shlobj.h>
 
 #ifdef _MSC_VER
 # pragma comment(lib, "shell32.lib")
-#endif
+#endif //_MSC_VER
 
 namespace fs = std::filesystem;
 

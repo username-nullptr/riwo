@@ -438,12 +438,11 @@ class RIWO_WEBSOCKET_TAPI basic_client<Exec>::impl :
 	{
 		using complete_fn_t = void (*)(open_operation&, error_code, stream_t);
 
-		open_operation(std::shared_ptr<impl> owner, complete_fn_t complete_fn) :
-			owner(std::move(owner)), complete_fn(complete_fn) {}
+		open_operation(std::shared_ptr<impl> owner_value, complete_fn_t complete_fn_value) :
+			owner(std::move(owner_value)), complete_fn(complete_fn_value) {}
 
-		void complete(error_code error, stream_t stream)
-		{
-			complete_fn(*this, error, std::move(stream));
+		void complete(error_code error, stream_t stream_value) {
+			complete_fn(*this, error, std::move(stream_value));
 		}
 
 		asio::cancellation_signal cancellation {};
@@ -460,10 +459,11 @@ class RIWO_WEBSOCKET_TAPI basic_client<Exec>::impl :
 		using allocator_type = asio::associated_allocator_t<Handler>;
 		using cancellation_slot_type = asio::associated_cancellation_slot_t<Handler>;
 
-		open_handler_operation(std::shared_ptr<impl> owner, Handler handler,
-			const executor_t &exec) :
-			open_operation(std::move(owner), &self_t::complete_handler),
-			handler(std::move(handler)),
+		open_handler_operation(std::shared_ptr<impl> owner_value,
+			Handler handler_value, const executor_t &exec
+		) :
+			open_operation(std::move(owner_value), &self_t::complete_handler),
+			handler(std::move(handler_value)),
 			executor(asio::get_associated_executor(this->handler, exec)),
 			allocator(asio::get_associated_allocator(this->handler)),
 			slot(asio::get_associated_cancellation_slot(this->handler)) {}
@@ -484,8 +484,7 @@ class RIWO_WEBSOCKET_TAPI basic_client<Exec>::impl :
 			});
 		}
 
-		static void complete_handler(open_operation &base, error_code error,
-			stream_t stream)
+		static void complete_handler(open_operation &base, error_code error, stream_t stream_value)
 		{
 			auto &self = static_cast<self_t&>(base);
 			if( self.slot.is_connected() )
@@ -494,11 +493,11 @@ class RIWO_WEBSOCKET_TAPI basic_client<Exec>::impl :
 			auto operation = self.shared_from_this();
 			self.owner->release_operation(operation);
 			auto handler = std::move(self.handler);
+
 			asio::post(self.executor, asio::bind_allocator(self.allocator,
-				[handler = std::move(handler), error,
-				 stream = std::move(stream)]() mutable {
-					std::move(handler)(error, std::move(stream));
-				}));
+			[handler = std::move(handler), error, stream = std::move(stream_value)]() mutable {
+				std::move(handler)(error, std::move(stream));
+			}));
 		}
 
 		Handler handler;
@@ -512,14 +511,11 @@ class RIWO_WEBSOCKET_TAPI basic_client<Exec>::impl :
 		using cancellation_slot_type = asio::cancellation_slot;
 		std::shared_ptr<open_operation> operation;
 
-		[[nodiscard]] cancellation_slot_type get_cancellation_slot() const noexcept
-		{
+		[[nodiscard]] cancellation_slot_type get_cancellation_slot() const noexcept {
 			return operation->cancellation.slot();
 		}
-
-		void operator()(error_code error, stream_t stream)
-		{
-			operation->complete(error, std::move(stream));
+		void operator()(error_code error, stream_t stream_value) {
+			operation->complete(error, std::move(stream_value));
 		}
 	};
 

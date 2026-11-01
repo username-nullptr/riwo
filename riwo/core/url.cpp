@@ -169,28 +169,28 @@ public:
 
 	void set_path(std::string_view path)
 	{
-		auto value = from_percent_encoding(strtls::trimmed(path));
-		if( value.empty() )
-			value = "/";
+		auto path_value = from_percent_encoding(strtls::trimmed(path));
+		if( path_value.empty() )
+			path_value = "/";
 
-		else if( not value.starts_with('/') )
-			value.insert(value.begin(), '/');
+		else if( not path_value.starts_with('/') )
+			path_value.insert(path_value.begin(), '/');
 
-		m_path = std::move(value);
+		m_path = std::move(path_value);
 		m_encoded_path = to_percent_encoding(m_path, "!$&'()*+,;=:@/");
 		refresh_validity();
 	}
 
 	void set_encoded_path(std::string_view path)
 	{
-		auto value = strtls::trimmed(path);
-		if( value.empty() )
-			value = "/";
-		else if( not value.starts_with('/') )
-			value.insert(value.begin(), '/');
+		auto path_value = strtls::trimmed(path);
+		if( path_value.empty() )
+			path_value = "/";
+		else if( not path_value.starts_with('/') )
+			path_value.insert(path_value.begin(), '/');
 
 		m_encoded_path = normalize_encoded_component (
-			value, "!$&'()*+,;=:@/"
+			path_value, "!$&'()*+,;=:@/"
 		);
 		m_path = from_percent_encoding(m_encoded_path);
 		refresh_validity();
@@ -238,10 +238,10 @@ public:
 			return m_encoded_query;
 
 		std::string result;
-		for(auto &[key,value] : m_parameters)
+		for(auto &[key,query_value] : m_parameters)
 		{
 			result += to_percent_encoding(key) + "=" +
-				to_percent_encoding(value.to_string()) + "&";
+				to_percent_encoding(query_value.to_string()) + "&";
 		}
 		if( not result.empty() )
 			result.pop_back();
@@ -597,11 +597,11 @@ url::operator std::string() const noexcept
 
 url url::resolve(const url &base, std::string_view reference)
 {
-	auto value = strtls::trimmed(reference);
-	if( auto scheme_end = value.find("://"); scheme_end != std::string::npos )
+	auto reference_value = strtls::trimmed(reference);
+	if( auto scheme_end = reference_value.find("://"); scheme_end != std::string::npos )
 	{
-		if( valid_scheme(std::string_view(value).substr(0, scheme_end)) )
-			return { value };
+		if( valid_scheme(std::string_view(reference_value).substr(0, scheme_end)) )
+			return { reference_value };
 	}
 	auto host = std::string(base.host());
 	if( host.find(':') != std::string::npos and not host.starts_with('[') )
@@ -611,22 +611,22 @@ url url::resolve(const url &base, std::string_view reference)
 	if( base.port() != 0 )
 		origin += ':' + std::to_string(base.port());
 
-	if( value.starts_with("//") )
-		return { std::string(base.protocol()) + ":" + value };
+	if( reference_value.starts_with("//") )
+		return { std::string(base.protocol()) + ":" + reference_value };
 
-	if( value.empty() )
+	if( reference_value.empty() )
 	{
 		auto result = base;
 		result.clear_fragment();
 		return result;
 	}
 	std::string fragment_suffix;
-	if( auto pos = value.find('#'); pos != std::string::npos )
+	if( auto pos = reference_value.find('#'); pos != std::string::npos )
 	{
-		fragment_suffix = value.substr(pos);
-		value.erase(pos);
+		fragment_suffix = reference_value.substr(pos);
+		reference_value.erase(pos);
 	}
-	if( value.empty() )
+	if( reference_value.empty() )
 	{
 		auto result = base;
 		result.clear_fragment();
@@ -636,25 +636,25 @@ url url::resolve(const url &base, std::string_view reference)
 		return result;
 	}
 	std::string query_suffix;
-	if( auto pos = value.find('?'); pos != std::string::npos )
+	if( auto pos = reference_value.find('?'); pos != std::string::npos )
 	{
-		query_suffix = value.substr(pos);
-		value.erase(pos);
+		query_suffix = reference_value.substr(pos);
+		reference_value.erase(pos);
 	}
 	std::string path;
-	if( value.empty() )
+	if( reference_value.empty() )
 	{
 		path = base.encoded_path();
 		if( query_suffix.empty() and base.has_query() )
 			query_suffix = '?' + base.encoded_query();
 	}
-	else if( value.front() == '/' )
-		path = remove_dot_segments(value);
+	else if( reference_value.front() == '/' )
+		path = remove_dot_segments(reference_value);
 	else
 	{
 		path = base.encoded_path();
 		path.erase(path.rfind('/') + 1);
-		path += value;
+		path += reference_value;
 		path = remove_dot_segments(path);
 	}
 	return { origin + path + query_suffix + fragment_suffix };

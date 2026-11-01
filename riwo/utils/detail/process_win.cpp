@@ -4,6 +4,10 @@
 #if defined(__WINNT__) || defined(_WINDOWS)
 
 #define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+# define NOMINMAX
+#endif //NOMINMAX
+
 #include <Windows.h>
 #include <shellapi.h>
 
@@ -13,7 +17,7 @@
 #if RIWO_USING_BOOST_ASIO
 # include <boost/asio/readable_pipe.hpp>
 # include <boost/asio/writable_pipe.hpp>
-#else
+#else //RIWO_USING_BOOST_ASIO
 # include <asio/readable_pipe.hpp>
 # include <asio/writable_pipe.hpp>
 #endif //RIWO_USING_BOOST_ASIO
@@ -46,9 +50,11 @@ using envs_t = std::map<std::string, path_t>;
 
 [[nodiscard]] static error_code sys_error()
 {
-	return error_code(std::error_code (
-		static_cast<int>(GetLastError()), std::system_category()
-	));
+	return {
+		std::error_code (
+			static_cast<int>(GetLastError()), std::system_category()
+		)
+	};
 }
 
 [[nodiscard]] static std::wstring quote_arg(std::wstring_view arg)
@@ -752,14 +758,14 @@ public:
 		try {
 			riwo::dispatch(m_exec, [self = shared_from_this()]
 			{
-				error_code error;
-				self->m_stdin.cancel(error);
+				error_code error {};
+				error = self->m_stdin.cancel(error);
 
 				error.clear();
-				self->m_stdout.cancel(error);
+				error = self->m_stdout.cancel(error);
 
 				error.clear();
-				self->m_stderr.cancel(error);
+				error = self->m_stderr.cancel(error);
 
 				std::vector<std::shared_ptr<asio::steady_timer>> vector;
 				{
@@ -1045,7 +1051,7 @@ private:
 	}
 
 	void post_io_result(process::io_handler_t handler, error_code error, size_t size) {
-		riwo::post_completion(m_exec, std::move(handler), error, size);
+		post_completion(m_exec, std::move(handler), error, size);
 	}
 
 public:

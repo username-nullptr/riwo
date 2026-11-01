@@ -218,45 +218,45 @@ template <typename Exec, typename Token>
 
 template <typename Exec, typename Token>
 auto retry_open
-(basic_client<Exec> &client, connect_request request, retry_open_options options, Token &&token)
+(basic_client<Exec> &client_value, connect_request request, retry_open_options options, Token &&token)
 	requires concepts::retry_open_token<Exec,Token>
 {
 	auto factory = detail::adapt_retry_open_request_factory (
 	[request = std::move(request)](const retry_open_context&) mutable {
 		return request;
 	});
-	return detail::initiate_retry_open(client, std::move(factory),
+	return detail::initiate_retry_open(client_value, std::move(factory),
 		std::move(options), std::forward<Token>(token)
 	);
 }
 
 template <typename Exec, typename Token>
-auto retry_open(basic_client<Exec> &client, connect_request request, Token &&token)
+auto retry_open(basic_client<Exec> &client_value, connect_request request, Token &&token)
 	requires concepts::retry_open_token<Exec,Token>
 {
-	return retry_open(client, std::move(request), retry_open_options{},
+	return retry_open(client_value, std::move(request), retry_open_options{},
 		std::forward<Token>(token)
 	);
 }
 
 template <typename Exec, typename Factory, typename Token>
 auto retry_open
-(basic_client<Exec> &client, Factory &&factory, retry_open_options options, Token &&token) requires
+(basic_client<Exec> &client_value, Factory &&factory, retry_open_options options, Token &&token) requires
 	concepts::retry_open_request_factory<Factory> and concepts::retry_open_token<Exec,Token> and
 	(not std::same_as<std::remove_cvref_t<Factory>,connect_request>)
 {
-	return detail::initiate_retry_open(client,
+	return detail::initiate_retry_open(client_value,
 		detail::adapt_retry_open_request_factory(std::forward<Factory>(factory)),
 		std::move(options), std::forward<Token>(token)
 	);
 }
 
 template <typename Exec, typename Factory, typename Token>
-auto retry_open(basic_client<Exec> &client, Factory &&factory, Token &&token) requires
+auto retry_open(basic_client<Exec> &client_value, Factory &&factory, Token &&token) requires
 	concepts::retry_open_request_factory<Factory> and concepts::retry_open_token<Exec,Token> and
 	(not std::same_as<std::remove_cvref_t<Factory>,connect_request>)
 {
-	return retry_open(client, std::forward<Factory>(factory),
+	return retry_open(client_value, std::forward<Factory>(factory),
 		retry_open_options{}, std::forward<Token>(token)
 	);
 }

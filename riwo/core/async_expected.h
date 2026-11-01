@@ -99,6 +99,12 @@ template <typename Value, concepts::exec Exec, typename Initiator, typename Toke
 	const Exec &exec, Initiator initiation, Token &&token
 );
 
+template <typename Value, concepts::exec Exec, typename Initiator,
+	typename Rep, typename Period, typename Fallback, typename Token>
+[[nodiscard]] RIWO_CORE_TAPI auto initiate_timed_io(const Exec &exec, Initiator initiation,
+	const std::chrono::duration<Rep,Period> &timeout, Fallback fallback, Token &&token)
+	requires std::invocable<Fallback&> and std::convertible_to<std::invoke_result_t<Fallback&>,Value>;
+
 template <concepts::exec Exec, typename Initiator, typename Token>
 [[nodiscard]] RIWO_CORE_TAPI auto initiate_io_void (
 	const Exec &exec, Initiator initiation, Token &&token
