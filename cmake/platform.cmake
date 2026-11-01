@@ -74,26 +74,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 			)
 		endif ()
 
-		if (RIWO_USE_LIBCXX)
-			unset(RIWO_LIBCXX_ATOMIC_SHARED_PTR_AVAILABLE CACHE)
-			string(CONCAT riwo_libcxx_atomic_shared_ptr_source
-				"#include <atomic>\n"
-				"#include <memory>\n"
-				"int main() { std::atomic<std::shared_ptr<int>> value{std::make_shared<int>(1)};\n"
-				"auto copy = value.load(); value.store(copy); return *copy - 1; }"
-			)
-			check_cxx_source_compiles (
-				"${riwo_libcxx_atomic_shared_ptr_source}"
-				RIWO_LIBCXX_ATOMIC_SHARED_PTR_AVAILABLE
-			)
-			unset(riwo_libcxx_atomic_shared_ptr_source)
-			if (NOT RIWO_LIBCXX_ATOMIC_SHARED_PTR_AVAILABLE)
-				message(FATAL_ERROR
-					"${PRO_NAME}: RIWO_USE_LIBCXX requires libc++ support for C++20 std::atomic<std::shared_ptr<T>>."
-				)
-			endif ()
-		endif ()
-
 		set(CMAKE_REQUIRED_FLAGS "${riwo_saved_required_flags}")
 		set(CMAKE_REQUIRED_LINK_OPTIONS ${riwo_saved_required_link_options})
 	endif ()

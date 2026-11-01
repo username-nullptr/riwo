@@ -21,7 +21,7 @@ public:
 	stream_transport() noexcept;
 	~stream_transport();
 
-	void reset(experimental::http::duplex_channel_io_ptr connection) noexcept;
+	void reset(http::duplex_channel_io_ptr connection) noexcept;
 
 	[[nodiscard]] awaitable<std::tuple<error_code,size_t>>
 	async_read(std::shared_ptr<std::vector<std::byte>> storage);
@@ -32,7 +32,7 @@ public:
 	) noexcept;
 
 private:
-	experimental::http::duplex_channel_io_ptr m_connection {};
+	http::duplex_channel_io_ptr m_connection {};
 };
 
 } //namespace riwo::experimental::websocket::detail

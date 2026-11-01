@@ -13,14 +13,14 @@ namespace riwo::experimental::websocket
 struct client_config
 {
 	stream_config stream {};
-	experimental::http::client_config http {};
+	http::client_config http {};
 	std::chrono::milliseconds handshake_timeout {30000};
 };
 
 struct RIWO_EXP_WEBSOCKET_API connect_request
 {
 	url endpoint {};
-	experimental::http::fields headers {};
+	http::fields headers {};
 
 	optional<stream_config> stream_options {};
 	optional<std::chrono::milliseconds> handshake_timeout {};
@@ -42,8 +42,8 @@ struct basic_open_diagnostics
 	using executor_t = executor_type;
 
 	url endpoint {};
-	optional<experimental::http::response_head> response {};
-	optional<experimental::http::protocol> selected_protocol {};
+	optional<http::response_head> response {};
+	optional<http::protocol> selected_protocol {};
 };
 
 using open_diagnostics = basic_open_diagnostics<>;
@@ -61,7 +61,7 @@ public:
 	using stream_t = basic_stream<executor_type>;
 	using connect_request_t = connect_request;
 
-	using http_client_t = experimental::http::basic_client<executor_type>;
+	using http_client_t = http::basic_client<executor_type>;
 	using diagnostics_t = basic_open_diagnostics<executor_type>;
 
 	template <typename Token>
@@ -107,7 +107,7 @@ public:
 	[[nodiscard]] size_t pending_open_count() const noexcept;
 	[[nodiscard]] config_t config() const;
 
-	[[nodiscard]] experimental::http::cookie_jar_ptr cookie_store() const noexcept;
+	[[nodiscard]] http::cookie_jar_ptr cookie_store() const noexcept;
 	[[nodiscard]] const http_client_t &http_client() const noexcept;
 	[[nodiscard]] http_client_t &http_client() noexcept;
 
@@ -124,26 +124,26 @@ using client = basic_client<>;
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token = use_sync_t>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto open (
-	experimental::http::basic_client<Exec> &http_client, connect_request request, Token &&token = {}
+	http::basic_client<Exec> &http_client, connect_request request, Token &&token = {}
 );
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token = use_sync_t>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto open (
-	experimental::http::basic_client<Exec> &http_client, connect_request request,
+	http::basic_client<Exec> &http_client, connect_request request,
 	basic_open_diagnostics<Exec> &diagnostics, Token &&token = {}
 );
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token = use_sync_t>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto open (
-	experimental::http::basic_client<Exec> &http_client, url endpoint, Token &&token = {}
+	http::basic_client<Exec> &http_client, url endpoint, Token &&token = {}
 );
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token = use_sync_t>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto open (
-	experimental::http::basic_client<Exec> &http_client, url endpoint,
+	http::basic_client<Exec> &http_client, url endpoint,
 	basic_open_diagnostics<Exec> &diagnostics, Token &&token = {}
 );
 

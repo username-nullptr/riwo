@@ -16,13 +16,13 @@ namespace riwo::experimental::websocket { namespace detail
 bool server_equal_ci(std::string_view lhs, std::string_view rhs) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
-bool server_is_h2(experimental::http::protocol version) noexcept;
+bool server_is_h2(http::protocol version) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
 bool server_deadline_expired(std::chrono::steady_clock::time_point deadline) noexcept;
 
 RIWO_EXP_WEBSOCKET_API bool header_has_token
-(const experimental::http::fields &headers, std::string_view name, std::string_view wanted) noexcept;
+(const http::fields &headers, std::string_view name, std::string_view wanted) noexcept;
 
 struct server_upgrade_plan
 {
@@ -30,7 +30,7 @@ struct server_upgrade_plan
 	opening_request opening {};
 
 	opening_response response_message {};
-	experimental::http::response_head response {};
+	http::response_head response {};
 
 	std::string body {};
 	error_code error {};
@@ -41,7 +41,7 @@ struct server_upgrade_plan
 
 RIWO_EXP_WEBSOCKET_API void reject_upgrade (
 	server_upgrade_plan &plan, error_code error,
-	experimental::http::status status = experimental::http::status::bad_request
+	experimental::http::status status = http::status::bad_request
 );
 
 RIWO_EXP_WEBSOCKET_API void reject_upgrade
@@ -82,14 +82,14 @@ RIWO_EXP_WEBSOCKET_API void complete_server_upgrade_plan (
 ) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
-experimental::http::server_config websocket_http_config(experimental::http::server_config config);
+http::server_config websocket_http_config(http::server_config config);
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
 server_config validate_server_config(server_config config);
 
 template <core_concepts::exec Exec>
 RIWO_EXP_WEBSOCKET_TAPI request_info
-snapshot_request(const experimental::http::basic_server_exchange<Exec> &exchange)
+snapshot_request(const http::basic_server_exchange<Exec> &exchange)
 {
 	request_info result {};
 	const auto &head = exchange.request();
@@ -130,7 +130,7 @@ snapshot_request(const experimental::http::basic_server_exchange<Exec> &exchange
 
 template <core_concepts::exec Exec>
 RIWO_EXP_WEBSOCKET_TAPI server_upgrade_plan
-prepare_server_upgrade(const experimental::http::basic_server_exchange<Exec> &exchange,
+prepare_server_upgrade(const http::basic_server_exchange<Exec> &exchange,
 	const upgrade_options &options, bool permit_async_callbacks) noexcept
 {
 	if( options.handshake_timeout <= std::chrono::milliseconds::zero() )
@@ -154,7 +154,7 @@ prepare_server_upgrade(const experimental::http::basic_server_exchange<Exec> &ex
 
 template <core_concepts::exec Exec>
 RIWO_EXP_WEBSOCKET_TAPI void write_rejection
-(experimental::http::basic_server_exchange<Exec> &exchange, server_upgrade_plan &plan, error_code &error) noexcept
+(http::basic_server_exchange<Exec> &exchange, server_upgrade_plan &plan, error_code &error) noexcept
 {
 	exchange.respond(std::move(plan.response), asio::buffer(plan.body), error);
 	if( not error or plan.preserve_error_on_write_failure )
@@ -162,7 +162,7 @@ RIWO_EXP_WEBSOCKET_TAPI void write_rejection
 }
 
 template <core_concepts::exec Exec>
-RIWO_EXP_WEBSOCKET_TAPI void upgrade_sync(experimental::http::basic_server_exchange<Exec> &exchange,
+RIWO_EXP_WEBSOCKET_TAPI void upgrade_sync(http::basic_server_exchange<Exec> &exchange,
 	upgrade_options options, basic_accept_result<Exec> &result, error_code &error) noexcept
 try
 {
@@ -189,7 +189,7 @@ try
 	result.handshake.extensions = plan.response_message.extensions;
 
 	result.stream.adopt (
-		std::make_shared<experimental::http::basic_duplex_channel<Exec>>(std::move(channel)),
+		std::make_shared<http::basic_duplex_channel<Exec>>(std::move(channel)),
 		adopt_options {
 			.stream_role = role::server,
 			.negotiated_subprotocol = result.handshake.subprotocol,
@@ -204,7 +204,7 @@ catch(...) {
 
 template <core_concepts::exec Exec>
 asio::awaitable<optional<std::tuple<error_code,basic_accept_result<Exec>>>,Exec>
-co_upgrade(experimental::http::basic_server_exchange<Exec> *exchange, upgrade_options options)
+co_upgrade(http::basic_server_exchange<Exec> *exchange, upgrade_options options)
 {
 	using result_t = basic_accept_result<Exec>;
 	result_t result(exchange->get_executor());
@@ -229,7 +229,7 @@ co_upgrade(experimental::http::basic_server_exchange<Exec> *exchange, upgrade_op
 			catch(...)
 			{
 				reject_upgrade(plan, exception_error(std::current_exception()),
-					experimental::http::status::internal_server_error
+					http::status::internal_server_error
 				);
 				plan.preserve_error_on_write_failure = true;
 			}
@@ -255,7 +255,7 @@ co_upgrade(experimental::http::basic_server_exchange<Exec> *exchange, upgrade_op
 			catch(...)
 			{
 				reject_upgrade(plan, exception_error(std::current_exception()),
-					experimental::http::status::internal_server_error
+					http::status::internal_server_error
 				);
 				plan.preserve_error_on_write_failure = true;
 			}
@@ -335,7 +335,7 @@ co_upgrade(experimental::http::basic_server_exchange<Exec> *exchange, upgrade_op
 
 		error_code adopt_error {};
 		result.stream.adopt (
-			std::make_shared<experimental::http::basic_duplex_channel<Exec>>(std::move(channel)),
+			std::make_shared<http::basic_duplex_channel<Exec>>(std::move(channel)),
 			adopt_options {
 				.stream_role = role::server,
 				.negotiated_subprotocol = result.handshake.subprotocol,
@@ -358,7 +358,7 @@ co_upgrade(experimental::http::basic_server_exchange<Exec> *exchange, upgrade_op
 
 template <core_concepts::exec Exec, typename Handler>
 void start_upgrade
-(experimental::http::basic_server_exchange<Exec> &exchange, upgrade_options options, Handler &&handler)
+(http::basic_server_exchange<Exec> &exchange, upgrade_options options, Handler &&handler)
 {
 	auto executor = exchange.get_executor();
 	auto coroutine_cancellation = std::make_shared<asio::cancellation_signal>();
@@ -733,8 +733,8 @@ public:
 		static constexpr std::string_view body =
 			"WebSocket accept queue unavailable\n";
 
-		experimental::http::response_head response {};
-		response.status = experimental::http::status::service_unavailable;
+		http::response_head response {};
+		response.status = http::status::service_unavailable;
 
 		if( not detail::server_is_h2(context.selected_protocol()) )
 			response.headers.set("Connection", "close");
@@ -895,10 +895,10 @@ public:
 		auto handler = std::make_shared<std::remove_cvref_t<Func>>(std::forward<Func>(func));
 
 		m_http_server.template on_request
-		<experimental::http::method::get, experimental::http::method::connect>(std::move(path),
+		<http::method::get, http::method::connect>(std::move(path),
 		[handler, selected = std::move(selected)](context_t &context) mutable -> awaitable<void>
 		{
-			auto upgraded = co_await experimental::websocket::upgrade (
+			auto upgraded = co_await websocket::upgrade (
 				context, selected, asio::as_tuple(use_awaitable)
 			);
 			auto &[error, result] = upgraded;
@@ -918,7 +918,7 @@ public:
 		m_http_server.on_default([handler, selected = std::move(selected)]
 		(context_t &context) mutable -> awaitable<void>
 		{
-			auto upgraded = co_await experimental::websocket::upgrade (
+			auto upgraded = co_await websocket::upgrade (
 				context, selected, asio::as_tuple(use_awaitable)
 			);
 			auto &[error, result] = upgraded;
@@ -1287,29 +1287,29 @@ auto basic_server<Exec,ServiceExec>::config() const -> config_t
 }
 
 template <core_concepts::exec Exec>
-bool is_upgrade_request(const experimental::http::basic_server_exchange<Exec> &exchange) noexcept
+bool is_upgrade_request(const http::basic_server_exchange<Exec> &exchange) noexcept
 {
 	const auto &request = exchange.request();
 	if( detail::server_is_h2(exchange.selected_protocol()) )
 	{
-		return request.method.known() == experimental::http::method::connect and request.connect_protocol and
+		return request.method.known() == http::method::connect and request.connect_protocol and
 			detail::server_equal_ci(*request.connect_protocol, "websocket");
 	}
-	return request.method.known() == experimental::http::method::get and
+	return request.method.known() == http::method::get and
 		detail::header_has_token(request.headers, "Connection", "Upgrade") and
 		detail::header_has_token(request.headers, "Upgrade", "websocket");
 }
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_accept_result<Exec>> Token>
-auto upgrade(experimental::http::basic_server_exchange<Exec> &exchange, Token &&token)
+auto upgrade(http::basic_server_exchange<Exec> &exchange, Token &&token)
 {
 	return upgrade(exchange, upgrade_options{}, std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_accept_result<Exec>> Token>
-auto upgrade(experimental::http::basic_server_exchange<Exec> &exchange, upgrade_options options, Token &&token)
+auto upgrade(http::basic_server_exchange<Exec> &exchange, upgrade_options options, Token &&token)
 {
 	using result_t = basic_accept_result<Exec>;
 	if constexpr( is_error_code_token_v<Token> )

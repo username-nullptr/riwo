@@ -14,8 +14,8 @@ namespace riwo::experimental::http
 class RIWO_EXP_HTTP_API response_head
 {
 public:
-	experimental::http::status status {
-		experimental::http::status::ok
+	status status {
+		status::ok
 	};
 	fields headers {};
 	optional<std::string> upgrade_protocol {};

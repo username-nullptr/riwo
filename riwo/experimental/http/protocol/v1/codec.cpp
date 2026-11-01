@@ -74,7 +74,7 @@ try
 			return sys_unexpected(make_error_code(errc::connection_protocol_error));
 
 		const auto name = line.substr(0, colon);
-		const auto value = experimental::http::detail::trim_ows(line.substr(colon + 1));
+		const auto value = http::detail::trim_ows(line.substr(colon + 1));
 
 		if( name.size() > limits.max_field_name_size or value.size() > limits.max_field_value_size )
 			return sys_unexpected(make_error_code(errc::header_limit_exceeded));

@@ -2163,8 +2163,9 @@ TLS 与明文路径在选定协议后创建同一种 HTTP/2 Session；差异只�
 - proxy 自身是否支持 HTTP/2 不等于目标 origin 是否支持 HTTP/2；
 - HTTP forward proxy 使用 HTTP/1.1 absolute-form 或 CONNECT；SOCKS5 支持无认证和
   RFC 1929 用户名/密码认证；代理 endpoint、类型和认证 identity 都参与 Session key；
-- `proxy_policy::use_environment` 显式启用 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`，并与
-  配置及环境中的 `no_proxy`/`NO_PROXY` 合并。绕过规则在创建 Session key 前求值；
+- `proxy_policy::use_environment` 默认启用 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`，
+  可按大小写回退并遵循 `no_proxy`/`NO_PROXY`；可显式关闭以忽略环境代理。
+  Experimental WebSocket 额外优先读取 `WS_PROXY`/`WSS_PROXY`，与旧版的默认行为一致；
 - 单请求 `request_options::proxy` 完整覆盖 client 级代理策略。`Proxy-Authorization` 只发送给
   HTTP proxy；HTTPS tunnel 建立后不得把该字段转发给 origin。
 

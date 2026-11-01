@@ -187,7 +187,7 @@ void file_sink::finish(error_code &error) noexcept
 		return ;
 	if( not m_backend )
 	{
-		error = experimental::http::make_error_code(errc::operation_not_permitted);
+		error = make_error_code(errc::operation_not_permitted);
 		return ;
 	}
 	try { m_backend->finish(error); }

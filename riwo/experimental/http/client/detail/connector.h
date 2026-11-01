@@ -49,6 +49,17 @@ struct proxy_identity
 	) = default;
 };
 
+struct proxy_environment
+{
+	url endpoint {};
+	optional<std::string> username {};
+	optional<std::string> password {};
+};
+
+struct resolved_environment_proxy {
+	optional<proxy_environment> proxy {};
+};
+
 struct protocol_policy_identity
 {
 	std::vector<protocol> preference {};
@@ -87,6 +98,11 @@ struct RIWO_EXP_HTTP_API session_key_hash {
 
 [[nodiscard]] RIWO_EXP_HTTP_API
 session_key make_session_key(const request_head &head, const client_config &config);
+
+[[nodiscard]] RIWO_EXP_HTTP_API
+sys_expected<resolved_environment_proxy> resolve_environment_proxy(const url &target,
+	std::initializer_list<std::string_view> variable_names
+) noexcept;
 
 struct negotiated_transport
 {

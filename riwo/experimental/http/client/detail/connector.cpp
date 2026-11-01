@@ -6,12 +6,15 @@
 #include <riwo/experimental/http/protocol/authentication.h>
 #include <riwo/experimental/http/error.h>
 
+#include <riwo/core/utils/string_tools.h>
+#include <riwo/core/system/app_utls.h>
+#include <riwo/core/algorithm/misc.h>
+#include <riwo/core/cxx/asio.h>
+
 #if RIWO_OPENSSL_SUPPORT
 # include <riwo/experimental/http/transport/tls_connection.h>
 # include <openssl/ssl.h>
 #endif //RIWO_OPENSSL_SUPPORT
-
-#include <riwo/core/cxx/asio.h>
 
 #if !defined(_WIN32)
 # include <poll.h>
@@ -462,7 +465,69 @@ socks5_connect_async(asio::ip::tcp::socket &socket, const session_key &key)
 	co_return error;
 }
 
-[[nodiscard]] bool no_proxy_match(std::string_view host, uint16_t port, std::string_view rule)
+[[nodiscard]] bool address_in_prefix
+(const asio::ip::address &address, const asio::ip::address &network, unsigned prefix) noexcept
+{
+	if( address.is_v4() != network.is_v4() )
+		return false;
+
+	if( address.is_v4() )
+	{
+		if( prefix > 32 )
+			return false;
+
+		const auto address_value = address.to_v4().to_uint();
+		const auto network_value = network.to_v4().to_uint();
+
+		const auto mask = prefix == 0 ? 0U :
+			std::numeric_limits<uint32_t>::max() << (32U - prefix);
+
+		return (address_value & mask) == (network_value & mask);
+	}
+	if( prefix > 128 )
+		return false;
+
+	const auto address_bytes = address.to_v6().to_bytes();
+	const auto network_bytes = network.to_v6().to_bytes();
+
+	const auto whole_bytes = prefix / 8;
+	const auto remaining_bits = prefix % 8;
+
+	for(unsigned index=0; index<whole_bytes; ++index)
+	{
+		if( address_bytes[index] != network_bytes[index] )
+			return false;
+	}
+	if( remaining_bits == 0 )
+		return true;
+
+	const auto mask = static_cast<unsigned char>(0xFFU << (8U - remaining_bits));
+	return (address_bytes[whole_bytes] & mask) == (network_bytes[whole_bytes] & mask);
+}
+
+[[nodiscard]] bool host_matches
+(std::string_view target, std::string_view pattern) noexcept
+{
+	while( pattern.starts_with('.') )
+		pattern.remove_prefix(1);
+
+	if( pattern.starts_with("*.") )
+		pattern.remove_prefix(2);
+
+	if( pattern.empty() )
+		return false;
+
+	auto target_lower = lower(target);
+	auto pattern_lower = lower(pattern);
+
+	return target_lower == pattern_lower or
+		(target_lower.size() > pattern_lower.size() and
+		 target_lower.ends_with(pattern_lower) and
+		 target_lower[target_lower.size() - pattern_lower.size() - 1] == '.');
+}
+
+[[nodiscard]] bool no_proxy_match
+(std::string_view host, uint16_t port, std::string_view rule)
 {
 	while( not rule.empty() and std::isspace(static_cast<unsigned char>(rule.front())) )
 		rule.remove_prefix(1);
@@ -511,67 +576,114 @@ socks5_connect_async(asio::ip::tcp::socket &socket, const session_key &key)
 			rule = rule.substr(0, colon);
 		}
 	}
-	if( rule.starts_with('.') )
-		rule.remove_prefix(1);
 
-	auto host_lower = lower(host);
-	auto rule_lower = lower(rule);
+	if( const auto slash = rule.rfind('/'); slash != std::string_view::npos )
+	{
+		unsigned prefix = 0;
+		auto parsed = std::from_chars (
+			rule.data() + slash + 1, rule.data() + rule.size(), prefix
+		);
+		if( parsed.ec != std::errc{} or parsed.ptr != rule.data() + rule.size() )
+			return false;
 
-	return host_lower == rule_lower or
-		   (host_lower.size() > rule_lower.size() and host_lower.ends_with(rule_lower) and
-		   host_lower[host_lower.size() - rule_lower.size() - 1] == '.');
+		error_code target_error {};
+		error_code network_error {};
+
+		auto target_address = asio::ip::make_address(host, target_error);
+		auto network_address = asio::ip::make_address (
+			rule.substr(0, slash), network_error
+		);
+		return not target_error and not network_error and
+			address_in_prefix(target_address, network_address, prefix);
+	}
+	return host_matches(host, rule);
 }
 
-void append_no_proxy_environment(std::vector<std::string> &rules)
+[[nodiscard]] optional<std::string>
+environment_value(std::initializer_list<std::string_view> names)
 {
-	const char *value = std::getenv("NO_PROXY");
-	if( not value )
-		value = std::getenv("no_proxy");
+	for(const auto name : names)
+	{
+		auto value = app::getenv(name);
+		if( not value )
+			continue;
 
-	if( not value )
-		return ;
+		if( auto text = strtls::trimmed(value->string()); not text.empty() )
+			return text;
+	}
+	return nullopt;
+}
 
-	std::string_view text(value);
+[[nodiscard]] bool bypasses_environment_proxy(const url &target)
+{
+	auto value = environment_value({"no_proxy", "NO_PROXY"});
+	if( not value )
+		return false;
+
+	const uint16_t port = target.port() != 0 ? target.port() :
+		static_cast<uint16_t> (
+			lower(target.protocol()) == "https" or
+			lower(target.protocol()) == "wss" ? 443 : 80
+		);
+
+	std::string_view text(*value);
 	while( not text.empty() )
 	{
 		auto comma = text.find(',');
-		rules.emplace_back(text.substr(0, comma));
+		if( no_proxy_match(target.host(), port, text.substr(0, comma)) )
+			return true;
 
 		if( comma == std::string_view::npos )
 			break;
 
 		text.remove_prefix(comma + 1);
 	}
+	return false;
 }
 
-[[nodiscard]] optional<url> environment_proxy(std::string_view scheme)
+[[nodiscard]] sys_expected<proxy_environment>
+parse_proxy_environment(std::string text) noexcept
+try
 {
-	const char *value = nullptr;
-	if( scheme == "https" )
-	{
-		value = std::getenv("HTTPS_PROXY");
-		if( not value )
-			value = std::getenv("https_proxy");
-	}
-	if( not value )
-		value = std::getenv("HTTP_PROXY");
-
-	if( not value )
-		value = std::getenv("http_proxy");
-
-	if( not value )
-		value = std::getenv("ALL_PROXY");
-
-	if( not value )
-		value = std::getenv("all_proxy");
-
-	if( not value or *value == '\0' )
-		return {};
-
-	std::string text(value);
+	text = strtls::trimmed(text);
 	if( text.find("://") == std::string::npos )
-		text = "http://" + text;
-	return url(text);
+		text.insert(0, "http://");
+
+	const auto scheme_end = text.find("://");
+	const auto authority_begin = scheme_end + 3;
+
+	const auto authority_end = text.find_first_of("/?#", authority_begin);
+	const auto at = text.rfind('@', authority_end);
+
+	proxy_environment result {};
+	if( at != std::string::npos and at >= authority_begin )
+	{
+		const std::string_view user_info (
+			text.data() + authority_begin, at - authority_begin
+		);
+		const auto colon = user_info.find(':');
+
+		result.username = from_percent_encoding(user_info.substr(0, colon));
+		result.password = colon == std::string_view::npos ?
+			std::string{} : from_percent_encoding(user_info.substr(colon + 1));
+
+		text.erase(authority_begin, at - authority_begin + 1);
+	}
+	result.endpoint = url(text);
+
+	if( not result.endpoint.is_valid() or
+		result.endpoint.host().empty() or
+		result.endpoint.has_fragment() or
+		result.endpoint.has_query() or result.endpoint.path() != "/" )
+		return sys_unexpected(make_error_code(errc::invalid_target));
+
+	return result;
+}
+catch(const std::bad_alloc&) {
+	return sys_unexpected(make_error_code(errc::operation_not_supported));
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
 }
 
 [[maybe_unused,nodiscard]] std::string origin_authority(const session_key &key)
@@ -1261,6 +1373,32 @@ public:
 
 } //namespace
 
+sys_expected<resolved_environment_proxy> resolve_environment_proxy
+(const url &target, std::initializer_list<std::string_view> variable_names) noexcept
+try
+{
+	resolved_environment_proxy result {};
+	if( bypasses_environment_proxy(target) )
+		return result;
+
+	auto value = environment_value(variable_names);
+	if( not value )
+		return result;
+
+	auto parsed = parse_proxy_environment(std::move(*value));
+	if( not parsed )
+		return sys_unexpected(parsed.error());
+
+	result.proxy = std::move(*parsed);
+	return result;
+}
+catch(const std::bad_alloc&) {
+	return sys_unexpected(make_error_code(errc::operation_not_supported));
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
+}
+
 origin session_key::target_origin() const noexcept
 {
 	return {
@@ -1325,14 +1463,36 @@ session_key make_session_key(const request_head &head, const client_config &conf
 	result.port = port;
 
 	auto proxy_url = config.proxy.forward_proxy;
+	optional<std::string> environment_username {};
+	optional<std::string> environment_password {};
+
+	// An explicit proxy keeps its legacy precedence; environment NO_PROXY only
+	// applies when the proxy itself was selected from the environment.
 	if( not proxy_url and config.proxy.use_environment )
-		proxy_url = environment_proxy(scheme);
-
-	auto bypass = config.proxy.no_proxy;
-	if( config.proxy.use_environment )
-		append_no_proxy_environment(bypass);
-
-	const bool bypassed = std::ranges::any_of(bypass,
+	{
+		auto environment = scheme == "https" ?
+			resolve_environment_proxy(head.url, {
+				"https_proxy", "HTTPS_PROXY",
+				"all_proxy", "ALL_PROXY"
+			}) :
+			resolve_environment_proxy(head.url, {
+				"http_proxy", "HTTP_PROXY",
+				"all_proxy", "ALL_PROXY"
+			});
+		if( not environment )
+		{
+			system_error::loc_throw(environment.error(),
+				"riwo::experimental::http::make_session_key"
+			);
+		}
+		if( environment->proxy )
+		{
+			proxy_url = environment->proxy->endpoint;
+			environment_username = environment->proxy->username;
+			environment_password = environment->proxy->password;
+		}
+	}
+	const bool bypassed = std::ranges::any_of(config.proxy.no_proxy,
 		[&](const std::string &rule) {
 			return no_proxy_match(result.host, result.port, rule);
 		});
@@ -1341,19 +1501,23 @@ session_key make_session_key(const request_head &head, const client_config &conf
 		result.proxy.endpoint = proxy_url->to_string();
 		result.proxy.type = config.proxy.type;
 
-		result.proxy.username = config.proxy.username;
-		result.proxy.password = config.proxy.password;
+		result.proxy.username = config.proxy.username ?
+			config.proxy.username : environment_username;
+
+		result.proxy.password = config.proxy.password ?
+			config.proxy.password : environment_password;
 
 		if( config.proxy.authorization )
 		{
 			if( config.proxy.authorization->find_first_of("\r\n") != std::string::npos )
 				invalid_argument::loc_throw("invalid proxy authorization");
+
 			result.proxy.authorization = config.proxy.authorization;
 		}
-		else if( config.proxy.username )
+		else if( result.proxy.username )
 		{
 			result.proxy.authorization = make_basic_authorization (
-				*config.proxy.username, config.proxy.password.value_or(std::string{})
+				*result.proxy.username, result.proxy.password.value_or(std::string{})
 			);
 		}
 	}

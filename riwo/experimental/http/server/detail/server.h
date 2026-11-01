@@ -17,6 +17,7 @@ class RIWO_EXP_HTTP_TAPI basic_server<Exec,ServiceExec>::impl :
 	public std::enable_shared_from_this<impl>
 {
 	RIWO_DISABLE_COPY_MOVE(impl)
+	friend class basic_server;
 
 public:
 	struct route
@@ -34,6 +35,12 @@ public:
 		std::vector<middleware_ptr> middleware {};
 		request_handler_t default_handler {};
 	};
+
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+	using route_table_snapshot = std::atomic<std::shared_ptr<const route_table>>;
+#else //atomic_shared_ptr
+	using route_table_snapshot = std::shared_ptr<const route_table>;
+#endif //atomic_shared_ptr
 
 public:
 	impl(acceptor_wrap_t &&acceptor_value,
@@ -108,7 +115,7 @@ public:
 		route_pattern compiled(path);
 		std::lock_guard lock(m_routes_write_mutex);
 
-		auto current = m_routes.load(std::memory_order_acquire);
+		auto current = load_routes();
 		for(const auto &value : current->routes)
 		{
 			if( value.pattern.text() != path )
@@ -129,10 +136,7 @@ public:
 		updated->routes.emplace_back(std::move(compiled),
 			std::move(methods), std::move(handler), std::move(middleware)
 		);
-		m_routes.store (
-			std::shared_ptr<const route_table>(std::move(updated)),
-			std::memory_order_release
-		);
+		store_routes(std::move(updated));
 	}
 
 	void use_middleware(middleware_ptr middleware)
@@ -141,14 +145,11 @@ public:
 			invalid_argument::loc_throw("riwo::experimental::http::server::use: middleware is null");
 
 		std::lock_guard lock(m_routes_write_mutex);
-		auto current = m_routes.load(std::memory_order_acquire);
+		auto current = load_routes();
 		auto updated = std::make_shared<route_table>(*current);
 
 		updated->middleware.emplace_back(std::move(middleware));
-		m_routes.store (
-			std::shared_ptr<const route_table>(std::move(updated)),
-			std::memory_order_release
-		);
+		store_routes(std::move(updated));
 	}
 
 	void report_server_error(error_code error) noexcept
@@ -160,6 +161,25 @@ public:
 				(void)m_server_error_handler(error);
 		}
 		catch(...) {}
+	}
+
+private:
+	[[nodiscard]] std::shared_ptr<const route_table> load_routes() const noexcept
+	{
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+		return m_routes.load(std::memory_order_acquire);
+#else //atomic_shared_ptr
+		return std::atomic_load_explicit(&m_routes, std::memory_order_acquire);
+#endif //atomic_shared_ptr
+	}
+
+	void store_routes(std::shared_ptr<const route_table> routes) noexcept
+	{
+#if defined(__cpp_lib_atomic_shared_ptr) && __cpp_lib_atomic_shared_ptr >= 201711L
+		m_routes.store(std::move(routes), std::memory_order_release);
+#else //atomic_shared_ptr
+		std::atomic_store_explicit(&m_routes, std::move(routes), std::memory_order_release);
+#endif //atomic_shared_ptr
 	}
 
 private:
@@ -449,7 +469,7 @@ private:
 			if( not query_parameters )
 				query_parameters = parameter_view{};
 
-			auto routes = self->m_routes.load(std::memory_order_acquire);
+			auto routes = self->load_routes();
 			const route *selected = nullptr;
 
 			optional<route_match> selected_match {};
@@ -590,7 +610,7 @@ public:
 	config_t m_config {};
 	app_session_manager_ptr m_sessions {};
 
-	std::atomic<std::shared_ptr<const route_table>> m_routes {};
+	route_table_snapshot m_routes {};
 	std::mutex m_routes_write_mutex {};
 	std::mutex m_lifecycle_mutex {};
 	std::mutex m_connections_mutex {};
@@ -779,15 +799,12 @@ auto basic_server<Exec,ServiceExec>::on_default(Func &&func) -> basic_server&
 	requires concepts::request_handler<Func,service_executor_t>
 {
 	std::lock_guard lock(m_impl->m_routes_write_mutex);
-	auto current = m_impl->m_routes.load(std::memory_order_acquire);
+	auto current = m_impl->load_routes();
 
 	auto updated = std::make_shared<typename impl::route_table>(*current);
 	updated->default_handler = request_handler_t(std::forward<Func>(func));
 
-	m_impl->m_routes.store (
-		std::shared_ptr<const typename impl::route_table>(std::move(updated)),
-		std::memory_order_release
-	);
+	m_impl->store_routes(std::move(updated));
 	return *this;
 }
 
@@ -796,7 +813,7 @@ auto basic_server<Exec,ServiceExec>::unbound_request
 (const core_concepts::text_p<char> auto &path) -> basic_server&
 {
 	std::lock_guard lock(m_impl->m_routes_write_mutex);
-	auto current = m_impl->m_routes.load(std::memory_order_acquire);
+	auto current = m_impl->load_routes();
 
 	auto updated = std::make_shared<typename impl::route_table>(*current);
 	auto path_view = strtls::to_view(path);
@@ -805,10 +822,7 @@ auto basic_server<Exec,ServiceExec>::unbound_request
 	[path_view](const typename impl::route &value) {
 		return value.pattern.text() == path_view;
 	});
-	m_impl->m_routes.store (
-		std::shared_ptr<const typename impl::route_table>(std::move(updated)),
-		std::memory_order_release
-	);
+	m_impl->store_routes(std::move(updated));
 	return *this;
 }
 

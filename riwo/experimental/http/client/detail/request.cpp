@@ -6,7 +6,7 @@
 namespace riwo::experimental::http
 {
 
-request::impl::impl(experimental::http::method request_method, riwo::url request_url) :
+request::impl::impl(http::method request_method, riwo::url request_url) :
 	m_head {.method = std::move(request_method), .url = std::move(request_url)}
 {
 

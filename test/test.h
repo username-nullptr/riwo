@@ -333,6 +333,17 @@ inline void print_help()
 		<< "  --fail-fast         stop after the first failed iteration\n";
 }
 
+inline void isolate_global_proxy_environment() noexcept
+{
+#if defined(_WIN32)
+	(void)_putenv_s("no_proxy", "*");
+	(void)_putenv_s("NO_PROXY", "*");
+#else
+	(void)::setenv("no_proxy", "*", 1);
+	(void)::setenv("NO_PROXY", "*", 1);
+#endif
+}
+
 inline int run_with_options(
 	std::initializer_list<test_case> tests, const run_options &options)
 {
@@ -349,6 +360,7 @@ inline int run_with_options(
 		return 0;
 	}
 
+	isolate_global_proxy_environment();
 	size_t selected_count = 0;
 	for(const auto &test : tests)
 		selected_count += selected(test.name, options.cases);

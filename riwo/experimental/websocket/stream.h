@@ -39,7 +39,7 @@ public:
 	using message_info_t = message_info;
 	using adopt_options_t = adopt_options;
 
-	using connection_t = experimental::http::basic_duplex_channel<executor_t>;
+	using connection_t = http::basic_duplex_channel<executor_t>;
 	using connection_ptr = std::shared_ptr<connection_t>;
 
 	template <typename Buffer>

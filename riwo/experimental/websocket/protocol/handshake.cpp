@@ -20,10 +20,10 @@ constexpr auto
 	sec_websocket_protocol   = "Sec-WebSocket-Protocol",
 	sec_websocket_extensions = "Sec-WebSocket-Extensions";
 
-[[nodiscard]] constexpr bool is_http2(experimental::http::protocol value) noexcept
+[[nodiscard]] constexpr bool is_http2(http::protocol value) noexcept
 {
 #if RIWO_EXP_HTTP_HTTP2_SUPPORT
-	return value == experimental::http::protocol::v2;
+	return value == http::protocol::v2;
 #else //RIWO_EXP_HTTP_HTTP2_SUPPORT
 	ignore_unused(value);
 	return false;
@@ -333,7 +333,7 @@ private:
 }
 
 [[nodiscard]] optional<std::string_view> header_value(
-	const experimental::http::fields &headers, const char *name)
+	const http::fields &headers, const char *name)
 {
 	return headers.find_first(name);
 }
@@ -377,10 +377,10 @@ sys_expected<std::string> make_accept_key(std::string_view client_key) noexcept
 	});
 }
 
-sys_expected<experimental::http::fields> make_opening_request_headers
-(const opening_request &request, experimental::http::protocol version) noexcept
+sys_expected<http::fields> make_opening_request_headers
+(const opening_request &request, http::protocol version) noexcept
 {
-	return guard_allocation<experimental::http::fields>([&]() -> sys_expected<experimental::http::fields>
+	return guard_allocation<http::fields>([&]() -> sys_expected<http::fields>
 	{
 		const auto key = trim_ows(request.key);
 		if( not is_client_key(key) )
@@ -394,7 +394,7 @@ sys_expected<experimental::http::fields> make_opening_request_headers
 		if( not request.extensions.empty() and extensions.empty() )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		experimental::http::fields result;
+		http::fields result;
 		if( not is_http2(version) )
 		{
 			result.add("Connection", "Upgrade");
@@ -412,15 +412,15 @@ sys_expected<experimental::http::fields> make_opening_request_headers
 	});
 }
 
-sys_expected<opening_request> parse_opening_request(const experimental::http::method &method,
-	experimental::http::protocol version, const experimental::http::fields &headers, bool extended_connect) noexcept
+sys_expected<opening_request> parse_opening_request(const http::method &method,
+	http::protocol version, const http::fields &headers, bool extended_connect) noexcept
 {
 	return guard_allocation<opening_request>([&]() -> sys_expected<opening_request>
 	{
 		const bool h2 = is_http2(version);
 		if( h2 ?
-			method.known() != experimental::http::method::connect or not extended_connect :
-			method.known() != experimental::http::method::get or version != experimental::http::protocol::v1_1 )
+			method.known() != http::method::connect or not extended_connect :
+			method.known() != http::method::get or version != http::protocol::v1_1 )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
 		const auto connection = header_value(headers, "Connection");
@@ -457,10 +457,10 @@ sys_expected<opening_request> parse_opening_request(const experimental::http::me
 	});
 }
 
-sys_expected<experimental::http::fields> make_opening_response_headers
-(const opening_request &request, const opening_response &response, experimental::http::protocol version) noexcept
+sys_expected<http::fields> make_opening_response_headers
+(const opening_request &request, const opening_response &response, http::protocol version) noexcept
 {
-	return guard_allocation<experimental::http::fields>([&]() -> sys_expected<experimental::http::fields>
+	return guard_allocation<http::fields>([&]() -> sys_expected<http::fields>
 	{
 		auto accept = make_accept_key(request.key);
 		if( not accept )
@@ -480,7 +480,7 @@ sys_expected<experimental::http::fields> make_opening_response_headers
 		if( not response.extensions.empty() and extensions.empty() )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		experimental::http::fields result {};
+		http::fields result {};
 		if( not is_http2(version) )
 		{
 			result.add("Connection", "Upgrade");
@@ -496,15 +496,15 @@ sys_expected<experimental::http::fields> make_opening_response_headers
 	});
 }
 
-sys_expected<opening_response> parse_opening_response(const experimental::http::status &status,
-	const experimental::http::fields &headers, const opening_request &request, experimental::http::protocol version) noexcept
+sys_expected<opening_response> parse_opening_response(const http::status &status,
+	const http::fields &headers, const opening_request &request, http::protocol version) noexcept
 {
 	return guard_allocation<opening_response>([&]() -> sys_expected<opening_response>
 	{
 		const bool h2 = is_http2(version);
 		if( h2 ?
 			status.code() < 200 or status.code() >= 300 :
-			status.code() != experimental::http::status::switching_protocols )
+			status.code() != http::status::switching_protocols )
 			return sys_unexpected(make_error_code(errc::handshake_rejected));
 
 		const auto connection = header_value(headers, "Connection");

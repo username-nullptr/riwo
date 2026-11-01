@@ -4,13 +4,14 @@
 #ifndef RIWO_UTILS_DETAIL_PROCESS_IO_H
 #define RIWO_UTILS_DETAIL_PROCESS_IO_H
 
+#include <riwo/utils/global.h>
 #include <riwo/core/async_expected.h>
 
 namespace riwo::utils::detail
 {
 
 template <typename Token, typename Initiation>
-[[nodiscard]] auto initiate_process_io(Initiation initiation, Token &&token)
+[[nodiscard]] RIWO_UTILS_TAPI auto initiate_process_io(Initiation initiation, Token &&token)
 {
 	using token_t = std::remove_cvref_t<Token>;
 	token_t completion_token(std::forward<Token>(token));
@@ -20,17 +21,8 @@ template <typename Token, typename Initiation>
 	);
 }
 
-inline std::shared_ptr<std::string> copy_process_buffer(const const_buffer &buffer)
-{
-	auto result = std::make_shared<std::string>();
-	if( buffer.size() > 0 )
-	{
-		result->assign(
-			static_cast<const char*>(buffer.data()), buffer.size()
-		);
-	}
-	return result;
-}
+[[nodiscard]] RIWO_UTILS_API
+std::shared_ptr<std::string> copy_process_buffer(const const_buffer &buffer);
 
 } //namespace riwo::utils::detail
 

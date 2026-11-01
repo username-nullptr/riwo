@@ -21,7 +21,7 @@ struct retry_open_context
 	error_code error {};
 
 	url endpoint {};
-	optional<experimental::http::status> http_status {};
+	optional<http::status> http_status {};
 };
 
 struct RIWO_EXP_WEBSOCKET_API retry_open_decision

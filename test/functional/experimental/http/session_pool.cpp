@@ -18,7 +18,7 @@ namespace
 {
 
 namespace http = riwo::experimental::http;
-namespace detail = riwo::experimental::http::detail;
+namespace detail = http::detail;
 
 class fake_stream final : public http::session_stream
 {

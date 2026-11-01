@@ -3,6 +3,7 @@
 
 #include "test.h"
 #include <riwo/experimental/websocket.h>
+#include <riwo/core/system/app_utls.h>
 
 #include <riwo/core/cxx/asio.h>
 #include <memory>
@@ -14,6 +15,186 @@ namespace
 
 namespace http = riwo::experimental::http;
 namespace ws = riwo::experimental::websocket;
+
+class scoped_environment
+{
+	struct entry
+	{
+		std::string name;
+		riwo::optional<riwo::app::path_t> value;
+	};
+
+public:
+	scoped_environment(std::initializer_list<std::string_view> names)
+	{
+		for(const auto name : names)
+		{
+			auto value = riwo::app::getenv(name);
+			m_entries.push_back({std::string(name), value ?
+				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
+		}
+	}
+
+	~scoped_environment()
+	{
+		for(const auto &item : m_entries)
+		{
+			if( item.value )
+				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
+			else
+				riwo::ignore_unused(riwo::app::unsetenv(item.name));
+		}
+	}
+
+private:
+	std::vector<entry> m_entries;
+};
+
+class recording_connector final :
+	public http::basic_transport_connector<riwo::io_context_t::executor_type>
+{
+public:
+	using executor_type = riwo::io_context_t::executor_type;
+
+	explicit recording_connector(executor_type executor) :
+		executor_(std::move(executor)) {}
+
+	[[nodiscard]] executor_type get_executor() const noexcept override {
+		return executor_;
+	}
+
+	[[nodiscard]] riwo::sys_expected<result_t> connect_sync(
+		const http::connect_request &request) noexcept override
+	{
+		record(request);
+		return riwo::sys_unexpected(asio::error::make_error_code(
+			asio::error::connection_refused));
+	}
+
+	void connect(http::connect_request request, connect_handler_t handler) override
+	{
+		record(request);
+		asio::post(executor_,
+			[handler = std::move(handler)]() mutable
+			{
+				std::move(handler)(asio::error::make_error_code(
+					asio::error::connection_refused), result_t{});
+			});
+	}
+
+	void cancel() noexcept override {}
+
+	[[nodiscard]] std::optional<http::connect_request> last_request() const
+	{
+		std::lock_guard lock(mutex_);
+		return last_request_;
+	}
+
+private:
+	void record(const http::connect_request &request)
+	{
+		std::lock_guard lock(mutex_);
+		last_request_ = request;
+	}
+
+	executor_type executor_;
+	mutable std::mutex mutex_;
+	std::optional<http::connect_request> last_request_;
+};
+
+void environment_proxy_selection()
+{
+	const scoped_environment environment({
+		"ws_proxy", "WS_PROXY", "wss_proxy", "WSS_PROXY",
+		"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
+		"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY",
+	});
+
+	auto clear = [] {
+		for(const auto name : {
+			"ws_proxy", "WS_PROXY", "wss_proxy", "WSS_PROXY",
+			"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
+			"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"
+		})
+			RIWO_TEST_CHECK(riwo::app::unsetenv(name));
+	};
+	auto open_and_observe = [](std::string_view endpoint, bool use_environment) {
+		riwo::io_context_t context;
+		auto connector = std::make_shared<recording_connector>(
+			context.get_executor());
+		http::client_config config;
+		config.protocols.requirement = http::protocol_requirement::v1;
+		config.proxy.use_environment = use_environment;
+		config.retries.max_attempts = 1;
+		http::basic_client<riwo::io_context_t::executor_type> http_client(
+			context.get_executor(), connector, config
+		);
+
+		riwo::error_code error;
+		auto stream = ws::open(http_client,
+			ws::connect_request(riwo::url(endpoint)), error);
+		riwo::ignore_unused(stream);
+		RIWO_TEST_CHECK_EQ(error,
+			asio::error::make_error_code(asio::error::connection_refused));
+		return connector->last_request();
+	};
+
+	clear();
+	RIWO_TEST_CHECK(riwo::app::setenv("ws_proxy",
+		"http://user:secret@ws-environment-proxy.test:8082/"));
+	RIWO_TEST_CHECK(riwo::app::setenv("http_proxy",
+		"http://http-fallback-proxy.test:8080/"));
+	{
+		auto observed = open_and_observe(
+			"ws://websocket-environment-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(observed->proxy.forward_proxy.has_value());
+		RIWO_TEST_CHECK_EQ(observed->proxy.forward_proxy->host(),
+			"ws-environment-proxy.test");
+		RIWO_TEST_CHECK_EQ(observed->proxy.authorization.value(),
+			"Basic dXNlcjpzZWNyZXQ=");
+	}
+
+	RIWO_TEST_CHECK(riwo::app::setenv("wss_proxy",
+		"http://secure-ws-environment-proxy.test:8444/"));
+	RIWO_TEST_CHECK(riwo::app::setenv("https_proxy",
+		"http://https-fallback-proxy.test:8443/"));
+	{
+		auto observed = open_and_observe(
+			"wss://secure-websocket-environment-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(observed->proxy.forward_proxy.has_value());
+		RIWO_TEST_CHECK_EQ(observed->proxy.forward_proxy->host(),
+			"secure-ws-environment-proxy.test");
+	}
+
+	RIWO_TEST_CHECK(riwo::app::setenv("no_proxy",
+		"websocket-environment-origin.test"));
+	{
+		auto observed = open_and_observe(
+			"ws://websocket-environment-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
+	}
+
+	RIWO_TEST_CHECK(riwo::app::unsetenv("no_proxy"));
+	{
+		auto observed = open_and_observe(
+			"ws://websocket-environment-origin.test/socket", false);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
+	}
+
+	RIWO_TEST_CHECK(riwo::app::unsetenv("wss_proxy"));
+	RIWO_TEST_CHECK(riwo::app::unsetenv("https_proxy"));
+	RIWO_TEST_CHECK(riwo::app::unsetenv("all_proxy"));
+	{
+		auto observed = open_and_observe(
+			"wss://https-only-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
+	}
+}
 
 void websocket_round_trip(bool use_http2, bool compression)
 {
@@ -481,6 +662,7 @@ void upgrade_rejection_preserved()
 int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
+		{"environment proxy selection", environment_proxy_selection},
 		{"HTTP/1 WebSocket upgrade", http1_upgrade},
 		{"standalone server accept queue", standalone_accept_queue},
 		{"redirect and external HTTP client", redirect_and_external_client},

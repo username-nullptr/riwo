@@ -70,7 +70,7 @@ sys_expected<permessage_deflate_parameters> parse_parameters(const extension &va
 	if( value.name != "permessage-deflate" )
 		return sys_unexpected(make_error_code(errc::unsupported_extension));
 
-	permessage_deflate_parameters result;
+	permessage_deflate_parameters result {};
 	bool server_no_context_takeover = false;
 	bool client_no_context_takeover = false;
 

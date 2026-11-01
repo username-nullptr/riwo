@@ -21,7 +21,7 @@ namespace riwo::experimental::http { namespace
 
 response_head &response_head::set_cookie(const response_cookie &value)
 {
-	experimental::http::set_cookie(headers, value);
+	http::set_cookie(headers, value);
 	return *this;
 }
 

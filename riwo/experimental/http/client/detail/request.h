@@ -13,7 +13,7 @@ namespace riwo::experimental::http
 class RIWO_EXP_HTTP_API request::impl
 {
 public:
-	impl(experimental::http::method request_method, riwo::url request_url);
+	impl(http::method request_method, riwo::url request_url);
 
 	request_head m_head {};
 	body_spec m_body_spec = body_spec::empty();

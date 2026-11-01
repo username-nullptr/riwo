@@ -5,6 +5,9 @@
 
 #if defined(_WIN32)
 # define WIN32_LEAN_AND_MEAN
+# ifndef NOMINMAX
+#  define NOMINMAX
+# endif //NOMINMAX
 # include <windows.h>
 # include <bcrypt.h>
 #elif defined(__linux__) && !defined(__ANDROID__)
@@ -12,10 +15,10 @@
 #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || \
 	defined(__OpenBSD__) || defined(__DragonFly__)
 # include <cstdlib>
-#else
+#else //Other
 # include <fcntl.h>
 # include <unistd.h>
-#endif
+#endif //OS
 
 namespace riwo { namespace
 {
@@ -31,7 +34,7 @@ namespace riwo { namespace
 [[nodiscard]] error_code errno_error() noexcept {
 	return { std::error_code(errno, std::generic_category()) };
 }
-#endif
+#endif //OS
 
 } //namespace
 

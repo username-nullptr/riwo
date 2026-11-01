@@ -65,6 +65,11 @@ not modify a system installation.
 
 ## Interoperability checks
 
+Every test executable sets `no_proxy` and `NO_PROXY` to `*` before running
+cases. This keeps host-level proxy environment variables from changing
+hermetic loopback tests; proxy-specific cases explicitly snapshot and override
+those variables.
+
 Loopback tests are always the dependency-free baseline. When Python 3.8+ is
 already available and the build is not cross-compiling, CMake may add external
 checks without downloading dependencies:

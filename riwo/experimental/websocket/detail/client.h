@@ -17,23 +17,27 @@ namespace riwo::experimental::websocket { namespace detail
 error_code validate_open_request(connect_request &request, const stream_config &stream) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
-bool extended_connect(const experimental::http::client_config &config) noexcept;
+bool extended_connect(const http::client_config &config) noexcept;
 
-[[nodiscard]] RIWO_EXP_WEBSOCKET_API experimental::http::client_config
-websocket_http_config(experimental::http::client_config config, std::chrono::milliseconds handshake_timeout);
+[[nodiscard]] RIWO_EXP_WEBSOCKET_API http::client_config
+websocket_http_config(http::client_config config, std::chrono::milliseconds handshake_timeout);
 
 struct RIWO_EXP_WEBSOCKET_API prepared_open
 {
-	prepared_open(experimental::http::request request_value,
-		experimental::http::body_spec spec_value, opening_request opening_value
-	);
-	experimental::http::request request;
-	experimental::http::body_spec spec;
+	http::request request;
+	http::body_spec spec;
 	opening_request opening {};
+
+	prepared_open(http::request request_value,
+		http::body_spec spec_value, opening_request opening_value
+	);
 };
 
-RIWO_EXP_WEBSOCKET_API sys_expected<prepared_open> prepare_open
-(const connect_request &request, const url &endpoint, bool use_extended_connect) noexcept;
+[[nodiscard]] RIWO_EXP_WEBSOCKET_API
+sys_expected<prepared_open> prepare_open (
+	const connect_request &request, const url &endpoint,
+	bool use_extended_connect, const http::client_config &config
+) noexcept;
 
 enum class open_response_action : uint8_t {
 	accept, redirect, reject
@@ -52,8 +56,8 @@ struct open_response_decision
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
 open_response_decision evaluate_open_response (
-	const experimental::http::response_head &response, const opening_request &opening,
-	const connect_request &request, const url &endpoint, experimental::http::protocol selected_protocol,
+	const http::response_head &response, const opening_request &opening,
+	const connect_request &request, const url &endpoint,http::protocol selected_protocol,
 	size_t redirects
 ) noexcept;
 
@@ -63,7 +67,7 @@ remaining_timeout(std::chrono::steady_clock::time_point deadline) noexcept;
 template <core_concepts::exec Exec>
 class RIWO_EXP_WEBSOCKET_TAPI open_cancellation_state
 {
-	using exchange_t = experimental::http::basic_client_exchange<Exec>;
+	using exchange_t = http::basic_client_exchange<Exec>;
 
 public:
 	void activate(const std::shared_ptr<exchange_t> &exchange) noexcept
@@ -114,7 +118,7 @@ cancellation_error(bool cancelled, const error_code &error = {}) noexcept;
 
 template <core_concepts::exec Exec>
 RIWO_EXP_WEBSOCKET_TAPI void open_sync
-(experimental::http::basic_client<Exec> &http_client, connect_request request,
+(http::basic_client<Exec> &http_client, connect_request request,
 	basic_open_diagnostics<Exec> *diagnostics, stream_config stream_options,
 	std::chrono::milliseconds timeout, bool use_extended_connect,
 	basic_stream<Exec> &result, error_code &error
@@ -150,7 +154,9 @@ try
 			error = asio::error::make_error_code(asio::error::timed_out);
 			return ;
 		}
-		auto prepared = prepare_open(request, endpoint, use_extended_connect);
+		auto prepared = prepare_open (
+			request, endpoint, use_extended_connect, http_client.config()
+		);
 		if( not prepared )
 		{
 			error = prepared.error();
@@ -199,7 +205,7 @@ try
 			return ;
 
 		result.adopt (
-			std::make_shared<experimental::http::basic_duplex_channel<Exec>>(std::move(channel)),
+			std::make_shared<http::basic_duplex_channel<Exec>>(std::move(channel)),
 			adopt_options {
 				.stream_role = role::client,
 				.negotiated_subprotocol = decision.response.subprotocol.value_or(""),
@@ -216,7 +222,7 @@ catch(...) {
 
 template <core_concepts::exec Exec>
 RIWO_EXP_WEBSOCKET_TAPI asio::awaitable<optional<std::tuple<error_code,basic_stream<Exec>>>,Exec>
-co_open(experimental::http::basic_client<Exec> *http_client, connect_request request,
+co_open(http::basic_client<Exec> *http_client, connect_request request,
 	basic_open_diagnostics<Exec> *diagnostics, stream_config stream_options,
 	std::chrono::milliseconds timeout, bool use_extended_connect,
 	std::shared_ptr<open_cancellation_state<Exec>> cancellation)
@@ -268,9 +274,11 @@ co_open(experimental::http::basic_client<Exec> *http_client, connect_request req
 					std::move(result)
 				};
 			}
-			auto prepared = prepare_open(request, endpoint, use_extended_connect);
+			auto prepared = prepare_open (
+				request, endpoint, use_extended_connect, http_client->config()
+			);
 			if( not prepared )
-				co_return std::tuple {prepared.error(), std::move(result)};
+				co_return std::tuple { prepared.error(), std::move(result) };
 
 			auto open_result = co_await http_client->open (
 				std::move(prepared->request), std::move(prepared->spec),
@@ -285,7 +293,7 @@ co_open(experimental::http::basic_client<Exec> *http_client, connect_request req
 				};
 			}
 			auto exchange = std::make_shared
-				<experimental::http::basic_client_exchange<Exec>>(std::move(exchange_value));
+				<http::basic_client_exchange<Exec>>(std::move(exchange_value));
 
 			cancellation->activate(exchange);
 			auto reply_result = co_await exchange->wait_reply (
@@ -360,7 +368,7 @@ co_open(experimental::http::basic_client<Exec> *http_client, connect_request req
 			}
 			error_code adopt_error {};
 			result.adopt (
-				std::make_shared<experimental::http::basic_duplex_channel<Exec>>(std::move(channel)),
+				std::make_shared<http::basic_duplex_channel<Exec>>(std::move(channel)),
 				adopt_options {
 					.stream_role = role::client,
 					.negotiated_subprotocol =
@@ -383,7 +391,7 @@ co_open(experimental::http::basic_client<Exec> *http_client, connect_request req
 }
 
 template <core_concepts::exec Exec, typename Handler>
-RIWO_EXP_WEBSOCKET_TAPI void start_open(experimental::http::basic_client<Exec> &http_client, connect_request request,
+RIWO_EXP_WEBSOCKET_TAPI void start_open(http::basic_client<Exec> &http_client, connect_request request,
 	basic_open_diagnostics<Exec> *diagnostics, stream_config stream_options, std::chrono::milliseconds timeout,
 	bool use_extended_connect, Handler &&handler)
 {
@@ -437,7 +445,7 @@ RIWO_EXP_WEBSOCKET_TAPI void start_open(experimental::http::basic_client<Exec> &
 }
 
 template <core_concepts::exec Exec, typename Token>
-RIWO_EXP_WEBSOCKET_TAPI auto external_open(experimental::http::basic_client<Exec> &http_client,
+RIWO_EXP_WEBSOCKET_TAPI auto external_open(http::basic_client<Exec> &http_client,
 	connect_request request, basic_open_diagnostics<Exec> *diagnostics, Token &&token)
 {
 	const auto stream_options = request.stream_options.value_or(stream_config{});
@@ -867,8 +875,7 @@ auto basic_client<Exec>::config() const -> config_t
 }
 
 template <core_concepts::exec Exec>
-std::shared_ptr<experimental::http::cookie_jar>
-basic_client<Exec>::cookie_store() const noexcept
+std::shared_ptr<http::cookie_jar> basic_client<Exec>::cookie_store() const noexcept
 {
 	return m_impl->m_http.cookie_store();
 }
@@ -900,7 +907,7 @@ basic_client<Exec> &basic_client<Exec>::cancel() noexcept
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token>
-auto open(experimental::http::basic_client<Exec> &http_client, connect_request request, Token &&token)
+auto open(http::basic_client<Exec> &http_client, connect_request request, Token &&token)
 {
 	return detail::external_open(http_client, std::move(request),
 		static_cast<basic_open_diagnostics<Exec>*>(nullptr),
@@ -910,7 +917,7 @@ auto open(experimental::http::basic_client<Exec> &http_client, connect_request r
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token>
-auto open(experimental::http::basic_client<Exec> &http_client,
+auto open(http::basic_client<Exec> &http_client,
 	connect_request request, basic_open_diagnostics<Exec> &diagnostics, Token &&token)
 {
 	return detail::external_open(http_client, std::move(request),
@@ -920,14 +927,14 @@ auto open(experimental::http::basic_client<Exec> &http_client,
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token>
-auto open(experimental::http::basic_client<Exec> &http_client, url endpoint, Token &&token)
+auto open(http::basic_client<Exec> &http_client, url endpoint, Token &&token)
 {
 	return open(http_client, connect_request(std::move(endpoint)), std::forward<Token>(token));
 }
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_stream<Exec>> Token>
-auto open(experimental::http::basic_client<Exec> &http_client,
+auto open(http::basic_client<Exec> &http_client,
 	url endpoint, basic_open_diagnostics<Exec> &diagnostics, Token &&token)
 {
 	return open(http_client, connect_request(std::move(endpoint)),

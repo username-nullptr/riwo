@@ -12,13 +12,13 @@ namespace riwo::experimental::websocket
 
 struct request_info
 {
-	experimental::http::method method {experimental::http::method::get};
-	experimental::http::protocol version {experimental::http::protocol::v1_1};
+	http::method method {http::method::get};
+	http::protocol version {http::protocol::v1_1};
 
 	std::string target {};
 	std::string path {};
 
-	experimental::http::fields request_headers {};
+	http::fields request_headers {};
 	parameter_map query_parameters {};
 	parameter_map path_arguments {};
 
@@ -31,8 +31,8 @@ struct request_info
 
 struct upgrade_rejection
 {
-	experimental::http::status status {experimental::http::status::forbidden};
-	experimental::http::fields headers {};
+	http::status status {http::status::forbidden};
+	http::fields headers {};
 	std::string body {};
 };
 
@@ -71,7 +71,7 @@ struct upgrade_options
 	std::vector<std::string> supported_subprotocols {};
 	std::vector<extension> supported_extensions {};
 
-	experimental::http::fields response_headers {};
+	http::fields response_headers {};
 	bool require_subprotocol = false;
 
 	request_validator_t request_validator {};
@@ -95,7 +95,7 @@ struct upgrade_result
 
 struct server_config
 {
-	experimental::http::server_config http {};
+	http::server_config http {};
 	upgrade_options default_upgrade {};
 
 	size_t max_pending_handshakes = 64;
@@ -145,7 +145,7 @@ public:
 	using request_info_t = request_info;
 	using accept_result_t = basic_accept_result<service_executor_t>;
 
-	using http_server_t = experimental::http::basic_server<executor_t,service_executor_t>;
+	using http_server_t = http::basic_server<executor_t,service_executor_t>;
 	using http_config_t = http_server_t::config_t;
 
 	using context_t = http_server_t::context_t;
@@ -268,17 +268,17 @@ using server = tcp_server;
 
 template <core_concepts::exec Exec>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI bool is_upgrade_request
-(const experimental::http::basic_server_exchange<Exec> &exchange) noexcept;
+(const http::basic_server_exchange<Exec> &exchange) noexcept;
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_accept_result<Exec>> Token = use_sync_t>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto upgrade
-(experimental::http::basic_server_exchange<Exec> &exchange, Token &&token = {}) ;
+(http::basic_server_exchange<Exec> &exchange, Token &&token = {}) ;
 
 template <core_concepts::exec Exec,
 	core_concepts::dis_detached_tf_opt_token<error_code,basic_accept_result<Exec>> Token = use_sync_t>
 [[nodiscard]] RIWO_EXP_WEBSOCKET_TAPI auto upgrade
-(experimental::http::basic_server_exchange<Exec> &exchange, upgrade_options options, Token &&token = {});
+(http::basic_server_exchange<Exec> &exchange, upgrade_options options, Token &&token = {});
 
 } //namespace riwo::experimental::websocket
 #include <riwo/experimental/websocket/detail/server.h>

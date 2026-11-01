@@ -18,7 +18,8 @@ struct proxy_policy
 	optional<url> forward_proxy {};
 	proxy_type type = proxy_type::automatic;
 
-	bool use_environment = false;
+	// Match the legacy clients: inherit proxy variables unless explicitly disabled.
+	bool use_environment = true;
 	std::vector<std::string> no_proxy {};
 
 	optional<std::string> username {};

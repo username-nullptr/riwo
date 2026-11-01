@@ -15,15 +15,15 @@ namespace riwo::experimental::http
 class RIWO_EXP_HTTP_API request_head
 {
 public:
-	experimental::http::method method {
-		experimental::http::method::get
+	method method {
+		method::get
 	};
 	riwo::url url {};
 
 	std::string scheme {};
 	std::string authority {};
 	std::string target {"/"};
-	experimental::http::fields headers {};
+	fields headers {};
 
 	optional<std::string> connect_protocol {};
 	optional<std::string> upgrade_protocol {};

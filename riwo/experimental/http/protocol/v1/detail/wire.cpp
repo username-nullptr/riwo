@@ -34,7 +34,7 @@ namespace riwo::experimental::http::v1::detail { namespace
 	for(;;)
 	{
 		const auto semicolon = value.find(';');
-		const auto item = experimental::http::detail::trim_ows(value.substr(0, semicolon));
+		const auto item = http::detail::trim_ows(value.substr(0, semicolon));
 
 		if( not item.empty() )
 		{
@@ -54,7 +54,7 @@ namespace riwo::experimental::http::v1::detail { namespace
 	for(;;)
 	{
 		const auto semicolon = value.find(';');
-		const auto item = experimental::http::detail::trim_ows(value.substr(0, semicolon));
+		const auto item = http::detail::trim_ows(value.substr(0, semicolon));
 
 		if( not item.empty() )
 			return item.find('=') != std::string_view::npos;
@@ -240,7 +240,7 @@ try
 			return sys_unexpected(make_error_code(errc::connection_protocol_error));
 
 		auto name = line.substr(0, colon);
-		auto value = experimental::http::detail::trim_ows(line.substr(colon + 1));
+		auto value = http::detail::trim_ows(line.substr(colon + 1));
 
 		if( name.size() > limits.max_field_name_size or value.size() > limits.max_field_value_size )
 			return sys_unexpected(make_error_code(errc::header_limit_exceeded));
@@ -266,14 +266,14 @@ try
 			if( result.transfer_encoding )
 				return sys_unexpected(make_error_code(errc::connection_protocol_error));
 
-			if( not equal_ci(experimental::http::detail::trim_ows(value), "chunked") )
+			if( not equal_ci(http::detail::trim_ows(value), "chunked") )
 				return sys_unexpected(make_error_code(errc::connection_protocol_error));
 
 			result.transfer_encoding = true;
 			result.chunked = true;
 		}
 		else if( equal_ci(name, "Connection") )
-			result.close = experimental::http::detail::comma_list_contains(value, "close");
+			result.close = http::detail::comma_list_contains(value, "close");
 
 		result.values.add(std::string(name), std::string(value));
 	}
@@ -610,7 +610,7 @@ sys_expected<parsed_response> parse_response
 sys_expected<uint64_t> parse_chunk_size(std::string_view line) noexcept
 {
 	auto semicolon = line.find(';');
-	line = experimental::http::detail::trim_ows(line.substr(0, semicolon));
+	line = http::detail::trim_ows(line.substr(0, semicolon));
 
 	uint64_t result = 0;
 	auto parsed = std::from_chars(line.data(), line.data() + line.size(), result, 16);

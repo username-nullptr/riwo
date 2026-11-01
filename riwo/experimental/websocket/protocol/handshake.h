@@ -31,26 +31,26 @@ sys_expected<std::string> make_client_key(std::span<const std::byte,16> nonce) n
 sys_expected<std::string> make_accept_key(std::string_view client_key) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
-sys_expected<experimental::http::fields> make_opening_request_headers (
-	const opening_request &request, experimental::http::protocol version = experimental::http::protocol::v1_1
+sys_expected<http::fields> make_opening_request_headers (
+	const opening_request &request, http::protocol version = http::protocol::v1_1
 ) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
 sys_expected<opening_request> parse_opening_request (
-	const experimental::http::method &method, experimental::http::protocol version,
-	const experimental::http::fields &headers, bool extended_connect = false
+	const http::method &method, http::protocol version,
+	const http::fields &headers, bool extended_connect = false
 ) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
-sys_expected<experimental::http::fields> make_opening_response_headers (
+sys_expected<http::fields> make_opening_response_headers (
 	const opening_request &request, const opening_response &response,
-	experimental::http::protocol version = experimental::http::protocol::v1_1
+	http::protocol version = http::protocol::v1_1
 ) noexcept;
 
 [[nodiscard]] RIWO_EXP_WEBSOCKET_API
 sys_expected<opening_response> parse_opening_response(
-	const experimental::http::status &status, const experimental::http::fields &headers, const opening_request &request,
-	experimental::http::protocol version = experimental::http::protocol::v1_1
+	const http::status &status, const http::fields &headers, const opening_request &request,
+	http::protocol version = http::protocol::v1_1
 ) noexcept;
 
 } //namespace riwo::experimental::websocket

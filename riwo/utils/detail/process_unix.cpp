@@ -37,7 +37,7 @@ using path_t = process::path_t;
 using envs_t = std::map<std::string, path_t>;
 
 [[nodiscard]] static error_code sys_error() {
-	return error_code(std::error_code(errno, std::system_category()));
+	return { std::error_code(errno, std::system_category()) };
 }
 
 [[nodiscard]] static bool is_shell_assignment(std::string_view word) noexcept

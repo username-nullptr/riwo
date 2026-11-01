@@ -11,7 +11,7 @@ stream_transport::stream_transport() noexcept = default;
 
 stream_transport::~stream_transport() = default;
 
-void stream_transport::reset(experimental::http::duplex_channel_io_ptr connection) noexcept
+void stream_transport::reset(http::duplex_channel_io_ptr connection) noexcept
 {
 	m_connection = std::move(connection);
 }

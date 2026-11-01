@@ -15,15 +15,15 @@
 namespace riwo::experimental::http::v2
 {
 
-using experimental::http::detail::body_reader_adapter;
-using experimental::http::detail::body_reader_state;
-using experimental::http::detail::body_writer_adapter;
-using experimental::http::detail::body_writer_state;
-using experimental::http::detail::duplex_state;
+using http::detail::body_reader_adapter;
+using http::detail::body_reader_state;
+using http::detail::body_writer_adapter;
+using http::detail::body_writer_state;
+using http::detail::duplex_state;
 
-using experimental::http::detail::make_body_reader_state;
-using experimental::http::detail::make_body_writer_state;
-using experimental::http::make_body_duplex_state;
+using http::detail::make_body_reader_state;
+using http::detail::make_body_writer_state;
+using http::make_body_duplex_state;
 
 using namespace ::riwo::experimental::http::v2::detail;
 

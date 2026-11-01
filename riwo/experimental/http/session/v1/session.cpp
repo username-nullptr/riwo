@@ -15,15 +15,15 @@
 namespace riwo::experimental::http::v1
 {
 
-using experimental::http::detail::body_reader_adapter;
-using experimental::http::detail::body_reader_state;
-using experimental::http::detail::body_writer_adapter;
-using experimental::http::detail::body_writer_state;
-using experimental::http::detail::duplex_state;
+using http::detail::body_reader_adapter;
+using http::detail::body_reader_state;
+using http::detail::body_writer_adapter;
+using http::detail::body_writer_state;
+using http::detail::duplex_state;
 
-using experimental::http::detail::make_body_reader_state;
-using experimental::http::make_body_duplex_state;
-using experimental::http::detail::make_body_writer_state;
+using http::detail::make_body_reader_state;
+using http::make_body_duplex_state;
+using http::detail::make_body_writer_state;
 
 using namespace ::riwo::experimental::http::v1::detail;
 
@@ -64,17 +64,17 @@ struct RIWO_DECL_HIDDEN connection final
 		return transport->write_sync(buffer, error);
 	}
 
-	void read_some(const mutable_buffer &buffer, experimental::http::connection::io_handler_t handler) {
+	void read_some(const mutable_buffer &buffer, http::connection::io_handler_t handler) {
 		transport->read_some(buffer, std::move(handler));
 	}
-	void write(const const_buffer &buffer, experimental::http::connection::io_handler_t handler) {
+	void write(const const_buffer &buffer, http::connection::io_handler_t handler) {
 		transport->write(buffer, std::move(handler));
 	}
 
 	void connect_sync(std::string_view host, uint16_t port, error_code &error) noexcept {
 		transport->connect_sync(host, port, error);
 	}
-	void connect_async(std::string_view host, uint16_t port, experimental::http::connection::close_handler_t handler) {
+	void connect_async(std::string_view host, uint16_t port, http::connection::close_handler_t handler) {
 		transport->connect_async(host, port, std::move(handler));
 	}
 
@@ -247,7 +247,7 @@ bounded_timeout(std::chrono::milliseconds idle, const timeout_policy &timeouts)
 	auto range = values.find_all(name);
 	for(auto iterator=range.begin(); iterator!=range.end(); ++iterator)
 	{
-		if( experimental::http::detail::comma_list_contains(iterator->value.to_string(), token) )
+		if( http::detail::comma_list_contains(iterator->value.to_string(), token) )
 			return true;
 	}
 	return false;
@@ -262,7 +262,7 @@ bounded_timeout(std::chrono::milliseconds idle, const timeout_policy &timeouts)
 		while( not text.empty() )
 		{
 			const auto comma = text.find(',');
-			auto item = experimental::http::detail::trim_ows(text.substr(0, comma));
+			auto item = http::detail::trim_ows(text.substr(0, comma));
 
 			if( item.empty() or not strtls::ascii_equal(item, "100-continue", false) )
 				return true;

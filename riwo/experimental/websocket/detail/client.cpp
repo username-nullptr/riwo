@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/experimental/websocket/client.h>
+#include <riwo/experimental/http/client/detail/connector.h>
 #include "permessage_deflate.h"
 
 namespace riwo::experimental::websocket::detail { namespace
@@ -77,13 +78,57 @@ catch(...) {
 		   websocket_effective_port(lhs) == websocket_effective_port(rhs);
 }
 
-[[nodiscard]] bool websocket_redirect_status(experimental::http::status status) noexcept
+[[nodiscard]] bool websocket_redirect_status(http::status status) noexcept
 {
-	return status == experimental::http::status::moved_permanently or
-		   status == experimental::http::status::found or
-		   status == experimental::http::status::see_other or
-		   status == experimental::http::status::temporary_redirect or
-		   status == experimental::http::status::permanent_redirect;
+	return status == http::status::moved_permanently or
+		   status == http::status::found or
+		   status == http::status::see_other or
+		   status == http::status::temporary_redirect or
+		   status == http::status::permanent_redirect;
+}
+
+[[nodiscard]] sys_expected<optional<http::proxy_policy>>
+websocket_environment_proxy
+(const url &endpoint, const http::proxy_policy &config) noexcept
+{
+	try {
+		if( not config.use_environment or config.forward_proxy )
+			return nullopt;
+
+		auto environment = equal_ci(endpoint.protocol(), "wss") ?
+			http::detail::resolve_environment_proxy(endpoint, {
+				"wss_proxy", "WSS_PROXY",
+				"https_proxy", "HTTPS_PROXY",
+				"all_proxy", "ALL_PROXY"
+			}) :
+			http::detail::resolve_environment_proxy(endpoint, {
+				"ws_proxy", "WS_PROXY",
+				"http_proxy", "HTTP_PROXY",
+				"all_proxy", "ALL_PROXY"
+			});
+		if( not environment )
+			return sys_unexpected(environment.error());
+
+		auto result = config;
+		// Resolve WS/WSS-specific variables here, then pass a fully selected
+		// policy to the HTTP client to avoid its HTTP-only environment lookup.
+		result.use_environment = false;
+		result.forward_proxy.reset();
+
+		if( environment->proxy )
+		{
+			result.forward_proxy = environment->proxy->endpoint;
+			if( environment->proxy->username )
+			{
+				result.username = environment->proxy->username;
+				result.password = environment->proxy->password;
+			}
+		}
+		return result;
+	}
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
 }
 
 } //namespace
@@ -116,10 +161,10 @@ catch(...) {
 	return exception_error(std::current_exception());
 }
 
-bool extended_connect(const experimental::http::client_config &config) noexcept
+bool extended_connect(const http::client_config &config) noexcept
 {
 #if RIWO_EXP_HTTP_HTTP2_SUPPORT
-	return config.protocols.requirement == experimental::http::protocol_requirement::v2;
+	return config.protocols.requirement == http::protocol_requirement::v2;
 
 #else //RIWO_EXP_HTTP_HTTP2_SUPPORT
 	ignore_unused(config);
@@ -127,17 +172,17 @@ bool extended_connect(const experimental::http::client_config &config) noexcept
 #endif //RIWO_EXP_HTTP_HTTP2_SUPPORT
 }
 
-experimental::http::client_config websocket_http_config
-(experimental::http::client_config config, std::chrono::milliseconds handshake_timeout)
+http::client_config websocket_http_config
+(http::client_config config, std::chrono::milliseconds handshake_timeout)
 {
 #if RIWO_EXP_HTTP_HTTP2_SUPPORT
-	if( config.protocols.requirement == experimental::http::protocol_requirement::v2 )
+	if( config.protocols.requirement == http::protocol_requirement::v2 )
 		config.h2.enable_extended_connect = true;
 	else
-		config.protocols.requirement = experimental::http::protocol_requirement::v1;
+		config.protocols.requirement = http::protocol_requirement::v1;
 
 #else ////RIWO_EXP_HTTP_HTTP2_SUPPORT
-	config.protocols.requirement = experimental::http::protocol_requirement::v1;
+	config.protocols.requirement = http::protocol_requirement::v1;
 #endif //RIWO_EXP_HTTP_HTTP2_SUPPORT
 
 	config.redirects.max_redirects = 0;
@@ -153,14 +198,15 @@ experimental::http::client_config websocket_http_config
 }
 
 prepared_open::prepared_open
-(experimental::http::request request_value, experimental::http::body_spec spec_value, opening_request opening_value) :
+(http::request request_value, http::body_spec spec_value, opening_request opening_value) :
 	request(std::move(request_value)), spec(std::move(spec_value)), opening(std::move(opening_value))
 {
 
 }
 
-sys_expected<prepared_open> prepare_open
-(const connect_request &request, const url &endpoint, bool use_extended_connect) noexcept
+sys_expected<prepared_open> prepare_open(const connect_request &request,
+	const url &endpoint, bool use_extended_connect,
+	const http::client_config &config) noexcept
 try
 {
 	auto target = websocket_transport_url(endpoint);
@@ -180,19 +226,19 @@ try
 		.subprotocols = request.subprotocols,
 		.extensions = request.extensions,
 	};
-	auto version = experimental::http::protocol::v1_1;
+	auto version = http::protocol::v1_1;
 
 #if RIWO_EXP_HTTP_HTTP2_SUPPORT
 	if( use_extended_connect )
-		version = experimental::http::protocol::v2;
+		version = http::protocol::v2;
 #endif //RIWO_EXP_HTTP_HTTP2_SUPPORT
 
 	auto handshake = make_opening_request_headers(opening, version);
 	if( not handshake )
 		return sys_unexpected(handshake.error());
 
-	experimental::http::request result(use_extended_connect ?
-		experimental::http::method::connect : experimental::http::method::get, std::move(*target)
+	http::request result(use_extended_connect ?
+		http::method::connect : http::method::get, std::move(*target)
 	);
 	for(const auto &[name, value] : request.headers)
 		result.headers().add(name, value);
@@ -210,8 +256,14 @@ try
 	else
 		result.set_upgrade_protocol("websocket");
 
+	auto proxy = websocket_environment_proxy(endpoint, config.proxy);
+	if( not proxy )
+		return sys_unexpected(proxy.error());
+	if( *proxy )
+		result.set_proxy(std::move(**proxy));
+
 	auto spec = use_extended_connect ?
-		experimental::http::body_spec::streaming() : experimental::http::body_spec::empty();
+		http::body_spec::streaming() : http::body_spec::empty();
 
 	return prepared_open(std::move(result), std::move(spec), std::move(opening));
 }
@@ -219,9 +271,9 @@ catch(...) {
 	return sys_unexpected(exception_error(std::current_exception()));
 }
 
-open_response_decision evaluate_open_response(const experimental::http::response_head &response,
+open_response_decision evaluate_open_response(const http::response_head &response,
 	const opening_request &opening, const connect_request &request, const url &endpoint,
-	experimental::http::protocol selected_protocol, size_t redirects) noexcept
+	http::protocol selected_protocol, size_t redirects) noexcept
 {
 	open_response_decision result {};
 	try {

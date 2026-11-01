@@ -11,15 +11,15 @@
 
 namespace riwo::experimental::http::v2
 {
-using experimental::http::detail::body_reader_adapter;
-using experimental::http::detail::body_reader_state;
-using experimental::http::detail::body_writer_adapter;
-using experimental::http::detail::body_writer_state;
-using experimental::http::detail::duplex_state;
+using http::detail::body_reader_adapter;
+using http::detail::body_reader_state;
+using http::detail::body_writer_adapter;
+using http::detail::body_writer_state;
+using http::detail::duplex_state;
 
-using experimental::http::detail::make_body_reader_state;
-using experimental::http::detail::make_body_writer_state;
-using experimental::http::make_body_duplex_state;
+using http::detail::make_body_reader_state;
+using http::detail::make_body_writer_state;
+using http::make_body_duplex_state;
 
 using namespace ::riwo::experimental::http::v2::detail;
 
@@ -263,13 +263,13 @@ public:
 		return m_request;
 	}
 
-	[[nodiscard]] experimental::http::detail::body_reader_state_ptr inbound_body() const noexcept override
+	[[nodiscard]] http::detail::body_reader_state_ptr inbound_body() const noexcept override
 	{
 		auto *self = const_cast<server_stream_impl*>(this);
 		return {self->shared_from_this(), std::addressof(self->m_inbound)};
 	}
 
-	[[nodiscard]] experimental::http::detail::body_writer_state_ptr outbound_body() const noexcept override
+	[[nodiscard]] http::detail::body_writer_state_ptr outbound_body() const noexcept override
 	{
 		auto *self = const_cast<server_stream_impl*>(this);
 		return {self->shared_from_this(), std::addressof(self->m_outbound)};
@@ -1709,8 +1709,8 @@ void server_stream_impl::inform(const response_head &head, operation_handler_t h
 	m_session->inform(shared_from_this(), head, std::move(handler));
 }
 
-experimental::http::detail::duplex_state_ptr server_stream_impl::open_duplex_sync(
-	const optional<response_head> &response, error_code &error) noexcept
+http::detail::duplex_state_ptr server_stream_impl::open_duplex_sync
+(const optional<response_head> &response, error_code &error) noexcept
 {
 	error.clear();
 	if( m_duplex_opened or not m_request.connect_protocol or not response or
