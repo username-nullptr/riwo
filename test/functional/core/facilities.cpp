@@ -372,9 +372,9 @@ auto checked_dequeue(Queue &queue)
 
 struct throwing_queue_value
 {
-	explicit throwing_queue_value(int value) : value(value)
+	explicit throwing_queue_value(int _value) : value(_value)
 	{
-		if( value < 0 )
+		if( _value < 0 )
 			throw std::runtime_error("queue value construction failed");
 	}
 	throwing_queue_value(throwing_queue_value &&other) : value(other.value)
