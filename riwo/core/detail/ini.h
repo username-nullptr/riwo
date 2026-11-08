@@ -537,11 +537,29 @@ public:
 		}
 		else if constexpr( is_sync_opt_token_v<Token> )
 		{
-			error_code error;
+			error_code error {};
 			auto loaded_data = load_file(file_name, error, no_cancellation, IgnoreMissing);
-			if( error )
-				system_error::loc_throw(error, "riwo::basic_ini::load");
-			set_data(std::move(loaded_data));
+
+			if constexpr( is_as_expected_v<std::remove_cvref_t<Token>> )
+			{
+				if( error )
+					return sys_expected(sys_unexpected(error));
+
+				set_data(std::move(loaded_data));
+				return sys_expected<>();
+			}
+			else if constexpr( is_as_tuple_v<std::remove_cvref_t<Token>> )
+			{
+				if( not error )
+					set_data(std::move(loaded_data));
+				return std::tuple(error);
+			}
+			else
+			{
+				if( error )
+					system_error::loc_throw(error, "riwo::basic_ini::load");
+				set_data(std::move(loaded_data));
+			}
 		}
 		else
 		{
@@ -551,6 +569,7 @@ public:
 			{
 				auto cancellation = self->m_cancellations->add();
 				auto slot = asio::get_associated_cancellation_slot(handler);
+
 				if( slot.is_connected() )
 				{
 					slot.template emplace<detail::ini_cancellation_handler>(
@@ -598,7 +617,7 @@ public:
 	auto sync(Token &&token)
 	{
 		const auto file_name = m_file_name;
-		const cancellation_state_t no_cancellation;
+		const cancellation_state_t no_cancellation {};
 
 		if constexpr( is_error_code_token_v<Token> )
 		{
@@ -608,9 +627,19 @@ public:
 
 		else if constexpr( is_sync_opt_token_v<Token> )
 		{
-			error_code error;
+			error_code error {};
 			sync_file(file_name, data(), error, no_cancellation);
-			if( error )
+
+			if constexpr( is_as_expected_v<std::remove_cvref_t<Token>> )
+			{
+				if( error )
+					return sys_expected(sys_unexpected(error));
+				return sys_expected<>();
+			}
+			else if constexpr( is_as_tuple_v<std::remove_cvref_t<Token>> )
+				return std::tuple(error);
+
+			else if( error )
 				system_error::loc_throw(error, "riwo::basic_ini::sync");
 		}
 		else

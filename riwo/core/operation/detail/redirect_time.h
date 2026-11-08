@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_UTILS_DETAIL_OPT_TOKEN_H
-#define RIWO_CORE_UTILS_DETAIL_OPT_TOKEN_H
+#ifndef RIWO_CORE_OPERATION_DETAIL_REDIRECT_TIME_H
+#define RIWO_CORE_OPERATION_DETAIL_REDIRECT_TIME_H
+
+#include <riwo/core/operation/tokens.h>
 
 namespace riwo
 {
@@ -10,7 +12,8 @@ namespace riwo
 template <typename Token>
 template <typename Rep, typename Period>
 redirect_time_t<Token>::redirect_time_t(auto &&completion_token, const duration<Rep,Period> &rtime) :
-	token(std::forward<decltype(completion_token)>(completion_token)), time(std::chrono::duration_cast<milliseconds>(rtime))
+	token(std::forward<decltype(completion_token)>(completion_token)),
+	time(std::chrono::duration_cast<milliseconds>(rtime))
 {
 
 }
@@ -30,16 +33,20 @@ redirect_time_t<Token>::redirect_time_t(auto &&completion_token, const time_poin
 template <typename Token, typename Rep, typename Period>
 auto redirect_time(Token &&token, const duration<Rep,Period> &timeout)
 {
-	return redirect_time_t<std::decay_t<Token>>(std::forward<Token>(token), timeout);
+	return redirect_time_t<std::decay_t<Token>>(
+		std::forward<Token>(token), timeout
+	);
 }
 
 template <typename Token, typename Clock, typename Duration>
 auto redirect_time(Token &&token, const time_point<Clock,Duration> &timeout)
 {
-	return redirect_time_t<std::decay_t<Token>>(std::forward<Token>(token), timeout);
+	return redirect_time_t<std::decay_t<Token>>(
+		std::forward<Token>(token), timeout
+	);
 }
 
 } //namespace riwo
 
 
-#endif //RIWO_CORE_UTILS_DETAIL_OPT_TOKEN_H
+#endif //RIWO_CORE_OPERATION_DETAIL_REDIRECT_TIME_H

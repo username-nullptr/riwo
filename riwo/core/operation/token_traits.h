@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_UTILS_TOKEN_CONCEPTS_H
-#define RIWO_CORE_UTILS_TOKEN_CONCEPTS_H
+#ifndef RIWO_CORE_OPERATION_TOKEN_TRAITS_H
+#define RIWO_CORE_OPERATION_TOKEN_TRAITS_H
 
-#include <riwo/core/utils/opt_token.h>
+#include <riwo/core/operation/redirect_time.h>
+#include <riwo/core/cxx/type_traits.h>
 
 namespace riwo
 {
@@ -44,6 +45,9 @@ struct is_use_sync : std::false_type {};
 
 template <>
 struct is_use_sync<use_sync_t> : std::true_type {};
+
+template <typename Token>
+struct is_use_sync<asio::as_tuple_t<Token>> : is_use_sync<Token> {};
 
 template <typename T>
 constexpr bool is_use_sync_v = is_use_sync<T>::value;
@@ -137,6 +141,32 @@ struct is_redirect_time<redirect_time_t<Token>> : is_any_async_opt_token<Token> 
 template <typename T>
 constexpr bool is_redirect_time_v = is_redirect_time<T>::value;
 
+template <typename>
+struct is_as_tuple : std::false_type {};
+
+template <typename Token>
+struct is_as_tuple<asio::as_tuple_t<Token>> : std::true_type {};
+
+template <>
+struct is_as_tuple<asio::partial_as_tuple> : std::true_type {};
+
+template <typename Token>
+constexpr bool is_as_tuple_v = is_as_tuple<Token>::value;
+
+template <typename Token>
+[[nodiscard]] constexpr decltype(auto) unbound_token(Token &&token);
+
+template <typename Token>
+struct token_unbound
+{
+	using type = std::remove_cvref_t <
+		decltype(unbound_token(std::declval<Token>()))
+	>;
+};
+
+template <typename Token>
+using token_unbound_t = token_unbound<Token>::type;
+
 template <typename Token, typename...Args>
 struct is_async_tf_opt_token
 {
@@ -195,7 +225,7 @@ struct is_sync_opt_token
 {
 	static constexpr bool value =
 		is_error_code_token_v<Token> or
-		std::is_same_v<std::remove_cvref_t<Token>,use_sync_t>;
+		is_use_sync_v<std::remove_cvref_t<Token>>;
 };
 
 template <typename Token>
@@ -204,16 +234,20 @@ constexpr bool is_sync_opt_token_v = is_sync_opt_token<Token>::value;
 template <typename Token, typename...Args>
 struct is_opt_token
 {
-	static constexpr bool value =
-		is_async_opt_token_v<Token,Args...> or
-		is_sync_opt_token_v<Token>;
+	static constexpr bool value = []() consteval -> bool
+	{
+		if constexpr( is_sync_opt_token_v<Token> )
+			return true;
+		else
+			return is_async_opt_token_v<Token,Args...>;
+	}();
 };
 
 template <typename Token, typename...Args>
 constexpr bool is_opt_token_v = is_opt_token<Token,Args...>::value;
 
 template <typename Token>
-struct is_any_opt_token : std::disjunction<is_async_opt_token<Token>, is_sync_opt_token<Token>> {};
+struct is_any_opt_token : std::disjunction<is_sync_opt_token<Token>, is_async_opt_token<Token>> {};
 
 template <typename Token>
 constexpr bool is_any_opt_token_v = is_any_opt_token<Token>::value;
@@ -221,16 +255,20 @@ constexpr bool is_any_opt_token_v = is_any_opt_token<Token>::value;
 template <typename Token, typename...Args>
 struct is_tf_opt_token
 {
-	static constexpr bool value =
-		is_async_tf_opt_token_v<Token,Args...> or
-		is_sync_opt_token_v<Token>;
+	static constexpr bool value = []() consteval -> bool
+	{
+		if constexpr( is_sync_opt_token_v<Token> )
+			return true;
+		else
+			return is_async_tf_opt_token_v<Token,Args...>;
+	}();
 };
 
 template <typename Token, typename...Args>
 constexpr bool is_tf_opt_token_v = is_tf_opt_token<Token,Args...>::value;
 
 template <typename Token>
-struct is_any_tf_opt_token : std::disjunction<is_any_async_tf_opt_token<Token>, is_sync_opt_token<Token>> {};
+struct is_any_tf_opt_token : std::disjunction<is_sync_opt_token<Token>, is_any_async_tf_opt_token<Token>> {};
 
 template <typename Token>
 constexpr bool is_any_tf_opt_token_v = is_any_tf_opt_token<Token>::value;
@@ -246,79 +284,56 @@ struct is_dis_sync_tf_opt_token
 template <typename Token, typename...Args>
 constexpr bool is_dis_sync_tf_opt_token_v = is_dis_sync_tf_opt_token<Token,Args...>::value;
 
-namespace concepts
+template <typename Token, typename...Args>
+struct is_dis_func_opt_token
 {
-
-template <typename T>
-concept use_awaitable = is_use_awaitable_v<T>;
-
-template <typename T>
-concept use_awaitable_p = use_awaitable<std::remove_cvref_t<T>>;
-
-template <typename T>
-concept use_future = is_use_future_v<T>;
-
-template <typename T>
-concept use_future_p = use_future<std::remove_cvref_t<T>>;
-
-template <typename T>
-concept detached = is_detached_v<T>;
-
-template <typename T>
-concept detached_p = detached<std::remove_cvref_t<T>>;
-
-template <typename T>
-concept redirect_error = is_redirect_error_v<T>;
-
-template <typename T>
-concept redirect_error_p = redirect_error<std::remove_cvref_t<T>>;
-
-template <typename T>
-concept cancellation_slot_binder = is_cancellation_slot_binder_v<T>;
-
-template <typename T>
-concept cancellation_slot_binder_p = cancellation_slot_binder<std::remove_cvref_t<T>>;
-
-template <typename T>
-concept redirect_time = is_redirect_time_v<T>;
-
-template <typename T>
-concept redirect_time_p = redirect_time<std::remove_cvref_t<T>>;
+	static constexpr bool value =
+		is_opt_token_v<Token,Args...> and
+		not is_function_v<token_unbound_t<Token>>;
+};
 
 template <typename Token, typename...Args>
-concept async_opt_token = is_async_opt_token_v<Token,Args...>;
-
-template <typename Token>
-concept any_async_opt_token = is_any_async_opt_token_v<Token>;
+constexpr bool is_dis_func_opt_token_v =
+	is_dis_func_opt_token<Token,Args...>::value;
 
 template <typename Token, typename...Args>
-concept async_tf_opt_token = is_async_tf_opt_token_v<Token,Args...>;
-
-template <typename Token>
-concept any_async_tf_opt_token = is_any_async_tf_opt_token_v<Token>;
-
-template <typename Token>
-concept error_code_token = is_error_code_token_v<Token>;
-
-template <typename Token>
-concept sync_opt_token = is_sync_opt_token_v<Token>;
+struct is_dis_func_tf_opt_token
+{
+	static constexpr bool value =
+		is_tf_opt_token_v<Token,Args...> and
+		not is_function_v<token_unbound_t<Token>>;
+};
 
 template <typename Token, typename...Args>
-concept opt_token = is_opt_token_v<Token,Args...>;
+constexpr bool is_dis_func_tf_opt_token_v =
+	is_dis_func_tf_opt_token<Token,Args...>::value;
 
 template <typename Token, typename...Args>
-concept tf_opt_token = is_tf_opt_token_v<Token,Args...>;
-
-template <typename Token>
-concept any_opt_token = is_any_opt_token_v<Token>;
-
-template <typename Token>
-concept any_tf_opt_token = is_any_tf_opt_token_v<Token>;
+struct is_dis_detached_opt_token
+{
+	static constexpr bool value =
+		is_opt_token_v<Token,Args...> and
+		not is_detached_v<token_unbound_t<Token>>;
+};
 
 template <typename Token, typename...Args>
-concept dis_sync_tf_opt_token = is_dis_sync_tf_opt_token_v<Token,Args...>;
+constexpr bool is_dis_detached_opt_token_v =
+	is_dis_detached_opt_token<Token,Args...>::value;
 
-}} //namespace riwo::concepts
+template <typename Token, typename...Args>
+struct is_dis_detached_tf_opt_token
+{
+	static constexpr bool value =
+		is_tf_opt_token_v<Token,Args...> and
+		not is_detached_v<token_unbound_t<Token>>;
+};
+
+template <typename Token, typename...Args>
+constexpr bool is_dis_detached_tf_opt_token_v =
+	is_dis_detached_tf_opt_token<Token,Args...>::value;
+
+} //namespace riwo
+#include <riwo/core/operation/detail/token_traits.h>
 
 
-#endif //RIWO_CORE_UTILS_TOKEN_CONCEPTS_H
+#endif //RIWO_CORE_OPERATION_TOKEN_TRAITS_H

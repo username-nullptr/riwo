@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_DETAIL_GLOBAL_H
-#define RIWO_CORE_DETAIL_GLOBAL_H
+#ifndef RIWO_CORE_OPERATION_DETAIL_TOKEN_TOOLS_H
+#define RIWO_CORE_OPERATION_DETAIL_TOKEN_TOOLS_H
+
+#include <riwo/core/cxx/tools.h>
 
 namespace riwo
 {
@@ -23,7 +25,9 @@ decltype(auto) get_associated_redirect_time
 decltype(auto) get_associated_redirect_time(concepts::any_async_tf_opt_token auto &&token)
 {
 	using token_t = decltype(token);
-	return get_associated_redirect_time(std::forward<token_t>(token), milliseconds(0));
+	return get_associated_redirect_time(
+		std::forward<token_t>(token), milliseconds(0)
+	);
 }
 
 constexpr decltype(auto) unbound_redirect_time(concepts::any_async_tf_opt_token auto &&token)
@@ -69,20 +73,34 @@ auto operator|(Token &&token, const asio::cancellation_slot &slot)
 }
 
 template <typename Rep, typename Period>
-auto operator|(concepts::any_async_opt_token auto &&token, const duration<Rep,Period> &d)
+auto operator|(concepts::any_async_opt_token auto &&token, const duration<Rep,Period> &duration)
 {
 	using token_t = decltype(token);
-	return redirect_time(std::forward<token_t>(token), d);
+	return redirect_time(std::forward<token_t>(token), duration);
 }
 
 template <typename Clock, typename Duration>
-auto operator|(concepts::any_async_opt_token auto &&token, const time_point<Clock,Duration> &tp)
+auto operator|(concepts::any_async_opt_token auto &&token, const time_point<Clock,Duration> &time)
 {
 	using token_t = decltype(token);
-	return redirect_time(std::forward<token_t>(token), tp);
+	return redirect_time(std::forward<token_t>(token), time);
+}
+
+template <concepts::as_tuple_p AsTuple>
+constexpr auto operator|(auto &&token, AsTuple &&as)
+{
+	using token_t = decltype(token);
+	return as(std::forward<token_t>(token));
+}
+
+template <concepts::as_expected_p AsExpected>
+constexpr auto operator|(auto &&token, AsExpected &&as)
+{
+	using token_t = decltype(token);
+	return as(std::forward<token_t>(token));
 }
 
 }} //namespace riwo::operators
 
 
-#endif //RIWO_CORE_DETAIL_GLOBAL_H
+#endif //RIWO_CORE_OPERATION_DETAIL_TOKEN_TOOLS_H

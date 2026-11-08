@@ -55,21 +55,6 @@ auto buffer(Args&&...args) requires (sizeof...(Args) > 0)
 		return asio::buffer(std::forward<Args>(args)...);
 }
 
-template <typename Token>
-decltype(auto) unbound_token(Token &&token)
-{
-	using token_t = std::remove_cvref_t<Token>;
-
-	if constexpr( is_redirect_time_v<token_t> )
-		return unbound_token(token.token);
-	else if constexpr( is_redirect_error_v<token_t> )
-		return return_reference(token.token_);
-	else if constexpr( is_cancellation_slot_binder_v<token_t> )
-		return token.get();
-	else
-		return std::forward<Token>(token);
-}
-
 decltype(auto) get_executor_helper(concepts::sched auto &&exec)
 {
 	using Exec = decltype(exec);

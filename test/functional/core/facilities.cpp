@@ -25,6 +25,33 @@ using ini_traits_string = std::basic_string<char,ini_char_traits>;
 using ini_traits_view = std::basic_string_view<char,ini_char_traits>;
 using ini_keys_t = riwo::ini::ini_keys_t;
 
+template <typename Token>
+concept can_adapt_as_expected = requires(Token &&token) {
+	riwo::as_expected(std::forward<Token>(token));
+};
+
+using expected_awaitable_t = decltype(riwo::as_expected(riwo::use_awaitable));
+using expected_sync_t = decltype(riwo::as_expected(riwo::use_sync));
+using tuple_sync_t = decltype(asio::as_tuple(riwo::use_sync));
+using tuple_expected_awaitable_t = decltype(asio::as_tuple(expected_awaitable_t {}));
+
+static_assert(asio::completion_token_for <
+	expected_awaitable_t, void(riwo::error_code)
+>);
+static_assert(riwo::concepts::sync_opt_token<expected_sync_t>);
+static_assert(riwo::concepts::sync_opt_token<tuple_sync_t>);
+static_assert(std::same_as <
+	decltype(std::declval<riwo::ini&>().load(expected_sync_t {})),
+	riwo::sys_expected<>
+>);
+static_assert(not can_adapt_as_expected <
+	decltype(asio::as_tuple(riwo::use_awaitable))
+>);
+static_assert(not can_adapt_as_expected<decltype(asio::as_tuple)>);
+static_assert(not asio::completion_token_for <
+	tuple_expected_awaitable_t, void(riwo::error_code)
+>);
+
 static_assert(std::same_as<
 	decltype(std::declval<riwo::ini&>()["group"]), ini_keys_t&
 >);
@@ -223,11 +250,22 @@ void ini_memory_and_file()
 	RIWO_TEST_CHECK_EQ(config.read("server/port")->to_int().value_or(0), 8080);
 
 	std::error_code error;
+	auto expected_sync_token = riwo::as_expected(riwo::use_sync);
+	auto sync_result = config.sync(expected_sync_token);
+	static_assert(std::same_as<decltype(sync_result),riwo::sys_expected<>>);
+	RIWO_TEST_CHECK(sync_result);
+	auto [tuple_sync_error] = config.sync(asio::as_tuple(riwo::use_sync));
+	RIWO_TEST_CHECK(not tuple_sync_error);
+
 	config.sync(error);
 	RIWO_TEST_CHECK(not error);
 	RIWO_TEST_CHECK(std::filesystem::is_regular_file(file));
 
 	riwo::ini restored(file);
+	auto load_result = restored.load(riwo::as_expected(riwo::use_sync));
+	static_assert(std::same_as<decltype(load_result),riwo::sys_expected<>>);
+	RIWO_TEST_CHECK(load_result);
+
 	restored.load(error);
 	RIWO_TEST_CHECK(not error);
 	RIWO_TEST_CHECK_EQ(restored.read("server/host")->to_string(), "127.0.0.1");
@@ -287,6 +325,15 @@ void ini_asynchronous_file_io()
 	context.run();
 	sync_result.get();
 	RIWO_TEST_CHECK(std::filesystem::is_regular_file(file));
+
+	context.restart();
+	auto expected_sync_result = config.sync(
+		riwo::as_expected(riwo::use_future)
+	);
+	context.run();
+	auto expected_sync = expected_sync_result.get();
+	static_assert(std::same_as<decltype(expected_sync),riwo::sys_expected<>>);
+	RIWO_TEST_CHECK(expected_sync);
 
 	riwo::io_context_t completion_context;
 	bool associated_completion = false;
@@ -356,9 +403,48 @@ void ini_asynchronous_file_io()
 	context.restart();
 	riwo::ini malformed(context, malformed_file);
 	malformed.write("preserved/value", 42);
+	RIWO_TEST_CHECK_THROWS(malformed.load(riwo::use_sync), std::system_error);
+	RIWO_TEST_CHECK_EQ(malformed.read("preserved/value")->to_int().value_or(0), 42);
+	auto [tuple_malformed_error] = malformed.load(
+		asio::as_tuple(riwo::use_sync)
+	);
+	RIWO_TEST_CHECK(tuple_malformed_error);
+	RIWO_TEST_CHECK_EQ(malformed.read("preserved/value")->to_int().value_or(0), 42);
+
+	auto expected_malformed_sync = malformed.load(
+		riwo::as_expected(riwo::use_sync)
+	);
+	RIWO_TEST_CHECK(not expected_malformed_sync);
+	RIWO_TEST_CHECK(expected_malformed_sync.error());
+	RIWO_TEST_CHECK_EQ(malformed.read("preserved/value")->to_int().value_or(0), 42);
+
 	auto malformed_result = malformed.load(riwo::use_future);
 	context.run();
 	RIWO_TEST_CHECK_THROWS(malformed_result.get(), std::system_error);
+	RIWO_TEST_CHECK_EQ(malformed.read("preserved/value")->to_int().value_or(0), 42);
+
+	context.restart();
+	auto expected_malformed_result = malformed.load(
+		riwo::as_expected(riwo::use_future)
+	);
+	context.run();
+	auto expected_malformed = expected_malformed_result.get();
+	RIWO_TEST_CHECK(not expected_malformed);
+	RIWO_TEST_CHECK(expected_malformed.error());
+	RIWO_TEST_CHECK_EQ(malformed.read("preserved/value")->to_int().value_or(0), 42);
+
+	context.restart();
+	auto expected_awaitable_result = asio::co_spawn(context,
+	[&]() -> riwo::awaitable<riwo::sys_expected<>>
+	{
+		co_return co_await malformed.load(
+			riwo::as_expected(riwo::use_awaitable)
+		);
+	}, riwo::use_future);
+	context.run();
+	auto expected_awaitable = expected_awaitable_result.get();
+	RIWO_TEST_CHECK(not expected_awaitable);
+	RIWO_TEST_CHECK(expected_awaitable.error());
 	RIWO_TEST_CHECK_EQ(malformed.read("preserved/value")->to_int().value_or(0), 42);
 }
 

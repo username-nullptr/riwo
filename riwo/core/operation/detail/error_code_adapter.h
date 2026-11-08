@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_UTILS_DETAIL_ERROR_CODE_ADAPTER_H
-#define RIWO_CORE_UTILS_DETAIL_ERROR_CODE_ADAPTER_H
+#ifndef RIWO_CORE_OPERATION_DETAIL_ERROR_CODE_ADAPTER_H
+#define RIWO_CORE_OPERATION_DETAIL_ERROR_CODE_ADAPTER_H
 
 namespace riwo
 {
@@ -39,4 +39,4 @@ auto adapt_error_code(Error &error) noexcept
 } //namespace riwo
 
 
-#endif //RIWO_CORE_UTILS_DETAIL_ERROR_CODE_ADAPTER_H
+#endif //RIWO_CORE_OPERATION_DETAIL_ERROR_CODE_ADAPTER_H
