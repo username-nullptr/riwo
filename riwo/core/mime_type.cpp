@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "mime_type.h"
-#include "riwo/core/system/app_utls.h"
+#include "executable.h"
 
 #include <unordered_map>
 #include <fstream>
@@ -1096,7 +1096,7 @@ std::string search(const mapping::mime_head_map &mimes, const char *buf, size_t 
 
 [[nodiscard]] static std::string mime_from_magic(const fs::path &file_name)
 {
-	auto opt = app::absolute_path(file_name);
+	auto opt = executable::resolve(file_name);
 	if( not opt )
 		return "unknown";
 

@@ -12,7 +12,7 @@ behavior rather than by implementation source file.
   optional/expected values, buffer helpers, spin/shared locks, and type utilities.
 - `core/facilities.cpp`: value/string containers, URL parse/resolve, command-line
   parsing, INI memory/file/token APIs, lock-free queue variants, MIME detection,
-  and application paths/environment.
+  and executable-relative path resolution.
 - `core/runtime.cpp`: global/local execution, dispatch/post/delay, timers,
   cancellation, event pumps, futures, awaitables, public `post_completion`,
   associated immediate executors, and exception recovery.
@@ -20,8 +20,16 @@ behavior rather than by implementation source file.
   API, including ownership, moves, automatic stop/join, callback lifetime, and
   concurrent callback destruction.
 - `core/public_api.cpp`: flags, parameter containers, value conversion overloads,
-  formatting, endpoint wrappers, environment operations, dynamic libraries, and
+  formatting, endpoint wrappers, executable paths, dynamic libraries, and
   compile-time public type properties.
+
+## System
+
+- `system/basic.cpp`: environment access and mutation, current-user lookup,
+  home-directory discovery, and user-path expansion.
+- `system/process.cpp`: process lifecycle and state, standard I/O pipes, child
+  environment and working directory, cancellation, exit status, and executor
+  delivery semantics.
 
 ## Coroutine
 
@@ -109,8 +117,8 @@ behavior rather than by implementation source file.
 - `utils/modules.cpp`: umbrella/module compile and initialization surface.
 - `utils/basic.cpp`: signal-slot modes, observer ownership, mutation, blocking,
   argument ownership, synchronous/asynchronous/awaitable delivery.
-- `utils/runtime.cpp`: settings persistence and async tokens, process lifecycle,
-  pipes/environment/cancellation, local message bus, and logger configuration/I/O.
+- `utils/runtime.cpp`: settings persistence and async tokens, local message bus,
+  and logger configuration/I/O.
 - `utils/sbus.cpp`: raw/typed publish-subscribe, cancellation, topic indexing,
   large-payload fanout ownership, UDP scope/fragmentation, and receive statistics.
 - `utils/sbus_cache.cpp`: cache set/get overloads, snapshots, typed topics,

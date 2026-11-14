@@ -2,50 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "scoped_environment.h"
 
 #include <riwo/http/protocol/cookie.h>
 #include <riwo/http/protocol/types.h>
 #include <riwo/http/protocol/version.h>
 #include <riwo/http/client.h>
 #include <riwo/http/server/response.h>
-#include <riwo/core/system/app_utls.h>
 
 namespace
 {
 
-class scoped_environment
-{
-	struct entry
-	{
-		std::string name;
-		riwo::optional<riwo::app::path_t> value;
-	};
-
-public:
-	scoped_environment(std::initializer_list<std::string_view> names)
-	{
-		for(const auto name : names)
-		{
-			auto value = riwo::app::getenv(name);
-			m_entries.push_back({std::string(name), value ?
-				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
-		}
-	}
-
-	~scoped_environment()
-	{
-		for(const auto &item : m_entries)
-		{
-			if( item.value )
-				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
-			else
-				riwo::ignore_unused(riwo::app::unsetenv(item.name));
-		}
-	}
-
-private:
-	std::vector<entry> m_entries;
-};
+using scoped_environment = riwo::test::scoped_environment;
 
 class scripted_connection final : public riwo::http::basic_connection<>
 {
@@ -412,32 +380,32 @@ void client_proxy_inheritance_and_environment()
 		"ws_proxy", "WS_PROXY", "wss_proxy", "WSS_PROXY",
 		"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY",
 	});
-	RIWO_TEST_CHECK(riwo::app::setenv("http_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("http_proxy",
 		"http://user:secret@proxy.test:8080/"));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("HTTP_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("HTTP_PROXY"));
 #endif
-	RIWO_TEST_CHECK(riwo::app::setenv("https_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("https_proxy",
 		"http://secure-proxy.test:8443/"));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("HTTPS_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("HTTPS_PROXY"));
 #endif
-	RIWO_TEST_CHECK(riwo::app::unsetenv("all_proxy"));
-	RIWO_TEST_CHECK(riwo::app::unsetenv("ALL_PROXY"));
-	RIWO_TEST_CHECK(riwo::app::setenv("ws_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::unset("all_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("ALL_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::set("ws_proxy",
 		"http://websocket-only.test:8082/"));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("WS_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("WS_PROXY"));
 #endif
-	RIWO_TEST_CHECK(riwo::app::setenv("wss_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("wss_proxy",
 		"http://secure-websocket-only.test:8444/"));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("WSS_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("WSS_PROXY"));
 #endif
-	RIWO_TEST_CHECK(riwo::app::setenv("no_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("no_proxy",
 		".bypass.test,127.0.0.0/8"));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("NO_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("NO_PROXY"));
 #endif
 
 	riwo::io_context_t context;
@@ -505,8 +473,8 @@ void client_proxy_inheritance_and_environment()
 		RIWO_TEST_CHECK_EQ(connector->last_target().port, 9000);
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("http_proxy"));
-	RIWO_TEST_CHECK(riwo::app::setenv("HTTP_PROXY",
+	RIWO_TEST_CHECK(riwo::system::environment::unset("http_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::set("HTTP_PROXY",
 		"http://uppercase-proxy.test:8081/"));
 	{
 		auto request = requester.make_get("http://uppercase-origin.test/", error);
@@ -516,7 +484,7 @@ void client_proxy_inheritance_and_environment()
 		RIWO_TEST_CHECK_EQ(connector->last_target().port, 8081);
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("HTTP_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("HTTP_PROXY"));
 	{
 		auto request = requester.make_get("http://http-only.test/", error);
 		RIWO_TEST_CHECK(request and not error);
@@ -524,8 +492,8 @@ void client_proxy_inheritance_and_environment()
 		RIWO_TEST_CHECK(not connector->last_target().tunnel);
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("https_proxy"));
-	RIWO_TEST_CHECK(riwo::app::unsetenv("HTTPS_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("https_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("HTTPS_PROXY"));
 	{
 		auto request = requester.make_get("https://https-only.test/", error);
 		RIWO_TEST_CHECK(request and not error);
@@ -533,7 +501,7 @@ void client_proxy_inheritance_and_environment()
 		RIWO_TEST_CHECK(not connector->last_target().tunnel);
 	}
 
-	RIWO_TEST_CHECK(riwo::app::setenv("all_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("all_proxy",
 		"socks5h://socks-proxy.test:1081/"));
 	{
 		auto request = requester.make_get("http://fallback-origin.test/", error);

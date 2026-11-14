@@ -10,7 +10,9 @@
 #include <riwo/core/string_deque.h>
 #include <riwo/core/string_list.h>
 #include <riwo/core/string_set.h>
-#include <riwo/core/system.h>
+#include <riwo/core/cpu.h>
+#include <riwo/core/executable.h>
+#include <riwo/core/library.h>
 #include <riwo/core/utils/formatter.h>
 #include <riwo/core/utils/utils.h>
 
@@ -197,39 +199,14 @@ void formatting_and_endpoints()
 	RIWO_TEST_CHECK_EQ(endpoint.port(), uint16_t {53});
 }
 
-void application_environment()
+void executable_paths()
 {
-	using namespace riwo::app::literals;
-	const auto original = riwo::app::current_directory();
-	RIWO_TEST_CHECK(original);
-	riwo::test::temporary_directory directory;
-	const bool changed = bool(riwo::app::set_current_directory(directory.path()));
-	const auto current = riwo::app::current_directory();
-	std::error_code equivalent_error;
-	const bool current_matches = changed and current and std::filesystem::equivalent(
-		*current, directory.path(), equivalent_error);
-	if( not current_matches )
-	{
-		std::cerr << "current directory mismatch: changed=" << changed
-			<< ", current='" << (current ? current->string() : "<error>")
-			<< "', expected='" << directory.path().string()
-			<< "', equivalent_error='" << equivalent_error.message() << "'\n";
-	}
-	const bool absolute_matches = "relative.txt"_abs ==
-		riwo::app::dir_path().value() / "relative.txt";
-	RIWO_TEST_CHECK(riwo::app::set_current_directory(*original));
-	RIWO_TEST_CHECK(changed);
-	RIWO_TEST_CHECK(current_matches);
-	RIWO_TEST_CHECK(absolute_matches);
-
-	constexpr std::string_view key = "RIWO_TEST_PUBLIC_API_ENV";
-	RIWO_TEST_CHECK(riwo::app::setenv(key, "first"));
-	RIWO_TEST_CHECK(riwo::app::setenv(key, "second", false));
-	RIWO_TEST_CHECK_EQ(riwo::app::getenv(key).value_or(""), "first");
-	RIWO_TEST_CHECK(riwo::app::getenvs()->contains(std::string(key)));
-	RIWO_TEST_CHECK(riwo::app::unsetenv(key));
-	RIWO_TEST_CHECK(riwo::app::current_user());
-	RIWO_TEST_CHECK(riwo::app::home_directory());
+	const auto directory = riwo::executable::directory();
+	const auto resolved = riwo::executable::resolve("relative.txt");
+	RIWO_TEST_CHECK(directory);
+	RIWO_TEST_CHECK(resolved);
+	RIWO_TEST_CHECK(directory and resolved and
+		*resolved == (*directory / "relative.txt").lexically_normal());
 	riwo::none_instruction();
 }
 
@@ -281,7 +258,7 @@ int main(int argc, const char *const argv[])
 		{"optional, expected, and async helpers", optional_expected_and_async_helpers},
 		{"filesystem exceptions", filesystem_exceptions},
 		{"formatting and endpoints", formatting_and_endpoints},
-		{"application environment", application_environment},
+		{"executable paths", executable_paths},
 		{"dynamic library", dynamic_library},
 	});
 }

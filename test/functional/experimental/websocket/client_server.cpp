@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "scoped_environment.h"
 #include <riwo/experimental/websocket.h>
-#include <riwo/core/system/app_utls.h>
 
 #include <riwo/core/cxx/asio.h>
 #include <memory>
@@ -16,39 +16,7 @@ namespace
 namespace http = riwo::experimental::http;
 namespace ws = riwo::experimental::websocket;
 
-class scoped_environment
-{
-	struct entry
-	{
-		std::string name;
-		riwo::optional<riwo::app::path_t> value;
-	};
-
-public:
-	scoped_environment(std::initializer_list<std::string_view> names)
-	{
-		for(const auto name : names)
-		{
-			auto value = riwo::app::getenv(name);
-			m_entries.push_back({std::string(name), value ?
-				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
-		}
-	}
-
-	~scoped_environment()
-	{
-		for(const auto &item : m_entries)
-		{
-			if( item.value )
-				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
-			else
-				riwo::ignore_unused(riwo::app::unsetenv(item.name));
-		}
-	}
-
-private:
-	std::vector<entry> m_entries;
-};
+using scoped_environment = riwo::test::scoped_environment;
 
 class recording_connector final :
 	public http::basic_transport_connector<riwo::io_context_t::executor_type>
@@ -116,7 +84,7 @@ void environment_proxy_selection()
 			"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
 			"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"
 		})
-			RIWO_TEST_CHECK(riwo::app::unsetenv(name));
+			RIWO_TEST_CHECK(riwo::system::environment::unset(name));
 	};
 	auto open_and_observe = [](std::string_view endpoint, bool use_environment) {
 		riwo::io_context_t context;
@@ -140,9 +108,9 @@ void environment_proxy_selection()
 	};
 
 	clear();
-	RIWO_TEST_CHECK(riwo::app::setenv("ws_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("ws_proxy",
 		"http://user:secret@ws-environment-proxy.test:8082/"));
-	RIWO_TEST_CHECK(riwo::app::setenv("http_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("http_proxy",
 		"http://http-fallback-proxy.test:8080/"));
 	{
 		auto observed = open_and_observe(
@@ -155,9 +123,9 @@ void environment_proxy_selection()
 			"Basic dXNlcjpzZWNyZXQ=");
 	}
 
-	RIWO_TEST_CHECK(riwo::app::setenv("wss_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("wss_proxy",
 		"http://secure-ws-environment-proxy.test:8444/"));
-	RIWO_TEST_CHECK(riwo::app::setenv("https_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("https_proxy",
 		"http://https-fallback-proxy.test:8443/"));
 	{
 		auto observed = open_and_observe(
@@ -168,7 +136,7 @@ void environment_proxy_selection()
 			"secure-ws-environment-proxy.test");
 	}
 
-	RIWO_TEST_CHECK(riwo::app::setenv("no_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("no_proxy",
 		"websocket-environment-origin.test"));
 	{
 		auto observed = open_and_observe(
@@ -177,7 +145,7 @@ void environment_proxy_selection()
 		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("no_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("no_proxy"));
 	{
 		auto observed = open_and_observe(
 			"ws://websocket-environment-origin.test/socket", false);
@@ -185,9 +153,9 @@ void environment_proxy_selection()
 		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("wss_proxy"));
-	RIWO_TEST_CHECK(riwo::app::unsetenv("https_proxy"));
-	RIWO_TEST_CHECK(riwo::app::unsetenv("all_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("wss_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("https_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("all_proxy"));
 	{
 		auto observed = open_and_observe(
 			"wss://https-only-origin.test/socket", true);

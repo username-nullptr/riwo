@@ -4,7 +4,7 @@
 #ifndef RIWO_EXP_HTTP_SERVER_DETAIL_EXCHANGE_H
 #define RIWO_EXP_HTTP_SERVER_DETAIL_EXCHANGE_H
 
-#include <riwo/core/system/app_utls.h>
+#include <riwo/core/executable.h>
 #include <riwo/core/utils/string_tools.h>
 
 #include <riwo/experimental/http/body/detail/source_transfer.h>
@@ -648,7 +648,7 @@ auto basic_server_exchange<Exec>::respond_file
 {
 	if( path.is_relative() )
 	{
-		auto resolved = app::absolute_path(resource_root() / path);
+		auto resolved = executable::resolve(resource_root() / path);
 		if( not resolved )
 			system_error::loc_throw(std::error_code(resolved.error()));
 

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_SYSTEM_DETAIL_LIBRARY_H
-#define RIWO_CORE_SYSTEM_DETAIL_LIBRARY_H
+#ifndef RIWO_CORE_DETAIL_LIBRARY_H
+#define RIWO_CORE_DETAIL_LIBRARY_H
 
 namespace riwo
 {
@@ -29,4 +29,4 @@ auto library::interface(std::format_string<Arg0,Args...> fmt_value, Arg0 &&arg0,
 } //namespace riwo
 
 
-#endif //RIWO_CORE_SYSTEM_DETAIL_LIBRARY_H
+#endif //RIWO_CORE_DETAIL_LIBRARY_H

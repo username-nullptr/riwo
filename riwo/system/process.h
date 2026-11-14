@@ -1,15 +1,14 @@
 // SPDX-FileCopyrightText: 2025-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_UTILS_PROCESS_H
-#define RIWO_UTILS_PROCESS_H
+#ifndef RIWO_SYSTEM_PROCESS_H
+#define RIWO_SYSTEM_PROCESS_H
 
-#include <riwo/utils/global.h>
-#include <riwo/core/execution.h>
+#include <riwo/system/global.h>
 #include <riwo/core/async_expected.h>
 #include <riwo/core/value.h>
 
-namespace riwo::utils
+namespace riwo::system
 {
 
 using pid_t = uint64_t;
@@ -26,7 +25,7 @@ enum class process_state {
  * outstanding. Serialize lifecycle changes with I/O initiation.
  */
 template <concepts::exec Exec = asio::any_io_executor>
-class RIWO_UTILS_TAPI basic_process
+class RIWO_SYSTEM_TAPI basic_process
 {
 	RIWO_DISABLE_COPY(basic_process)
 
@@ -82,7 +81,7 @@ public:
 		none, terminate, kill, detach
 	};
 	// Cancel pending waits and stream operations.  The terminal options release
-	// join ownership after signalling the child so cancellation stays
+	// join ownership after signaling the child so cancellation stays
 	// non-blocking while the platform monitor finishes resource reclamation.
 	void cancel(cancel_option option = cancel_option::none) noexcept;
 
@@ -193,8 +192,8 @@ private:
 
 using process  = basic_process<>;
 
-} //namespace riwo::utils
-#include <riwo/utils/detail/process.h>
+} //namespace riwo::system
+#include <riwo/system/detail/process.h>
 
 
-#endif //RIWO_UTILS_PROCESS_H
+#endif //RIWO_SYSTEM_PROCESS_H

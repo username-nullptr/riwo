@@ -8,7 +8,7 @@ Language: English | [简体中文](../zh_CN/utilities.md)
 | Source-tree target | `riwo.utils` |
 | Installed target | `Riwo::utils` |
 | Umbrella header | `<riwo/utils.h>` |
-| Depends on | Coroutines and spdlog |
+| Depends on | Coroutines, System, and spdlog |
 | Optional capability | UDP soft bus with `RIWO_BUILD_UTILITIES_SBUS_UDP` |
 
 Utilities contains application-level facilities that do not belong to the
@@ -23,11 +23,11 @@ protocol stack.
 | Signals | `<riwo/utils/signal_slot.h>` | Synchronous, asynchronous, and backpressure delivery |
 | Observers | `<riwo/utils/observer.h>` | ID-addressed callbacks dispatched by executor |
 | Modules | `<riwo/utils/modules.h>` | Dependency-ordered application initialization |
-| Processes | `<riwo/utils/process.h>` | Child lifecycle and standard-stream I/O |
 | Soft bus | `<riwo/utils/sbus.h>` | Typed publish/subscribe and cached topic state |
 
 The umbrella header includes logger, settings, modules, and soft bus. Include
-process, signal/slot, or observer directly when using those facilities.
+signal/slot or observer directly when using those facilities. Process
+management belongs to [System](system.md).
 
 ## Logging and settings
 
@@ -57,17 +57,6 @@ objects captured by slots remain the caller's responsibility.
 `utils::observer` routes indexed callbacks by stable object ID and unregisters
 on destruction. `utils::modules` registers named initializers, orders them by
 declared dependencies, and supports synchronous or asynchronous initialization.
-
-## Processes
-
-`utils::process` provides start/run, join, detach, terminate, kill,
-cancellation, timeouts, working directory/environment, single-instance locks,
-and stdin/stdout/stderr I/O. Commands and arguments use
-`std::filesystem::path`.
-
-Keep the process object alive while I/O is pending. Serialize lifecycle changes
-with I/O initiation. For one process, keep at most one stdin write, one stdout
-read, and one stderr read active.
 
 ## Soft bus
 
@@ -100,5 +89,5 @@ matters.
 
 The shared ownership and concurrency contract is in
 [Execution and I/O model](io-model.md). Runnable logging, settings, signals,
-observers, processes, modules, and bus programs are indexed in
+observers, modules, and bus programs are indexed in
 [Utilities examples](../../examples/README.md#utilities).

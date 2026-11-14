@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 set(target_name riwo.http)
-add_project(${target_name} riwo.coro)
+add_project(${target_name} riwo.coro riwo.system)
 
 target_compile_definitions (
 	${target_name} PRIVATE RIWO_HTTP_SHARED

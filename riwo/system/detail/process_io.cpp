@@ -3,7 +3,7 @@
 
 #include "process_io.h"
 
-namespace riwo::utils::detail
+namespace riwo::system::detail
 {
 
 std::shared_ptr<std::string> copy_process_buffer(const const_buffer &buffer)
@@ -18,4 +18,4 @@ std::shared_ptr<std::string> copy_process_buffer(const const_buffer &buffer)
 	return result;
 }
 
-} //namespace riwo::utils::detail
+} //namespace riwo::system::detail

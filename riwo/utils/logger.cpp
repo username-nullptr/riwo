@@ -26,7 +26,7 @@
 #include <spdlog/sinks/daily_file_sink.h>
 #include <spdlog/sinks/sink.h>
 
-#include <riwo/core/system/app_utls.h>
+#include <riwo/core/executable.h>
 #include <riwo/core/shared_mutex.h>
 #include <iostream>
 
@@ -249,7 +249,7 @@ public:
 				barrier = {};
 			if( not conf.path.empty() )
 			{
-				auto path = app::absolute_path(conf.path).or_else()->ptostr() + PCHAR("/");
+				auto path = executable::resolve(conf.path).or_else()->ptostr() + PCHAR("/");
 
 				create_file_logger<spdlog::sinks::daily_file_sink_mt>(0,
 					m_name + g_daily_log, path + PCHAR("daily/daily.log"), 0, 0

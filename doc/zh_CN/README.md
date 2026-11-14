@@ -19,11 +19,12 @@
 
 | 模块 | 定位 | 指南 |
 | --- | --- | --- |
-| `riwo.core` | 通用数据、执行、算法、系统和同步能力 | [核心模块](core.md) |
+| `riwo.core` | 通用数据、执行、算法、可执行文件路径与同步能力 | [核心模块](core.md) |
+| `riwo.system` | 环境、用户目录与子进程管理 | [System 模块](system.md) |
 | `riwo.coro` | 协程等待与同步 | [协程](coroutines.md) |
 | `riwo.http` | HTTP/1.0 和 HTTP/1.1 客户端、服务端与协议工具 | [HTTP](http.md) |
 | `riwo.websocket` | RFC 6455 客户端、服务端、Stream 和编解码 | [WebSocket](websocket.md) |
-| `riwo.utils` | 日志、设置、Signal、进程、模块与软总线 | [应用工具](utilities.md) |
+| `riwo.utils` | 日志、设置、Signal、模块与软总线 | [应用工具](utilities.md) |
 
 ## 文档边界
 

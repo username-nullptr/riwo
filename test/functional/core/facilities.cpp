@@ -8,7 +8,7 @@
 #include <riwo/core/lock_free_queue.h>
 #include <riwo/core/mime_type.h>
 #include <riwo/core/string_vector.h>
-#include <riwo/core/system/app_utls.h>
+#include <riwo/core/executable.h>
 #include <riwo/core/url.h>
 #include <riwo/core/value.h>
 #include <fstream>
@@ -1051,33 +1051,15 @@ void mime_detection()
 	}
 }
 
-void application_environment()
+void executable_paths()
 {
-	const auto executable = riwo::app::file_path();
-	const auto directory = riwo::app::dir_path();
-	const auto current = riwo::app::current_directory();
+	const auto executable = riwo::executable::path();
+	const auto directory = riwo::executable::directory();
 	RIWO_TEST_CHECK(executable and not executable->empty());
 	RIWO_TEST_CHECK(directory and std::filesystem::is_directory(*directory));
-	RIWO_TEST_CHECK(current and std::filesystem::is_directory(*current));
-	RIWO_TEST_CHECK(riwo::app::absolute_path(".").has_value());
-
-	constexpr auto key = "RIWO_TEST_ENVIRONMENT_VALUE";
-	const riwo::app::path_t value {u8"available/环境变量"};
-	RIWO_TEST_CHECK(riwo::app::setenv(key, value).has_value());
-
-	const auto variable = riwo::app::getenv(key);
-	RIWO_TEST_CHECK(variable and *variable == value);
-
-	const auto variables = riwo::app::getenvs();
-	RIWO_TEST_CHECK(variables);
-	if( variables )
-	{
-		const auto position = variables->find(key);
-		RIWO_TEST_CHECK(position != variables->end() and position->second == value);
-	}
-
-	RIWO_TEST_CHECK(riwo::app::unsetenv(key).has_value());
-	RIWO_TEST_CHECK(not riwo::app::getenv(key));
+	const auto resolved = riwo::executable::resolve("relative/path");
+	RIWO_TEST_CHECK(resolved and *resolved ==
+		(*directory / "relative/path").lexically_normal());
 }
 
 } //namespace
@@ -1095,6 +1077,6 @@ int main(int argc, const char *const argv[])
 		{"INI asynchronous file I/O", ini_asynchronous_file_io},
 		{"lock-free queues", lock_free_queues},
 		{"MIME detection", mime_detection},
-		{"application environment", application_environment},
+		{"executable paths", executable_paths},
 	});
 }

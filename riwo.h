@@ -10,6 +10,10 @@
 # include <riwo/coro.h>
 #endif //RIWO_CORO_SUPPORT
 
+#if RIWO_SYSTEM_SUPPORT
+# include <riwo/system.h>
+#endif //RIWO_SYSTEM_SUPPORT
+
 #if RIWO_HTTP_SUPPORT
 # include <riwo/http.h>
 #endif //RIWO_HTTP_SUPPORT

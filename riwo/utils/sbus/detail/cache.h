@@ -6,7 +6,7 @@
 
 #include <riwo/core/async_expected.h>
 #include <riwo/core/shared_mutex.h>
-#include <riwo/utils/process.h>
+#include <riwo/system/process.h>
 #include <atomic>
 
 namespace riwo::utils
@@ -109,7 +109,7 @@ public:
 			if( _topic == cache_event::riwo_sbus_topic_v )
 			{
 				auto cache = *streamer<cache_event>::decode(payload);
-				if( auto pid = process::self_pid(); not pid or cache.pid == *pid )
+				if( auto pid = system::process::self_pid(); not pid or cache.pid == *pid )
 					co_return ;
 
 				_topic = std::move(cache.topic);
@@ -235,7 +235,7 @@ public:
 			);
 			co_return ;
 		});
-		auto pid = process::self_pid();
+		auto pid = system::process::self_pid();
 		if( not pid )
 			return ;
 

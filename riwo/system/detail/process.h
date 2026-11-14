@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2025-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_UTILS_DETAIL_PROCESS_H
-#define RIWO_UTILS_DETAIL_PROCESS_H
+#ifndef RIWO_SYSTEM_DETAIL_PROCESS_H
+#define RIWO_SYSTEM_DETAIL_PROCESS_H
 
-#include <riwo/utils/detail/process_io.h>
+#include <riwo/system/detail/process_io.h>
 
-namespace riwo::utils { namespace detail
+namespace riwo::system { namespace detail
 {
 
-class RIWO_UTILS_API process
+class RIWO_SYSTEM_API process
 {
 	RIWO_DISABLE_COPY_MOVE(process)
 
@@ -132,7 +132,7 @@ private:
 } //namespace detail
 
 template <concepts::exec Exec>
-class RIWO_UTILS_TAPI basic_process<Exec>::impl : public std::enable_shared_from_this<impl>
+class RIWO_SYSTEM_TAPI basic_process<Exec>::impl : public std::enable_shared_from_this<impl>
 {
 	RIWO_DISABLE_COPY_MOVE(impl)
 
@@ -146,13 +146,12 @@ public:
 		m_detail(m_exec) {}
 
 public:
-	void set(path_t cmd, args_t args)
-	{
+	void set(const path_t &cmd, const args_t &args) {
 		m_detail.set(cmd, args);
 	}
 
 	template <typename...Args>
-	void set(path_t cmd, Args&&...args)
+	void set(const path_t &cmd, Args&&...args)
 	{
 		m_detail.set(cmd, {});
 		(m_detail.add_arg(path_t(std::forward<Args>(args))), ...);
@@ -527,7 +526,7 @@ public:
 			const auto read_size = *read_result;
 			result.insert (
 				result.end(), chunk.begin(),
-				chunk.begin() + read_size
+				chunk.begin() + static_cast<ptrdiff_t>(read_size)
 			);
 			read_result = m_detail.read(Channel, buffer(chunk));
 		}
@@ -599,7 +598,7 @@ public:
 			}
 		}
 
-		void read_complete(error_code read_error, std::size_t read_size)
+		void read_complete(const error_code &read_error, std::size_t read_size)
 		{
 			if constexpr( is_array_buffer_v<Buffer> )
 				complete(read_error, std::move(m_result));
@@ -609,7 +608,7 @@ public:
 				{
 					try {
 						m_source.insert(m_source.end(), m_chunk.begin(),
-							m_chunk.begin() + read_size
+							m_chunk.begin() + static_cast<ptrdiff_t>(read_size)
 						);
 					}
 					catch(const std::bad_alloc&)
@@ -1342,7 +1341,7 @@ sys_expected<pid_t> basic_process<Exec>::set_single(std::string_view key)
 	return expected;
 }
 
-} //namespace riwo::utils
+} //namespace riwo::system
 
 
-#endif //RIWO_UTILS_DETAIL_PROCESS_H
+#endif //RIWO_SYSTEM_DETAIL_PROCESS_H

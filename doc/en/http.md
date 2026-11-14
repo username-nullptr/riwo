@@ -8,7 +8,7 @@ Language: English | [简体中文](../zh_CN/http.md)
 | Source-tree target | `riwo.http` |
 | Installed target | `Riwo::http` |
 | Umbrella header | `<riwo/http.h>` |
-| Depends on | Coroutines |
+| Depends on | Coroutines and System |
 | Optional capabilities | HTTPS with `RIWO_OPENSSL_SUPPORT`; gzip with `RIWO_HTTP_ZLIB_SUPPORT` |
 
 The module implements HTTP/1.0 and HTTP/1.1 client, server, and protocol

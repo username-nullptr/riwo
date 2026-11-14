@@ -42,7 +42,7 @@ Core examples have no optional module requirement.
 | Program | Demonstrates | Arguments / side effects |
 | --- | --- | --- |
 | [`algorithms`](core/algorithms.cpp) | MIME, SHA-1, UUID, wildcard matching | None |
-| [`app_paths`](core/app_paths.cpp) | Executable, working, home, and absolute paths | None |
+| [`executable_paths`](core/executable_paths.cpp) | Executable path and executable-relative resolution | None |
 | [`args_parser`](core/args_parser.cpp) | Options, flags, help/version, positional values | `-o/--output`, `-v/--verbose`, `--version`, `-h/--help` |
 | [`dynamic_library`](core/dynamic_library.cpp) | Load a shared library and resolve a symbol | Optional plugin path; otherwise uses its companion fixture |
 | [`execution`](core/execution.cpp) | Dispatch, post, timers, cancellation, event loop | None; runs for about one second |
@@ -52,6 +52,15 @@ Core examples have no optional module requirement.
 
 `dynamic_library_plugin` is a shared-library fixture built beside
 `dynamic_library`, not a standalone example.
+
+## System
+
+Requires `RIWO_BUILD_SYSTEM=ON` (the default).
+
+| Program | Demonstrates | Arguments / side effects |
+| --- | --- | --- |
+| [`environment`](system/environment.cpp) | Environment variables, current user, and home directory | Temporarily sets `RIWO_SYSTEM_EXAMPLE` |
+| [`process`](system/process.cpp) | Child start, stdout, join, exit code | Runs the platform echo command |
 
 ## Coroutines
 
@@ -253,7 +262,6 @@ Requires `RIWO_BUILD_UTILITIES=ON`.
 | [`signal_slot`](utils/signal_slot.cpp) | Function and lambda slots | None |
 | [`observer`](utils/observer.cpp) | ID-addressed callback lifecycle | None |
 | [`modules`](utils/modules) | Dependency graph and ordered initialization | None |
-| [`process`](utils/process.cpp) | Child start, stdout, join, exit code | Runs the platform echo command |
 | [`soft_bus_local`](utils/soft_bus_local.cpp) | In-process publish/subscribe/cache | None |
 | [`soft_bus_udp`](utils/soft_bus_udp.cpp) | UDP multicast transport | Requires UDP transport and local multicast |
 | [`soft_bus_transport`](utils/soft_bus_transport.cpp) | Custom transport boundary | None |

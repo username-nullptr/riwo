@@ -1,25 +1,34 @@
 // SPDX-FileCopyrightText: 2025-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifdef __unix__
+#if defined(__WINNT__) || defined(_WINDOWS)
 
-#include <riwo/utils/process.h>
-#include <riwo/utils/logger.h>
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+# define NOMINMAX
+#endif //NOMINMAX
 
-#include <riwo/coro/utils.h>
+#include <Windows.h>
+#include <shellapi.h>
+
+#include <riwo/system/process.h>
+
+#if RIWO_USING_BOOST_ASIO
+# include <boost/asio/readable_pipe.hpp>
+# include <boost/asio/writable_pipe.hpp>
+#else //RIWO_USING_BOOST_ASIO
+# include <asio/readable_pipe.hpp>
+# include <asio/writable_pipe.hpp>
+#endif //RIWO_USING_BOOST_ASIO
+
 #include <utility>
-
-#include <sys/wait.h>
-#include <wordexp.h>
-#include <csignal>
-#include <pwd.h>
 #include <map>
 
-#ifdef __linux__
-#include <sys/prctl.h>
-#endif
+#ifdef _MSC_VER
+# pragma comment(lib, "shell32.lib")
+#endif //_MSC_VER
 
-namespace riwo::utils::detail
+namespace riwo::system::detail
 {
 
 namespace fs = std::filesystem;
@@ -28,60 +37,253 @@ using namespace std::chrono_literals;
 using namespace operators;
 
 using executor_t = process::executor_t;
-using descriptor_t = asio::posix::stream_descriptor;
+using path_t = process::path_t;
+
+using read_pipe_t = asio::readable_pipe;
+using write_pipe_t = asio::writable_pipe;
 
 using read_channel_t = process::read_channel;
-using args_t = std::vector<std::string>;
 
-using path_t = process::path_t;
+using args_t = std::vector<std::wstring>;
 using envs_t = std::map<std::string, path_t>;
 
-[[nodiscard]] static error_code sys_error() {
-	return { std::error_code(errno, std::system_category()) };
+[[nodiscard]] static error_code sys_error()
+{
+	return {
+		std::error_code (
+			static_cast<int>(GetLastError()), std::system_category()
+		)
+	};
 }
 
-[[nodiscard]] static bool is_shell_assignment(std::string_view word) noexcept
+[[nodiscard]] static std::wstring quote_arg(std::wstring_view arg)
 {
-	const auto equal_pos = word.find('=');
-	if( equal_pos == std::string_view::npos or equal_pos == 0 )
-		return false;
+	if( arg.empty() )
+		return L"\"\"";
 
-	auto is_name_head = [](char character) noexcept
+	bool need_quote = false;
+	for(auto ch : arg)
 	{
-		return character == '_' or
-			(character >= 'A' and character <= 'Z') or
-			(character >= 'a' and character <= 'z');
-	};
-	auto is_name_body = [is_name_head](char character) noexcept
-	{
-		return is_name_head(character) or
-			(character >= '0' and character <= '9');
-	};
-	if( not is_name_head(word.front()) )
-		return false;
-
-	for(size_t index = 1; index < equal_pos; ++index)
-	{
-		if( not is_name_body(word[index]) )
-			return false;
+		if( ch == L' ' or ch == L'\t' or ch == L'\n' or ch == L'\v' or ch == L'"' )
+		{
+			need_quote = true;
+			break;
+		}
 	}
-	return true;
+	if( not need_quote )
+		return std::wstring(arg);
+
+	std::wstring result;
+	result.reserve(arg.size() + 2);
+	result += L'"';
+
+	size_t backslashes = 0;
+	for(auto ch : arg)
+	{
+		if( ch == L'\\' )
+		{
+			++backslashes;
+			continue;
+		}
+		if( ch == L'"' )
+		{
+			result.append(backslashes * 2 + 1, L'\\');
+			result += ch;
+		}
+		else
+		{
+			result.append(backslashes, L'\\');
+			result += ch;
+		}
+		backslashes = 0;
+	}
+	result.append(backslashes * 2, L'\\');
+	result += L'"';
+	return result;
 }
 
-[[nodiscard]] static bool exit_on_parent_exit(::pid_t parent_pid) noexcept
+[[nodiscard]] static std::wstring make_cmdline(std::wstring_view cmd, const args_t &args)
 {
-#ifdef __linux__
-	if( prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 )
-		return false;
-	return getppid() == parent_pid;
-#else
-	RIWO_UNUSED(parent_pid);
-	return true;
-#endif
+	auto cmdline = quote_arg(cmd);
+	for(auto &arg : args)
+	{
+		cmdline += L' ';
+		cmdline += quote_arg(arg);
+	}
+	return cmdline;
 }
 
-namespace
+[[nodiscard]] static bool has_shell_meta(std::wstring_view str) noexcept
 {
+	return std::ranges::any_of(str, [](auto ch) {
+		return ch == L'|' or ch == L'&' or ch == L'<' or ch == L'>';
+	});
+}
+
+[[nodiscard]] static std::wstring to_wstring(std::string_view str)
+{
+	if( str.empty() )
+		return {};
+
+	int size = MultiByteToWideChar(CP_UTF8, 0, str.data(),
+		static_cast<int>(str.size()), nullptr, 0
+	);
+	if( size <= 0 )
+		return std::wstring(str.begin(), str.end());
+
+	std::wstring result(static_cast<size_t>(size), L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, str.data(),
+		static_cast<int>(str.size()), result.data(), size
+	);
+	return result;
+}
+
+[[nodiscard]] static std::vector<wchar_t> make_environment(const envs_t &envs)
+{
+	std::map<std::wstring,std::wstring> merged;
+	if( auto block = GetEnvironmentStringsW() )
+	{
+		for(auto ptr = block; *ptr != L'\0'; )
+		{
+			std::wstring item = ptr;
+			ptr += item.size() + 1;
+
+			auto pos = item.find(L'=', item.starts_with(L'=') ? 1 : 0);
+			if( pos != std::wstring::npos )
+				merged.emplace(item.substr(0, pos), item.substr(pos + 1));
+		}
+		FreeEnvironmentStringsW(block);
+	}
+	for(auto &[key, val] : envs)
+		merged[to_wstring(key)] = val.wstring();
+
+	std::vector<wchar_t> result;
+	for(auto &[key, val] : merged)
+	{
+		result.insert(result.end(), key.begin(), key.end());
+		result.push_back(L'=');
+		result.insert(result.end(), val.begin(), val.end());
+		result.push_back(L'\0');
+	}
+	result.push_back(L'\0');
+	return result;
+}
+
+[[nodiscard]] static std::wstring make_pipe_name()
+{
+	static std::atomic_long counter {0};
+	return std::format (
+		LR"(\\.\pipe\riwo-utils-process-{}-{})",
+		GetCurrentProcessId(), counter.fetch_add(1, std::memory_order_relaxed)
+	);
+}
+
+static void close_handle(HANDLE handle) noexcept
+{
+	if( handle != nullptr and handle != INVALID_HANDLE_VALUE )
+		CloseHandle(handle);
+}
+
+[[nodiscard]] static bool connect_pipe_server(HANDLE handle) noexcept
+{
+	if( ConnectNamedPipe(handle, nullptr) )
+		return true;
+	return GetLastError() == ERROR_PIPE_CONNECTED;
+}
+
+[[nodiscard]] static sys_expected<> make_stdout_pipe(read_pipe_t &parent, HANDLE &child) noexcept
+{
+	sys_expected<> expected;
+	auto name = make_pipe_name();
+
+	auto parent_handle = CreateNamedPipeW(name.c_str(),
+		PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+		PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+		1, 8192, 8192, 0, nullptr
+	);
+	if( parent_handle == INVALID_HANDLE_VALUE )
+		return expected.despair(sys_error());
+
+	SECURITY_ATTRIBUTES sa {};
+	sa.nLength = sizeof(sa);
+	sa.bInheritHandle = TRUE;
+
+	child = CreateFileW(name.c_str(), GENERIC_WRITE, 0, &sa,
+		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr
+	);
+	if( child == INVALID_HANDLE_VALUE )
+	{
+		auto error = sys_error();
+		close_handle(parent_handle);
+		child = nullptr;
+		return expected.despair(error);
+	}
+	if( not connect_pipe_server(parent_handle) )
+	{
+		auto error = sys_error();
+		close_handle(parent_handle);
+		close_handle(child);
+		child = nullptr;
+		return expected.despair(error);
+	}
+	error_code error;
+	error = parent.assign(parent_handle, error);
+	if( error )
+	{
+		close_handle(parent_handle);
+		close_handle(child);
+		child = nullptr;
+		return expected.despair(error);
+	}
+	return expected;
+}
+
+[[nodiscard]] static sys_expected<> make_stdin_pipe(write_pipe_t &parent, HANDLE &child) noexcept
+{
+	sys_expected<> expected;
+	auto name = make_pipe_name();
+
+	auto parent_handle = CreateNamedPipeW(name.c_str(),
+		PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED,
+		PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+		1, 8192, 8192, 0, nullptr
+	);
+	if( parent_handle == INVALID_HANDLE_VALUE )
+		return expected.despair(sys_error());
+
+	SECURITY_ATTRIBUTES sa {};
+	sa.nLength = sizeof(sa);
+	sa.bInheritHandle = TRUE;
+
+	child = CreateFileW(name.c_str(), GENERIC_READ, 0, &sa,
+		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr
+	);
+	if( child == INVALID_HANDLE_VALUE )
+	{
+		auto error = sys_error();
+		close_handle(parent_handle);
+		child = nullptr;
+		return expected.despair(error);
+	}
+	if( not connect_pipe_server(parent_handle) )
+	{
+		auto error = sys_error();
+		close_handle(parent_handle);
+		close_handle(child);
+		child = nullptr;
+		return expected.despair(error);
+	}
+	error_code error;
+	error = parent.assign(parent_handle, error);
+	if( error )
+	{
+		close_handle(parent_handle);
+		close_handle(child);
+		child = nullptr;
+		return expected.despair(error);
+	}
+	return expected;
+}
 
 class RIWO_DECL_HIDDEN vindicator final :
 	public std::enable_shared_from_this<vindicator>
@@ -98,15 +300,15 @@ public:
 	}
 
 public:
-	[[nodiscard]] sys_expected<> start(bool is_pipe, std::string_view cmd,
-		const args_t &args, std::string_view work_path, const envs_t &envs)
+	[[nodiscard]] sys_expected<> start(bool is_pipe, std::wstring_view cmd,
+		const args_t &args, const path_t &work_path, const envs_t &envs)
 	{
 		error_code error; RIWO_UNUSED(error);
 		sys_expected<> expected;
 
 		if( m_joinable.load(std::memory_order_acquire) )
 		{
-			return expected.despair(std::make_error_code (
+			return expected.despair(std::make_error_code(
 				std::errc::device_or_resource_busy
 			));
 		}
@@ -122,143 +324,145 @@ public:
 		m_released.store(false, std::memory_order_release);
 		auto generation = m_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
 
-		// From the perspective of the child process.
-		int stdin_pipe [2] {-1,-1};
-		int stdout_pipe[2] {-1,-1};
-		int stderr_pipe[2] {-1,-1};
-		::pid_t parent_pid = -1;
+		write_pipe_t stdin_write(m_exec);
+		read_pipe_t stdout_read(m_exec);
+		read_pipe_t stderr_read(m_exec);
+
+		HANDLE child_stdin = nullptr;
+		HANDLE child_stdout = nullptr;
+		HANDLE child_stderr = nullptr;
+
+		auto pipe_expected = make_stdin_pipe(stdin_write, child_stdin);
+		if( not pipe_expected )
+			return pipe_expected;
+
+		pipe_expected = make_stdout_pipe(stdout_read, child_stdout);
+		if( not pipe_expected )
+		{
+			close_handle(child_stdin);
+			return pipe_expected;
+		}
+		pipe_expected = make_stdout_pipe(stderr_read, child_stderr);
+		if( not pipe_expected )
+		{
+			close_handle(child_stdin);
+			close_handle(child_stdout);
+			return pipe_expected;
+		}
+		std::wstring command_line;
+		if( is_pipe )
+		{
+			wchar_t comspec[MAX_PATH] {};
+			auto len = GetEnvironmentVariableW(L"COMSPEC", comspec, MAX_PATH);
+
+			std::wstring shell = len > 0 ? std::wstring(comspec, len) : L"cmd.exe";
+			command_line = make_cmdline(shell, {L"/C", std::wstring(cmd)});
+		}
+		else
+			command_line = make_cmdline(cmd, args);
+
+		STARTUPINFOW si {};
+		si.cb = sizeof(si);
+		si.dwFlags = STARTF_USESTDHANDLES;
+		si.hStdInput = child_stdin;
+		si.hStdOutput = child_stdout;
+		si.hStdError = child_stderr;
+
+		PROCESS_INFORMATION pi {};
+		auto env_block = envs.empty() ? std::vector<wchar_t>{} : make_environment(envs);
+		auto work_path_str = work_path.empty() ? std::wstring{} : work_path.wstring();
+
+		HANDLE job_handle = CreateJobObjectW(nullptr, nullptr);
+		if( job_handle == nullptr )
+		{
+			auto job_error = sys_error();
+			close_handle(child_stdin);
+			close_handle(child_stdout);
+			close_handle(child_stderr);
+			return expected.despair(job_error);
+		}
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_info {};
+		job_info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+		if( not SetInformationJobObject(job_handle,
+			JobObjectExtendedLimitInformation, &job_info, sizeof(job_info)) )
+		{
+			auto job_error = sys_error();
+			close_handle(job_handle);
+			close_handle(child_stdin);
+			close_handle(child_stdout);
+			close_handle(child_stderr);
+			return expected.despair(job_error);
+		}
+		if( not CreateProcessW (
+			nullptr, command_line.data(), nullptr, nullptr, TRUE,
+			CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
+			env_block.empty() ? nullptr : env_block.data(),
+			work_path_str.empty() ? nullptr : work_path_str.c_str(), &si, &pi) )
+		{
+			auto create_error = sys_error();
+			close_handle(job_handle);
+			close_handle(child_stdin);
+			close_handle(child_stdout);
+			close_handle(child_stderr);
+			return expected.despair(create_error);
+		}
+		if( not AssignProcessToJobObject(job_handle, pi.hProcess) )
+		{
+			auto assign_error = sys_error();
+			TerminateProcess(pi.hProcess, static_cast<UINT>(-9));
+			WaitForSingleObject(pi.hProcess, INFINITE);
+
+			close_handle(pi.hThread);
+			close_handle(pi.hProcess);
+			close_handle(job_handle);
+			close_handle(child_stdin);
+			close_handle(child_stdout);
+			close_handle(child_stderr);
+			return expected.despair(assign_error);
+		}
+		if( ResumeThread(pi.hThread) == static_cast<DWORD>(-1) )
+		{
+			auto resume_error = sys_error();
+			TerminateProcess(pi.hProcess, static_cast<UINT>(-9));
+			WaitForSingleObject(pi.hProcess, INFINITE);
+
+			close_handle(pi.hThread);
+			close_handle(pi.hProcess);
+			close_handle(job_handle);
+			close_handle(child_stdin);
+			close_handle(child_stdout);
+			close_handle(child_stderr);
+			return expected.despair(resume_error);
+		}
+		close_handle(pi.hThread);
+		close_handle(child_stdin);
+		close_handle(child_stdout);
+		close_handle(child_stderr);
 
 		error = m_stdin.close(error);
-		if( pipe2(stdin_pipe, O_NONBLOCK) < 0 )
-		{
-			expected.despair(sys_error());
-			goto stdin_error;
-		}
 		error = m_stdout.close(error);
-		if( pipe2(stdout_pipe, O_NONBLOCK) < 0 )
-		{
-			expected.despair(sys_error());
-			goto stdout_error;
-		}
 		error = m_stderr.close(error);
-		if( pipe2(stderr_pipe, O_NONBLOCK) < 0 )
-		{
-			expected.despair(sys_error());
-			goto stderr_error;
-		}
-		parent_pid = getpid();
-		m_pid = fork();
-		if( m_pid < 0 )
-		{
-			expected.despair(sys_error());
-			goto fork_error;
-		}
-		else if( m_pid == 0 ) //child
-		{
-			if( not exit_on_parent_exit(parent_pid) )
-				_exit(255);
-
-			fcntl(stdin_pipe[0], F_SETFL,
-				fcntl(stdin_pipe[0], F_GETFL) & ~O_NONBLOCK
-			);
-			fcntl(stdout_pipe[1], F_SETFL,
-				fcntl(stdout_pipe[1], F_GETFL) & ~O_NONBLOCK
-			);
-			fcntl(stderr_pipe[1], F_SETFL,
-				fcntl(stderr_pipe[1], F_GETFL) & ~O_NONBLOCK
-			);
-			dup2(stdin_pipe [0], STDIN_FILENO );
-			dup2(stdout_pipe[1], STDOUT_FILENO);
-			dup2(stderr_pipe[1], STDERR_FILENO);
-
-			close(stdin_pipe [1]);
-			close(stdout_pipe[0]);
-			close(stderr_pipe[0]);
-
-			int res = chdir(work_path.data());
-			RIWO_UNUSED(res);
-
-			for(auto &[key, value] : envs)
-				setenv(key.c_str(), value.c_str(), true);
-
-			if( is_pipe )
-			{
-				default_shell()
-				.transform([&](const std::string &shell)
-				{
-					res = execlp(shell.c_str(),
-						shell.c_str(), "-c", cmd.data(), nullptr
-					);
-					return shell;
-				})
-				.or_else([&]
-				{
-					expected.despair(std::make_error_code(
-						std::errc::no_such_file_or_directory
-					));
-					_exit(-1);
-				});
-			}
-			else
-			{
-				auto _args = new const char*[1 + args.size() + 1] {
-					cmd.data(), nullptr
-				};
-				for(size_t i=0; i<args.size(); i++)
-				{
-					if( not args[i].empty() )
-						_args[1 + i] = args[i].c_str();
-				}
-				res = execvp(cmd.data(), const_cast<char**>(_args));
-				delete[] _args;
-			}
-			perror("||| *** *** *** Error: execvp *** >>> ");
-			_exit(res);
-		}
-		if( not expected )
-			goto exec_error;
 
 		error.clear();
-		error = m_stdin.assign(stdin_pipe[1], error);
-		if( error )
-		{
-			expected.despair(error);
-			stop_and_reap(true);
-			goto exec_error;
-		}
-		stdin_pipe[1] = -1;
-		close(stdin_pipe[0]);
-		stdin_pipe[0] = -1;
+		m_stdin = std::move(stdin_write);
 
 		error.clear();
-		error = m_stdout.assign(stdout_pipe[0], error);
-		if( error )
-		{
-			expected.despair(error);
-			stop_and_reap(true);
-			goto exec_error;
-		}
-		stdout_pipe[0] = -1;
-		close(stdout_pipe[1]);
-		stdout_pipe[1] = -1;
+		m_stdout = std::move(stdout_read);
 
 		error.clear();
-		error = m_stderr.assign(stderr_pipe[0], error);
-		if( error )
+		m_stderr = std::move(stderr_read);
 		{
-			expected.despair(error);
-			stop_and_reap(true);
-			goto exec_error;
+			std::lock_guard resource_lock(m_resource_mutex);
+			m_process = pi.hProcess;
+			m_job = job_handle;
+			m_pid.store(pi.dwProcessId, std::memory_order_release);
 		}
-		stderr_pipe[0] = -1;
-		close(stderr_pipe[1]);
-		stderr_pipe[1] = -1;
-
 		m_state = process_state::running;
 		try {
-			const auto child_pid = m_pid.load(std::memory_order_acquire);
-			m_thread = std::thread([self = shared_from_this(), child_pid, generation]{
-				self->monitor_child(child_pid, generation);
+			m_thread = std::thread (
+			[self = shared_from_this(), process_handle = pi.hProcess, generation]{
+				self->monitor_child(process_handle, generation);
 			});
 			m_joinable.store(true, std::memory_order_release);
 		}
@@ -278,38 +482,6 @@ public:
 			stop_and_reap(true);
 		}
 		return expected;
-
-	exec_error: {
-		m_joinable.store(false, std::memory_order_release);
-		m_join_in_progress.store(false, std::memory_order_release);
-		m_pid = -1;
-
-		publish_terminal_state(process_state::crashed, 255);
-		std::vector<std::shared_ptr<asio::steady_timer>> vector;
-		{
-			std::lock_guard timer_lock(m_timer_mutex);
-			vector = std::move(m_co_join_list);
-		}
-		for(auto &timer : vector)
-			timer->cancel();
-	}
-	fork_error:
-		close(stderr_pipe[0]);
-		close(stderr_pipe[1]);
-		stderr_pipe[0] = stderr_pipe[1] = -1;
-
-	stderr_error:
-		close(stdout_pipe[0]);
-		close(stdout_pipe[1]);
-		stdout_pipe[0] = stdout_pipe[1] = -1;
-
-	stdout_error:
-		close(stdin_pipe[0]);
-		close(stdin_pipe[1]);
-		stdin_pipe[0] = stdin_pipe[1] = -1;
-
-	stdin_error:
-		return expected;
 	}
 
 private:
@@ -323,44 +495,30 @@ private:
 		m_cv.notify_all();
 	}
 
-	void monitor_child(int child_pid, std::uint64_t generation) noexcept
+	void monitor_child(HANDLE process_handle, std::uint64_t generation) noexcept
 	{
-		int status = 0;
-		bool reaped = false;
-		for(;;)
-		{
-			const int result = waitpid(child_pid, &status, 0);
-			if( result == child_pid )
-			{
-				if( WIFSTOPPED(status) or WIFCONTINUED(status) )
-					continue;
-				reaped = true;
-				break;
-			}
-			if( result < 0 and errno == EINTR )
-				continue;
+		const DWORD wait_result = WaitForSingleObject(process_handle, INFINITE);
+		DWORD child_exit_code = 255;
 
-			const int wait_error = errno;
-			riwo_utils_clog_error("Riwo.Utils",
-				"process: waitpid failed: '{}' ({})",
-				strerror(wait_error), wait_error
-			);
-			break;
-		}
+		const bool got_exit_code = wait_result == WAIT_OBJECT_0 and
+			GetExitCodeProcess(process_handle, &child_exit_code);
+
+		const bool forced = generation ==
+			m_forced_generation.load(std::memory_order_acquire);
+
 		if( generation == m_generation.load(std::memory_order_acquire) )
 		{
 			process_state state;
 			int exit_code;
-
-			if( reaped and WIFEXITED(status) )
+			if( got_exit_code and not forced )
 			{
-				exit_code = WEXITSTATUS(status);
+				exit_code = static_cast<int>(child_exit_code);
 				state = process_state::exited;
 			}
 			else
 			{
-				exit_code = reaped and WIFSIGNALED(status) ?
-					WTERMSIG(status) : 255;
+				exit_code = got_exit_code ?
+					static_cast<int>(child_exit_code) : 255;
 				state = process_state::crashed;
 			}
 			publish_terminal_state(state, exit_code);
@@ -369,9 +527,8 @@ private:
 			if( m_released.load(std::memory_order_acquire) )
 			{
 				// A released control block has no public owner. Keep it alive until
-				// descriptor cleanup has run on its executor, otherwise destruction
-				// may race execution_context shutdown on the monitor thread.
-				riwo::post(m_exec, [self = shared_from_this(), generation]{
+				// handle cleanup has run on its executor.
+				riwo::post(m_exec, [self = shared_from_this(), generation] {
 					self->finish_io(generation, false);
 				});
 			}
@@ -380,8 +537,7 @@ private:
 				// A joined process retains its public owner. Avoid extending that
 				// lifetime merely because executor progress has stopped.
 				std::weak_ptr weak = shared_from_this();
-				riwo::post(m_exec, [weak = std::move(weak), generation]
-				{
+				riwo::post(m_exec, [weak = std::move(weak), generation] {
 					if( auto self = weak.lock() )
 						self->finish_io(generation, false);
 				});
@@ -408,8 +564,8 @@ private:
 	void release_monitor_thread() noexcept
 	{
 		// Once public join ownership has been released, the monitor owns its
-		// control block until waitpid() completes.  Detach the native thread at
-		// the same point so a process-wide owner can shut down without leaving a
+		// control block until the child handle is signalled.  Detach the native
+		// thread at the same point so process-wide teardown cannot leave a
 		// finished, unjoined thread behind.
 		try {
 			if( m_thread.joinable() )
@@ -423,16 +579,26 @@ private:
 		if( generation != m_generation.load(std::memory_order_acquire) )
 			return ;
 
-		error_code error;
-		error = m_stdin.close(error);
-		if( close_output )
+		HANDLE process_handle;
+		HANDLE job_handle;
 		{
-			error.clear();
-			error = m_stdout.close(error);
-			error.clear();
-			error = m_stderr.close(error);
+			std::lock_guard resource_lock(m_resource_mutex);
+			error_code close_error;
+			close_error = m_stdin.close(close_error);
+			if( close_output )
+			{
+				close_error.clear();
+				close_error = m_stdout.close(close_error);
+				close_error.clear();
+				close_error = m_stderr.close(close_error);
+				RIWO_UNUSED(close_error);
+			}
+			process_handle = std::exchange(m_process, nullptr);
+			job_handle = std::exchange(m_job, nullptr);
+			m_pid.store(0, std::memory_order_release);
 		}
-		m_pid.store(-1, std::memory_order_release);
+		close_handle(process_handle);
+		close_handle(job_handle);
 
 		std::vector<std::shared_ptr<asio::steady_timer>> timers;
 		{
@@ -451,33 +617,35 @@ private:
 	void stop_and_reap(bool force) noexcept
 	{
 		const auto state = m_state.load(std::memory_order_acquire);
-		const int child_pid = m_pid.load(std::memory_order_acquire);
+		const auto generation = m_generation.load(std::memory_order_acquire);
 		const bool must_stop = force or state == process_state::running;
 
-		if( must_stop and child_pid > 0 )
-			::kill(child_pid, SIGKILL);
+		if( must_stop )
+		{
+			m_forced_generation.store(generation, std::memory_order_release);
+			std::lock_guard resource_lock(m_resource_mutex);
 
+			if( m_process != nullptr )
+				TerminateProcess(m_process, static_cast<UINT>(-9));
+		}
 		if( m_thread.joinable() )
 			join_monitor_thread();
 
-		else if( must_stop and child_pid > 0 )
+		else if( must_stop )
 		{
-			int status = 0;
-			int wait_result = -1;
-			do {
-				wait_result = waitpid(child_pid, &status, 0);
+			HANDLE process_handle;
+			{
+				std::lock_guard resource_lock(m_resource_mutex);
+				process_handle = m_process;
 			}
-			while( wait_result < 0 and errno == EINTR );
+			if( process_handle != nullptr )
+				WaitForSingleObject(process_handle, INFINITE);
 
-			const int exit_code = wait_result == child_pid and WIFSIGNALED(status) ?
-				WTERMSIG(status) : 255;
-
-			publish_terminal_state(process_state::crashed, exit_code);
+			publish_terminal_state(process_state::crashed, 255);
 		}
 		if( m_state.load(std::memory_order_acquire) == process_state::running )
 			publish_terminal_state(process_state::crashed, 255);
-
-		finish_io(m_generation.load(std::memory_order_acquire), true);
+		finish_io(generation, true);
 	}
 
 	[[nodiscard]] bool register_join_timer(const std::shared_ptr<asio::steady_timer> &timer)
@@ -485,7 +653,6 @@ private:
 		std::lock_guard timer_lock(m_timer_mutex);
 		if( m_state.load(std::memory_order_acquire) != process_state::running )
 			return false;
-
 		m_co_join_list.emplace_back(timer);
 		return true;
 	}
@@ -540,13 +707,19 @@ public:
 	void terminate() const noexcept
 	{
 		if( m_state == process_state::running )
-			::kill(m_pid.load(std::memory_order_acquire), SIGTERM);
+		{
+			m_forced_generation.store (
+				m_generation.load(std::memory_order_acquire),
+				std::memory_order_release
+			);
+			std::lock_guard resource_lock(m_resource_mutex);
+			if( m_process != nullptr )
+				TerminateProcess(m_process, static_cast<UINT>(-9));
+		}
 	}
 
-	void kill() noexcept
-	{
-		if( m_state == process_state::running )
-			::kill(m_pid.load(std::memory_order_acquire), SIGKILL);
+	void kill() const noexcept {
+		terminate();
 	}
 
 	[[nodiscard]] sys_expected<> detach() noexcept
@@ -584,7 +757,7 @@ public:
 		try {
 			riwo::dispatch(m_exec, [self = shared_from_this()]
 			{
-				error_code error;
+				error_code error {};
 				error = self->m_stdin.cancel(error);
 
 				error.clear();
@@ -593,7 +766,6 @@ public:
 				error.clear();
 				error = self->m_stderr.cancel(error);
 
-				RIWO_UNUSED(error);
 				std::vector<std::shared_ptr<asio::steady_timer>> vector;
 				{
 					std::lock_guard timer_lock(self->m_timer_mutex);
@@ -720,11 +892,9 @@ public:
 					break;
 				}
 				error_code error;
-				if( cancel_slot.is_connected() )
-					co_await timer->async_wait(use_awaitable | cancel_slot | error);
-				else
-					co_await timer->async_wait(use_awaitable | error);
-
+				co_await timer->async_wait (
+					use_awaitable | cancel_slot | error
+				);
 				state = m_state.load();
 				if( state == process_state::running )
 				{
@@ -750,10 +920,9 @@ public:
 			error_code error;
 			if( timer_registered )
 			{
-				if( cancel_slot.is_connected() )
-					co_await timer->async_wait(use_awaitable | cancel_slot | error);
-				else
-					co_await timer->async_wait(use_awaitable | error);
+				co_await timer->async_wait (
+					use_awaitable | cancel_slot | error
+				);
 			}
 			state = m_state.load();
 			if( state == process_state::running )
@@ -784,17 +953,13 @@ public:
 			);
 		}
 		error_code error;
-		error = m_stdin.non_blocking(false, error);
-		if( error )
-			return {error};
-
 		auto sum = asio::write(m_stdin, buf, error);
 		if( error )
 			return {error};
 		return sum;
 	}
 
-	void async_write(const_buffer buf, process::io_handler_t handler)
+	void async_write(const const_buffer &buf, process::io_handler_t handler)
 	{
 		if( buf.size() == 0 )
 		{
@@ -806,13 +971,6 @@ public:
 			post_io_result(std::move(handler),
 				make_system_error_code(std::errc::no_such_process), 0
 			);
-			return ;
-		}
-		error_code error;
-		error = m_stdin.non_blocking(true, error);
-		if( error )
-		{
-			post_io_result(std::move(handler), error, 0);
 			return ;
 		}
 		asio::async_write(m_stdin, buf, std::move(handler));
@@ -827,40 +985,27 @@ public:
 				make_system_error_code(std::errc::no_such_process)
 			);
 		}
-		descriptor_t *stream = nullptr;
-
-		if( channel == read_channel_t::std_output )
+		auto stream = read_stream(channel);
+		if( stream == nullptr or not stream->is_open() )
 		{
-			if( not m_stdout.is_open() )
-			{
-				return io_unexpected (
-					make_system_error_code(std::errc::no_such_process)
-				);
-			}
-			stream = &m_stdout;
-		}
-		else
-		{
-			if( not m_stderr.is_open() )
-			{
-				return io_unexpected (
-					make_system_error_code(std::errc::no_such_process)
-				);
-			}
-			stream = &m_stderr;
+			return io_unexpected (
+				make_system_error_code(std::errc::no_such_process)
+			);
 		}
 		error_code error;
-		error = stream->non_blocking(false, error);
-		if( error )
-			return {error};
+		auto sum = stream->read_some(buf, error);
 
-		auto size = stream->read_some(buf, error);
+		if( error.value() == ERROR_BROKEN_PIPE or
+			error.value() == ERROR_HANDLE_EOF or
+			error.value() == ERROR_NO_DATA )
+			error = make_error_code(asio::error::eof);
+
 		if( error )
 			return {error};
-		return size;
+		return sum;
 	}
 
-	void async_read(read_channel_t channel, mutable_buffer buf, process::io_handler_t handler)
+	void async_read(read_channel_t channel, const mutable_buffer &buf, process::io_handler_t handler)
 	{
 		if( buf.size() == 0 )
 		{
@@ -874,35 +1019,12 @@ public:
 			);
 			return ;
 		}
-		error_code error;
-		descriptor_t *stream = nullptr;
-
-		if( channel == read_channel_t::std_output )
+		auto stream = read_stream(channel);
+		if( stream == nullptr or not stream->is_open() )
 		{
-			if( not m_stdout.is_open() )
-			{
-				post_io_result(std::move(handler),
-					make_system_error_code(std::errc::no_such_process), 0
-				);
-				return ;
-			}
-			stream = &m_stdout;
-		}
-		else
-		{
-			if( not m_stderr.is_open() )
-			{
-				post_io_result(std::move(handler),
-					make_system_error_code(std::errc::no_such_process), 0
-				);
-				return ;
-			}
-			stream = &m_stderr;
-		}
-		error = stream->non_blocking(true, error);
-		if( error )
-		{
-			post_io_result(std::move(handler), error, 0);
+			post_io_result(std::move(handler),
+				make_system_error_code(std::errc::no_such_process), 0
+			);
 			return ;
 		}
 		stream->async_read_some(buf, std::move(handler));
@@ -923,25 +1045,26 @@ public:
 	}
 
 private:
-	void post_io_result(process::io_handler_t handler, error_code error, size_t size) const {
-		post_completion(m_exec, std::move(handler), error, size);
+	[[nodiscard]] read_pipe_t *read_stream(read_channel_t channel) noexcept {
+		return channel == read_channel_t::std_output ? &m_stdout : &m_stderr;
 	}
 
-	[[nodiscard]] static optional<std::string> default_shell() noexcept
-	{
-		if( auto shell = getenv("SHELL"); shell and strlen(shell) > 0 )
-			return {shell};
-
-		auto pw = getpwuid(getuid());
-		if( pw and pw->pw_shell and strlen(pw->pw_shell) > 0 )
-			return {pw->pw_shell};
-		return {};
+	void post_io_result(process::io_handler_t handler, error_code error, size_t size) {
+		post_completion(m_exec, std::move(handler), error, size);
 	}
 
 public:
 	std::thread m_thread {};
-	std::atomic_int m_pid {-1};
+	HANDLE m_process = nullptr;
+	HANDLE m_job = nullptr;
+
+	std::atomic<DWORD> m_pid {0};
 	std::atomic_uint64_t m_generation {0};
+
+	mutable std::atomic_uint64_t m_forced_generation {
+		static_cast<std::uint64_t>(-1)
+	};
+	mutable std::mutex m_resource_mutex {};
 
 	std::atomic<process_state> m_state {
 		process_state::idle
@@ -951,11 +1074,10 @@ public:
 	std::atomic_bool m_join_in_progress {false};
 	std::atomic_bool m_released {false};
 
-	// From the perspective of the child process.
 	executor_t m_exec {};
-	descriptor_t m_stdin  {m_exec};
-	descriptor_t m_stdout {m_exec};
-	descriptor_t m_stderr {m_exec};
+	write_pipe_t m_stdin  {m_exec};
+	read_pipe_t  m_stdout {m_exec};
+	read_pipe_t  m_stderr {m_exec};
 
 	std::condition_variable m_cv {};
 	std::mutex m_cv_mutex {};
@@ -963,12 +1085,11 @@ public:
 	std::vector <
 		std::shared_ptr<asio::steady_timer>
 	> m_co_join_list {};
+
 	std::mutex m_timer_mutex {};
 };
 
 using vindicator_ptr = vindicator::ptr_t;
-
-} //namespace
 
 class RIWO_DECL_HIDDEN process::impl
 {
@@ -986,7 +1107,7 @@ public:
 	}
 
 public:
-	std::string m_cmd {};
+	std::wstring m_cmd {};
 	args_t m_args {};
 
 	path_t m_work_path {};
@@ -1010,50 +1131,29 @@ void process::set(const path_t &cmd, const std::vector<path_t> &args) const
 	if( cmd.empty() )
 		return ;
 
-	auto cmd_str = strtls::trimmed(cmd.string());
-	wordexp_t word {};
-
-	auto res = wordexp(cmd_str.c_str(), &word, 0);
-	if( res != 0 )
-	{
-		if( res == WRDE_NOSPACE )
-			wordfree(&word);
-
-		for(auto &arg : args)
-			cmd_str += " " + strtls::trimmed(arg.string());
-
-		m_impl->m_cmd = std::move(cmd_str);
-		m_impl->m_is_pipe = true;
-		return ;
-	}
-	if( word.we_wordc == 0 )
-	{
-		wordfree(&word);
-		m_impl->m_cmd.clear();
-		m_impl->m_args.clear();
-		m_impl->m_is_pipe = false;
-		return ;
-	}
-	if( is_shell_assignment(word.we_wordv[0]) )
-	{
-		wordfree(&word);
-		for(auto &arg : args)
-			cmd_str += " " + strtls::trimmed(arg.string());
-
-		m_impl->m_cmd = std::move(cmd_str);
-		m_impl->m_args.clear();
-		m_impl->m_is_pipe = true;
-		return ;
-	}
-	m_impl->m_cmd = word.we_wordv[0];
+	auto cmd_str = strtls::trimmed(cmd.wstring());
+	m_impl->m_cmd = std::move(cmd_str);
 	m_impl->m_args.clear();
+	m_impl->m_is_pipe = has_shell_meta(m_impl->m_cmd);
 
-	for(size_t i=1; i<word.we_wordc; i++)
-		m_impl->m_args.emplace_back(word.we_wordv[i]);
-
-	wordfree(&word);
-	m_impl->m_is_pipe = false;
-
+	if( not m_impl->m_is_pipe )
+	{
+		int count = 0;
+		auto argv = CommandLineToArgvW(m_impl->m_cmd.c_str(), &count);
+		if( argv != nullptr and count > 0 )
+		{
+			m_impl->m_cmd = argv[0];
+			for(int i=1; i<count; ++i)
+				m_impl->m_args.emplace_back(argv[i]);
+			LocalFree(argv);
+		}
+		else
+		{
+			if( argv != nullptr )
+				LocalFree(argv);
+			m_impl->m_is_pipe = true;
+		}
+	}
 	for(auto &arg : args)
 		add_arg(arg);
 }
@@ -1063,22 +1163,18 @@ void process::add_arg(const path_t &arg) const
 	if( arg.empty() )
 		return ;
 
-	else if( m_impl->m_is_pipe )
-	{
-		m_impl->m_cmd += " " + strtls::trimmed(arg.string());
-		return ;
-	}
-	// Arguments supplied separately are already tokenized by the caller.  In
-	// particular, a value containing spaces must remain one argv entry (matching
-	// the Windows implementation and normal execvp semantics).
-	m_impl->m_args.emplace_back(strtls::trimmed(arg.string()));
+	auto arg_str = strtls::trimmed(arg.wstring());
+	if( m_impl->m_is_pipe )
+		m_impl->m_cmd += L" " + std::move(arg_str);
+	else
+		m_impl->m_args.emplace_back(std::move(arg_str));
 }
 
 sys_expected<> process::start() const
 {
 	return m_impl->m_vindicator->start (
 		m_impl->m_is_pipe, m_impl->m_cmd, m_impl->m_args,
-		m_impl->m_work_path.string(), m_impl->m_envs
+		m_impl->m_work_path, m_impl->m_envs
 	);
 }
 
@@ -1095,9 +1191,8 @@ void process::kill() const noexcept
 sys_expected<> process::detach() const noexcept
 {
 	// Detach releases only the public join ownership.  The old control block is
-	// kept alive by its monitor thread until waitpid() has reaped the child; the
-	// replacement lets this process object be reused without abandoning that
-	// parent-side resource management.
+	// kept alive by its monitor thread until the process has been waited and all
+	// handles are closed; the replacement makes this process object reusable.
 	vindicator_ptr replacement;
 	try {
 		replacement = std::make_shared<vindicator>(m_impl->m_exec);
@@ -1133,8 +1228,8 @@ void process::cancel(bool release) const noexcept
 	catch(...) {}
 
 	// Releasing join ownership must not wait for an outstanding co_join() to
-	// unwind.  The monitor thread keeps the old control block alive and reaps
-	// the child after the pending operations have been cancelled.
+	// unwind.  The monitor thread keeps the old control block alive and closes
+	// its process handles after the pending operations have been cancelled.
 	current->cancel(true);
 	if( replacement )
 		m_impl->m_vindicator = std::move(replacement);
@@ -1195,7 +1290,9 @@ void process::async_read(read_channel channel, const mutable_buffer &buf, io_han
 
 void process::normalize_read_error(error_code &error) const noexcept
 {
-	if( error.default_error_condition() == std::errc::broken_pipe )
+	if( error.value() == ERROR_BROKEN_PIPE or
+		error.value() == ERROR_HANDLE_EOF or
+		error.value() == ERROR_NO_DATA )
 		error = make_error_code(asio::error::eof);
 }
 
@@ -1208,9 +1305,7 @@ void process::protect_io_error(const error_code &error) const noexcept
 		condition == std::errc::bad_file_descriptor or
 		condition == std::errc::io_error or
 		condition == std::errc::bad_address )
-	{
 		m_impl->m_vindicator->kill();
-	}
 }
 
 void process::set_work_path(path_t path) noexcept
@@ -1245,22 +1340,27 @@ pid_t process::pid() const noexcept
 
 sys_expected<uint64_t> process::self_pid() noexcept
 {
-	// Always successful on unix/linux.
-	return getpid();
+	return GetCurrentProcessId();
 }
 
 sys_expected<> process::terminate(pid_t pid) noexcept
 {
-	if( ::kill(static_cast<::pid_t>(pid), SIGTERM) == 0 )
+	auto handle = OpenProcess(PROCESS_TERMINATE, FALSE, static_cast<DWORD>(pid));
+	if( handle == nullptr )
+		return sys_unexpected(sys_error());
+
+	auto ok = TerminateProcess(handle, static_cast<UINT>(-9));
+	auto error = sys_error();
+
+	CloseHandle(handle);
+	if( ok )
 		return {};
-	return sys_unexpected(sys_error());
+	return sys_unexpected(error);
 }
 
 sys_expected<> process::kill(pid_t pid) noexcept
 {
-	if( ::kill(static_cast<::pid_t>(pid), SIGKILL) == 0 )
-		return {};
-	return sys_unexpected(sys_error());
+	return terminate(pid);
 }
 
 static fs::path g_pid_file {};
@@ -1268,82 +1368,96 @@ static fs::path g_pid_file {};
 static void singleton_cleanup()
 {
 	if( not g_pid_file.empty() )
-		unlink(g_pid_file.c_str());
+		DeleteFileW(g_pid_file.wstring().c_str());
 }
 
 static sys_expected<uint64_t> do_set_single(const fs::path &path, std::string_view key)
 {
 	sys_expected<uint64_t> result;
+	fs::path dir = path;
+
+	if( dir.empty() )
 	{
-		auto g_pid_path = path.empty() ? "/tmp" : path.string();
-		while( g_pid_path.ends_with('/') )
-			g_pid_path.pop_back();
+		wchar_t tmp[MAX_PATH] {};
+		auto len = GetTempPathW(MAX_PATH, tmp);
 
-		g_pid_path += "/.riwo.utils.process";
-		namespace fs = std::filesystem;
+		if( len == 0 or len > MAX_PATH )
+			return result.despair(sys_error());
 
-		if( not fs::exists(g_pid_path) )
-		{
-			if( std::error_code error; not fs::create_directories(g_pid_path, error) )
-				return result.despair(error);
-		}
-		g_pid_file = g_pid_path + std::format("/{}", key);
+		dir = fs::path(std::wstring(tmp, len));
 	}
-	auto curr_pid = getpid();
-	bool created = false;
+	dir /= L".riwo.utils.process";
 
-	int fd = open(g_pid_file.c_str(),
-		O_WRONLY | O_CREAT | O_EXCL, 0644
+	if( std::error_code error; not fs::exists(dir, error) )
+	{
+		if( not fs::create_directories(dir, error) )
+			return result.despair(error);
+	}
+	g_pid_file = dir / fs::path(std::string(key));
+	auto curr_pid = GetCurrentProcessId();
+
+	auto file = CreateFileW(g_pid_file.wstring().c_str(), GENERIC_WRITE, 0,
+		nullptr, CREATE_NEW, FILE_ATTRIBUTE_READONLY, nullptr
 	);
-	if( fd >= 0 )
+	if( file != INVALID_HANDLE_VALUE )
 	{
 		auto pid_str = std::to_string(curr_pid);
-		auto len = ::write(fd, pid_str.c_str(), pid_str.size());
+		DWORD written = 0; RIWO_UNUSED(written);
 
-		RIWO_UNUSED(len);
-		close(fd);
+		WriteFile(file, pid_str.c_str(), static_cast<DWORD>(pid_str.size()), &written, nullptr);
+		CloseHandle(file);
 
-		if( chmod(g_pid_file.c_str(), 0444) == 0 )
-			created = true;
-		else
-		{
-			result.despair(sys_error());
-			chmod(g_pid_file.c_str(), 0644);
-			unlink(g_pid_file.c_str());
-			return result;
-		}
-	}
-	if( created )
-	{
 		atexit(singleton_cleanup);
 		result = curr_pid;
 		return result;
 	}
-	::pid_t existing_pid = 0;
-	auto fp = fopen(g_pid_file.c_str(), "r");
-	if( not fp )
+	auto create_error = GetLastError();
+	if( create_error != ERROR_FILE_EXISTS and create_error != ERROR_ALREADY_EXISTS )
+	{
+		return result.despair(error_code(std::error_code (
+			static_cast<int>(create_error), std::system_category()
+		)));
+	}
+	file = CreateFileW(g_pid_file.wstring().c_str(), GENERIC_READ,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr
+	);
+	if( file == INVALID_HANDLE_VALUE )
 		return result.despair(sys_error());
 
-	char buf[1024] {0};
-	if( std::fgets(buf, sizeof(buf), fp) )
+	char buf[1024] {};
+	DWORD read_len = 0;
+	if( not ReadFile(file, buf, sizeof(buf) - 1, &read_len, nullptr) )
 	{
-		if( auto opt = strtls::to_int32(strtls::trimmed(buf)) )
-			existing_pid = *opt;
-		else
+		auto err = sys_error();
+		CloseHandle(file);
+		return result.despair(err);
+	}
+	CloseHandle(file);
+
+	auto opt = strtls::to_uint64(strtls::trimmed(std::string(buf, read_len)));
+	if( not opt )
+	{
+		SetFileAttributesW(g_pid_file.wstring().c_str(), FILE_ATTRIBUTE_NORMAL);
+		DeleteFileW(g_pid_file.wstring().c_str());
+		return do_set_single(path, key);
+	}
+	auto existing_pid = static_cast<DWORD>(*opt);
+	auto process = OpenProcess(SYNCHRONIZE, FALSE, existing_pid);
+
+	if( process != nullptr )
+	{
+		auto wait_res = WaitForSingleObject(process, 0);
+		CloseHandle(process);
+		if( wait_res == WAIT_TIMEOUT )
 		{
-			fclose(fp);
-			unlink(g_pid_file.c_str());
-			return do_set_single(path, key);
+			result = existing_pid;
+			return result;
 		}
 	}
-	fclose(fp);
+	SetFileAttributesW(g_pid_file.wstring().c_str(), FILE_ATTRIBUTE_NORMAL);
 
-	if( ::kill(existing_pid, 0) == 0 )
-	{
-		result = existing_pid;
-		return result;
-	}
-	if( unlink(g_pid_file.c_str()) == 0 )
+	if( DeleteFileW(g_pid_file.wstring().c_str()) )
 		return do_set_single(path, key);
 	return result.despair(sys_error());
 }
@@ -1356,12 +1470,12 @@ sys_expected<uint64_t> process::set_single(const fs::path &path, std::string_vie
 		std::memory_order_acquire, std::memory_order_relaxed) )
 	{
 		runtime_error::loc_throw (
-			"riwo::app::set_single: Another instance is running (Prohibition of concurrent operation)."
+			"riwo::system::process::set_single: Another instance is running (Prohibition of concurrent operation)."
 		);
 	}
 	return do_set_single(path, key);
 }
 
-} //namespace riwo::utils::detail
+} //namespace riwo::system::detail
 
-#endif //__unix__
+#endif //Windows

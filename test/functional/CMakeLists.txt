@@ -28,6 +28,11 @@ if (RIWO_BUILD_CORO)
 	add_riwo_test(coro coro/basic.cpp riwo.coro)
 endif ()
 
+if (RIWO_BUILD_SYSTEM)
+	add_riwo_test(system system/basic.cpp riwo.system)
+	add_riwo_test(system.process system/process.cpp riwo.system)
+endif ()
+
 if (RIWO_BUILD_HTTP)
 	add_riwo_test(http http/basic.cpp riwo.http)
 	add_riwo_test(http.protocol http/protocol.cpp riwo.http)

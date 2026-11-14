@@ -4,7 +4,7 @@
 #ifdef __unix__
 
 #include "library_impl.ipp"
-#include <riwo/core/system/app_utls.h>
+#include <riwo/core/executable.h>
 #include <dlfcn.h>
 
 namespace fs = std::filesystem;
@@ -85,7 +85,7 @@ void library::impl::set_file_name(fs::path file_name)
 #endif
 	for(auto &name : candidates)
 	{
-		auto abs_name = *app::absolute_path(name).or_else("");
+		auto abs_name = *executable::resolve(name).or_else("");
 		if( not fs::exists(abs_name) )
 			continue;
 

@@ -15,6 +15,7 @@ set(Riwo_EXP_HTTP_NGHTTP2_PROVIDER "@RIWO_EXP_HTTP_NGHTTP2_PROVIDER@")
 # Resolve component availability before looking for dependencies.  A missing
 # component must not be obscured by an unrelated dependency failure.
 set(Riwo_core_FOUND TRUE)
+set(Riwo_system_FOUND @RIWO_BUILD_SYSTEM@)
 set(Riwo_coro_FOUND @RIWO_BUILD_CORO@)
 set(Riwo_http_FOUND @RIWO_BUILD_HTTP@)
 set(Riwo_exp_http_FOUND @RIWO_PACKAGE_EXP_HTTP_AVAILABLE@)
@@ -266,7 +267,7 @@ endif ()
 include("${CMAKE_CURRENT_LIST_DIR}/RiwoTargets.cmake")
 
 # Preserve the source-tree target names for consumers that already use them.
-foreach(_riwo_component core coro http exp_http websocket exp_websocket utils)
+foreach(_riwo_component core system coro http exp_http websocket exp_websocket utils)
 	if (TARGET Riwo::${_riwo_component} AND NOT TARGET riwo.${_riwo_component})
 		add_library(riwo.${_riwo_component} INTERFACE IMPORTED)
 		set_property(TARGET riwo.${_riwo_component} PROPERTY

@@ -12,7 +12,9 @@
 #include <riwo/core/container.h>
 #include <riwo/core/algorithm.h>
 #include <riwo/core/jthread.h>
-#include <riwo/core/system.h>
+#include <riwo/core/cpu.h>
+#include <riwo/core/executable.h>
+#include <riwo/core/library.h>
 #include <riwo/core/ini.h>
 #include <riwo/core/url.h>
 

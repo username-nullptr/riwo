@@ -9,23 +9,26 @@ source tree as it exists now; it is not a migration history.
 
 ```text
 riwo.core
+├── riwo.system
 └── riwo.coro
-    ├── riwo.http
+    ├── riwo.http (+ riwo.system)
     │   └── riwo.websocket
-    └── riwo.utils
+    └── riwo.utils (+ riwo.system)
 ```
 
 | Layer | Responsibility | May depend on |
 | --- | --- | --- |
-| Core | Asio adaptation, execution, common values, algorithms, files, system and thread primitives | Selected Asio provider; optional OpenSSL/liburing |
+| Core | Asio adaptation, execution, common values, algorithms, executable paths, files, and thread primitives | Selected Asio provider; optional OpenSSL/liburing |
+| System | Environment, user profile, child processes, and standard-stream I/O | Core |
 | Coroutines | Suspending locks, condition variables, semaphores, waits, and executor switching | Core |
-| HTTP | HTTP/1.x values, codecs, connections, client, server, routing, sessions | Coroutines; optional zlib |
+| HTTP | HTTP/1.x values, codecs, connections, client, server, routing, sessions | Coroutines and System; optional zlib |
 | WebSocket | RFC 6455 handshake, frame codecs, clients, servers, streams, retry | HTTP; optional zlib |
-| Utilities | Logging, settings, signals, observers, processes, module startup, soft bus | Coroutines; spdlog |
+| Utilities | Logging, settings, signals, observers, module startup, soft bus | Coroutines and System; spdlog |
 
-Dependencies point downward only. HTTP and Utilities are siblings; WebSocket is
-the only library module layered on HTTP. Enabling a higher module requires its
-lower modules, and CMake publishes those dependencies transitively.
+Dependencies point downward only. System and Coroutines both build on Core;
+HTTP and Utilities use both foundations. WebSocket is layered on HTTP. Enabling
+a higher module requires its lower modules, and CMake publishes those
+dependencies transitively.
 
 ## Source tree
 
@@ -57,6 +60,7 @@ the corresponding component and link `Riwo::<module>`:
 | Module | Source tree | Installed package |
 | --- | --- | --- |
 | Core | `riwo.core` | `Riwo::core` |
+| System | `riwo.system` | `Riwo::system` |
 | Coroutines | `riwo.coro` | `Riwo::coro` |
 | HTTP | `riwo.http` | `Riwo::http` |
 | WebSocket | `riwo.websocket` | `Riwo::websocket` |

@@ -53,7 +53,7 @@ endfunction()
 
 # Core
 riwo_add_example(core algorithms      LIBRARIES riwo.core)
-riwo_add_example(core app_paths       LIBRARIES riwo.core)
+riwo_add_example(core executable_paths LIBRARIES riwo.core)
 riwo_add_example(core args_parser     LIBRARIES riwo.core)
 riwo_add_example(core execution       LIBRARIES riwo.core)
 riwo_add_example(core ini             LIBRARIES riwo.core)
@@ -78,6 +78,12 @@ riwo_add_example(core dynamic_library LIBRARIES riwo.core)
 add_dependencies(riwo.example.core.dynamic_library
 	riwo.example.core.dynamic_library_plugin
 )
+
+# System
+if (RIWO_BUILD_SYSTEM)
+	riwo_add_example(system environment LIBRARIES riwo.system)
+	riwo_add_example(system process     LIBRARIES riwo.system)
+endif ()
 
 # Coroutines
 if (RIWO_BUILD_CORO)
@@ -153,7 +159,6 @@ endif ()
 if (RIWO_BUILD_UTILITIES)
 	riwo_add_example(utils logger             LIBRARIES riwo.utils)
 	riwo_add_example(utils observer           LIBRARIES riwo.utils)
-	riwo_add_example(utils process            LIBRARIES riwo.utils)
 	riwo_add_example(utils soft_bus_local     LIBRARIES riwo.utils)
 	riwo_add_example(utils soft_bus_transport LIBRARIES riwo.utils)
 	if (RIWO_BUILD_UTILITIES_SBUS_UDP)
@@ -173,7 +178,7 @@ endif ()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	core/algorithms.cpp
-	core/app_paths.cpp
+	core/executable_paths.cpp
 	core/args_parser.cpp
 	core/dynamic_library.cpp
 	core/dynamic_library_plugin.cpp
@@ -181,6 +186,8 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	core/ini.cpp
 	core/lock_free_queue.cpp
 	core/value.cpp
+	system/environment.cpp
+	system/process.cpp
 	coro/basics.cpp
 	coro/condition_variable.cpp
 	coro/mutex.cpp
@@ -229,7 +236,6 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	utils/modules/foundation.cpp
 	utils/modules/main.cpp
 	utils/observer.cpp
-	utils/process.cpp
 	utils/soft_bus_local.cpp
 	utils/soft_bus_transport.cpp
 	utils/soft_bus_udp.cpp

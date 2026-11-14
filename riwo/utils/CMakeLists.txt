@@ -8,7 +8,7 @@ set_property(SOURCE modules.cpp APPEND PROPERTY COMPILE_OPTIONS
 )
 
 set(target_name riwo.utils)
-add_project(${target_name} riwo.coro)
+add_project(${target_name} riwo.coro riwo.system)
 
 target_link_libraries(${target_name} PUBLIC riwo.spdlog)
 target_compile_definitions(${target_name} PRIVATE RIWO_UTILS_SHARED)

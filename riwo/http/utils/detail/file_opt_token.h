@@ -5,7 +5,7 @@
 #define RIWO_HTTP_UTILS_DETAIL_FILE_OPT_TOKEN_H
 
 #include <riwo/core/mime_type.h>
-#include <riwo/core/system/app_utls.h>
+#include <riwo/core/executable.h>
 
 namespace riwo::http { namespace detail
 {
@@ -113,7 +113,7 @@ inline sys_expected<> file_opt_token<void,file_optype::single>::init(std::ios_ba
 			std::make_error_code(std::errc::invalid_argument)
 		);
 	}
-	return app::absolute_path(file_name).and_then([&](const path_t &abs_name) -> sys_expected<>
+	return executable::resolve(file_name).and_then([&](const path_t &abs_name) -> sys_expected<>
 	{
 		file_name = abs_name;
 		namespace fs = std::filesystem;
@@ -260,7 +260,7 @@ inline sys_expected<> file_opt_token<void,file_optype::multiple>::init(std::ios_
 			std::make_error_code(std::errc::invalid_argument)
 		);
 	}
-	return app::absolute_path(file_name).and_then([&](const path_t &abs_name) -> sys_expected<>
+	return executable::resolve(file_name).and_then([&](const path_t &abs_name) -> sys_expected<>
 	{
 		file_name = std::move(abs_name);
 		namespace fs = std::filesystem;

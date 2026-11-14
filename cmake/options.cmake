@@ -47,6 +47,15 @@ if (RIWO_BUILD_CORO)
 	message(STATUS "${PRO_NAME}: Build module <Coroutine>.")
 endif ()
 
+option(RIWO_BUILD_SYSTEM
+	"-- ${PRO_NAME}: Build module <System>." ON
+)
+set(RIWO_SYSTEM_SUPPORT ${RIWO_BUILD_SYSTEM})
+
+if (RIWO_BUILD_SYSTEM)
+	message(STATUS "${PRO_NAME}: Build module <System>.")
+endif ()
+
 option(RIWO_BUILD_HTTP
 	"-- ${PRO_NAME}: Build module <HTTP>." OFF
 )
@@ -55,6 +64,9 @@ set(RIWO_HTTP_SUPPORT ${RIWO_BUILD_HTTP})
 if (RIWO_BUILD_HTTP)
 	if (NOT RIWO_BUILD_CORO)
 		message(FATAL_ERROR "${PRO_NAME}: <HTTP> module depends on <Coroutine> module.")
+		unset(RIWO_BUILD_HTTP)
+	elseif (NOT RIWO_BUILD_SYSTEM)
+		message(FATAL_ERROR "${PRO_NAME}: <HTTP> module depends on <System> module.")
 		unset(RIWO_BUILD_HTTP)
 	elseif (RIWO_OPENSSL_SUPPORT)
 		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS>.")
@@ -69,7 +81,10 @@ option(RIWO_BUILD_EXP_HTTP
 set(RIWO_EXP_HTTP_SUPPORT ${RIWO_BUILD_EXP_HTTP})
 
 if (RIWO_BUILD_EXP_HTTP)
-	if (RIWO_OPENSSL_SUPPORT)
+	if (NOT RIWO_BUILD_SYSTEM)
+		message(FATAL_ERROR "${PRO_NAME}: <EXP_HTTP> module depends on <System> module.")
+		unset(RIWO_BUILD_EXP_HTTP)
+	elseif (RIWO_OPENSSL_SUPPORT)
 		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS_EXP>.")
 	else ()
 		message(STATUS "${PRO_NAME}: Build module <EXP_HTTP>.")
@@ -126,6 +141,9 @@ set(RIWO_UTILITIES_SUPPORT ${RIWO_BUILD_UTILITIES})
 if (RIWO_BUILD_UTILITIES)
 	if (NOT RIWO_BUILD_CORO)
 		message(FATAL_ERROR "${PRO_NAME}: <Utilities> module depends on <Coroutine> module.")
+		unset(RIWO_BUILD_UTILITIES)
+	elseif (NOT RIWO_BUILD_SYSTEM)
+		message(FATAL_ERROR "${PRO_NAME}: <Utilities> module depends on <System> module.")
 		unset(RIWO_BUILD_UTILITIES)
 	else ()
 		message(STATUS "${PRO_NAME}: Build module <Utilities>.")

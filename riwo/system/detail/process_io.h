@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_UTILS_DETAIL_PROCESS_IO_H
-#define RIWO_UTILS_DETAIL_PROCESS_IO_H
+#ifndef RIWO_SYSTEM_DETAIL_PROCESS_IO_H
+#define RIWO_SYSTEM_DETAIL_PROCESS_IO_H
 
-#include <riwo/utils/global.h>
+#include <riwo/system/global.h>
 #include <riwo/core/async_expected.h>
 
-namespace riwo::utils::detail
+namespace riwo::system::detail
 {
 
 template <typename Token, typename Initiation>
-[[nodiscard]] RIWO_UTILS_TAPI auto initiate_process_io(Initiation initiation, Token &&token)
+[[nodiscard]] RIWO_SYSTEM_TAPI auto initiate_process_io(Initiation initiation, Token &&token)
 {
 	using token_t = std::remove_cvref_t<Token>;
 	token_t completion_token(std::forward<Token>(token));
@@ -21,10 +21,10 @@ template <typename Token, typename Initiation>
 	);
 }
 
-[[nodiscard]] RIWO_UTILS_API
+[[nodiscard]] RIWO_SYSTEM_API
 std::shared_ptr<std::string> copy_process_buffer(const const_buffer &buffer);
 
-} //namespace riwo::utils::detail
+} //namespace riwo::system::detail
 
 
-#endif //RIWO_UTILS_DETAIL_PROCESS_IO_H
+#endif //RIWO_SYSTEM_DETAIL_PROCESS_IO_H

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/http/client/detail/proxy.h>
+#include <riwo/system/environment.h>
 #include <riwo/core/utils/string_tools.h>
-#include <riwo/core/system/app_utls.h>
 #include <riwo/core/algorithm/base64.h>
 #include <riwo/core/algorithm/misc.h>
 
@@ -26,10 +26,10 @@ struct RIWO_DECL_HIDDEN proxy_environment
 {
 	for(const auto name : names)
 	{
-		auto value = app::getenv(name);
-		if( value )
+		auto value = system::environment::get(name);
+		if( value and value->has_value() )
 		{
-			auto string = value->string();
+			auto string = **value;
 			if( not strtls::trimmed(string).empty() )
 				return strtls::trimmed(string);
 		}

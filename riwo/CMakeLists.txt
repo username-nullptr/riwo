@@ -11,6 +11,11 @@ if (RIWO_BUILD_CORO)
 	add_subdirectory(coro)
 endif ()
 
+if (RIWO_BUILD_SYSTEM)
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES system.h)
+	add_subdirectory(system)
+endif ()
+
 if (RIWO_BUILD_HTTP)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES http.h)
 	add_subdirectory(http)
@@ -31,6 +36,7 @@ add_subdirectory(experimental)
 set(TARGET_LIST
 	riwo.core
 	riwo.coro
+	riwo.system
 	riwo.http
 	riwo.websocket
 	riwo.utils

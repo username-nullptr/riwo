@@ -8,22 +8,25 @@
 
 ```text
 riwo.core
+├── riwo.system
 └── riwo.coro
-    ├── riwo.http
+    ├── riwo.http（同时依赖 riwo.system）
     │   └── riwo.websocket
-    └── riwo.utils
+    └── riwo.utils（同时依赖 riwo.system）
 ```
 
 | 层 | 职责 | 允许依赖 |
 | --- | --- | --- |
-| Core | Asio 适配、执行、通用值、算法、文件、系统与线程原语 | 选定的 Asio provider；可选 OpenSSL/liburing |
+| Core | Asio 适配、执行、通用值、算法、可执行文件路径、文件与线程原语 | 选定的 Asio provider；可选 OpenSSL/liburing |
+| System | 环境变量、用户目录、子进程与标准流 I/O | Core |
 | Coroutines | 可挂起锁、条件变量、信号量、等待与 executor 切换 | Core |
-| HTTP | HTTP/1.x 值、编解码、连接、客户端、服务端、路由与 Session | Coroutines；可选 zlib |
+| HTTP | HTTP/1.x 值、编解码、连接、客户端、服务端、路由与 Session | Coroutines 与 System；可选 zlib |
 | WebSocket | RFC 6455 握手、Frame 编解码、客户端、服务端、Stream 与重试 | HTTP；可选 zlib |
-| Utilities | 日志、设置、Signal、Observer、进程、模块启动与软总线 | Coroutines；spdlog |
+| Utilities | 日志、设置、Signal、Observer、模块启动与软总线 | Coroutines 与 System；spdlog |
 
-依赖只能向下。HTTP 与 Utilities 是同层兄弟模块，WebSocket 是唯一建立在
-HTTP 之上的库模块。启用上层模块时必须保留下层模块，CMake 会传递这些依赖。
+依赖只能向下。System 与 Coroutines 都建立在 Core 上，HTTP 与 Utilities 同时使用
+这两个基础模块；WebSocket 建立在 HTTP 上。启用上层模块时必须保留下层模块，
+CMake 会传递这些依赖。
 
 ## 源码树
 
@@ -53,6 +56,7 @@ HTTP 之上的库模块。启用上层模块时必须保留下层模块，CMake 
 | 模块 | 源码树 | 安装包 |
 | --- | --- | --- |
 | Core | `riwo.core` | `Riwo::core` |
+| System | `riwo.system` | `Riwo::system` |
 | Coroutines | `riwo.coro` | `Riwo::coro` |
 | HTTP | `riwo.http` | `Riwo::http` |
 | WebSocket | `riwo.websocket` | `Riwo::websocket` |

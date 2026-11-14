@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "scoped_environment.h"
 #include <riwo/experimental/http.h>
-#include <riwo/core/system/app_utls.h>
 #include <deque>
 
 namespace
@@ -12,39 +12,7 @@ namespace
 namespace http = riwo::experimental::http;
 using executor_type = riwo::io_context_t::executor_type;
 
-class scoped_environment
-{
-	struct entry
-	{
-		std::string name;
-		riwo::optional<riwo::app::path_t> value;
-	};
-
-public:
-	scoped_environment(std::initializer_list<std::string_view> names)
-	{
-		for(const auto name : names)
-		{
-			auto value = riwo::app::getenv(name);
-			m_entries.push_back({std::string(name), value ?
-				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
-		}
-	}
-
-	~scoped_environment()
-	{
-		for(const auto &item : m_entries)
-		{
-			if( item.value )
-				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
-			else
-				riwo::ignore_unused(riwo::app::unsetenv(item.name));
-		}
-	}
-
-private:
-	std::vector<entry> m_entries;
-};
+using scoped_environment = riwo::test::scoped_environment;
 
 struct memory_state
 {
@@ -453,7 +421,7 @@ void environment_proxy_configuration()
 			"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
 			"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"
 		})
-			RIWO_TEST_CHECK(riwo::app::unsetenv(name));
+			RIWO_TEST_CHECK(riwo::system::environment::unset(name));
 	};
 
 	auto fetch = [](std::string_view target, http::client_config config) {
@@ -481,7 +449,7 @@ void environment_proxy_configuration()
 	};
 
 	clear_proxy_environment();
-	RIWO_TEST_CHECK(riwo::app::setenv("http_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("http_proxy",
 		"http://user:secret@environment-proxy.test:8080/"));
 	{
 		auto observed = fetch("http://environment-origin.test/value",
@@ -495,7 +463,7 @@ void environment_proxy_configuration()
 			"Basic dXNlcjpzZWNyZXQ=");
 	}
 
-	RIWO_TEST_CHECK(riwo::app::setenv("no_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::set("no_proxy",
 		"environment-origin.test"));
 	{
 		auto observed = fetch("http://environment-origin.test/value",
@@ -504,7 +472,7 @@ void environment_proxy_configuration()
 		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("no_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("no_proxy"));
 	{
 		http::client_config config;
 		config.proxy.use_environment = false;
@@ -514,8 +482,8 @@ void environment_proxy_configuration()
 		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("http_proxy"));
-	RIWO_TEST_CHECK(riwo::app::setenv("https_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::unset("http_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::set("https_proxy",
 		"http://secure-environment-proxy.test:8443/"));
 	{
 		auto observed = fetch("https://secure-environment-origin.test/value",
@@ -526,8 +494,8 @@ void environment_proxy_configuration()
 			"secure-environment-proxy.test");
 	}
 
-	RIWO_TEST_CHECK(riwo::app::unsetenv("https_proxy"));
-	RIWO_TEST_CHECK(riwo::app::setenv("http_proxy",
+	RIWO_TEST_CHECK(riwo::system::environment::unset("https_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::set("http_proxy",
 		"http://http-only-proxy.test:8080/"));
 	{
 		auto observed = fetch("https://https-only-origin.test/value",

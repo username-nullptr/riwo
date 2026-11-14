@@ -10,8 +10,8 @@
 | 聚合头 | `<riwo/core.h>` |
 | 依赖 | 选定的 Asio provider；可选 OpenSSL/liburing |
 
-Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算法、文件、系统访问和
-线程级同步。
+Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算法、可执行文件相对路径、
+文件和线程级同步。
 
 ## 头文件地图
 
@@ -23,7 +23,7 @@ Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算
 | 算法 | `<riwo/core/algorithm.h>`、`mime_type.h` | UUID、SHA-1、通配/编码/数学辅助与 MIME |
 | 同步 | `<riwo/core/atomic_mutex.h>`、`shared_mutex.h`、`lock_free_queue.h` | 线程锁与队列 |
 | 线程生命周期 | `<riwo/core/jthread.h>` | 自动汇合线程、停止源/令牌/回调 |
-| 系统 | `<riwo/core/system.h>` | 应用路径、环境、CPU 与动态库 |
+| 运行时基础 | `<riwo/core/executable.h>`、`cpu.h`、`library.h` | 可执行文件相对路径、CPU pause 与动态库 |
 | 语言支持 | `<riwo/core/cxx/...>`、`<riwo/core/utils/...>` | Concepts、traits、expected/optional、格式化与 Asio 适配 |
 
 `<riwo/core.h>` 聚合常用数据、解析、算法、同步和系统头文件。Execution、value、
@@ -70,13 +70,13 @@ token、取消、生命周期、strand 和关闭顺序统一见
 标准库可用时，`riwo::jthread`、`stop_token`、`stop_source` 和
 `stop_callback` 使用标准实现，否则由 Core 提供兼容回退。
 
-`riwo::app` 区域提供可执行文件、工作目录、主目录、用户和环境能力。
+`riwo::executable` 提供运行程序路径，并以程序所在目录为基准解析相对路径。
 `riwo::library` 加载动态库及符号；使用任何已解析符号期间，都要保持动态库对象有效。
 
 ## 边界
 
-Core 不负责协程感知锁、协议客户端/服务端、应用日志或进程管理，它们分别属于
-Coroutines、HTTP、WebSocket 与 Utilities。OpenSSL 和 io_uring 会改变 Core/Asio
+Core 不负责协程感知锁、协议客户端/服务端、应用日志、环境/用户访问或进程管理，
+它们分别属于 Coroutines、HTTP、WebSocket、Utilities 与 System。OpenSSL 和 io_uring 会改变 Core/Asio
 构建能力，但 TLS 策略和 executor 生命周期仍由应用负责。
 
 可运行覆盖见 [Core 示例](../../examples/README.md#core)。

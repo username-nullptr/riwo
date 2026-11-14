@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <riwo/core/system/app_utls.h>
-#include <riwo/core/system/library.h>
+#include <riwo/core/executable.h>
+#include <riwo/core/library.h>
 
 #include <filesystem>
 #include <iostream>
@@ -11,7 +11,7 @@ namespace
 {
 std::filesystem::path default_plugin_path()
 {
-	auto directory = riwo::app::dir_path();
+	auto directory = riwo::executable::directory();
 	if(not directory)
 		throw std::system_error(directory.error());
 

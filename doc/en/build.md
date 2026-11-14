@@ -54,10 +54,11 @@ cmake --build build-secure --parallel
 | Option | Default | Built target | Requires |
 | --- | :---: | --- | --- |
 | Core, no option | ON | `riwo.core` | selected Asio provider |
+| `RIWO_BUILD_SYSTEM` | ON | `riwo.system` | Core |
 | `RIWO_BUILD_CORO` | ON | `riwo.coro` | Core |
-| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Coroutines |
+| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Coroutines and System |
 | `RIWO_BUILD_WEBSOCKET` | OFF | `riwo.websocket` | HTTP |
-| `RIWO_BUILD_UTILITIES` | OFF | `riwo.utils` | Coroutines and spdlog |
+| `RIWO_BUILD_UTILITIES` | OFF | `riwo.utils` | Coroutines, System, and spdlog |
 | `RIWO_BUILD_EXAMPLES` | OFF | `riwo.example.*` | corresponding enabled modules |
 
 CMake rejects an enabled module whose prerequisite is disabled. Link every

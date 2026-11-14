@@ -513,7 +513,7 @@ public:
 	[[nodiscard]] std::filesystem::path
 	resource_file_name(std::filesystem::path file_name) const
 	{
-		if( file_name.empty() or m_resource_root.empty() or app::is_absolute_path(file_name) )
+		if( file_name.empty() or m_resource_root.empty() or file_name.is_absolute() )
 			return file_name;
 		return m_resource_root / file_name;
 	}

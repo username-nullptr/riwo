@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_SYSTEM_DETAIL_LIBRARY_IMPL_HII
-#define RIWO_CORE_SYSTEM_DETAIL_LIBRARY_IMPL_HII
+#ifndef RIWO_CORE_DETAIL_LIBRARY_IMPL_IPP
+#define RIWO_CORE_DETAIL_LIBRARY_IMPL_IPP
 
-#include <riwo/core/system/library.h>
+#include <riwo/core/library.h>
 
 #if defined(__WINNT__) || defined(_WINDOWS)
 # define WIN32_LEAN_AND_MEAN
@@ -103,7 +103,7 @@ public:
 private:
 	void set_file_name(path_t file_name);
 	[[nodiscard]] error_code load_native();
-	[[nodiscard]] error_code unload_native();
+	error_code unload_native();
 
 public:
 	path_t m_file_name;
@@ -118,4 +118,4 @@ public:
 } //namespace riwo
 
 
-#endif //RIWO_CORE_SYSTEM_DETAIL_LIBRARY_IMPL_HII
+#endif //RIWO_CORE_DETAIL_LIBRARY_IMPL_IPP

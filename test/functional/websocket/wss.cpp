@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "scoped_environment.h"
 
 #include <riwo/websocket/client.h>
 #include <riwo/websocket/server.h>
-#include <riwo/core/system/app_utls.h>
 
 #include <thread>
 
@@ -32,39 +32,7 @@ private:
 	std::thread &m_thread;
 };
 
-class scoped_environment
-{
-	struct entry
-	{
-		std::string name;
-		riwo::optional<riwo::app::path_t> value;
-	};
-
-public:
-	scoped_environment(std::initializer_list<std::string_view> names)
-	{
-		for(const auto name : names)
-		{
-			auto value = riwo::app::getenv(name);
-			m_entries.push_back({std::string(name), value ?
-				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
-		}
-	}
-
-	~scoped_environment()
-	{
-		for(const auto &item : m_entries)
-		{
-			if( item.value )
-				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
-			else
-				riwo::ignore_unused(riwo::app::unsetenv(item.name));
-		}
-	}
-
-private:
-	std::vector<entry> m_entries;
-};
+using scoped_environment = riwo::test::scoped_environment;
 
 // Test-only CA/server identity for 127.0.0.1 and localhost. Keeping it in the
 // binary makes the TLS round trip hermetic and avoids invoking OpenSSL tools.
@@ -165,13 +133,13 @@ void secure_round_trip()
 	asio::ip::tcp::acceptor proxy_acceptor(proxy_context,
 		{asio::ip::address_v4::loopback(), 0});
 	const auto proxy_port = proxy_acceptor.local_endpoint().port();
-	RIWO_TEST_CHECK(riwo::app::setenv("wss_proxy", std::format(
+	RIWO_TEST_CHECK(riwo::system::environment::set("wss_proxy", std::format(
 		"http://user:secret@127.0.0.1:{}/", proxy_port)));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("WSS_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("WSS_PROXY"));
 #endif
-	RIWO_TEST_CHECK(riwo::app::unsetenv("no_proxy"));
-	RIWO_TEST_CHECK(riwo::app::unsetenv("NO_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("no_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("NO_PROXY"));
 	std::exception_ptr proxy_error;
 	std::thread proxy_thread([&]
 	{

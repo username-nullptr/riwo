@@ -50,7 +50,7 @@ function(add_project target_name)
 		$<BUILD_INTERFACE:${RIWO_CONFIG_INCLUDE}>
 		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 	)
-	if (NOT ${ARGN} STREQUAL "")
+	if (ARGN)
 		target_link_libraries(${target_name} PUBLIC ${ARGN})
 	endif ()
 

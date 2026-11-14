@@ -11,8 +11,8 @@ Language: English | [简体中文](../zh_CN/core.md)
 | Depends on | Selected Asio provider; optional OpenSSL/liburing |
 
 Core is the foundation for every other Riwo module. It owns the common runtime,
-value and container types, algorithms, files, system access, and thread-level
-synchronization.
+value and container types, algorithms, executable-relative paths, files, and
+thread-level synchronization.
 
 ## Header map
 
@@ -24,7 +24,7 @@ synchronization.
 | Algorithms | `<riwo/core/algorithm.h>`, `mime_type.h` | UUID, SHA-1, wildcard/encoding/math helpers, MIME lookup |
 | Synchronization | `<riwo/core/atomic_mutex.h>`, `shared_mutex.h`, `lock_free_queue.h` | Thread locks and queues |
 | Thread lifecycle | `<riwo/core/jthread.h>` | Joining thread, stop source/token/callback |
-| System | `<riwo/core/system.h>` | Application paths, environment, CPU, dynamic libraries |
+| Runtime foundation | `<riwo/core/executable.h>`, `cpu.h`, `library.h` | Executable-relative paths, CPU pause, dynamic libraries |
 | Language support | `<riwo/core/cxx/...>`, `<riwo/core/utils/...>` | Concepts, traits, expected/optional, formatting, Asio adapters |
 
 `<riwo/core.h>` aggregates the common data, parsing, algorithm,
@@ -80,15 +80,15 @@ critical sections on controlled threads.
 standard-library implementation where available; Core supplies a compatible
 fallback otherwise.
 
-The `riwo::app` area provides executable, working, home, user, and environment
-facilities. `riwo::library` loads shared libraries and symbols; keep the
-library object alive while any resolved symbol is used.
+`riwo::executable` provides the running executable path and resolves relative
+paths against its directory. `riwo::library` loads shared libraries and
+symbols; keep the library object alive while any resolved symbol is used.
 
 ## Boundaries
 
 Core does not provide coroutine-aware locks, protocol clients/servers,
-application logging, or process management. Those belong to Coroutines, HTTP,
-WebSocket, and Utilities respectively. OpenSSL and io_uring support change the
+application logging, environment/user access, or process management. Those
+belong to Coroutines, HTTP, WebSocket, Utilities, and System. OpenSSL and io_uring support change the
 Core/Asio build capability; applications still own TLS policy and executor
 lifecycle.
 

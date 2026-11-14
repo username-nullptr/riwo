@@ -6,8 +6,8 @@
 #include <riwo/experimental/http/protocol/authentication.h>
 #include <riwo/experimental/http/error.h>
 
+#include <riwo/system/environment.h>
 #include <riwo/core/utils/string_tools.h>
-#include <riwo/core/system/app_utls.h>
 #include <riwo/core/algorithm/misc.h>
 #include <riwo/core/cxx/asio.h>
 
@@ -23,10 +23,6 @@
 
 namespace riwo::experimental::http::detail { namespace
 {
-
-#if RIWO_OPENSSL_SUPPORT
-constexpr bool h2_client_session_available = RIWO_EXP_HTTP_HTTP2_SUPPORT != 0;
-#endif //RIWO_OPENSSL_SUPPORT
 
 [[nodiscard]] std::vector<asio::ip::tcp::endpoint> resolve_with_timeout
 (const asio::any_io_executor &executor, std::string_view host, uint16_t port,
@@ -602,13 +598,13 @@ socks5_connect_async(asio::ip::tcp::socket &socket, const session_key &key)
 [[nodiscard]] optional<std::string>
 environment_value(std::initializer_list<std::string_view> names)
 {
-	for(const auto name : names)
+	for(auto &name : names)
 	{
-		auto value = app::getenv(name);
-		if( not value )
+		auto value = system::environment::get(name);
+		if( not value or not value->has_value() )
 			continue;
 
-		if( auto text = strtls::trimmed(value->string()); not text.empty() )
+		if( auto text = strtls::trimmed(**value); not text.empty() )
 			return text;
 	}
 	return nullopt;
@@ -729,6 +725,20 @@ void mix(size_t &seed, size_t value) noexcept
 }
 
 #if RIWO_OPENSSL_SUPPORT
+// Advertise a protocol only after both its ALPN mapping and client Session exist.
+[[nodiscard]] bool alpn_advertisable(protocol value) noexcept
+{
+	if( value == protocol::v1_1 )
+		return true;
+
+# if RIWO_EXP_HTTP_HTTP2_SUPPORT
+	if( value == protocol::v2 )
+		return true;
+# endif //RIWO_EXP_HTTP_HTTP2_SUPPORT
+
+	return false;
+}
+
 [[nodiscard]] std::vector<unsigned char> alpn_wire(const std::vector<protocol> &preference)
 {
 	std::vector<unsigned char> result {};
@@ -756,13 +766,8 @@ void mix(size_t &seed, size_t value) noexcept
 	std::vector<protocol> result;
 	for(const auto value : key.protocols.preference)
 	{
-		if( value == protocol::v1_0 )
+		if( not alpn_advertisable(value) )
 			continue;
-
-#if RIWO_EXP_HTTP_HTTP2_SUPPORT
-		if( value == protocol::v2 and not h2_client_session_available )
-			continue;
-#endif //RIWO_EXP_HTTP_HTTP2_SUPPORT
 
 		if( key.protocols.requirement == protocol_requirement::v1 and value != protocol::v1_1 )
 			continue;

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_SYSTEM_LIBRARY_H
-#define RIWO_CORE_SYSTEM_LIBRARY_H
+#ifndef RIWO_CORE_LIBRARY_H
+#define RIWO_CORE_LIBRARY_H
 
 #include <riwo/core/global.h>
 
@@ -50,7 +50,7 @@ private:
 };
 
 } //namespace riwo
-#include <riwo/core/system/detail/library.h>
+#include <riwo/core/detail/library.h>
 
 
-#endif //RIWO_CORE_SYSTEM_LIBRARY_H
+#endif //RIWO_CORE_LIBRARY_H

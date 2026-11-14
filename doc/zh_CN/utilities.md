@@ -8,7 +8,7 @@
 | 源码树 Target | `riwo.utils` |
 | 安装 Target | `Riwo::utils` |
 | 聚合头 | `<riwo/utils.h>` |
-| 依赖 | Coroutines 与 spdlog |
+| 依赖 | Coroutines、System 与 spdlog |
 | 可选能力 | `RIWO_BUILD_UTILITIES_SBUS_UDP` 提供 UDP 软总线 |
 
 Utilities 包含不属于协议栈的应用层能力。
@@ -22,11 +22,10 @@ Utilities 包含不属于协议栈的应用层能力。
 | Signal | `<riwo/utils/signal_slot.h>` | 同步、异步与背压交付 |
 | Observer | `<riwo/utils/observer.h>` | 由 executor 分派、按 ID 寻址的回调 |
 | Modules | `<riwo/utils/modules.h>` | 按依赖顺序初始化应用模块 |
-| Process | `<riwo/utils/process.h>` | 子进程生命周期与标准流 I/O |
 | 软总线 | `<riwo/utils/sbus.h>` | 带类型的发布/订阅与 Topic 缓存 |
 
-聚合头包含 logger、settings、modules 与软总线。使用 process、signal/slot 或
-observer 时直接包含对应头文件。
+聚合头包含 logger、settings、modules 与软总线。使用 signal/slot 或 observer 时
+直接包含对应头文件。进程管理属于 [System](system.md)。
 
 ## 日志与设置
 
@@ -54,15 +53,6 @@ observer 时直接包含对应头文件。
 `utils::observer` 按稳定对象 ID 路由索引回调，并在析构时注销。
 `utils::modules` 注册命名初始化器，按声明的依赖排序，并支持同步或异步初始化。
 
-## 进程
-
-`utils::process` 提供 start/run、join、detach、terminate、kill、取消、超时、
-工作目录/环境、单实例锁，以及 stdin/stdout/stderr I/O。命令和参数使用
-`std::filesystem::path`。
-
-I/O 未完成时保持 Process 对象有效。生命周期变化与 I/O 发起必须串行化；同一进程
-最多保留一个 stdin 写、一个 stdout 读和一个 stderr 读。
-
 ## 软总线
 
 软总线把带类型的发布/订阅/缓存 API 与传输层分开：
@@ -88,5 +78,5 @@ LAN 与路由多播范围。交付为 best-effort：过载保护可能丢弃流�
 时，应使用应用持有的 executor。
 
 共享所有权与并发契约见[执行与 I/O 模型](io-model.md)。日志、设置、Signal、
-Observer、Process、Modules 与总线程序见
+Observer、Modules 与总线程序见
 [Utilities 示例](../../examples/README.md#utilities)。

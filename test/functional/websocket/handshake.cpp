@@ -2,51 +2,19 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "scoped_environment.h"
 
 #include <riwo/websocket/client.h>
 #include <riwo/websocket/server.h>
 #include <riwo/websocket/detail/permessage_deflate.h>
 #include <riwo/http/utils/tcp_connection.h>
-#include <riwo/core/system/app_utls.h>
 
 namespace
 {
 
 namespace ws = riwo::websocket;
 
-class scoped_environment
-{
-	struct entry
-	{
-		std::string name;
-		riwo::optional<riwo::app::path_t> value;
-	};
-
-public:
-	scoped_environment(std::initializer_list<std::string_view> names)
-	{
-		for(const auto name : names)
-		{
-			auto value = riwo::app::getenv(name);
-			m_entries.push_back({std::string(name), value ?
-				riwo::optional<riwo::app::path_t>(*value) : riwo::nullopt});
-		}
-	}
-
-	~scoped_environment()
-	{
-		for(const auto &item : m_entries)
-		{
-			if( item.value )
-				riwo::ignore_unused(riwo::app::setenv(item.name, *item.value));
-			else
-				riwo::ignore_unused(riwo::app::unsetenv(item.name));
-		}
-	}
-
-private:
-	std::vector<entry> m_entries;
-};
+using scoped_environment = riwo::test::scoped_environment;
 
 void permessage_deflate_negotiation()
 {
@@ -170,13 +138,13 @@ void proxy_round_trips()
 		}).start();
 	const auto forward_port = forward_proxy.acceptor_wrap()
 		.acceptor().local_endpoint().port();
-	RIWO_TEST_CHECK(riwo::app::setenv("ws_proxy", std::format(
+	RIWO_TEST_CHECK(riwo::system::environment::set("ws_proxy", std::format(
 		"http://user:secret@127.0.0.1:{}/", forward_port)));
 #if !defined(_WIN32)
-	RIWO_TEST_CHECK(riwo::app::unsetenv("WS_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("WS_PROXY"));
 #endif
-	RIWO_TEST_CHECK(riwo::app::unsetenv("no_proxy"));
-	RIWO_TEST_CHECK(riwo::app::unsetenv("NO_PROXY"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("no_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("NO_PROXY"));
 
 	asio::ip::tcp::acceptor socks_acceptor(context,
 		{asio::ip::address_v4::loopback(), 0});

@@ -4,11 +4,27 @@
 #ifndef RIWO_CORE_DETAIL_ATOMIC_MUTEX_H
 #define RIWO_CORE_DETAIL_ATOMIC_MUTEX_H
 
-#include <riwo/core/system/cpu.h>
-
-
 namespace riwo { namespace detail
 {
+
+inline void none_instruction() noexcept
+{
+#ifdef _MSC_VER
+	_mm_pause();
+#elif defined(__GNUC__)
+# if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
+	asm volatile("pause" : : : "memory");
+# elif defined(__aarch64__) || defined(__arm64__) || defined(__arm__)
+	asm volatile("yield" : : : "memory");
+# elif defined(__powerpc__) || defined(__ppc__)
+	asm volatile("or 0, 0, 0" : : : "memory");
+# elif defined(__riscv)
+	asm volatile("fence w, 0" : : : "memory");
+# else // Unknown
+	asm volatile("" : : : "memory");
+# endif // CPU Architecture
+#endif //_MSC_VER
+}
 
 template <typename T>
 void spin_while_equal(std::atomic<T> &value, T expected) noexcept
@@ -32,7 +48,7 @@ void basic_atomic_mutex<Policy>::lock() noexcept
 		for(;;)
 		{
 			while( m_native_handle.load(std::memory_order_relaxed) != unlocked )
-				none_instruction();
+				detail::none_instruction();
 
 			expected = unlocked;
 			if( m_native_handle.compare_exchange_weak(expected, locked,

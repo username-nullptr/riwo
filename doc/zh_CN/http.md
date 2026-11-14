@@ -8,7 +8,7 @@
 | 源码树 Target | `riwo.http` |
 | 安装 Target | `Riwo::http` |
 | 聚合头 | `<riwo/http.h>` |
-| 依赖 | Coroutines |
+| 依赖 | Coroutines 与 System |
 | 可选能力 | `RIWO_OPENSSL_SUPPORT` 提供 HTTPS；`RIWO_HTTP_ZLIB_SUPPORT` 提供 gzip |
 
 该模块实现 HTTP/1.0 与 HTTP/1.1 客户端、服务端和协议构件，不实现 HTTP/2 或

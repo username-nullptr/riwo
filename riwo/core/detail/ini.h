@@ -5,7 +5,7 @@
 #define RIWO_CORE_DETAIL_INI_H
 
 #include <riwo/core/algorithm/misc.h>
-#include <riwo/core/system/app_utls.h>
+#include <riwo/core/executable.h>
 
 namespace riwo { namespace detail
 {
@@ -300,7 +300,7 @@ public:
 	void set_file_name(const path_t &file_name)
 	{
 		if( not file_name.empty() )
-			m_file_name = *app::absolute_path(file_name).or_else();
+			m_file_name = *executable::resolve(file_name).or_else();
 	}
 
 public:

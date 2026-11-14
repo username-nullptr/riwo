@@ -20,11 +20,12 @@ you use.
 
 | Module | Purpose | Guide |
 | --- | --- | --- |
-| `riwo.core` | Common data types, execution, algorithms, system and synchronization facilities | [Core](core.md) |
+| `riwo.core` | Common data types, execution, algorithms, executable paths, and synchronization | [Core](core.md) |
+| `riwo.system` | Environment, user profile, and child-process management | [System](system.md) |
 | `riwo.coro` | Coroutine waits and synchronization | [Coroutines](coroutines.md) |
 | `riwo.http` | HTTP/1.0 and HTTP/1.1 client, server, and protocol tools | [HTTP](http.md) |
 | `riwo.websocket` | RFC 6455 clients, servers, streams, and codecs | [WebSocket](websocket.md) |
-| `riwo.utils` | Logging, settings, signals, processes, modules, and soft bus | [Utilities](utilities.md) |
+| `riwo.utils` | Logging, settings, signals, modules, and soft bus | [Utilities](utilities.md) |
 
 ## Documentation boundaries
 
