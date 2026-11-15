@@ -6,6 +6,7 @@
 #include <riwo/websocket/protocol/generator.h>
 #include <riwo/websocket/protocol/handshake.h>
 #include <riwo/websocket/protocol/parser.h>
+#include <riwo/websocket/protocol/detail/utf8.h>
 
 namespace ws = riwo::websocket;
 
@@ -237,6 +238,19 @@ void test_masking()
 	RIWO_TEST_CHECK_EQ(destination[1], source[1] ^ key.bytes[0]);
 	RIWO_TEST_CHECK_EQ(destination[2], source[2] ^ key.bytes[1]);
 
+	std::array<std::byte,8> overlapping {
+		std::byte {0x01}, std::byte {0x02}, std::byte {0x03}, std::byte {0x04},
+		std::byte {0x05}, std::byte {0x06}, std::byte {0x07}, std::byte {0x08}
+	};
+	const auto original = overlapping;
+	copied = ws::mask_copy (
+		riwo::mutable_buffer(overlapping.data() + 1, 6),
+		riwo::const_buffer(overlapping.data(), 6), key
+	);
+	RIWO_TEST_CHECK(copied.has_value());
+	for(size_t index = 0; index < 6; ++index)
+		RIWO_TEST_CHECK_EQ(overlapping[index + 1], original[index] ^ key.bytes[index & 3]);
+
 	std::array<std::byte,2> too_small {std::byte {0xAA}, std::byte {0xBB}};
 	copied = ws::mask_copy (
 		riwo::mutable_buffer(too_small.data(), too_small.size()),
@@ -341,20 +355,21 @@ void test_opening_handshake_round_trip()
 
 	auto request_headers = ws::make_opening_request_headers(request);
 	RIWO_TEST_CHECK(request_headers.has_value());
-	RIWO_TEST_CHECK_EQ(request_headers->at("Connection").to_string(), "Upgrade");
-	RIWO_TEST_CHECK_EQ(request_headers->at("Upgrade").to_string(), "websocket");
-	RIWO_TEST_CHECK_EQ(request_headers->at("Sec-WebSocket-Version").to_string(), "13");
-	RIWO_TEST_CHECK_EQ(request_headers->at("Sec-WebSocket-Protocol").to_string(),
+	RIWO_TEST_CHECK_EQ(request_headers->find_first("Connection").value(), "Upgrade");
+	RIWO_TEST_CHECK_EQ(request_headers->find_first("Upgrade").value(), "websocket");
+	RIWO_TEST_CHECK_EQ(request_headers->find_first("Sec-WebSocket-Version").value(), "13");
+	RIWO_TEST_CHECK_EQ(request_headers->find_first("Sec-WebSocket-Protocol").value(),
 		"chat, superchat");
-	RIWO_TEST_CHECK_EQ(request_headers->at("Sec-WebSocket-Extensions").to_string(),
+	RIWO_TEST_CHECK_EQ(request_headers->find_first("Sec-WebSocket-Extensions").value(),
 		"permessage-deflate; client_max_window_bits; mode=fast");
 
-	(*request_headers)["Connection"] = "keep-alive, uPgRaDe";
-	(*request_headers)["Upgrade"] = "WebSocket";
-	(*request_headers)["Sec-WebSocket-Extensions"] =
-		"permessage-deflate; client_max_window_bits; mode=\"fa\\st\"";
-	auto parsed_request = ws::parse_opening_request(riwo::http::method::get,
-		riwo::http::version::v11, *request_headers);
+	request_headers->set("Connection", "keep-alive, uPgRaDe");
+	request_headers->set("Upgrade", "WebSocket");
+	request_headers->set("Sec-WebSocket-Extensions",
+		"permessage-deflate; client_max_window_bits; mode=\"fa\\st\"");
+	auto parsed_request = ws::parse_opening_request(
+		riwo::http::method::get, riwo::http::protocol::v1_1,
+		*request_headers);
 	RIWO_TEST_CHECK(parsed_request.has_value());
 	RIWO_TEST_CHECK_EQ(parsed_request->key, *client_key);
 	RIWO_TEST_CHECK_EQ(parsed_request->subprotocols.size(), size_t {2});
@@ -370,7 +385,7 @@ void test_opening_handshake_round_trip()
 	};
 	auto response_headers = ws::make_opening_response_headers(*parsed_request, response);
 	RIWO_TEST_CHECK(response_headers.has_value());
-	RIWO_TEST_CHECK_EQ(response_headers->at("Sec-WebSocket-Accept").to_string(),
+	RIWO_TEST_CHECK_EQ(response_headers->find_first("Sec-WebSocket-Accept").value(),
 		"s3pPLMBiTxaQ9kYGzzhZRbK+xOo=");
 	auto parsed_response = ws::parse_opening_response (
 		riwo::http::status::switching_protocols,
@@ -391,35 +406,36 @@ void test_opening_handshake_errors()
 	RIWO_TEST_CHECK(generated.has_value());
 
 	auto parsed = ws::parse_opening_request(riwo::http::method::post,
-		riwo::http::version::v11, *generated);
+		riwo::http::protocol::v1_1, *generated);
 	RIWO_TEST_CHECK(not parsed.has_value());
 	check_error(parsed.error(), ws::errc::invalid_upgrade);
 
 	auto headers = *generated;
-	headers["Sec-WebSocket-Version"] = "12";
+	headers.set("Sec-WebSocket-Version", "12");
 	parsed = ws::parse_opening_request(riwo::http::method::get,
-		riwo::http::version::v11, headers);
+		riwo::http::protocol::v1_1, headers);
 	RIWO_TEST_CHECK(not parsed.has_value());
 	check_error(parsed.error(), ws::errc::unsupported_version);
 
 	headers = *generated;
-	headers["Sec-WebSocket-Key"] = "dGhlIHNhbXBsZSBub25jZQ=A";
+	headers.set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=A");
 	parsed = ws::parse_opening_request(riwo::http::method::get,
-		riwo::http::version::v11, headers);
+		riwo::http::protocol::v1_1, headers);
 	RIWO_TEST_CHECK(not parsed.has_value());
 	check_error(parsed.error(), ws::errc::invalid_upgrade);
 
 	headers = *generated;
-	headers["Sec-WebSocket-Protocol"] = "chat, chat";
+	headers.set("Sec-WebSocket-Protocol", "chat, chat");
 	parsed = ws::parse_opening_request(riwo::http::method::get,
-		riwo::http::version::v11, headers);
+		riwo::http::protocol::v1_1, headers);
 	RIWO_TEST_CHECK(not parsed.has_value());
 	check_error(parsed.error(), ws::errc::invalid_upgrade);
 
 	headers = *generated;
-	headers["Sec-WebSocket-Extensions"] = "permessage-deflate; mode=\"not valid\"";
+	headers.set("Sec-WebSocket-Extensions",
+		"permessage-deflate; mode=\"not valid\"");
 	parsed = ws::parse_opening_request(riwo::http::method::get,
-		riwo::http::version::v11, headers);
+		riwo::http::protocol::v1_1, headers);
 	RIWO_TEST_CHECK(not parsed.has_value());
 	check_error(parsed.error(), ws::errc::invalid_upgrade);
 
@@ -437,26 +453,68 @@ void test_opening_handshake_errors()
 	check_error(response.error(), ws::errc::handshake_rejected);
 
 	headers = *response_headers;
-	headers["Sec-WebSocket-Accept"] = "incorrect";
-	response = ws::parse_opening_response(riwo::http::status::switching_protocols,
+	headers.set("Sec-WebSocket-Accept", "incorrect");
+	response = ws::parse_opening_response(
+		riwo::http::status::switching_protocols,
 		headers, request);
 	RIWO_TEST_CHECK(not response.has_value());
 	check_error(response.error(), ws::errc::invalid_accept_key);
 
 	headers = *response_headers;
-	headers["Sec-WebSocket-Protocol"] = "other";
-	response = ws::parse_opening_response(riwo::http::status::switching_protocols,
+	headers.set("Sec-WebSocket-Protocol", "other");
+	response = ws::parse_opening_response(
+		riwo::http::status::switching_protocols,
 		headers, request);
 	RIWO_TEST_CHECK(not response.has_value());
 	check_error(response.error(), ws::errc::unsupported_subprotocol);
 
 	headers = *response_headers;
-	headers["Sec-WebSocket-Protocol"] = "chat, superchat";
-	response = ws::parse_opening_response(riwo::http::status::switching_protocols,
+	headers.set("Sec-WebSocket-Protocol", "chat, superchat");
+	response = ws::parse_opening_response(
+		riwo::http::status::switching_protocols,
 		headers, request);
 	RIWO_TEST_CHECK(not response.has_value());
 	check_error(response.error(), ws::errc::invalid_upgrade);
 }
+
+#if RIWO_HTTP_HTTP2_SUPPORT
+void test_extended_connect_handshake()
+{
+	ws::opening_request request {
+		.key = "dGhlIHNhbXBsZSBub25jZQ==",
+		.subprotocols = {"chat"},
+	};
+	auto headers = ws::make_opening_request_headers(
+		request, riwo::http::protocol::v2);
+	RIWO_TEST_CHECK(headers.has_value());
+	RIWO_TEST_CHECK(not headers->find_first("Connection"));
+	RIWO_TEST_CHECK(not headers->find_first("Upgrade"));
+
+	auto missing_marker = ws::parse_opening_request(
+		riwo::http::method::connect, riwo::http::protocol::v2,
+		*headers, false);
+	RIWO_TEST_CHECK(not missing_marker.has_value());
+	check_error(missing_marker.error(), ws::errc::invalid_upgrade);
+
+	auto parsed = ws::parse_opening_request(
+		riwo::http::method::connect, riwo::http::protocol::v2,
+		*headers, true);
+	RIWO_TEST_CHECK(parsed.has_value());
+	RIWO_TEST_CHECK_EQ(parsed->subprotocols.size(), 1U);
+	RIWO_TEST_CHECK_EQ(parsed->subprotocols.front(), "chat");
+
+	ws::opening_response response {.subprotocol = std::string("chat")};
+	auto response_headers = ws::make_opening_response_headers(
+		*parsed, response, riwo::http::protocol::v2);
+	RIWO_TEST_CHECK(response_headers.has_value());
+	RIWO_TEST_CHECK(not response_headers->find_first("Connection"));
+	RIWO_TEST_CHECK(not response_headers->find_first("Upgrade"));
+	auto accepted = ws::parse_opening_response(riwo::http::status::ok,
+		*response_headers, *parsed, riwo::http::protocol::v2);
+	RIWO_TEST_CHECK(accepted.has_value());
+	RIWO_TEST_CHECK_EQ(accepted->subprotocol.value_or(""), "chat");
+}
+#endif
 
 void test_incremental_frame_parser()
 {
@@ -638,12 +696,12 @@ void test_frame_codec_chunk_corpus()
 		std::byte {0x56}, std::byte {0x78},
 	}};
 
-	for( const auto sender_role : {ws::role::client, ws::role::server} )
+	for(const auto sender_role : {ws::role::client, ws::role::server})
 	{
-		for( const auto payload_size : payload_sizes )
+		for(const auto payload_size : payload_sizes)
 		{
 			std::vector<std::byte> payload(payload_size);
-			for( size_t index = 0; index < payload.size(); ++index )
+			for(size_t index = 0; index < payload.size(); ++index)
 				payload[index] = static_cast<std::byte>((index * 37U + 11U) & 0xFFU);
 
 			ws::frame_header header {
@@ -669,7 +727,7 @@ void test_frame_codec_chunk_corpus()
 					wire.data() + encoded->size, payload.size()), *header.mask);
 			}
 
-			for( const auto chunk_size : chunk_sizes )
+			for(const auto chunk_size : chunk_sizes)
 			{
 				ws::frame_parser parser(ws::frame_codec_config {
 					.local_role = sender_role == ws::role::client ?
@@ -718,6 +776,44 @@ void test_frame_codec_chunk_corpus()
 	}
 }
 
+void test_moved_from_protocol_objects_are_safe()
+{
+	ws::frame_parser parser({
+		.local_role = ws::role::server,
+		.max_frame_size = 1024,
+	});
+	auto moved_parser = std::move(parser);
+	RIWO_TEST_CHECK(parser.config().local_role == ws::role::client);
+	RIWO_TEST_CHECK_EQ(parser.config().max_frame_size, 16U * 1024U * 1024U);
+
+	std::array wire {std::byte{0x82}, std::byte{0x00}};
+	auto parsed = parser.parse(riwo::buffer(wire));
+	RIWO_TEST_CHECK(parsed.has_value());
+	RIWO_TEST_CHECK(parsed->header_ready);
+	RIWO_TEST_CHECK(parsed->frame_finished);
+	RIWO_TEST_CHECK(!parser.failed());
+	RIWO_TEST_CHECK(moved_parser.config().local_role == ws::role::server);
+
+	ws::frame_parser assigned_parser({.local_role = ws::role::client});
+	assigned_parser = std::move(moved_parser);
+	RIWO_TEST_CHECK(moved_parser.config().local_role == ws::role::client);
+	RIWO_TEST_CHECK(!moved_parser.failed());
+	RIWO_TEST_CHECK(assigned_parser.config().local_role == ws::role::server);
+
+	ws::detail::utf8_validator validator;
+	RIWO_TEST_CHECK(validator.consume("\xE4\xB8\xAD"));
+	auto moved_validator = std::move(validator);
+	RIWO_TEST_CHECK(validator.complete());
+	RIWO_TEST_CHECK(validator.consume("text"));
+	RIWO_TEST_CHECK(moved_validator.complete());
+
+	ws::detail::utf8_validator assigned_validator;
+	assigned_validator = std::move(moved_validator);
+	RIWO_TEST_CHECK(moved_validator.complete());
+	RIWO_TEST_CHECK(moved_validator.consume("reused"));
+	RIWO_TEST_CHECK(assigned_validator.complete());
+}
+
 } //namespace
 
 int main(int argc, const char *const argv[])
@@ -731,9 +827,14 @@ int main(int argc, const char *const argv[])
 		{"Close payload", test_close_payload},
 		{"opening handshake round trip", test_opening_handshake_round_trip},
 		{"opening handshake errors", test_opening_handshake_errors},
+#if RIWO_HTTP_HTTP2_SUPPORT
+		{"HTTP/2 extended CONNECT handshake", test_extended_connect_handshake},
+#endif
 		{"incremental frame parser", test_incremental_frame_parser},
 		{"frame parser errors", test_frame_parser_errors},
 		{"frame fragmentation state", test_frame_fragmentation_state},
 		{"frame codec chunk corpus", test_frame_codec_chunk_corpus},
+		{"moved-from protocol objects are safe",
+			test_moved_from_protocol_objects_are_safe},
 	});
 }

@@ -6,7 +6,7 @@
 
 #ifndef RIWO_WEBSOCKET_STREAM_H
 # error "Include <riwo/websocket/stream.h> instead."
-#endif
+#endif //RIWO_WEBSOCKET_STREAM_H
 
 #include <riwo/websocket/detail/stream/close_operations.h>
 #include <riwo/websocket/detail/stream/close_wait_queue.h>
@@ -128,13 +128,13 @@ public:
 
 public:
 	[[nodiscard]] detail::receive_engine &receive_side() noexcept override;
-	[[nodiscard]] std::shared_ptr<receive_engine_owner> receive_owner() noexcept override;
+	[[nodiscard]] detail::receive_engine_owner_ptr receive_owner() noexcept override;
 
 	[[nodiscard]] std::weak_ptr<receive_engine_owner> weak_receive_owner() noexcept override;
 	[[nodiscard]] asio::any_io_executor receive_executor() const noexcept override;
 
 	[[nodiscard]] detail::send_engine &send_side() noexcept override;
-	[[nodiscard]] std::shared_ptr<send_engine_owner> send_owner() noexcept override;
+	[[nodiscard]] detail::send_engine_owner_ptr send_owner() noexcept override;
 
 	[[nodiscard]] std::weak_ptr<send_engine_owner> weak_send_owner() noexcept override;
 	[[nodiscard]] asio::any_io_executor send_executor() const noexcept override;
@@ -184,16 +184,10 @@ public:
 		const std::vector<std::byte> &payload
 	) noexcept override;
 
-	void start_transport_write(prepared_frame frame,
-		detail::wire_frame_kind kind, std::shared_ptr<detail::send_operation> operation
+	void start_transport_write(const prepared_frame &frame,
+		detail::wire_frame_kind kind, detail::send_operation_ptr operation
 	) noexcept override;
 
-	static void start_async_transport_read(void *connection,
-		const mutable_buffer &buffer, io_handler_t handler
-	);
-	static void start_async_transport_write(void *connection,
-		std::span<const const_buffer> buffers, io_handler_t handler
-	);
 	void handle_send_failure(error_code error) noexcept override;
 	void handle_wire_frame_sent(detail::wire_frame_kind kind) noexcept override;
 
@@ -266,7 +260,7 @@ private:
 	executor_t m_exec {};
 	config_t m_config {};
 
-	connection_ptr m_connection;
+	connection_ptr m_connection {};
 	connection_state m_state = connection_state::idle;
 
 	role m_role = role::client;
@@ -281,7 +275,7 @@ private:
 	async_control_callback_t m_on_async_ping {};
 	sync_control_callback_t m_on_pong {};
 	async_control_callback_t m_on_async_pong {};
-	std::shared_ptr<detail::automatic_ping> m_automatic_ping {};
+	detail::automatic_ping_ptr m_automatic_ping {};
 
 	optional<close_info_t> m_peer_close {};
 	optional<close_info_t> m_close_result {};

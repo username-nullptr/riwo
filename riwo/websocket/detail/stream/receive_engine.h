@@ -37,6 +37,7 @@ public:
 	explicit receive_engine(receive_engine_owner &owner) noexcept;
 	~receive_engine();
 
+public:
 	void reset(role local_role, const stream_config &config,
 		std::span<const extension> extensions, std::vector<std::byte> pending_data
 	);
@@ -79,7 +80,7 @@ public:
 private:
 	struct close_receive_handler
 	{
-		std::shared_ptr<receive_engine_owner> owner;
+		receive_engine_owner_ptr owner {};
 		void operator()(const std::exception_ptr &exception,
 			error_code error) const noexcept;
 	};
@@ -93,9 +94,9 @@ private:
 	error_code m_read_error {};
 	bool m_read_active = false;
 
-	std::shared_ptr<read_wait_operation> m_read_waiter {};
-	std::shared_ptr<frame_read_wait_operation> m_frame_read_waiter {};
-	std::shared_ptr<consume_wait_operation> m_consume_waiter {};
+	read_wait_operation_ptr m_read_waiter {};
+	frame_read_wait_operation_ptr m_frame_read_waiter {};
+	consume_wait_operation_ptr m_consume_waiter {};
 	uint64_t m_next_read_waiter_id = 0;
 };
 

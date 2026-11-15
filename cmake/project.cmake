@@ -21,6 +21,18 @@ function(add_project target_name)
 				VERSION ${PRO_VERSION} SOVERSION ${MAJOR_VERSION}
 			)
 		endif ()
+		# Installed Riwo libraries live together.  Give each shared module a
+		# loader-relative search path so its transitive Riwo dependencies are
+		# found without requiring consumers to set a process-wide library path.
+		if (APPLE)
+			set_target_properties(${target_name} PROPERTIES
+				INSTALL_RPATH "@loader_path"
+			)
+		elseif (UNIX)
+			set_target_properties(${target_name} PROPERTIES
+				INSTALL_RPATH "$ORIGIN"
+			)
+		endif ()
 	endif ()
 
 	string(REPLACE "." "_" target_micro "${target_name}")

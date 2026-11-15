@@ -30,13 +30,5 @@
 # include <riwo/utils.h>
 #endif //RIWO_UTILITIES_SUPPORT
 
-#if RIWO_EXP_HTTP_SUPPORT
-# include <riwo/experimental/http.h>
-#endif //RIWO_EXP_HTTP_SUPPORT
-
-#if RIWO_EXP_WEBSOCKET_SUPPORT
-# include <riwo/experimental/websocket.h>
-#endif //RIWO_EXP_WEBSOCKET_SUPPORT
-
 
 #endif //RIWO_RIWO_H

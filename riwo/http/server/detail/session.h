@@ -1,110 +1,70 @@
-// SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
 #ifndef RIWO_HTTP_SERVER_DETAIL_SESSION_H
 #define RIWO_HTTP_SERVER_DETAIL_SESSION_H
 
-#include <riwo/crypto/uuid.h>
+#include <riwo/http/session/session_stream.h>
+#include <riwo/http/protocol/request_head.h>
+#include <riwo/http/server/config.h>
 
 namespace riwo::http
 {
 
-class RIWO_HTTP_API session::impl
+class connection;
+class session_stream;
+
+namespace detail
 {
-	RIWO_DISABLE_COPY_MOVE(impl)
+
+using server_accept_handler_t = std::function <
+	void(error_code,session_stream_ptr,request_head)
+>;
+
+class
+#ifdef __GNUC__
+ RIWO_HTTP_API
+#else //__GNUC__
+ RIWO_DECL_HIDDEN
+#endif //__GNUC__
+server_connection
+{
+	RIWO_DISABLE_COPY_MOVE(server_connection)
 
 public:
-	template <typename Rep, typename Period = std::ratio<1>>
-	impl(session *owner, const duration<Rep,Period> &seconds, const executor_t &exec) :
-		q_ptr(owner), m_second(static_cast<uint64_t>(seconds.count())), m_timer(exec) {}
+	server_connection() = default;
+	virtual ~server_connection() = default;
 
-	void start();
-
-private:
-	[[nodiscard]] awaitable<void> work();
-
-public:
-	session *q_ptr = nullptr;
-	const std::string m_id = crypto::uuid::generate();
-	time_point_t m_create_time = sys_clock_t::now();
-
-	attributes_t m_attributes {};
-	std::atomic<uint64_t> m_second;
-
-	std::atomic_bool m_valid = false;
-	std::atomic_bool m_restart = false;
-
-	asio::steady_timer m_timer;
-	std::function<void()> m_timeout_handle {};
-	std::function<void(error_code)> m_error_handle {};
+	[[nodiscard]] virtual bool closed() const noexcept = 0;
+	virtual void cancel() noexcept = 0;
 };
 
-template <typename Rep, typename Period>
-session::session(const duration<Rep,Period> &seconds, const executor_t &exec) :
-	m_impl(new impl(this, seconds, exec))
-{
-	m_impl->start();
-}
+using server_connection_ptr = std::shared_ptr<server_connection>;
 
-optional<std::any> session::attribute(const core_concepts::text_p<char> auto &key) const noexcept
-{
-	auto it = m_impl->m_attributes.find(strtls::to_string(key));
-	return it == m_impl->m_attributes.end() ?
-		optional<std::any>() : optional<std::any>(it->second);
-}
+[[nodiscard]] RIWO_DECL_HIDDEN server_connection_ptr accept_h1 (
+	asio::ip::tcp::socket socket, const message_limits &limits, const timeout_policy &timeouts,
+	server_accept_handler_t handler
+);
+[[nodiscard]] RIWO_DECL_HIDDEN server_connection_ptr accept_h1 (
+	std::shared_ptr<connection> transport, const message_limits &limits, const timeout_policy &timeouts,
+	server_accept_handler_t handler, std::string initial_input = {}
+);
 
-session &session::set_attribute(core_concepts::text_p<char> auto &&key, std::any value) noexcept
-{
-	m_impl->m_attributes[strtls::to_string(std::forward<decltype(key)>(key))] = std::move(value);
-	return *this;
-}
+// Selects a cleartext HTTP/1.x or HTTP/2 server Session according to the
+// frozen server policy.  The HTTP/2 client preface is inspected without
+// losing bytes: a mismatch is replayed to the HTTP/1 parser.
+[[nodiscard]] RIWO_HTTP_API server_connection_ptr accept_server (
+	asio::ip::tcp::socket socket, server_config config, server_accept_handler_t handler
+);
+[[nodiscard]] RIWO_HTTP_API server_connection_ptr accept_server (
+	std::shared_ptr<connection> transport, protocol selected_protocol, const server_config &config,
+	server_accept_handler_t handler
+);
 
-session &session::unset_attribute(const core_concepts::text_p<char> auto &key) noexcept
-{
-	m_impl->m_attributes.erase(strtls::to_string(key));
-	return *this;
-}
+[[nodiscard]] RIWO_HTTP_API
+error_code validate_server_config(const server_config &config) noexcept;
 
-template <typename Rep, typename Period>
-session &session::set_lifecycle(const duration<Rep,Period> &seconds)
-{
-	namespace sc = std::chrono;
-	m_impl->m_second = static_cast<uint64_t>(
-		sc::duration_cast<sc::seconds>(seconds).count()
-	);
-	if( m_impl->m_second == 0 )
-		m_impl->m_second = 1;
-
-	m_impl->m_restart = true;
-	m_impl->start();
-	return *this;
-}
-
-template <typename Rep, typename Period>
-session &session::expand(const duration<Rep,Period> &seconds)
-{
-	namespace sc = std::chrono;
-	m_impl->m_second += static_cast<uint64_t>(
-		sc::duration_cast<sc::seconds>(seconds).count()
-	);
-	return expand();
-}
-
-template <core_concepts::callable Func>
-session &session::on_timeout(Func &&func)
-{
-	m_impl->m_timeout_handle = std::forward<Func>(func);
-	return *this;
-}
-
-template <core_concepts::callable<error_code> Func>
-session &session::on_error(Func &&func)
-{
-	m_impl->m_error_handle = std::forward<Func>(func);
-	return *this;
-}
-
-} //namespace riwo::http
+}} //namespace riwo::http::detail
 
 
 #endif //RIWO_HTTP_SERVER_DETAIL_SESSION_H

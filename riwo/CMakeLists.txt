@@ -36,8 +36,6 @@ if (RIWO_BUILD_UTILITIES)
 	add_subdirectory(utils)
 endif ()
 
-add_subdirectory(experimental)
-
 set(TARGET_LIST
 	riwo.core
 	riwo.crypto
@@ -46,8 +44,6 @@ set(TARGET_LIST
 	riwo.http
 	riwo.websocket
 	riwo.utils
-	riwo.exp_http
-	riwo.exp_websocket
 )
 if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 	foreach(target ${TARGET_LIST})

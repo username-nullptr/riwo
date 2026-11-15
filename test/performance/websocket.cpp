@@ -5,6 +5,7 @@
 #include "test.h"
 
 #include <riwo/websocket/client.h>
+#include <riwo/websocket/detail/permessage_deflate.h>
 #include <riwo/websocket/protocol/generator.h>
 #include <riwo/websocket/protocol/parser.h>
 #include <riwo/websocket/server.h>
@@ -12,6 +13,7 @@
 namespace
 {
 
+namespace http = riwo::http;
 namespace ws = riwo::websocket;
 
 #ifdef NDEBUG
@@ -22,16 +24,34 @@ constexpr size_t codec_iteration_count = 5'000 * riwo::test::performance_scale;
 constexpr size_t message_iteration_count = 200 * riwo::test::performance_scale;
 #endif
 constexpr size_t large_message_iteration_count = message_iteration_count / 20;
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+constexpr size_t compression_iteration_count = 20'000 * riwo::test::performance_scale;
+#endif
 constexpr size_t warmup_count = 10;
 
 template <typename Function>
-void report_median(std::string_view name, size_t iterations, Function &&function)
+void report_median(std::string_view name, size_t iterations, Function &&function,
+	std::string_view unit = "frame")
 {
 	std::array<std::chrono::steady_clock::duration,3> samples {};
 	for(auto &sample : samples)
 		sample = function(iterations);
 	std::ranges::sort(samples);
-	riwo::test::print_performance_result(name, iterations, samples[1], "frame");
+	riwo::test::print_performance_result(name, iterations, samples[1], unit);
+}
+
+[[nodiscard]] ws::server_config make_server_config()
+{
+	ws::server_config config;
+	config.http.protocols.requirement = http::protocol_requirement::v1;
+	return config;
+}
+
+[[nodiscard]] ws::client_config make_client_config()
+{
+	ws::client_config config;
+	config.http.protocols.requirement = http::protocol_requirement::v1;
+	return config;
 }
 
 void frame_codec_throughput()
@@ -90,11 +110,59 @@ void frame_codec_throughput()
 		codec_iteration_count, measure_parse);
 }
 
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+void compression_state_reuse()
+{
+	std::vector<std::byte> source(512);
+	for(size_t index = 0; index < source.size(); ++index)
+		source[index] = static_cast<std::byte>((index * 17) & 0x3F);
+	const std::array input {
+		riwo::const_buffer(source.data(), source.size())
+	};
+
+	auto expected = ws::detail::deflate_message(input, 15, 1);
+	RIWO_TEST_CHECK(expected.has_value());
+
+	auto measure_one_shot = [&](size_t iterations)
+	{
+		const auto begin = std::chrono::steady_clock::now();
+		for(size_t index = 0; index < iterations; ++index)
+		{
+			auto compressed = ws::detail::deflate_message(input, 15, 1);
+			RIWO_TEST_CHECK(compressed.has_value());
+			RIWO_TEST_CHECK_EQ(*compressed, *expected);
+		}
+		return std::chrono::steady_clock::now() - begin;
+	};
+
+	ws::detail::permessage_deflater deflater;
+	RIWO_TEST_CHECK(not deflater.reset(15, 1));
+	auto measure_reused = [&](size_t iterations)
+	{
+		const auto begin = std::chrono::steady_clock::now();
+		for(size_t index = 0; index < iterations; ++index)
+		{
+			auto compressed = deflater.deflate(input);
+			RIWO_TEST_CHECK(compressed.has_value());
+			RIWO_TEST_CHECK_EQ(*compressed, *expected);
+		}
+		return std::chrono::steady_clock::now() - begin;
+	};
+
+	measure_one_shot(warmup_count);
+	report_median("WebSocket deflate init/end per message (median of 3)",
+		compression_iteration_count, measure_one_shot, "message");
+	measure_reused(warmup_count);
+	report_median("WebSocket reused deflater state (median of 3)",
+		compression_iteration_count, measure_reused, "message");
+}
+#endif
+
 void message_loopback_throughput()
 {
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
+	ws::server service(std::move(acceptor), make_server_config());
 	service.on_connection("/benchmark",
 		[](ws::accept_result accepted) -> riwo::awaitable<void>
 		{
@@ -103,7 +171,7 @@ void message_loopback_throughput()
 				auto read_result = co_await accepted.stream.read<>(
 					asio::as_tuple(riwo::use_awaitable));
 				auto &[read_error, message] = read_result;
-				if( read_error )
+				if(read_error)
 					co_return;
 				auto write_result = co_await accepted.stream.write(
 					message.type,
@@ -111,14 +179,13 @@ void message_loopback_throughput()
 					asio::as_tuple(riwo::use_awaitable));
 				auto &[write_error, transferred] = write_result;
 				riwo::ignore_unused(transferred);
-				if( write_error )
+				if(write_error)
 					co_return;
 			}
 		});
 	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	ws::client client(context.get_executor());
+	const auto port = service.http_server().acceptor().local_endpoint().port();
+	ws::client client(context.get_executor(), make_client_config());
 
 	auto completed = asio::co_spawn(context,
 		[&]() -> riwo::awaitable<void>
@@ -185,6 +252,9 @@ int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
 		{"WebSocket frame codec throughput", frame_codec_throughput},
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+		{"WebSocket compression state reuse", compression_state_reuse},
+#endif
 		{"WebSocket message loopback throughput", message_loopback_throughput},
 	});
 }

@@ -35,9 +35,14 @@ basic_stream<Exec>::basic_stream(config_t config)
 
 template <core_concepts::exec Exec>
 template <typename Exec0>
-basic_stream<Exec>::basic_stream(Exec0 &&exec, config_t config) requires
-(not std::same_as<std::remove_cvref_t<Exec0>,basic_stream> and core_concepts::match_sched<Exec0,executor_t>):
-	m_impl(std::make_shared<impl>(executor_t(get_executor_helper(std::forward<decltype(exec)>(exec))), config))
+basic_stream<Exec>::basic_stream(Exec0 &&exec, config_t config) requires (
+	not std::same_as<std::remove_cvref_t<Exec0>,basic_stream> and
+	core_concepts::match_sched<Exec0,executor_t>
+):
+	m_impl(std::make_shared<impl>(
+		executor_t(get_executor_helper(std::forward<decltype(exec)>(exec))),
+		config
+	))
 {
 
 }
@@ -46,7 +51,7 @@ template <core_concepts::exec Exec>
 basic_stream<Exec>::basic_stream(basic_stream &&other) noexcept :
 	m_impl(std::move(other.m_impl))
 {
-
+	other.m_impl = std::make_shared<impl>(m_impl->m_exec, config_t{});
 }
 
 template <core_concepts::exec Exec>
@@ -55,12 +60,14 @@ basic_stream<Exec> &basic_stream<Exec>::operator=(basic_stream &&other) noexcept
 	if( this == &other )
 		return *this;
 
+	auto replacement = std::make_shared<impl>(other.m_impl->m_exec, config_t{});
 	if( m_impl )
 	{
 		error_code error;
 		m_impl->shutdown(error);
 	}
 	m_impl = std::move(other.m_impl);
+	other.m_impl = std::move(replacement);
 	return *this;
 }
 
@@ -77,8 +84,9 @@ basic_stream<Exec>::~basic_stream()
 template <core_concepts::exec Exec>
 basic_stream<Exec> &basic_stream<Exec>::adopt(connection_ptr connection, adopt_options_t options)
 {
-	error_code error;
+	error_code error {};
 	m_impl->adopt(std::move(connection), std::move(options), error);
+
 	if( error )
 		system_error::loc_throw(error, "riwo::websocket::basic_stream::adopt");
 	return *this;
@@ -115,6 +123,7 @@ auto basic_stream<Exec>::read(Token &&token) requires
 	{
 		error_code error;
 		auto value = m_impl->read(error);
+
 		if( error )
 			system_error::loc_throw(error, "riwo::websocket::basic_stream::read");
 
@@ -140,7 +149,7 @@ auto basic_stream<Exec>::read(Token &&token) requires
 					if( error )
 					{
 						std::move(handler)(error, result_t {});
-						return;
+						return ;
 					}
 					auto result = impl::template convert_message<buffer_t>(
 						std::move(value), error
@@ -175,8 +184,9 @@ auto basic_stream<Exec>::read_frame(Token &&token) requires
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
-		error_code error;
+		error_code error {};
 		auto value = m_impl->read_frame(error);
+
 		if( error )
 			system_error::loc_throw(error, "riwo::websocket::basic_stream::read_frame");
 
@@ -204,7 +214,7 @@ auto basic_stream<Exec>::read_frame(Token &&token) requires
 					if( error )
 					{
 						std::move(handler)(error, result_t {});
-						return;
+						return ;
 					}
 					auto result = impl::template convert_frame<buffer_t>(
 						std::move(value), error
@@ -234,6 +244,7 @@ auto basic_stream<Exec>::consume(Consumer &&consumer, Token &&token) requires (
 	{
 		error_code error;
 		auto result = m_impl->consume(consumer, error);
+
 		if( error )
 			system_error::loc_throw(error, "riwo::websocket::basic_stream::consume");
 		return result;
@@ -421,11 +432,25 @@ auto basic_stream<Exec>::write
 (message_type type, const const_buffer &body, write_options options, Token &&token)
 	requires completion_token_v<Token, size_t>
 {
-	return write(type, std::span(&body, 1), options,
-		std::forward<Token>(token)
-	);
+	if constexpr( is_error_code_token_v<Token> or is_sync_opt_token_v<Token> or
+		is_detached_v<token_unbound_t<Token>> )
+	{
+		return write(type, std::span(&body, 1), options,
+			std::forward<Token>(token)
+		);
+	}
+	else
+	{
+		return initiate_io<size_t>(get_executor(),
+			[self = m_impl, type, body, options]<typename T0>(T0 &&completion_token) mutable
+			{
+				self->async_write_message(type, std::span(&body, 1), options,
+					{}, std::forward<T0>(completion_token)
+				);
+			}, std::forward<Token>(token)
+		);
+	}
 }
-
 
 template <core_concepts::exec Exec>
 template <typename Token>
@@ -440,8 +465,9 @@ auto basic_stream<Exec>::write
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
-		error_code error;
+		error_code error {};
 		auto transferred = m_impl->write(type, body, options, error);
+
 		if( error )
 			system_error::loc_throw(error, "riwo::websocket::basic_stream::write");
 		return transferred;
@@ -576,8 +602,7 @@ basic_stream<Exec> &basic_stream<Exec>::on_pong(Func &&callback)
 	{
 		m_impl->on_pong(typename impl::async_control_callback_t(
 		[callback = callback_t(std::forward<Func>(callback))]
-		(ctrl_payload_t &payload) mutable -> awaitable<void>
-		{
+		(ctrl_payload_t &payload) mutable -> awaitable<void> {
 			static_cast<void>(co_await std::invoke(callback, payload));
 		}));
 	}
@@ -585,8 +610,7 @@ basic_stream<Exec> &basic_stream<Exec>::on_pong(Func &&callback)
 	{
 		m_impl->on_pong(typename impl::sync_control_callback_t(
 		[callback = callback_t(std::forward<Func>(callback))]
-		(ctrl_payload_t &payload) mutable
-		{
+		(ctrl_payload_t &payload) mutable {
 			static_cast<void>(std::invoke(callback, payload));
 		}));
 	}
@@ -747,7 +771,7 @@ auto basic_stream<Exec>::close(close_frame_t frame, Token &&token)
 template <core_concepts::exec Exec>
 basic_stream<Exec> &basic_stream<Exec>::cancel()
 {
-	error_code error;
+	error_code error {};
 	cancel(error);
 	if( error )
 		system_error::loc_throw(error, "riwo::websocket::basic_stream::cancel");
@@ -764,7 +788,7 @@ basic_stream<Exec> &basic_stream<Exec>::cancel(error_code &error) noexcept
 template <core_concepts::exec Exec>
 basic_stream<Exec> &basic_stream<Exec>::shutdown()
 {
-	error_code error;
+	error_code error {};
 	shutdown(error);
 	if( error )
 		system_error::loc_throw(error, "riwo::websocket::basic_stream::shutdown");
@@ -833,17 +857,19 @@ auto basic_stream<Exec>::peer_close() const -> optional<close_info_t>
 }
 
 template <core_concepts::exec Exec>
-http::endpoint basic_stream<Exec>::remote_endpoint() const noexcept
+asio::ip::tcp::endpoint basic_stream<Exec>::remote_endpoint() const noexcept
 {
+	error_code error;
 	return m_impl and m_impl->m_connection ?
-		m_impl->m_connection->remote_endpoint() : http::endpoint{};
+		m_impl->m_connection->remote_endpoint(error) : asio::ip::tcp::endpoint{};
 }
 
 template <core_concepts::exec Exec>
-http::endpoint basic_stream<Exec>::local_endpoint() const noexcept
+asio::ip::tcp::endpoint basic_stream<Exec>::local_endpoint() const noexcept
 {
+	error_code error;
 	return m_impl and m_impl->m_connection ?
-		m_impl->m_connection->local_endpoint() : http::endpoint{};
+		m_impl->m_connection->local_endpoint(error) : asio::ip::tcp::endpoint{};
 }
 
 } //namespace riwo::websocket

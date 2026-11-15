@@ -134,8 +134,7 @@ function(add_riwo_fuzzer module name source library)
 endfunction()
 
 
-foreach(target riwo.core riwo.crypto riwo.coro riwo.http riwo.exp_http riwo.websocket
-	riwo.exp_websocket riwo.utils)
+foreach(target riwo.core riwo.crypto riwo.coro riwo.http riwo.websocket riwo.utils)
 	if (TARGET ${target})
 		if (MSVC)
 			target_compile_options(${target} PRIVATE
@@ -186,54 +185,27 @@ if (RIWO_BUILD_CORO)
 endif ()
 
 if (RIWO_BUILD_HTTP)
-	add_riwo_fuzzer(http request-parser http_request_parser.cpp riwo.http
+	add_riwo_fuzzer(http request-parser http_request_parser.cpp
+		riwo.http
 		CORPUS corpus/http-request DICTIONARY dictionaries/http.dict
 	)
-	add_riwo_fuzzer(http response-parser http_response_parser.cpp riwo.http
-		CORPUS corpus/http-response DICTIONARY dictionaries/http.dict
-	)
-	add_riwo_fuzzer(http roundtrip http_roundtrip.cpp riwo.http
-		CORPUS corpus/http-values DICTIONARY dictionaries/http.dict
-	)
-	add_riwo_fuzzer(http public-api http_public_api.cpp riwo.http
-		CORPUS corpus/http-values DICTIONARY dictionaries/http.dict
-	)
-endif ()
-
-if (RIWO_BUILD_EXP_HTTP)
-	add_riwo_fuzzer(exp_http request-parser exp_http_request_parser.cpp
-		riwo.exp_http
-		CORPUS corpus/http-request DICTIONARY dictionaries/http.dict
-	)
-	add_riwo_fuzzer(exp_http response-parser exp_http_response_parser.cpp
-		riwo.exp_http
+	add_riwo_fuzzer(http response-parser http_response_parser.cpp
+		riwo.http
 		CORPUS corpus/http-response DICTIONARY dictionaries/http.dict
 	)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)
-	add_riwo_fuzzer(websocket frame-parser websocket_frame_parser.cpp riwo.websocket
+	add_riwo_fuzzer(websocket frame-parser
+		websocket_frame_parser.cpp riwo.websocket
 		CORPUS corpus/websocket-frame DICTIONARY dictionaries/websocket.dict
 	)
-	add_riwo_fuzzer(websocket handshake-parser websocket_handshake_parser.cpp riwo.websocket
+	add_riwo_fuzzer(websocket handshake-parser
+		websocket_handshake_parser.cpp riwo.websocket
 		CORPUS corpus/websocket-handshake DICTIONARY dictionaries/websocket.dict
 	)
-	add_riwo_fuzzer(websocket public-api websocket_public_api.cpp riwo.websocket
-		CORPUS corpus/websocket-values DICTIONARY dictionaries/websocket.dict
-	)
-endif ()
-
-if (RIWO_BUILD_EXP_WEBSOCKET)
-	add_riwo_fuzzer(exp_websocket frame-parser
-		exp_websocket_frame_parser.cpp riwo.exp_websocket
-		CORPUS corpus/websocket-frame DICTIONARY dictionaries/websocket.dict
-	)
-	add_riwo_fuzzer(exp_websocket handshake-parser
-		exp_websocket_handshake_parser.cpp riwo.exp_websocket
-		CORPUS corpus/websocket-handshake DICTIONARY dictionaries/websocket.dict
-	)
-	add_riwo_fuzzer(exp_websocket public-api
-		exp_websocket_public_api.cpp riwo.exp_websocket
+	add_riwo_fuzzer(websocket public-api
+		websocket_public_api.cpp riwo.websocket
 		CORPUS corpus/websocket-values DICTIONARY dictionaries/websocket.dict
 	)
 endif ()

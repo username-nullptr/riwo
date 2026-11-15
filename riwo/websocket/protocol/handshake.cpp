@@ -11,12 +11,22 @@ namespace riwo::websocket { namespace
 constexpr std::string_view websocket_guid =
 	"258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-constexpr const char
-	* sec_websocket_key        = "Sec-WebSocket-Key",
-	* sec_websocket_accept     = "Sec-WebSocket-Accept",
-	* sec_websocket_version    = "Sec-WebSocket-Version",
-	* sec_websocket_protocol   = "Sec-WebSocket-Protocol",
-	* sec_websocket_extensions = "Sec-WebSocket-Extensions";
+constexpr auto
+	sec_websocket_key        = "Sec-WebSocket-Key",
+	sec_websocket_accept     = "Sec-WebSocket-Accept",
+	sec_websocket_version    = "Sec-WebSocket-Version",
+	sec_websocket_protocol   = "Sec-WebSocket-Protocol",
+	sec_websocket_extensions = "Sec-WebSocket-Extensions";
+
+[[nodiscard]] constexpr bool is_http2(http::protocol value) noexcept
+{
+#if RIWO_HTTP_HTTP2_SUPPORT
+	return value == http::protocol::v2;
+#else //RIWO_HTTP_HTTP2_SUPPORT
+	ignore_unused(value);
+	return false;
+#endif //RIWO_HTTP_HTTP2_SUPPORT
+}
 
 [[nodiscard]] std::string_view trim_ows(std::string_view value) noexcept
 {
@@ -34,16 +44,16 @@ constexpr const char
 
 [[nodiscard]] bool contains_header_token(std::string_view value, std::string_view wanted) noexcept
 {
-	while( true )
+	for(;;)
 	{
 		const auto comma = value.find(',');
-		const auto item = trim_ows(value.substr(0, comma));
 
-		if( ascii_equal_case_insensitive(item, wanted) )
+		if( const auto item = trim_ows(value.substr(0, comma));
+			ascii_equal_case_insensitive(item, wanted) )
 			return true;
 
 		if( comma == std::string_view::npos )
-			return false;
+			break;
 
 		value.remove_prefix(comma + 1);
 	}
@@ -320,16 +330,16 @@ private:
 	return (base64_value(value[21]) & 0x0F) == 0;
 }
 
-[[nodiscard]] const std::string *header_value(const http::headers &headers, const char *name)
+[[nodiscard]] optional<std::string_view> header_value(
+	const http::fields &headers, const char *name)
 {
-	const auto it = headers.find(name);
-	return it == headers.end() ? nullptr : &it->second.to_string();
+	return headers.find_first(name);
 }
 
 template <typename Result, typename Function>
 [[nodiscard]] sys_expected<Result> guard_allocation(Function &&function) noexcept
 {
-	error_code error {};
+	error_code error;
 	try {
 		return std::forward<Function>(function)();
 	}
@@ -346,7 +356,7 @@ template <typename Result, typename Function>
 
 sys_expected<std::string> make_client_key(std::span<const std::byte,16> nonce) noexcept
 {
-	return guard_allocation<std::string>([&]{
+	return guard_allocation<std::string>([&] {
 		return crypto::base64_encode(nonce);
 	});
 }
@@ -365,9 +375,10 @@ sys_expected<std::string> make_accept_key(std::string_view client_key) noexcept
 	});
 }
 
-sys_expected<http::headers> make_opening_request_headers(const opening_request &request) noexcept
+sys_expected<http::fields> make_opening_request_headers
+(const opening_request &request, http::protocol version) noexcept
 {
-	return guard_allocation<http::headers>([&]() -> sys_expected<http::headers>
+	return guard_allocation<http::fields>([&]() -> sys_expected<http::fields>
 	{
 		const auto key = trim_ows(request.key);
 		if( not is_client_key(key) )
@@ -381,53 +392,61 @@ sys_expected<http::headers> make_opening_request_headers(const opening_request &
 		if( not request.extensions.empty() and extensions.empty() )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		http::headers result {
-			{http::header::connection, "Upgrade"},
-			{http::header::upgrade, "websocket"},
-			{sec_websocket_version, "13"},
-			{sec_websocket_key, key},
-		};
+		http::fields result;
+		if( not is_http2(version) )
+		{
+			result.add("Connection", "Upgrade");
+			result.add("Upgrade", "websocket");
+		}
+		result.add(sec_websocket_version, "13");
+		result.add(sec_websocket_key, std::string(key));
+
 		if( not protocols.empty() )
-			result[sec_websocket_protocol] = protocols;
+			result.set(sec_websocket_protocol, protocols);
 
 		if( not extensions.empty() )
-			result[sec_websocket_extensions] = extensions;
+			result.set(sec_websocket_extensions, extensions);
 		return result;
 	});
 }
 
-sys_expected<opening_request> parse_opening_request
-(http::method_enum method, http::version_enum version, const http::headers &headers) noexcept
+sys_expected<opening_request> parse_opening_request(const http::method &method,
+	http::protocol version, const http::fields &headers, bool extended_connect) noexcept
 {
 	return guard_allocation<opening_request>([&]() -> sys_expected<opening_request>
 	{
-		if( method != http::method::get or version != http::version::v11 )
+		const bool h2 = is_http2(version);
+		if( h2 ?
+			method.known() != http::method::connect or not extended_connect :
+			method.known() != http::method::get or version != http::protocol::v1_1 )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		const auto *connection = header_value(headers, http::header::connection);
-		const auto *upgrade = header_value(headers, http::header::upgrade);
+		const auto connection = header_value(headers, "Connection");
 
-		if( not connection or not contains_header_token(*connection, "upgrade") or
-			not upgrade or not ascii_equal_case_insensitive(trim_ows(*upgrade), "websocket") )
+		if( const auto upgrade = header_value(headers, "Upgrade");
+			not h2 and
+			(not connection or not contains_header_token(*connection, "upgrade") or
+			not upgrade or
+			not ascii_equal_case_insensitive(trim_ows(*upgrade), "websocket")) )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		const auto *websocket_version = header_value(headers, sec_websocket_version);
-		if( not websocket_version or trim_ows(*websocket_version) != "13" )
+		if( const auto websocket_version = header_value(headers, sec_websocket_version);
+			not websocket_version or trim_ows(*websocket_version) != "13" )
 			return sys_unexpected(make_error_code(errc::unsupported_version));
 
-		const auto *key = header_value(headers, sec_websocket_key);
+		const auto key = header_value(headers, sec_websocket_key);
 		if( not key or not is_client_key(*key) )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
 		opening_request result;
 		result.key = trim_ows(*key);
 
-		if( const auto *protocols = header_value(headers, sec_websocket_protocol) )
+		if( const auto protocols = header_value(headers, sec_websocket_protocol) )
 		{
 			if( not parse_token_list(*protocols, result.subprotocols, true) )
 				return sys_unexpected(make_error_code(errc::invalid_upgrade));
 		}
-		if( const auto *extensions = header_value(headers, sec_websocket_extensions) )
+		if( const auto extensions = header_value(headers, sec_websocket_extensions) )
 		{
 			if( not parse_extension_list(*extensions, result.extensions) )
 				return sys_unexpected(make_error_code(errc::invalid_upgrade));
@@ -436,17 +455,17 @@ sys_expected<opening_request> parse_opening_request
 	});
 }
 
-sys_expected<http::headers> make_opening_response_headers
-(const opening_request &request, const opening_response &response) noexcept
+sys_expected<http::fields> make_opening_response_headers
+(const opening_request &request, const opening_response &response, http::protocol version) noexcept
 {
-	return guard_allocation<http::headers>([&]() -> sys_expected<http::headers>
+	return guard_allocation<http::fields>([&]() -> sys_expected<http::fields>
 	{
 		auto accept = make_accept_key(request.key);
 		if( not accept )
 			return sys_unexpected(accept.error());
 
-		const auto offered_protocols = serialize_token_list(request.subprotocols);
-		if( not request.subprotocols.empty() and offered_protocols.empty() )
+		if( const auto offered_protocols = serialize_token_list(request.subprotocols);
+			not request.subprotocols.empty() and offered_protocols.empty() )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
 		if( response.subprotocol )
@@ -459,47 +478,53 @@ sys_expected<http::headers> make_opening_response_headers
 		if( not response.extensions.empty() and extensions.empty() )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		http::headers result {
-			{http::header::connection, "Upgrade"},
-			{http::header::upgrade, "websocket"},
-			{sec_websocket_accept, *accept},
-		};
+		http::fields result {};
+		if( not is_http2(version) )
+		{
+			result.add("Connection", "Upgrade");
+			result.add("Upgrade", "websocket");
+		}
+		result.add(sec_websocket_accept, *accept);
 		if( response.subprotocol )
-			result[sec_websocket_protocol] = *response.subprotocol;
+			result.set(sec_websocket_protocol, *response.subprotocol);
 
 		if( not extensions.empty() )
-			result[sec_websocket_extensions] = extensions;
+			result.set(sec_websocket_extensions, extensions);
 		return result;
 	});
 }
 
-sys_expected<opening_response> parse_opening_response(http::status_enum status,
-	const http::headers &headers, const opening_request &request) noexcept
+sys_expected<opening_response> parse_opening_response(const http::status &status,
+	const http::fields &headers, const opening_request &request, http::protocol version) noexcept
 {
 	return guard_allocation<opening_response>([&]() -> sys_expected<opening_response>
 	{
-		if( status != http::status::switching_protocols )
+		const bool h2 = is_http2(version);
+		if( h2 ?
+			status.code() < 200 or status.code() >= 300 :
+			status.code() != http::status::switching_protocols )
 			return sys_unexpected(make_error_code(errc::handshake_rejected));
 
-		const auto *connection = header_value(headers, http::header::connection);
-		const auto *upgrade = header_value(headers, http::header::upgrade);
+		const auto connection = header_value(headers, "Connection");
 
-		if( not connection or not contains_header_token(*connection, "upgrade") or
-			not upgrade or not ascii_equal_case_insensitive(trim_ows(*upgrade), "websocket") )
+		if( const auto upgrade = header_value(headers, "Upgrade");
+			not h2 and (not connection or not contains_header_token(*connection, "upgrade") or
+			not upgrade or
+			not ascii_equal_case_insensitive(trim_ows(*upgrade), "websocket")) )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
 		auto expected_accept = make_accept_key(request.key);
 		if( not expected_accept )
 			return sys_unexpected(expected_accept.error());
 
-		const auto *accept = header_value(headers, sec_websocket_accept);
-		if( not accept or trim_ows(*accept) != *expected_accept )
+		if( const auto accept = header_value(headers, sec_websocket_accept);
+			not accept or trim_ows(*accept) != *expected_accept )
 			return sys_unexpected(make_error_code(errc::invalid_accept_key));
 
-		opening_response result;
-		if( const auto *protocol = header_value(headers, sec_websocket_protocol) )
+		opening_response result {};
+		if( const auto protocol = header_value(headers, sec_websocket_protocol) )
 		{
-			std::vector<std::string> selected;
+			std::vector<std::string> selected {};
 			if( not parse_token_list(*protocol, selected, true) or selected.size() != 1 )
 				return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
@@ -508,7 +533,7 @@ sys_expected<opening_response> parse_opening_response(http::status_enum status,
 
 			result.subprotocol = std::move(selected.front());
 		}
-		if( const auto *extensions = header_value(headers, sec_websocket_extensions) )
+		if( const auto extensions = header_value(headers, sec_websocket_extensions) )
 		{
 			if( not parse_extension_list(*extensions, result.extensions) )
 				return sys_unexpected(make_error_code(errc::invalid_upgrade));

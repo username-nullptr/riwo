@@ -9,7 +9,22 @@
 namespace
 {
 
+namespace http = riwo::http;
 namespace ws = riwo::websocket;
+
+[[nodiscard]] ws::server_config make_server_config()
+{
+	ws::server_config config;
+	config.http.protocols.requirement = http::protocol_requirement::v1;
+	return config;
+}
+
+[[nodiscard]] ws::client_config make_client_config()
+{
+	ws::client_config config;
+	config.http.protocols.requirement = http::protocol_requirement::v1;
+	return config;
+}
 
 void low_load_connection_lifecycle_repetition()
 {
@@ -17,7 +32,8 @@ void low_load_connection_lifecycle_repetition()
 	const auto seed = riwo::test::current_seed();
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor), asio::make_strand(context));
+	ws::server service(std::move(acceptor), asio::make_strand(context),
+		make_server_config());
 	std::atomic_size_t echoed {0};
 	service.on_connection("/lifecycle",
 	[&](ws::accept_result accepted) -> riwo::awaitable<void>
@@ -35,8 +51,7 @@ void low_load_connection_lifecycle_repetition()
 		}
 	});
 	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
+	const auto port = service.http_server().acceptor().local_endpoint().port();
 	const auto target = std::format("ws://127.0.0.1:{}/lifecycle", port);
 	auto completed = asio::co_spawn(asio::make_strand(context),
 		[&, target]() -> riwo::awaitable<void>
@@ -44,7 +59,7 @@ void low_load_connection_lifecycle_repetition()
 			auto executor = co_await asio::this_coro::executor;
 			for(size_t round = 0; round < rounds; ++round)
 			{
-				ws::client requester(executor);
+				ws::client requester(executor, make_client_config());
 				auto stream = co_await requester.open(target, riwo::use_awaitable);
 				const auto payload = std::format("lifecycle:{}", round);
 				co_await stream.write_text(payload, riwo::use_awaitable);
@@ -88,7 +103,8 @@ void concurrent_connection_pressure()
 	riwo::io_context_t context;
 	asio::ip::tcp::acceptor acceptor(context);
 	auto service_executor = asio::make_strand(context);
-	ws::server service(std::move(acceptor), service_executor);
+	ws::server service(std::move(acceptor), service_executor,
+		make_server_config());
 	std::atomic_size_t echoed {0};
 	service.on_connection("/stress",
 	[&](ws::accept_result accepted) -> riwo::awaitable<void>
@@ -107,8 +123,7 @@ void concurrent_connection_pressure()
 		}
 	});
 	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
+	const auto port = service.http_server().acceptor().local_endpoint().port();
 	const auto target = std::format("ws://127.0.0.1:{}/stress", port);
 	std::vector<std::future<void>> futures;
 	futures.reserve(client_count);
@@ -118,7 +133,8 @@ void concurrent_connection_pressure()
 		futures.emplace_back(asio::co_spawn(client_executor,
 		[&, target, client_index]() -> riwo::awaitable<void>
 		{
-			ws::client client(co_await asio::this_coro::executor);
+			ws::client client(co_await asio::this_coro::executor,
+				make_client_config());
 			for(size_t cycle = 0; cycle < connection_cycles; ++cycle)
 			{
 				auto stream = co_await client.open(target, riwo::use_awaitable);
@@ -176,6 +192,7 @@ int main(int argc, const char *const argv[])
 	return riwo::test::run(argc, argv, {
 		{"low-load WebSocket connection lifecycle repetition",
 			low_load_connection_lifecycle_repetition},
-		{"concurrent WebSocket connection pressure", concurrent_connection_pressure},
+		{"concurrent WebSocket connection pressure",
+			concurrent_connection_pressure},
 	});
 }

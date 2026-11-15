@@ -145,8 +145,8 @@ endfunction()
 
 
 # Resolve nghttp2 from the supported providers, verify the exact HTTP/2 API
-# surface used by EXP_HTTP, and publish the normalized result to the caller.
-function(riwo_configure_exp_http_nghttp2)
+# surface used by HTTP, and publish the normalized result to the caller.
+function(riwo_configure_http_nghttp2)
 	set(http2_support 0)
 
 	set(nghttp2_provider "none")
@@ -157,7 +157,7 @@ function(riwo_configure_exp_http_nghttp2)
 	set(nghttp2_use_modern_api 0)
 	set(nghttp2_target "")
 
-	if (NOT RIWO_EXP_HTTP2_SUPPORT STREQUAL "OFF")
+	if (NOT RIWO_HTTP2_SUPPORT STREQUAL "OFF")
 		find_package(nghttp2 CONFIG QUIET)
 
 		foreach(candidate
@@ -189,12 +189,12 @@ function(riwo_configure_exp_http_nghttp2)
 			find_library(RIWO_NGHTTP2_LIBRARY NAMES nghttp2 libnghttp2)
 
 			if (RIWO_NGHTTP2_INCLUDE_DIR AND RIWO_NGHTTP2_LIBRARY)
-				add_library(riwo_exp_http_nghttp2_library UNKNOWN IMPORTED)
-				set_target_properties(riwo_exp_http_nghttp2_library PROPERTIES
+				add_library(riwo_http_nghttp2_library UNKNOWN IMPORTED)
+				set_target_properties(riwo_http_nghttp2_library PROPERTIES
 					IMPORTED_LOCATION "${RIWO_NGHTTP2_LIBRARY}"
 					INTERFACE_INCLUDE_DIRECTORIES "${RIWO_NGHTTP2_INCLUDE_DIR}"
 				)
-				set(nghttp2_target riwo_exp_http_nghttp2_library)
+				set(nghttp2_target riwo_http_nghttp2_library)
 				set(nghttp2_provider "library")
 			endif ()
 		endif ()
@@ -227,7 +227,7 @@ function(riwo_configure_exp_http_nghttp2)
 			set(CMAKE_REQUIRED_QUIET TRUE)
 			set(CMAKE_REQUIRED_LIBRARIES ${nghttp2_target})
 
-			unset(RIWO_EXP_HTTP_NGHTTP2_MODERN_CAPABILITIES CACHE)
+			unset(RIWO_HTTP_NGHTTP2_MODERN_CAPABILITIES CACHE)
 
 			check_c_source_compiles([=[
 #define NGHTTP2_NO_SSIZE_T
@@ -276,9 +276,9 @@ int main(void)
     nghttp2_session_callbacks_del(callbacks);
     return 0;
 }
-]=] RIWO_EXP_HTTP_NGHTTP2_MODERN_CAPABILITIES)
+]=] RIWO_HTTP_NGHTTP2_MODERN_CAPABILITIES)
 
-			unset(RIWO_EXP_HTTP_NGHTTP2_LEGACY_CAPABILITIES CACHE)
+			unset(RIWO_HTTP_NGHTTP2_LEGACY_CAPABILITIES CACHE)
 
 			check_c_source_compiles([=[
 #if defined(_MSC_VER) && !defined(_SSIZE_T_DEFINED)
@@ -331,22 +331,22 @@ int main(void)
     nghttp2_session_callbacks_del(callbacks);
     return 0;
 }
-]=] RIWO_EXP_HTTP_NGHTTP2_LEGACY_CAPABILITIES)
+]=] RIWO_HTTP_NGHTTP2_LEGACY_CAPABILITIES)
 			cmake_pop_check_state()
 
-			if (RIWO_EXP_HTTP_NGHTTP2_MODERN_CAPABILITIES OR
-				RIWO_EXP_HTTP_NGHTTP2_LEGACY_CAPABILITIES)
+			if (RIWO_HTTP_NGHTTP2_MODERN_CAPABILITIES OR
+				RIWO_HTTP_NGHTTP2_LEGACY_CAPABILITIES)
 				set(http2_support 1)
 
-				if (RIWO_EXP_HTTP_NGHTTP2_MODERN_CAPABILITIES)
+				if (RIWO_HTTP_NGHTTP2_MODERN_CAPABILITIES)
 					set(nghttp2_api "modern")
 					set(nghttp2_use_modern_api 1)
 				else ()
 					set(nghttp2_api "legacy")
 				endif ()
 
-				add_library(Riwo::exp_http_nghttp2 INTERFACE IMPORTED GLOBAL)
-				set_property(TARGET Riwo::exp_http_nghttp2 PROPERTY
+				add_library(Riwo::http_nghttp2 INTERFACE IMPORTED GLOBAL)
+				set_property(TARGET Riwo::http_nghttp2 PROPERTY
 					INTERFACE_LINK_LIBRARIES ${nghttp2_target}
 				)
 				get_target_property(nghttp2_type ${nghttp2_target} TYPE)
@@ -356,23 +356,23 @@ int main(void)
 			endif ()
 		endif ()
 
-		if (RIWO_EXP_HTTP2_SUPPORT STREQUAL "ON" AND NOT http2_support)
+		if (RIWO_HTTP2_SUPPORT STREQUAL "ON" AND NOT http2_support)
 			message(FATAL_ERROR
-				"${PRO_NAME}: RIWO_EXP_HTTP2_SUPPORT=ON requires an nghttp2 library "
+				"${PRO_NAME}: RIWO_HTTP2_SUPPORT=ON requires an nghttp2 library "
 				"with the client/server, callback, manual flow-control, memory I/O, "
 				"resume DATA, SETTINGS and GOAWAY APIs."
 			)
 		endif ()
 	endif ()
 
-	set(RIWO_EXP_HTTP_HTTP2_SUPPORT ${http2_support} PARENT_SCOPE)
+	set(RIWO_HTTP_HTTP2_SUPPORT ${http2_support} PARENT_SCOPE)
 
-	set(RIWO_EXP_HTTP_NGHTTP2_PROVIDER "${nghttp2_provider}" PARENT_SCOPE)
-	set(RIWO_EXP_HTTP_NGHTTP2_VERSION "${nghttp2_version}" PARENT_SCOPE)
-	set(RIWO_EXP_HTTP_NGHTTP2_LINKAGE "${nghttp2_linkage}" PARENT_SCOPE)
-	set(RIWO_EXP_HTTP_NGHTTP2_API "${nghttp2_api}" PARENT_SCOPE)
+	set(RIWO_HTTP_NGHTTP2_PROVIDER "${nghttp2_provider}" PARENT_SCOPE)
+	set(RIWO_HTTP_NGHTTP2_VERSION "${nghttp2_version}" PARENT_SCOPE)
+	set(RIWO_HTTP_NGHTTP2_LINKAGE "${nghttp2_linkage}" PARENT_SCOPE)
+	set(RIWO_HTTP_NGHTTP2_API "${nghttp2_api}" PARENT_SCOPE)
 
-	set(RIWO_EXP_HTTP_NGHTTP2_USE_MODERN_API
+	set(RIWO_HTTP_NGHTTP2_USE_MODERN_API
 		${nghttp2_use_modern_api} PARENT_SCOPE
 	)
 endfunction()

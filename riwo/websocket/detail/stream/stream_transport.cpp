@@ -3,7 +3,6 @@
 
 #include <riwo/websocket/detail/stream/stream_transport.h>
 #include <riwo/websocket/detail/stream/send_engine.h>
-#include <riwo/http/utils/connection.h>
 
 namespace riwo::websocket::detail
 {
@@ -12,49 +11,59 @@ stream_transport::stream_transport() noexcept = default;
 
 stream_transport::~stream_transport() = default;
 
-void stream_transport::reset
-(std::shared_ptr<void> connection, read_fn_t read_fn, write_fn_t write_fn) noexcept
+void stream_transport::reset(http::duplex_channel_io_ptr connection) noexcept
 {
 	m_connection = std::move(connection);
-	m_read_fn = read_fn;
-	m_write_fn = write_fn;
 }
 
 awaitable<std::tuple<error_code,size_t>>
 stream_transport::async_read(std::shared_ptr<std::vector<std::byte>> storage)
 {
 	auto connection = m_connection;
-	auto read_fn = m_read_fn;
+	auto token = asio::as_tuple(asio::use_awaitable);
 
-	co_return co_await http::detail::initiate_connection_io(
-	[connection = std::move(connection), storage = std::move(storage), read_fn]
+	co_return co_await asio::async_initiate<decltype(token),void(error_code,size_t)>(
+	[connection = std::move(connection), storage = std::move(storage)]
 	(auto next_handler) mutable
 	{
-		read_fn(connection.get(),
-			mutable_buffer(storage->data(), storage->size()),
+		connection->read_some(mutable_buffer(storage->data(), storage->size()),
 			io_handler_t(std::move(next_handler))
 		);
 	},
-	asio::as_tuple(asio::use_awaitable));
+	token);
 }
 
-void stream_transport::start_write(const std::shared_ptr<send_engine_owner> &owner,
-	prepared_frame frame, wire_frame_kind kind, const std::shared_ptr<send_operation> &operation) noexcept
+void stream_transport::start_write(const send_engine_owner_ptr &owner,
+	const prepared_frame &frame, wire_frame_kind kind, const send_operation_ptr &operation) noexcept
 {
 	try {
-		auto buffers = std::span<const const_buffer>(frame.buffers);
-		io_handler_t handler([owner, frame, kind, operation](error_code error, size_t wire_size) mutable
+		const auto header_size = frame.header_size;
+		const auto payload_size = frame.payload_size;
+		const auto application_size = frame.application_size;
+
+		auto wire_lifetime = operation ?
+			std::shared_ptr<std::vector<std::byte>>{} : frame.wire;
+
+		prepared_frame_buffers buffers(frame);
+
+		io_handler_t handler(asio::bind_executor(owner->send_executor(), [
+			owner, wire_lifetime = std::move(wire_lifetime), header_size,
+			payload_size, application_size, kind, operation
+		](error_code error, size_t wire_size) mutable
 		{
+			ignore_unused(wire_lifetime);
 			owner->send_side().complete_wire_frame (
-				frame, kind, operation, error, wire_size
+				header_size, payload_size, application_size,
+				kind, operation, error, wire_size
 			);
-		});
-		m_write_fn(m_connection.get(), buffers, std::move(handler));
+		}));
+		m_connection->write(buffers.get(), std::move(handler));
 	}
 	catch(...)
 	{
-		owner->send_side().complete_wire_frame(frame, kind,
-			operation, exception_error(std::current_exception()), 0
+		owner->send_side().complete_wire_frame(frame.header_size,
+			frame.payload_size, frame.application_size, kind, operation,
+			exception_error(std::current_exception()), 0
 		);
 	}
 }

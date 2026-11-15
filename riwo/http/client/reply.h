@@ -1,108 +1,92 @@
-// SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
 #ifndef RIWO_HTTP_CLIENT_REPLY_H
 #define RIWO_HTTP_CLIENT_REPLY_H
 
-#include <riwo/http/protocol/utils/client/parser.h>
-#include <riwo/http/protocol/utils/client/cookie_jar.h>
-#include <riwo/http/client/connection_lease.h>
+#include <riwo/http/protocol/response_head.h>
+#include <riwo/http/body/pipe.h>
+#include <riwo/http/version.h>
 
 namespace riwo::http { namespace detail {
-struct reply_access;
+class body_reader_state;
 } //namespace detail
 
+using reply_head = response_head;
+
 template <core_concepts::exec Exec = asio::any_io_executor>
-class RIWO_HTTP_TAPI basic_reply final :
-	public const_headers<basic_reply<Exec>>,
-	public const_cookies<cookie,basic_reply<Exec>>
+class RIWO_HTTP_TAPI basic_reply
 {
-	RIWO_DISABLE_COPY_MOVE(basic_reply)
+	RIWO_DISABLE_COPY(basic_reply)
 
 public:
 	using executor_type = Exec;
 	using executor_t = executor_type;
-	using parser_t = client_parser;
 
-	using connection_t = basic_connection<executor_t>;
-	using connection_ptr = connection_t::ptr_t;
-
-	using lease_t = basic_connection_lease<executor_t>;
-	using lease_ptr = lease_t::ptr_t;
-
-	explicit basic_reply(lease_ptr lease);
-	basic_reply(lease_ptr lease, parser_t &&parser);
-	~basic_reply() override;
+	using status_t = http::status;
+	using body_reader_t = basic_body_reader<executor_t>;
 
 public:
-	// Synchronous I/O returns the value directly. The default token throws
-	// std::system_error on failure; error_code& returns a default value and
-	// stores the error. Async completion uses (error_code, value).
-	template <typename Token, typename...Value>
-	static constexpr bool task_token_v =
-		core_concepts::dis_detached_tf_opt_token<Token,error_code,Value...>;
+	template <typename Exec0>
+	explicit basic_reply(Exec0 &&executor) requires
+		core_concepts::match_sched<Exec0,executor_t>;
 
-	template <typename T, typename Token>
-	static constexpr bool file_task_token =
-		task_token_v<Token,size_t> and
-		concepts::file_opt_token_p <
-			T, char, file_optype::single, io_permission::write
-		>;
+	basic_reply(protocol selected_protocol, reply_head head, detail::body_reader_state_ptr body,
+		std::vector<std::byte> buffered_body = {}, std::shared_ptr<void> owner = {},
+		uint64_t max_buffered_body = 8U * 1024U * 1024U, protocol reply_protocol = protocol::v1_1
+	) requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
 
-public:
-	template <typename Token = use_sync_t>
-	auto wait(Token &&token = {})
-		requires task_token_v<Token,status_enum>;
+	template <typename Exec0>
+	basic_reply(Exec0 &&executor, protocol selected_protocol, reply_head head,
+		detail::body_reader_state_ptr body, std::vector<std::byte> buffered_body = {},
+		std::shared_ptr<void> owner = {}, uint64_t max_buffered_body = 8U * 1024U * 1024U,
+		protocol reply_protocol = protocol::v1_1
+	) requires
+		core_concepts::match_sched<Exec0,executor_t>;
 
-	template <typename Token = use_sync_t>
-	auto read(const mutable_buffer &buf, Token &&token = {})
-		requires task_token_v<Token,size_t>;
+	basic_reply() requires
+		core_concepts::match_sched<io_executor_t,executor_t>;
+	~basic_reply();
 
-	template <core_concepts::buffer Buffer, typename Token = use_sync_t>
-	auto read(Token &&token = {})
-		requires task_token_v<Token,Buffer>;
-
-	template <typename Token = use_sync_t>
-	auto read(Token &&token = {})
-		requires task_token_v<Token,std::vector<std::byte>>;
-
-	template <typename T, typename Token = use_sync_t>
-	auto save_file(T &&opt, Token &&token = {})
-		requires file_task_token<T,Token>;
-
-	template <typename T, typename Progress, typename Token = use_sync_t>
-	auto save_file(T &&opt, Progress &&progress, Token &&token = {})
-		requires file_task_token<T,Token> and concepts::progress_callback<Progress,Token>;
+	basic_reply(basic_reply &&other) noexcept;
+	basic_reply &operator=(basic_reply &&other) noexcept;
 
 public:
-	[[nodiscard]] version_enum version() const noexcept;
-	[[nodiscard]] status_enum status() const noexcept;
 
-	[[nodiscard]] bool valid() const noexcept;
-	[[nodiscard]] error_code first_error() const noexcept;
+	template <core_concepts::dis_detached_tf_opt_token
+		<error_code,std::vector<std::byte>> Token = use_sync_t>
+	[[nodiscard]] auto read_all(Token &&token = {});
 
-	[[nodiscard]] bool content_decoded() const noexcept;
-	[[nodiscard]] bool is_chunked() const noexcept;
-	[[nodiscard]] bool is_eof() const noexcept;
+	template <core_concepts::dis_detached_tf_opt_token<error_code,uint64_t> Token = use_sync_t>
+	[[nodiscard]] auto save_file(const std::filesystem::path &path, Token &&token = {});
 
-	[[nodiscard]] bool is_upgrade() const noexcept;
-	[[nodiscard]] std::string take_pending_data();
+	template <typename File,
+		core_concepts::dis_detached_tf_opt_token<error_code,uint64_t> Token = use_sync_t>
+	[[nodiscard]] auto save_file(File &&file, Token &&token = {}) requires
+		(not std::same_as<std::remove_cvref_t<File>,std::filesystem::path>) and
+		std::constructible_from<file_sink,File>;
 
-	[[nodiscard]] const lease_t &lease() const noexcept;
-	[[nodiscard]] lease_t &lease() noexcept;
+	void cancel() noexcept;
 
-	[[nodiscard]] const parser_t &parser() const noexcept;
-	[[nodiscard]] parser_t &parser() noexcept;
+public:
+	[[nodiscard]] status_t status() const noexcept;
+	[[nodiscard]] const fields &headers() const noexcept;
 
-	[[nodiscard]] executor_t get_executor() noexcept;
-	basic_reply &bind_cookie_jar(std::shared_ptr<cookie_jar> jar, url origin);
-	basic_reply &cancel() noexcept;
+	[[nodiscard]] body_reader_t &body() noexcept;
+	[[nodiscard]] std::span<const std::byte> buffered_body() const noexcept;
+
+	[[nodiscard]] protocol selected_protocol() const noexcept;
+	[[nodiscard]] protocol http_version() const noexcept;
+
+	[[nodiscard]] executor_t get_executor() const noexcept;
 
 private:
-	friend struct detail::reply_access;
 	class impl;
-	std::shared_ptr<impl> m_impl;
+	std::shared_ptr<impl> m_impl {};
 };
+
+using reply = basic_reply<>;
 
 } //namespace riwo::http
 #include <riwo/http/client/detail/reply.h>

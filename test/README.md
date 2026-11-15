@@ -27,9 +27,9 @@ The following enables every module so every functional area is present:
 ```sh
 cmake -S . -B build-test -DBUILD_TESTING=ON \
   -DRIWO_BUILD_HTTP=ON \
-  -DRIWO_BUILD_EXP_HTTP=ON \
+  -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
-  -DRIWO_BUILD_EXP_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Debug
 cmake --build build-test --parallel
@@ -90,9 +90,9 @@ ctest --test-dir build-test -L interop --output-on-failure
 cmake -S . -B build-stress -DBUILD_TESTING=ON \
   -DRIWO_BUILD_STRESS_TESTS=ON \
   -DRIWO_BUILD_HTTP=ON \
-  -DRIWO_BUILD_EXP_HTTP=ON \
+  -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
-  -DRIWO_BUILD_EXP_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-stress --parallel
@@ -102,7 +102,7 @@ ctest --test-dir build-stress -L stress --output-on-failure
 CTest names are `riwo.stress.<area>`. Entries run serially at the CTest level;
 the test executables create their own internal concurrency. Coverage includes
 Core queues/locks and fallback joining threads, coroutine synchronization,
-repeated HTTP/WebSocket and WebSocket_EXP connections, EXP_HTTP HTTP/1 pool
+repeated HTTP/WebSocket and WebSocket connections, HTTP HTTP/1 pool
 concurrency and HTTP/2 multiplexing with a stalled consumer, utility
 lifecycle/fanout, and optional UDP soft-bus pressure.
 
@@ -120,7 +120,7 @@ cmake -S . -B build-fuzz -DBUILD_TESTING=ON \
   -DRIWO_BUILD_STRESS_TESTS=ON \
   -DCMAKE_CXX_COMPILER=clang++ \
   -DRIWO_BUILD_HTTP=ON \
-  -DRIWO_BUILD_EXP_HTTP=ON \
+  -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -136,7 +136,7 @@ Studio developer prompt:
 cmake -S . -B build-msvc-fuzz -G Ninja ^
   -DBUILD_TESTING=ON -DRIWO_BUILD_FUZZ_TESTS=ON ^
   -DRIWO_BUILD_STATIC=ON ^
-  -DRIWO_BUILD_HTTP=ON -DRIWO_BUILD_EXP_HTTP=ON ^
+  -DRIWO_BUILD_HTTP=ON -DRIWO_BUILD_HTTP=ON ^
   -DRIWO_BUILD_WEBSOCKET=ON -DRIWO_BUILD_UTILITIES=ON ^
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build-msvc-fuzz --parallel
@@ -159,7 +159,7 @@ cmake -S . -B build-gnu-fuzz -DBUILD_TESTING=ON \
   -DRIWO_BUILD_FUZZ_TESTS=ON \
   -DCMAKE_CXX_COMPILER=g++ \
   -DRIWO_BUILD_HTTP=ON \
-  -DRIWO_BUILD_EXP_HTTP=ON \
+  -DRIWO_BUILD_HTTP=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
@@ -173,8 +173,8 @@ written to `build-fuzz/output/fuzz/`. Seed corpora and dictionaries live in
 artifacts below `build-fuzz/test/fuzz/artifacts/`. GNU failures leave the exact
 current input at `artifacts/<module>-<harness>/last-input`.
 
-The EXP_HTTP HTTP/1 parser fuzzers compare contiguous and fragmented parsing
-within the experimental codec itself. They require `RIWO_BUILD_EXP_HTTP=ON`
+The HTTP HTTP/1 parser fuzzers compare contiguous and fragmented parsing
+within the HTTP codec itself. They require `RIWO_BUILD_HTTP=ON`
 but do not build or link the legacy HTTP module.
 
 Run a longer campaign directly:
@@ -201,11 +201,11 @@ build-gnu-fuzz/output/fuzz/riwo.fuzz.core.public-api \
 cmake -S . -B build-perf -DBUILD_TESTING=ON \
   -DRIWO_BUILD_PERFORMANCE_TESTS=ON \
   -DRIWO_BUILD_HTTP=ON \
-  -DRIWO_BUILD_EXP_HTTP=ON \
+  -DRIWO_BUILD_HTTP=ON \
   -DRIWO_HTTP_ZLIB_SUPPORT=ON \
-  -DRIWO_EXP_HTTP_ZLIB_SUPPORT=ON \
+  -DRIWO_HTTP_ZLIB_SUPPORT=ON \
   -DRIWO_BUILD_WEBSOCKET=ON \
-  -DRIWO_BUILD_EXP_WEBSOCKET=ON \
+  -DRIWO_BUILD_WEBSOCKET=ON \
   -DRIWO_BUILD_UTILITIES=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build-perf --parallel
@@ -213,14 +213,14 @@ ctest --test-dir build-perf -L performance -V
 ```
 
 CTest names are `riwo.performance.<area>`. The suite measures Core
-algorithms/queues/locks, coroutine primitives, HTTP, WebSocket, WebSocket_EXP,
+algorithms/queues/locks, coroutine primitives, HTTP, WebSocket, WebSocket,
 logging, signal/slot, and soft bus. When both HTTP implementations are enabled,
 the `http-exp` test runs matched sequential and concurrent HTTP/1.1 loopback,
 request/response head, and—when both implementations enable zlib—gzip
 workloads. The gzip coverage includes 512 B and 64 KiB one-shot round trips,
 reused codec state, and real HTTP compression-policy comparisons for dynamic
 versus cached output, small-response bypass, and already-compressed MIME types.
-It reports EXP_HTTP throughput relative to legacy HTTP as both a ratio and a
+It reports HTTP throughput relative to legacy HTTP as both a ratio and a
 percentage change. The suite enforces correctness but has no fixed performance
 threshold. Compare results only across the same host, compiler, build type,
 feature set, and scale.

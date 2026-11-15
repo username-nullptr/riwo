@@ -1,146 +1,174 @@
-// SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
 #ifndef RIWO_HTTP_SERVER_SERVER_H
 #define RIWO_HTTP_SERVER_SERVER_H
 
 #include <riwo/http/server/acceptor_wrap.h>
-#include <riwo/http/server/aop.h>
+#include <riwo/http/server/middleware.h>
+#include <riwo/http/server/exchange.h>
+#include <riwo/http/server/config.h>
+#include <riwo/http/server/tls.h>
 
-namespace riwo::http
+namespace riwo::http { namespace concepts
 {
 
-template <concepts::any_exec_stream>
-struct server_config;
+template <typename Func, typename Exec = asio::any_io_executor>
+concept request_handler = core_concepts::exec<Exec> and
+	requires(Func &&func, basic_server_exchange<Exec> &exchange) {
+		{ std::forward<Func>(func)(exchange) } -> core_concepts::awaitable;
+	} and
+	std::same_as <
+		awaitable_ret_t<decltype(std::declval<Func>()(
+			std::declval<basic_server_exchange<Exec>&>()))
+		>, void
+	>;
 
-template <core_concepts::exec Exec>
-struct server_config<asio::basic_stream_socket<asio::ip::tcp,Exec>>
-{
-	std::chrono::milliseconds first_reading_time {1500};
-	std::chrono::milliseconds keepalive_time {5000};
+} //namespace concepts
 
-	// Base for relative server-side file paths. Empty keeps the executable
-	// directory as the base for backward compatibility.
-	std::filesystem::path resource_root {};
-};
-
-#if RIWO_OPENSSL_SUPPORT
-template <core_concepts::exec Exec>
-struct server_config<asio::ssl::stream<asio::basic_stream_socket<asio::ip::tcp,Exec>>> :
-	server_config<asio::basic_stream_socket<asio::ip::tcp,Exec>>
-{
-	std::chrono::milliseconds tls_handshake_timeout {5000};
-};
-#endif //RIWO_OPENSSL_SUPPORT
-
-template <concepts::any_exec_stream Stream = asio::ip::tcp::socket>
+template <core_concepts::exec Exec = asio::any_io_executor,
+	core_concepts::exec ServiceExec = Exec>
 class RIWO_HTTP_TAPI basic_server
 {
-	RIWO_DISABLE_COPY_MOVE(basic_server)
+	RIWO_DISABLE_COPY(basic_server)
 
 public:
-	using socket_t = Stream;
-	using executor_type = socket_t::executor_type;
-
+	using executor_type = Exec;
 	using executor_t = executor_type;
-	using config_t = server_config<socket_t>;
+	using service_executor_t = ServiceExec;
 
-	using acceptor_wrap_t = basic_acceptor_wrap<socket_t>;
+	using config_t = server_config;
+	using protocol_t = asio::ip::tcp;
+
+	using socket_t = asio::basic_stream_socket<protocol_t,executor_t>;
+	using negotiated_transport_t = basic_negotiated_transport<executor_t>;
+
+	using acceptor_wrap_t = basic_acceptor_wrap<executor_t>;
 	using acceptor_t = acceptor_wrap_t::acceptor_t;
 
-	using connection_t = acceptor_wrap_t::connection_t;
-	using connection_ptr = acceptor_wrap_t::connection_ptr;
+	using endpoint_wrapper_t = basic_endpoint_wrapper<protocol_t>;
+	using context_t = basic_server_exchange<service_executor_t>;
+	using request_handler_t = std::function<awaitable<void>(context_t&)>;
 
-	using endpoint_wrapper_t = basic_endpoint_wrapper <
-		typename acceptor_t::protocol_type
-	>;
-	using request_t = basic_request<executor_t>;
-	using response_t = basic_response<executor_t>;
+	using middleware_t = basic_middleware<service_executor_t>;
+	using middleware_ptr = middleware_t::ptr_t;
 
-	using path_opt_token_t = basic_path_opt_token<char>;
-	using context_t = basic_service_context<executor_t>;
-
-	using aop_t = basic_aop<executor_t>;
-	using ctrlr_aop_t = basic_ctrlr_aop<executor_t>;
-
-	using aop_ptr_t = basic_aop<executor_t>::ptr_t;
-	using ctrlr_aop_ptr_t = basic_ctrlr_aop<executor_t>::ptr_t;
+	using controller_t = basic_controller<service_executor_t>;
+	using controller_ptr = controller_t::ptr_t;
 
 	using server_error_handler_t = std::function<bool(error_code)>;
 	using service_error_handler_t = std::function<bool(context_t&, const std::exception&)>;
 
 public:
-	basic_server(acceptor_wrap_t &&wrap, core_concepts::sched auto &&service_exec);
-	basic_server(acceptor_wrap_t &&wrap);
-	~basic_server();
-
-	basic_server &bind(endpoint_wrapper_t ep);
-	basic_server &bind(endpoint_wrapper_t ep, error_code &error) noexcept;
-
-public:
-	basic_server &start(size_t max = asio::socket_base::max_listen_connections);
-	basic_server &start(size_t max, error_code &error) noexcept;
-	basic_server &start(error_code &error) noexcept;
-
-	basic_server &start (
-		core_concepts::sched auto &&service_exec,
-		size_t max = asio::socket_base::max_listen_connections
+	explicit basic_server(config_t config = {}) requires (
+		core_concepts::match_sched<io_executor_t,executor_t> and
+		core_concepts::match_sched<executor_t,service_executor_t>
 	);
-	basic_server &start (
-		core_concepts::sched auto &&service_exec,
-		size_t max, error_code &error
-	) noexcept;
 
-	basic_server &start (
-		core_concepts::sched auto service_exec,
-		error_code &error
-	) noexcept;
+	template <typename Exec0>
+	explicit basic_server(Exec0 &&executor, config_t config = {}) requires (
+		not std::same_as<std::remove_cvref_t<Exec0>,basic_server> and
+		core_concepts::match_sched<Exec0,executor_t> and
+		core_concepts::match_sched<executor_t,service_executor_t>
+	);
+
+	explicit basic_server(acceptor_wrap_t &&acceptor, config_t config = {})
+		requires core_concepts::match_sched<executor_t,service_executor_t>;
+
+	template <typename ServiceExec0>
+	basic_server(acceptor_wrap_t &&acceptor, ServiceExec0 &&service_executor, config_t config = {})
+		requires core_concepts::match_sched<ServiceExec0,service_executor_t>;
+
+#if RIWO_OPENSSL_SUPPORT
+	explicit basic_server(server_tls_context_ptr tls_context, config_t config = {}) requires (
+		std::same_as<executor_t,asio::any_io_executor> and
+		core_concepts::match_sched<io_executor_t,executor_t> and
+		core_concepts::match_sched<executor_t,service_executor_t>
+	);
+#endif //RIWO_OPENSSL_SUPPORT
+
+	basic_server(basic_server &&other) noexcept;
+	basic_server &operator=(basic_server &&other) noexcept;
 
 public:
-	template <method_enum...Method, typename Func, typename...AopPtrs>
-	basic_server &on_request(const path_opt_token_t &path_rules, Func &&func, AopPtrs&&...aops) requires
-		concepts::request_handler<Func,executor_t> and
-		concepts::aop_ptr_list<executor_t,AopPtrs...>;
+	template <method::well_known...Methods, typename Func, typename...Middleware>
+	basic_server &on_request
+	(core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware_values) requires
+		concepts::request_handler<Func,service_executor_t> and
+		concepts::middleware_list<service_executor_t,Middleware...>;
 
-	template <method_enum...Method>
-	basic_server &on_request(const path_opt_token_t &path_rules, ctrlr_aop_ptr_t ctrlr);
+	template <typename Func, typename...Middleware>
+	basic_server &on_request(method request_method,
+		core_concepts::text_p<char> auto &&path, Func &&func, Middleware&&...middleware_values
+	) requires
+		concepts::request_handler<Func,service_executor_t> and
+		concepts::middleware_list<service_executor_t,Middleware...>;
 
-	template <method_enum...Method>
-	basic_server &on_request(const path_opt_token_t &path_rules, ctrlr_aop_t *ctrlr);
+	template <method::well_known...Methods, core_concepts::text_p<char> Path>
+	basic_server &on_request(Path &&path, controller_ptr controller_value);
+
+	basic_server &on_server_error(server_error_handler_t handler);
+	basic_server &on_service_error(service_error_handler_t handler);
+
+	basic_server &use(middleware_ptr middleware_value);
+	basic_server &set_config(config_t config);
 
 	template <typename Func>
 	basic_server &on_default(Func &&func) requires
-		concepts::request_handler<Func,executor_t>;
+		concepts::request_handler<Func,service_executor_t>;
 
-public:
-	basic_server &on_server_error(server_error_handler_t func);
-	basic_server &on_service_error(service_error_handler_t func);
-
-	template <core_concepts::text_p<char> Text>
-	basic_server &unbound_request(const Text &path_rule = "");
-
+	basic_server &unbound_request(const core_concepts::text_p<char> auto &path);
 	basic_server &unbound_server_error();
 	basic_server &unbound_service_error();
 
 public:
-	basic_server &set_config(const config_t &config);
-	[[nodiscard]] config_t config() const noexcept;
+	basic_server &bind(endpoint_wrapper_t endpoint);
+	basic_server &bind(endpoint_wrapper_t endpoint, error_code &error) noexcept;
 
-	[[nodiscard]] executor_t get_executor() noexcept;
+	basic_server &start(size_t max = asio::socket_base::max_listen_connections);
+	basic_server &start(size_t max, error_code &error) noexcept;
+	basic_server &start(error_code &error) noexcept;
+
+	template <typename ServiceExec0>
+	basic_server &start(ServiceExec0 &&service_executor,
+		size_t max = asio::socket_base::max_listen_connections
+	) requires
+		core_concepts::match_sched<ServiceExec0,service_executor_t>;
+
+	template <typename ServiceExec0>
+	basic_server &start(ServiceExec0 &&service_executor, size_t max, error_code &error) noexcept
+		requires core_concepts::match_sched<ServiceExec0,service_executor_t>;
+
+	template <typename ServiceExec0>
+	basic_server &start(ServiceExec0 &&service_executor, error_code &error) noexcept
+		requires core_concepts::match_sched<ServiceExec0,service_executor_t>;
+
+	basic_server &serve(negotiated_transport_t transport);
+	basic_server &serve(negotiated_transport_t transport, error_code &error) noexcept;
+
 	basic_server &cancel() noexcept;
 	basic_server &stop() noexcept;
 
 public:
-	[[nodiscard]] const acceptor_wrap_t &acceptor_wrap() const;
-	[[nodiscard]] acceptor_wrap_t &acceptor_wrap();
+	[[nodiscard]] config_t config() const noexcept;
+
+	[[nodiscard]] const acceptor_t &acceptor() const noexcept;
+	[[nodiscard]] acceptor_t &acceptor() noexcept;
+
+	[[nodiscard]] const acceptor_wrap_t &acceptor_wrap() const noexcept;
+	[[nodiscard]] acceptor_wrap_t &acceptor_wrap() noexcept;
+
+	[[nodiscard]] executor_t get_executor() noexcept;
+	[[nodiscard]] service_executor_t get_service_executor() const noexcept;
 
 private:
 	class impl;
-	std::shared_ptr<impl> m_impl;
+	std::shared_ptr<impl> m_impl {};
 };
 
-template <core_concepts::exec Exec = asio::any_io_executor>
-using basic_tcp_server = basic_server<asio::basic_stream_socket<asio::ip::tcp,Exec>>;
+template <core_concepts::exec Exec = asio::any_io_executor,
+	core_concepts::exec ServiceExec = Exec>
+using basic_tcp_server = basic_server<Exec,ServiceExec>;
 
 using tcp_server = basic_tcp_server<>;
 using server = tcp_server;
@@ -148,37 +176,5 @@ using server = tcp_server;
 } //namespace riwo::http
 #include <riwo/http/server/detail/server.h>
 
-#if RIWO_OPENSSL_SUPPORT
-namespace riwo { namespace http
-{
 
-template <typename Protocol = asio::ip::tcp,
-		  core_concepts::exec Exec = asio::any_io_executor>
-using basic_ssl_server = basic_server <
-	asio::ssl::stream<asio::basic_stream_socket<Protocol,Exec>>
->;
-
-template <core_concepts::exec Exec = asio::any_io_executor>
-using basic_tls_server = basic_ssl_server<asio::ip::tcp,Exec>;
-
-using tls_server = basic_tls_server<>;
-using ssl_tcp_server = tls_server;
-using ssl_server = tls_server;
-
-} //namespace riwo::http
-
-namespace https
-{
-
-template <typename Protocol = asio::ip::tcp,
-		  concepts::exec Exec = asio::any_io_executor>
-using basic_server = http::basic_server <
-	asio::ssl::stream<asio::basic_stream_socket<Protocol,Exec>>
->;
-using tcp_server = basic_server<>;
-using server = tcp_server;
-
-}} //namespace riwo::https
-
-#endif //RIWO_OPENSSL_SUPPORT
 #endif //RIWO_HTTP_SERVER_SERVER_H

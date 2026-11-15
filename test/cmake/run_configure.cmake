@@ -108,7 +108,7 @@ if (TEST_EXPECT_SUCCESS)
 		message(FATAL_ERROR "The generated package does not expose core.")
 	endif ()
 
-	foreach(component system coro http exp_http websocket exp_websocket utils)
+	foreach(component system coro http websocket utils)
 		if (component IN_LIST expected_components)
 			set(expected_value ON)
 		else ()
@@ -134,18 +134,18 @@ if (TEST_EXPECT_SUCCESS)
 	endif ()
 
 	if (NOT "${TEST_EXPECT_HTTP2}" STREQUAL "")
-		set(exp_http_config
-			"${TEST_BINARY_DIR}/output/config_include/riwo/experimental/http/cxx/configs.h"
+		set(http_config
+			"${TEST_BINARY_DIR}/output/config_include/riwo/http/cxx/configs.h"
 		)
-		if (NOT EXISTS "${exp_http_config}")
+		if (NOT EXISTS "${http_config}")
 			message(FATAL_ERROR
-				"Configuration '${TEST_NAME}' did not generate the EXP_HTTP config."
+				"Configuration '${TEST_NAME}' did not generate the HTTP config."
 			)
 		endif ()
 
-		file(READ "${exp_http_config}" exp_http_config_contents)
-		if (NOT exp_http_config_contents MATCHES
-			"#define RIWO_EXP_HTTP_HTTP2_SUPPORT ${TEST_EXPECT_HTTP2}")
+		file(READ "${http_config}" http_config_contents)
+		if (NOT http_config_contents MATCHES
+			"#define RIWO_HTTP_HTTP2_SUPPORT ${TEST_EXPECT_HTTP2}")
 			message(FATAL_ERROR
 				"Configuration '${TEST_NAME}' generated an inconsistent HTTP/2 "
 				"capability; expected ${TEST_EXPECT_HTTP2}."
@@ -154,18 +154,18 @@ if (TEST_EXPECT_SUCCESS)
 	endif ()
 
 	if (NOT "${TEST_EXPECT_ZLIB}" STREQUAL "")
-		set(exp_http_config
-			"${TEST_BINARY_DIR}/output/config_include/riwo/experimental/http/cxx/configs.h"
+		set(http_config
+			"${TEST_BINARY_DIR}/output/config_include/riwo/http/cxx/configs.h"
 		)
-		if (NOT EXISTS "${exp_http_config}")
+		if (NOT EXISTS "${http_config}")
 			message(FATAL_ERROR
-				"Configuration '${TEST_NAME}' did not generate the EXP_HTTP config."
+				"Configuration '${TEST_NAME}' did not generate the HTTP config."
 			)
 		endif ()
 
-		file(READ "${exp_http_config}" exp_http_config_contents)
-		if (NOT exp_http_config_contents MATCHES
-			"#define RIWO_EXP_HTTP_ZLIB_SUPPORT ${TEST_EXPECT_ZLIB}")
+		file(READ "${http_config}" http_config_contents)
+		if (NOT http_config_contents MATCHES
+			"#define RIWO_HTTP_ZLIB_SUPPORT ${TEST_EXPECT_ZLIB}")
 			message(FATAL_ERROR
 				"Configuration '${TEST_NAME}' generated an inconsistent zlib "
 				"capability; expected ${TEST_EXPECT_ZLIB}."

@@ -119,12 +119,7 @@ foreach(coro OFF ON)
 					"RIWO_BUILD_WEBSOCKET=${websocket}"
 					"RIWO_BUILD_UTILITIES=${utils}"
 				)
-				if (http AND NOT coro)
-					add_riwo_configure_case(${case_name}
-						ERROR "<HTTP> module depends on <Coroutine> module"
-						OPTIONS ${case_options}
-					)
-				elseif (websocket AND NOT http)
+				if (websocket AND NOT http)
 					add_riwo_configure_case(${case_name}
 						ERROR "<WebSocket> module depends on <HTTP> module"
 						OPTIONS ${case_options}
@@ -173,7 +168,6 @@ add_riwo_configure_case(crypto-disabled SUCCESS
 	OPTIONS
 		"RIWO_BUILD_CRYPTO=OFF"
 		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=OFF"
 	COMPONENTS core system coro
 )
 add_riwo_configure_case(http-without-crypto
@@ -182,24 +176,12 @@ add_riwo_configure_case(http-without-crypto
 		"RIWO_BUILD_CRYPTO=OFF"
 		"RIWO_BUILD_HTTP=ON"
 )
-add_riwo_configure_case(http-exp-without-crypto
-	ERROR "<EXP_HTTP> module depends on <Crypto> module"
-	OPTIONS
-		"RIWO_BUILD_CRYPTO=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-)
 add_riwo_configure_case(http-without-system
 	ERROR "<HTTP> module depends on <System> module"
 	OPTIONS
 		"RIWO_BUILD_SYSTEM=OFF"
 		"RIWO_BUILD_CORO=ON"
 		"RIWO_BUILD_HTTP=ON"
-)
-add_riwo_configure_case(http-exp-without-system
-	ERROR "<EXP_HTTP> module depends on <System> module"
-	OPTIONS
-		"RIWO_BUILD_SYSTEM=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
 )
 add_riwo_configure_case(utils-without-system
 	ERROR "<Utilities> module depends on <System> module"
@@ -208,123 +190,98 @@ add_riwo_configure_case(utils-without-system
 		"RIWO_BUILD_CORO=ON"
 		"RIWO_BUILD_UTILITIES=ON"
 )
-add_riwo_configure_case(http-exp-without-coro SUCCESS
+add_riwo_configure_case(http-without-coro SUCCESS
 	OPTIONS
 		"RIWO_BUILD_CORO=OFF"
-		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=OFF"
-	COMPONENTS core system exp_http
-)
-add_riwo_configure_case(http-exp-standalone SUCCESS
-	OPTIONS
-		"RIWO_BUILD_CORO=ON"
-		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=OFF"
-	COMPONENTS core system coro exp_http
-)
-add_riwo_configure_case(http-exp-coexists-with-http SUCCESS
-	OPTIONS
-		"RIWO_BUILD_CORO=ON"
 		"RIWO_BUILD_HTTP=ON"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=OFF"
-	COMPONENTS core system coro http exp_http
+		"RIWO_HTTP2_SUPPORT=OFF"
+	COMPONENTS core system http
 )
 
 find_package(Boost CONFIG QUIET)
 if (Boost_FOUND)
-	add_riwo_configure_case(http-exp-boost-asio SUCCESS
+	add_riwo_configure_case(http-boost-asio SUCCESS
 		ASIO BOOST
 		OPTIONS
 			"RIWO_BUILD_CORO=ON"
-			"RIWO_BUILD_HTTP=OFF"
-			"RIWO_BUILD_EXP_HTTP=ON"
+			"RIWO_BUILD_HTTP=ON"
 			"RIWO_ASIO_PROVIDER=BOOST"
-			"RIWO_EXP_HTTP2_SUPPORT=OFF"
-		COMPONENTS core system coro exp_http
+			"RIWO_HTTP2_SUPPORT=OFF"
+		COMPONENTS core system coro http
 	)
 endif ()
 
-add_riwo_configure_case(websocket-exp-without-http-exp
-	ERROR "<WebSocket_EXP> module depends on <EXP_HTTP> module"
-	OPTIONS
-		"RIWO_BUILD_CORO=ON"
-		"RIWO_BUILD_EXP_HTTP=OFF"
-		"RIWO_BUILD_EXP_WEBSOCKET=ON"
-)
-add_riwo_configure_case(websocket-exp-standalone SUCCESS
+add_riwo_configure_case(websocket-without-http
+	ERROR "<WebSocket> module depends on <HTTP> module"
 	OPTIONS
 		"RIWO_BUILD_CORO=ON"
 		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_BUILD_WEBSOCKET=OFF"
-		"RIWO_BUILD_EXP_WEBSOCKET=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=OFF"
-	COMPONENTS core system coro exp_http exp_websocket
+		"RIWO_BUILD_WEBSOCKET=ON"
 )
-add_riwo_configure_case(http-exp-http2-auto-unavailable SUCCESS
+add_riwo_configure_case(websocket-enabled SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CORO=ON"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_BUILD_WEBSOCKET=ON"
+		"RIWO_HTTP2_SUPPORT=OFF"
+	COMPONENTS core system coro http websocket
+)
+add_riwo_configure_case(http2-auto-unavailable SUCCESS
 	HTTP2 0
 	OPTIONS
 		"RIWO_BUILD_CORO=ON"
-		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=AUTO"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_HTTP2_SUPPORT=AUTO"
 		"CMAKE_DISABLE_FIND_PACKAGE_nghttp2=TRUE"
 		"CMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE"
 		"RIWO_NGHTTP2_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
 		"RIWO_NGHTTP2_LIBRARY=${CMAKE_COMMAND}"
-	COMPONENTS core system coro exp_http
+	COMPONENTS core system coro http
 )
-add_riwo_configure_case(http-exp-http2-required-unavailable
-	ERROR "RIWO_EXP_HTTP2_SUPPORT=ON requires an nghttp2 library"
+add_riwo_configure_case(http2-required-unavailable
+	ERROR "RIWO_HTTP2_SUPPORT=ON requires an nghttp2 library"
 	OPTIONS
 		"RIWO_BUILD_CORO=ON"
-		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=ON"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_HTTP2_SUPPORT=ON"
 		"CMAKE_DISABLE_FIND_PACKAGE_nghttp2=TRUE"
 		"CMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE"
 		"RIWO_NGHTTP2_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
 		"RIWO_NGHTTP2_LIBRARY=${CMAKE_COMMAND}"
 )
-add_riwo_configure_case(http-exp-invalid-http2-mode
-	ERROR "RIWO_EXP_HTTP2_SUPPORT must be AUTO, ON or OFF"
-	OPTIONS "RIWO_EXP_HTTP2_SUPPORT=invalid"
+add_riwo_configure_case(http-invalid-http2-mode
+	ERROR "RIWO_HTTP2_SUPPORT must be AUTO, ON or OFF"
+	OPTIONS "RIWO_HTTP2_SUPPORT=invalid"
 )
-set(riwo_exp_http_zlib_options
+set(riwo_http_zlib_options
 	"RIWO_BUILD_CORO=ON"
-	"RIWO_BUILD_HTTP=OFF"
-	"RIWO_BUILD_EXP_HTTP=ON"
-	"RIWO_EXP_HTTP2_SUPPORT=OFF"
-	"RIWO_EXP_HTTP_ZLIB_SUPPORT=ON"
+	"RIWO_BUILD_HTTP=ON"
+	"RIWO_HTTP2_SUPPORT=OFF"
+	"RIWO_HTTP_ZLIB_SUPPORT=ON"
 	"ZLIB_INCLUDE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/zlib"
 	"ZLIB_LIBRARY=${CMAKE_COMMAND}"
 )
-add_riwo_configure_case(http-exp-zlib-default-off SUCCESS
+add_riwo_configure_case(http-zlib-default-off SUCCESS
 	ZLIB 0
 	OPTIONS
 		"RIWO_BUILD_CORO=ON"
-		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=OFF"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_HTTP2_SUPPORT=OFF"
 		"CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
-	COMPONENTS core system coro exp_http
+	COMPONENTS core system coro http
 )
-add_riwo_configure_case(http-exp-zlib-enabled SUCCESS
+add_riwo_configure_case(http-zlib-enabled SUCCESS
 	ZLIB 1
-	OPTIONS ${riwo_exp_http_zlib_options}
-	COMPONENTS core system coro exp_http
+	OPTIONS ${riwo_http_zlib_options}
+	COMPONENTS core system coro http
 )
-add_riwo_configure_case(http-exp-zlib-required-unavailable
+add_riwo_configure_case(http-zlib-required-unavailable
 	ERROR "ZLIB"
 	OPTIONS
 		"RIWO_BUILD_CORO=ON"
-		"RIWO_BUILD_HTTP=OFF"
-		"RIWO_BUILD_EXP_HTTP=ON"
-		"RIWO_EXP_HTTP2_SUPPORT=OFF"
-		"RIWO_EXP_HTTP_ZLIB_SUPPORT=ON"
+		"RIWO_BUILD_HTTP=ON"
+		"RIWO_HTTP2_SUPPORT=OFF"
+		"RIWO_HTTP_ZLIB_SUPPORT=ON"
 		"CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
 add_riwo_configure_case(invalid-asio-provider
@@ -401,25 +358,21 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=OFF"
 			"RIWO_BUILD_HTTP=OFF"
-			"RIWO_BUILD_EXP_HTTP=OFF"
 			"RIWO_BUILD_WEBSOCKET=OFF"
-			"RIWO_BUILD_EXP_WEBSOCKET=OFF"
 			"RIWO_BUILD_UTILITIES=OFF"
 		COMPONENTS core system
 	)
-	add_riwo_configure_case(http-exp-fuzzer-without-http SUCCESS
+	add_riwo_configure_case(http-fuzzer SUCCESS
 		OPTIONS
 			"BUILD_TESTING=ON"
 			"RIWO_BUILD_FUZZ_TESTS=ON"
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=ON"
-			"RIWO_BUILD_HTTP=OFF"
-			"RIWO_BUILD_EXP_HTTP=ON"
-			"RIWO_EXP_HTTP2_SUPPORT=OFF"
+			"RIWO_BUILD_HTTP=ON"
+			"RIWO_HTTP2_SUPPORT=OFF"
 			"RIWO_BUILD_WEBSOCKET=OFF"
-			"RIWO_BUILD_EXP_WEBSOCKET=OFF"
 			"RIWO_BUILD_UTILITIES=OFF"
-		COMPONENTS core system coro exp_http
+		COMPONENTS core system coro http
 	)
 endif ()
 
@@ -431,9 +384,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 			"RIWO_BUILD_EXAMPLES=OFF"
 			"RIWO_BUILD_CORO=OFF"
 			"RIWO_BUILD_HTTP=OFF"
-			"RIWO_BUILD_EXP_HTTP=OFF"
 			"RIWO_BUILD_WEBSOCKET=OFF"
-			"RIWO_BUILD_EXP_WEBSOCKET=OFF"
 			"RIWO_BUILD_UTILITIES=OFF"
 		COMPONENTS core system
 	)
@@ -541,21 +492,21 @@ add_riwo_package_probe_case(websocket-restores-zlib
 	COMPONENTS core system coro http websocket
 	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
-set(riwo_exp_http_zlib_static_options
+set(riwo_http_zlib_static_options
 	"RIWO_BUILD_STATIC=ON"
-	${riwo_exp_http_zlib_options}
+	${riwo_http_zlib_options}
 )
-add_riwo_package_probe_case(http-exp-ignores-unrequested-zlib FOUND
+add_riwo_package_probe_case(http-ignores-unrequested-zlib FOUND
 	COMPONENT coro
-	OPTIONS ${riwo_exp_http_zlib_static_options}
-	COMPONENTS core system coro exp_http
+	OPTIONS ${riwo_http_zlib_static_options}
+	COMPONENTS core system coro http
 	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
-add_riwo_package_probe_case(http-exp-restores-zlib
-	COMPONENT exp_http
+add_riwo_package_probe_case(http-restores-zlib
+	COMPONENT http
 	ERROR "dependency ZLIB"
-	OPTIONS ${riwo_exp_http_zlib_static_options}
-	COMPONENTS core system coro exp_http
+	OPTIONS ${riwo_http_zlib_static_options}
+	COMPONENTS core system coro http
 	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
 set(riwo_consumer_components core)
@@ -579,18 +530,10 @@ foreach(component system coro http websocket utils)
 
 endforeach()
 
-if (RIWO_BUILD_EXP_HTTP)
-	list(APPEND riwo_consumer_components exp_http)
-endif ()
-
-if (RIWO_BUILD_EXP_WEBSOCKET)
-	list(APPEND riwo_consumer_components exp_websocket)
-endif ()
-
 string(JOIN "," riwo_consumer_components_arg ${riwo_consumer_components})
 set(riwo_missing_component unknown)
 
-foreach(component system coro http exp_http websocket exp_websocket utils)
+foreach(component system coro http websocket utils)
 	if (NOT component IN_LIST riwo_consumer_components)
 		set(riwo_missing_component ${component})
 		break()

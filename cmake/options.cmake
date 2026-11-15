@@ -71,10 +71,7 @@ option(RIWO_BUILD_HTTP
 set(RIWO_HTTP_SUPPORT ${RIWO_BUILD_HTTP})
 
 if (RIWO_BUILD_HTTP)
-	if (NOT RIWO_BUILD_CORO)
-		message(FATAL_ERROR "${PRO_NAME}: <HTTP> module depends on <Coroutine> module.")
-		unset(RIWO_BUILD_HTTP)
-	elseif (NOT RIWO_BUILD_SYSTEM)
+	if (NOT RIWO_BUILD_SYSTEM)
 		message(FATAL_ERROR "${PRO_NAME}: <HTTP> module depends on <System> module.")
 		unset(RIWO_BUILD_HTTP)
 	elseif (NOT RIWO_BUILD_CRYPTO)
@@ -87,34 +84,15 @@ if (RIWO_BUILD_HTTP)
 	endif ()
 endif ()
 
-option(RIWO_BUILD_EXP_HTTP
-	"-- ${PRO_NAME}: Build module <EXP_HTTP>." OFF
+set(RIWO_HTTP2_SUPPORT "AUTO" CACHE STRING
+	"HTTP/2 support for HTTP: AUTO, ON or OFF."
 )
-set(RIWO_EXP_HTTP_SUPPORT ${RIWO_BUILD_EXP_HTTP})
+set_property(CACHE RIWO_HTTP2_SUPPORT PROPERTY STRINGS AUTO ON OFF)
+string(TOUPPER "${RIWO_HTTP2_SUPPORT}" RIWO_HTTP2_SUPPORT)
 
-if (RIWO_BUILD_EXP_HTTP)
-	if (NOT RIWO_BUILD_SYSTEM)
-		message(FATAL_ERROR "${PRO_NAME}: <EXP_HTTP> module depends on <System> module.")
-		unset(RIWO_BUILD_EXP_HTTP)
-	elseif (NOT RIWO_BUILD_CRYPTO)
-		message(FATAL_ERROR "${PRO_NAME}: <EXP_HTTP> module depends on <Crypto> module.")
-		unset(RIWO_BUILD_EXP_HTTP)
-	elseif (RIWO_OPENSSL_SUPPORT)
-		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS_EXP>.")
-	else ()
-		message(STATUS "${PRO_NAME}: Build module <EXP_HTTP>.")
-	endif ()
-endif ()
-
-set(RIWO_EXP_HTTP2_SUPPORT "AUTO" CACHE STRING
-	"HTTP/2 support for EXP_HTTP: AUTO, ON or OFF."
-)
-set_property(CACHE RIWO_EXP_HTTP2_SUPPORT PROPERTY STRINGS AUTO ON OFF)
-string(TOUPPER "${RIWO_EXP_HTTP2_SUPPORT}" RIWO_EXP_HTTP2_SUPPORT)
-
-if (NOT RIWO_EXP_HTTP2_SUPPORT MATCHES "^(AUTO|ON|OFF)$")
+if (NOT RIWO_HTTP2_SUPPORT MATCHES "^(AUTO|ON|OFF)$")
 	message(FATAL_ERROR
-		"${PRO_NAME}: RIWO_EXP_HTTP2_SUPPORT must be AUTO, ON or OFF."
+		"${PRO_NAME}: RIWO_HTTP2_SUPPORT must be AUTO, ON or OFF."
 	)
 endif ()
 
@@ -125,26 +103,12 @@ set(RIWO_WEBSOCKET_SUPPORT ${RIWO_BUILD_WEBSOCKET})
 
 if (RIWO_BUILD_WEBSOCKET)
 	if (NOT RIWO_BUILD_HTTP)
-		message(FATAL_ERROR "${PRO_NAME}: <WebSocket> module depends on <HTTP> module.")
+		message(FATAL_ERROR
+			"${PRO_NAME}: <WebSocket> module depends on <HTTP> module."
+		)
 		unset(RIWO_BUILD_WEBSOCKET)
 	else ()
 		message(STATUS "${PRO_NAME}: Build module <WebSocket>.")
-	endif ()
-endif ()
-
-option(RIWO_BUILD_EXP_WEBSOCKET
-	"-- ${PRO_NAME}: Build module <WebSocket_EXP>." OFF
-)
-set(RIWO_EXP_WEBSOCKET_SUPPORT ${RIWO_BUILD_EXP_WEBSOCKET})
-
-if (RIWO_BUILD_EXP_WEBSOCKET)
-	if (NOT RIWO_BUILD_EXP_HTTP)
-		message(FATAL_ERROR
-			"${PRO_NAME}: <WebSocket_EXP> module depends on <EXP_HTTP> module."
-		)
-		unset(RIWO_BUILD_EXP_WEBSOCKET)
-	else ()
-		message(STATUS "${PRO_NAME}: Build module <WebSocket_EXP>.")
 	endif ()
 endif ()
 

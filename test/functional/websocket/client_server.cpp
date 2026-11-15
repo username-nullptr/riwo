@@ -2,1147 +2,632 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
+#include "scoped_environment.h"
+#include <riwo/websocket.h>
 
-#include <riwo/websocket/client.h>
-#include <riwo/websocket/retry.h>
-#include <riwo/websocket/server.h>
-#include <riwo/websocket/detail/permessage_deflate.h>
+#include <riwo/core/asio/asio.h>
+#include <memory>
+#include <string>
+#include <thread>
 
 namespace
 {
 
+namespace http = riwo::http;
 namespace ws = riwo::websocket;
 
-class observing_connector final : public riwo::http::connector
+using scoped_environment = riwo::test::scoped_environment;
+
+class recording_connector final :
+	public http::basic_transport_connector<riwo::io_context_t::executor_type>
 {
 public:
-	// Keep a non-owning handle so the adopted stream remains the sole owner.
-	explicit observing_connector(executor_t exec) :
-		riwo::http::connector(std::move(exec)) {}
+	using executor_type = riwo::io_context_t::executor_type;
 
-	[[nodiscard]] connection_ptr last_connection() const noexcept
-	{
-		return m_last_connection.lock();
+	explicit recording_connector(executor_type executor) :
+		executor_(std::move(executor)) {}
+
+	[[nodiscard]] executor_type get_executor() const noexcept override {
+		return executor_;
 	}
 
-protected:
-	riwo::sys_expected<connection_ptr> do_connect(
-		const riwo::http::connect_target &target
-	) noexcept override
+	[[nodiscard]] riwo::sys_expected<result_t> connect_sync(
+		const http::connect_request &request) noexcept override
 	{
-		auto result = riwo::http::connector::do_connect(target);
-		if( result )
-			m_last_connection = *result;
-		return result;
+		record(request);
+		return riwo::sys_unexpected(asio::error::make_error_code(
+			asio::error::connection_refused));
 	}
 
-	riwo::awaitable<riwo::sys_expected<connection_ptr>> co_do_connect(
-		const riwo::http::connect_target &target
-	) noexcept override
+	void connect(http::connect_request request, connect_handler_t handler) override
 	{
-		auto result = co_await riwo::http::connector::co_do_connect(target);
-		if( result )
-			m_last_connection = *result;
-		co_return result;
+		record(request);
+		asio::post(executor_,
+			[handler = std::move(handler)]() mutable
+			{
+				std::move(handler)(asio::error::make_error_code(
+					asio::error::connection_refused), result_t{});
+			});
+	}
+
+	void cancel() noexcept override {}
+
+	[[nodiscard]] std::optional<http::connect_request> last_request() const
+	{
+		std::lock_guard lock(mutex_);
+		return last_request_;
 	}
 
 private:
-	std::weak_ptr<connection_t> m_last_connection {};
+	void record(const http::connect_request &request)
+	{
+		std::lock_guard lock(mutex_);
+		last_request_ = request;
+	}
+
+	executor_type executor_;
+	mutable std::mutex mutex_;
+	std::optional<http::connect_request> last_request_;
 };
 
-void owned_handler_round_trip()
+void environment_proxy_selection()
 {
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server_config server_config;
-	server_config.default_upgrade.supported_subprotocols = {"owned.chat"};
-	server_config.default_upgrade.require_subprotocol = true;
-	server_config.default_upgrade.stream.ping_interval =
-		std::chrono::milliseconds(19000);
-	server_config.default_upgrade.stream.pong_timeout_retries = 4;
-	ws::server service(std::move(acceptor), server_config);
+	const scoped_environment environment({
+		"ws_proxy", "WS_PROXY", "wss_proxy", "WSS_PROXY",
+		"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
+		"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY",
+	});
 
-	service.on_connection("/echo/{id}",
-		[](ws::accept_result accepted) -> riwo::awaitable<void>
-		{
-			RIWO_TEST_CHECK_EQ(
-				accepted.stream.config().ping_interval,
-				std::chrono::milliseconds(19000));
-			RIWO_TEST_CHECK_EQ(
-				accepted.stream.config().pong_timeout_retries, 4U);
-			auto id = accepted.request.path_arguments.find("id");
-			const auto id_text = id == accepted.request.path_arguments.end() ?
-				std::string("missing") : id->second.to_string();
-			auto request = co_await accepted.stream.read<std::string>(
-				riwo::use_awaitable);
-			co_await accepted.stream.write_text(
-				"owned:" + id_text + ": " + request.body,
-				riwo::use_awaitable);
-			auto close_result = co_await accepted.stream.read<std::string>(
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[close_error, trailing] = close_result;
-			riwo::ignore_unused(close_error, trailing);
-			co_return;
-		});
-	service.bind({riwo::ip_type::v4, 0}).start();
+	auto clear = [] {
+		for(const auto name : {
+			"ws_proxy", "WS_PROXY", "wss_proxy", "WSS_PROXY",
+			"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY",
+			"all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"
+		})
+			RIWO_TEST_CHECK(riwo::system::environment::unset(name));
+	};
+	auto open_and_observe = [](std::string_view endpoint, bool use_environment) {
+		riwo::io_context_t context;
+		auto connector = std::make_shared<recording_connector>(
+			context.get_executor());
+		http::client_config config;
+		config.protocols.requirement = http::protocol_requirement::v1;
+		config.proxy.use_environment = use_environment;
+		config.retries.max_attempts = 1;
+		http::basic_client<riwo::io_context_t::executor_type> http_client(
+			context.get_executor(), connector, config
+		);
 
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	ws::client client(context.get_executor());
-	auto completed = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			ws::connect_request request(std::format(
-				"ws://127.0.0.1:{}/echo/7", port));
-			request.subprotocols = {"owned.chat"};
-			auto stream = co_await client.open(
-				std::move(request), riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
-			RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "owned.chat");
-
-			co_await stream.write_text("hello", riwo::use_awaitable);
-			auto response = co_await stream.read<std::string>(
-				riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(response.body, "owned:7: hello");
-			auto close_result = co_await stream.close(
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[close_error, closed] = close_result;
-			service.stop();
-			RIWO_TEST_CHECK(not close_error);
-			RIWO_TEST_CHECK(closed.clean);
-			co_return;
-		}, asio::use_future);
-	context.run();
-	completed.get();
-}
-
-void owned_accept_round_trip()
-{
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	ws::upgrade_options options;
-	options.supported_subprotocols = {"meta.v1", "meta.v2"};
-	options.require_subprotocol = true;
-	options.stream.ping_interval = std::chrono::milliseconds(17000);
-	options.stream.pong_timeout_retries = 2;
-	size_t selector_calls = 0;
-	options.subprotocol_selector = [&](const ws::request_info &request,
-		std::span<const std::string> offered)
-		-> riwo::optional<std::string>
-	{
-		++selector_calls;
-		if( request.path == "/accept/42" and
-			request.request_headers.contains("X-WebSocket-Metadata") and
-			offered.size() == 2 and offered[0] == "meta.v1" and
-			offered[1] == "meta.v2" )
-			return std::string("meta.v2");
-		return riwo::nullopt;
+		riwo::error_code error;
+		auto stream = ws::open(http_client,
+			ws::connect_request(riwo::url(endpoint)), error);
+		riwo::ignore_unused(stream);
+		RIWO_TEST_CHECK_EQ(error,
+			asio::error::make_error_code(asio::error::connection_refused));
+		return connector->last_request();
 	};
 
-	auto accepted = asio::co_spawn(context,
-		[&, options = std::move(options)]() mutable -> riwo::awaitable<void>
-		{
-			auto connection = co_await service.accept(
-				std::move(options), riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(connection.stream.config().ping_interval,
-				std::chrono::milliseconds(17000));
-			RIWO_TEST_CHECK_EQ(
-				connection.stream.config().pong_timeout_retries, 2U);
-			RIWO_TEST_CHECK_EQ(connection.request.method,
-				riwo::http::method::get);
-			RIWO_TEST_CHECK_EQ(connection.request.version,
-				riwo::http::version::v11);
-			RIWO_TEST_CHECK_EQ(connection.request.target,
-				"/accept/42?mode=full");
-			RIWO_TEST_CHECK_EQ(connection.request.path, "/accept/42");
-			RIWO_TEST_CHECK_EQ(connection.request.request_headers
-				.at("X-WebSocket-Metadata").to_string(), "present");
-			auto mode = connection.request.query_parameters.find("mode");
-			RIWO_TEST_CHECK(mode !=
-				connection.request.query_parameters.end());
-			RIWO_TEST_CHECK_EQ(mode->second.to_string(), "full");
-			RIWO_TEST_CHECK(connection.request.path_arguments.empty());
-			RIWO_TEST_CHECK(connection.request.remote_endpoint.port != 0);
-			RIWO_TEST_CHECK_EQ(connection.request.local_endpoint.port, port);
-			RIWO_TEST_CHECK_EQ(connection.handshake.subprotocol, "meta.v2");
-			RIWO_TEST_CHECK(connection.handshake.extensions.empty());
-			RIWO_TEST_CHECK_EQ(connection.stream.negotiated_subprotocol(),
-				"meta.v2");
-			RIWO_TEST_CHECK(connection.stream.negotiated_extensions().empty());
-			auto message = co_await connection.stream.read<std::string>(
-				riwo::use_awaitable);
-			co_await connection.stream.write_text(
-				message.body, riwo::use_awaitable);
-			auto close_result = co_await connection.stream.read<std::string>(
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[close_error, trailing] = close_result;
-			riwo::ignore_unused(close_error, trailing);
-			co_return;
-		}, asio::use_future);
+	clear();
+	RIWO_TEST_CHECK(riwo::system::environment::set("ws_proxy",
+		"http://user:secret@ws-environment-proxy.test:8082/"));
+	RIWO_TEST_CHECK(riwo::system::environment::set("http_proxy",
+		"http://http-fallback-proxy.test:8080/"));
+	{
+		auto observed = open_and_observe(
+			"ws://websocket-environment-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(observed->proxy.forward_proxy.has_value());
+		RIWO_TEST_CHECK_EQ(observed->proxy.forward_proxy->host(),
+			"ws-environment-proxy.test");
+		RIWO_TEST_CHECK_EQ(observed->proxy.authorization.value(),
+			"Basic dXNlcjpzZWNyZXQ=");
+	}
 
-	ws::client_config client_config;
-	client_config.stream.ping_interval =
-		std::chrono::milliseconds(23000);
-	client_config.stream.pong_timeout_retries = 3;
-	ws::client client(context.get_executor(), client_config);
-	auto connected = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			ws::connect_request request(std::format(
-				"ws://127.0.0.1:{}/accept/42?mode=full", port));
-			request.subprotocols = {"meta.v1", "meta.v2"};
-			request.request_options.set_header(
-				"X-WebSocket-Metadata", "present");
-			auto stream = co_await client.open(
-				std::move(request), riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(stream.config().ping_interval,
-				std::chrono::milliseconds(23000));
-			RIWO_TEST_CHECK_EQ(stream.config().pong_timeout_retries, 3U);
-			RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "meta.v2");
-			co_await stream.write_text("accept-mode", riwo::use_awaitable);
-			auto response = co_await stream.read<std::string>(
-				riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(response.body, "accept-mode");
-			auto close_result = co_await stream.close(
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[close_error, closed] = close_result;
-			service.stop();
-			RIWO_TEST_CHECK(not close_error);
-			RIWO_TEST_CHECK(closed.clean);
-			co_return;
-		}, asio::use_future);
+	RIWO_TEST_CHECK(riwo::system::environment::set("wss_proxy",
+		"http://secure-ws-environment-proxy.test:8444/"));
+	RIWO_TEST_CHECK(riwo::system::environment::set("https_proxy",
+		"http://https-fallback-proxy.test:8443/"));
+	{
+		auto observed = open_and_observe(
+			"wss://secure-websocket-environment-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(observed->proxy.forward_proxy.has_value());
+		RIWO_TEST_CHECK_EQ(observed->proxy.forward_proxy->host(),
+			"secure-ws-environment-proxy.test");
+	}
 
-	context.run();
-	accepted.get();
-	connected.get();
-	RIWO_TEST_CHECK_EQ(selector_calls, 1U);
+	RIWO_TEST_CHECK(riwo::system::environment::set("no_proxy",
+		"websocket-environment-origin.test"));
+	{
+		auto observed = open_and_observe(
+			"ws://websocket-environment-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
+	}
+
+	RIWO_TEST_CHECK(riwo::system::environment::unset("no_proxy"));
+	{
+		auto observed = open_and_observe(
+			"ws://websocket-environment-origin.test/socket", false);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
+	}
+
+	RIWO_TEST_CHECK(riwo::system::environment::unset("wss_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("https_proxy"));
+	RIWO_TEST_CHECK(riwo::system::environment::unset("all_proxy"));
+	{
+		auto observed = open_and_observe(
+			"wss://https-only-origin.test/socket", true);
+		RIWO_TEST_CHECK(observed.has_value());
+		RIWO_TEST_CHECK(!observed->proxy.forward_proxy.has_value());
+	}
 }
 
-void owned_configuration_and_resources()
+void websocket_round_trip(bool use_http2, bool compression)
 {
-	using namespace std::chrono_literals;
 	riwo::io_context_t context;
-	riwo::http::client http_client(context.get_executor());
-	auto cookie_store = http_client.cookie_store();
-
-	ws::client_config client_config;
-	client_config.handshake_timeout = 321ms;
-	client_config.stream.max_message_size = 4096;
-	client_config.stream.ping_interval = 7s;
-	client_config.stream.pong_timeout_retries = 5;
-	client_config.no_delay = riwo::nullopt;
-	ws::client original(std::move(http_client), client_config);
-	RIWO_TEST_CHECK_EQ(original.config().handshake_timeout, 321ms);
-	RIWO_TEST_CHECK_EQ(original.config().stream.max_message_size, 4096U);
-	RIWO_TEST_CHECK_EQ(original.config().stream.ping_interval, 7s);
-	RIWO_TEST_CHECK_EQ(original.config().stream.pong_timeout_retries, 5U);
-	RIWO_TEST_CHECK(not original.config().no_delay.has_value());
-	RIWO_TEST_CHECK_EQ(original.cookie_store(), cookie_store);
-	RIWO_TEST_CHECK(original.get_executor() == context.get_executor());
-	const auto &const_client = original;
-	RIWO_TEST_CHECK_EQ(&const_client.http_client(), &original.http_client());
-
-	ws::client moved(std::move(original));
-	ws::client assigned(context.get_executor());
-	assigned = std::move(moved);
-	RIWO_TEST_CHECK_EQ(assigned.cookie_store(), cookie_store);
-	RIWO_TEST_CHECK_EQ(assigned.config().handshake_timeout, 321ms);
-
 	asio::ip::tcp::acceptor acceptor(context);
 	ws::server_config server_config;
-	server_config.max_pending_handshakes = 7;
-	server_config.default_upgrade.stream.ping_interval = 9s;
-	server_config.default_upgrade.stream.pong_timeout_retries = 6;
-	ws::server service(std::move(acceptor), server_config);
-	RIWO_TEST_CHECK_EQ(service.config().max_pending_handshakes, 7U);
-	RIWO_TEST_CHECK_EQ(service.config().default_upgrade.stream.ping_interval,
-		9s);
-	RIWO_TEST_CHECK_EQ(
-		service.config().default_upgrade.stream.pong_timeout_retries, 6U);
-	RIWO_TEST_CHECK(service.get_executor() == context.get_executor());
-	const auto &const_service = service;
-	RIWO_TEST_CHECK_EQ(&const_service.http_server(), &service.http_server());
-
-	server_config.max_pending_handshakes = 3;
-	server_config.pending_handshake_timeout = 456ms;
-	service.set_config(server_config);
-	RIWO_TEST_CHECK_EQ(service.config().max_pending_handshakes, 3U);
-	RIWO_TEST_CHECK_EQ(service.config().pending_handshake_timeout, 456ms);
-}
-
-void client_no_delay_modes()
-{
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-	service.on_default([](ws::accept_result accepted) -> riwo::awaitable<void>
+	if( use_http2 )
 	{
-		auto read_result = co_await accepted.stream.read<std::string>(
-			asio::as_tuple(riwo::use_awaitable));
-		auto &[error, message] = read_result;
-		riwo::ignore_unused(error, message);
-	});
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	const auto endpoint = std::format("ws://127.0.0.1:{}/no-delay", port);
+#if RIWO_HTTP_HTTP2_SUPPORT
+		server_config.http.protocols.requirement =
+			http::protocol_requirement::v2;
+#else
+		return ;
+#endif
+	}
+	else
+		server_config.http.protocols.requirement =
+			http::protocol_requirement::v1;
+
+	ws::server service(std::move(acceptor), server_config);
+	auto handler = [](ws::accept_result accepted)
+		-> riwo::awaitable<void>
+	{
+		for(;;)
+		{
+			auto result = co_await accepted.stream.read<std::string>(
+				asio::as_tuple(riwo::use_awaitable));
+			auto &[error, message] = result;
+			if( error ) break;
+			if( message.type == ws::message_type::text )
+				co_await accepted.stream.write_text(message.body,
+					riwo::use_awaitable);
+			else
+				co_await accepted.stream.write_binary(
+					riwo::buffer(message.body), riwo::use_awaitable);
+		}
+	};
+	ws::upgrade_options options;
+	riwo::optional<ws::request_info> validated_request;
+	options.supported_subprotocols = {"riwo.echo.v1"};
+	options.require_subprotocol = true;
+	options.async_request_validator =
+	[&validated_request](const ws::request_info &request) -> riwo::awaitable<
+		ws::upgrade_validation_result>
+	{
+		validated_request = request;
+		co_return riwo::nullopt;
+	};
+	options.async_subprotocol_selector =
+	[](const ws::request_info &,
+		std::span<const std::string> offered)
+		-> riwo::awaitable<riwo::optional<std::string>>
+	{
+		co_return offered.empty() ? riwo::nullopt :
+			riwo::optional<std::string>(offered.front());
+	};
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+	if( compression )
+		options.supported_extensions.push_back(
+			ws::permessage_deflate_extension());
+#else
+	riwo::ignore_unused(compression);
+#endif
+	service.bind({riwo::ip_type::v4, 0});
+	service.on_connection("/echo", std::move(handler), std::move(options));
+	service.on_server_error([](riwo::error_code error) {
+		std::cerr << "WebSocket server error: " << error.message() << '\n';
+		return false;
+	}).on_service_error([](ws::server::context_t &,
+		const std::exception &error) {
+		std::cerr << "WebSocket service error: " << error.what() << '\n';
+		return false;
+	}).start();
+
+	ws::client_config client_config;
+	if( use_http2 )
+{
+#if RIWO_HTTP_HTTP2_SUPPORT
+		client_config.http.protocols.requirement =
+			http::protocol_requirement::v2;
+#endif
+	}
+	else
+		client_config.http.protocols.requirement =
+			http::protocol_requirement::v1;
+	ws::client client(context, client_config);
+	const auto endpoint = std::format("ws://127.0.0.1:{}/echo?case=roundtrip",
+		service.http_server().acceptor().local_endpoint().port());
 
 	auto completed = asio::co_spawn(context, [&]() -> riwo::awaitable<void>
 	{
-		auto verify = [&](bool http_no_delay, riwo::optional<bool> ws_no_delay,
-			bool expected) -> riwo::awaitable<void>
-		{
-			auto connector = std::make_shared<observing_connector>(
-				context.get_executor());
-			riwo::http::connection_pool pool(connector);
-			riwo::http::client_config http_config;
-			http_config.no_delay = http_no_delay;
-			riwo::http::client http_client(std::move(pool), http_config);
-
-			ws::client_config ws_config;
-			ws_config.no_delay = ws_no_delay;
-			ws::client client(std::move(http_client), ws_config);
-			auto stream = co_await client.open(endpoint, riwo::use_awaitable);
-
-			auto connection = connector->last_connection();
-			RIWO_TEST_CHECK(connection);
-			auto options = connection->options();
-			RIWO_TEST_CHECK(options);
-			RIWO_TEST_CHECK_EQ(options->no_delay, expected);
-			riwo::ignore_unused(co_await stream.close(riwo::use_awaitable));
-		};
-
-		try {
-			co_await verify(false, true, true);
-			co_await verify(true, false, false);
-			co_await verify(false, riwo::nullopt, false);
-		}
-		catch(...)
-		{
-			service.stop();
-			throw;
-		}
-		service.stop();
-	}, asio::use_future);
-
-	context.run();
-	completed.get();
-}
-
-void delivery_modes_and_cancellation()
-{
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-
-	bool completed = false;
-	service.accept([&](riwo::error_code error, ws::accept_result result)
-	{
-		RIWO_TEST_CHECK_EQ(error,
-			riwo::error_code(asio::error::operation_aborted));
-		RIWO_TEST_CHECK(not result.stream.is_open());
-		completed = true;
-	});
-	RIWO_TEST_CHECK_EQ(service.pending_accept_count(), 1U);
-	RIWO_TEST_CHECK_THROWS(
-		service.on_default([](ws::accept_result) -> riwo::awaitable<void> {
-			co_return;
-		}), std::logic_error);
-	service.cancel();
-	context.run();
-	RIWO_TEST_CHECK(completed);
-	RIWO_TEST_CHECK_EQ(service.pending_accept_count(), 0U);
-
-	riwo::io_context_t other_context;
-	asio::ip::tcp::acceptor other_acceptor(other_context);
-	ws::server callback_service(std::move(other_acceptor));
-	callback_service.on_default(
-		[](ws::accept_result) -> riwo::awaitable<void> { co_return; });
-	bool rejected = false;
-	callback_service.accept(
-		[&](riwo::error_code error, ws::accept_result result)
-		{
-			RIWO_TEST_CHECK_EQ(error,
-				std::make_error_code(std::errc::operation_not_supported));
-			RIWO_TEST_CHECK(not result.stream.is_open());
-			rejected = true;
-		});
-	other_context.run();
-	RIWO_TEST_CHECK(rejected);
-	riwo::error_code sync_error;
-	auto sync_result = callback_service.accept(sync_error);
-	RIWO_TEST_CHECK_EQ(sync_error,
-		std::make_error_code(std::errc::operation_not_supported));
-	RIWO_TEST_CHECK(not sync_result.stream.is_open());
-}
-
-void pending_handshake_queue()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server_config config;
-	config.pending_handshake_timeout = 30s;
-	ws::server service(std::move(acceptor), config);
-
-	// Fix the server in accept mode, then remove the initial waiter so that the
-	// incoming request has to wait in the handshake queue.
-	asio::cancellation_signal cancellation;
-	bool initial_cancelled = false;
-	service.accept(asio::bind_cancellation_slot(cancellation.slot(),
-		[&](riwo::error_code error, ws::accept_result)
-		{
-			RIWO_TEST_CHECK_EQ(error,
-				riwo::error_code(asio::error::operation_aborted));
-			initial_cancelled = true;
-		}));
-	cancellation.emit(asio::cancellation_type::all);
-	context.poll();
-	RIWO_TEST_CHECK(initial_cancelled);
-	context.restart();
-
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	ws::client client(context.get_executor());
-	bool watchdog_expired = false;
-	asio::steady_timer watchdog(context.get_executor());
-	watchdog.expires_after(5s);
-	watchdog.async_wait([&](riwo::error_code error)
-	{
-		if( error == asio::error::operation_aborted )
-			return;
-		watchdog_expired = true;
-		client.cancel();
-		service.stop();
-	});
-	auto connected = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			auto stream = co_await client.open(std::format(
-				"ws://127.0.0.1:{}/queued", port), riwo::use_awaitable);
-			co_await stream.write_text("queued", riwo::use_awaitable);
-			auto response = co_await stream.read<std::string>(
-				riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(response.body, "queued");
-			riwo::ignore_unused(co_await stream.close(riwo::use_awaitable));
-			riwo::ignore_unused(watchdog.cancel());
-			service.stop();
-			co_return;
-		}, asio::use_future);
-	auto accepted = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			asio::steady_timer retry(context.get_executor());
-			while( service.pending_handshake_count() == 0 and
-				not watchdog_expired )
-			{
-				retry.expires_after(1ms);
-				co_await retry.async_wait(riwo::use_awaitable);
-			}
-			if( watchdog_expired )
-				co_return;
-			RIWO_TEST_CHECK_EQ(service.pending_handshake_count(), 1U);
-			auto connection = co_await service.accept(riwo::use_awaitable);
-			auto message = co_await connection.stream.read<std::string>(
-				riwo::use_awaitable);
-			co_await connection.stream.write_text(
-				message.body, riwo::use_awaitable);
-			riwo::ignore_unused(co_await connection.stream.close(
-				riwo::use_awaitable));
-			co_return;
-		}, asio::use_future);
-
-	context.run();
-	RIWO_TEST_CHECK(not watchdog_expired);
-	connected.get();
-	accepted.get();
-}
-
-void unavailable_handshake_queue()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-	auto config = service.config();
-	config.max_pending_handshakes = 0;
-	config.default_upgrade.handshake_timeout = 1s;
-	service.set_config(config);
-
-	// Enter accept mode and remove the only waiter. With queueing disabled, the
-	// next otherwise-valid opening request must receive a bounded 503 response.
-	asio::cancellation_signal cancellation;
-	bool initial_cancelled = false;
-	service.accept(asio::bind_cancellation_slot(cancellation.slot(),
-		[&](riwo::error_code error, ws::accept_result)
-		{
-			RIWO_TEST_CHECK_EQ(error,
-				riwo::error_code(asio::error::operation_aborted));
-			initial_cancelled = true;
-		}));
-	cancellation.emit(asio::cancellation_type::all);
-	context.poll();
-	RIWO_TEST_CHECK(initial_cancelled);
-	context.restart();
-
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	ws::client client(context.get_executor());
-	auto completed = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			ws::open_diagnostics diagnostics;
-			auto open_result = co_await client.open(ws::connect_request(
-				std::format("ws://127.0.0.1:{}/unavailable", port)),
-				diagnostics, asio::as_tuple(riwo::use_awaitable));
-			auto &[error, stream] = open_result;
-			RIWO_TEST_CHECK_EQ(error,
-				ws::make_error_code(ws::errc::handshake_rejected));
-			RIWO_TEST_CHECK(not stream.is_open());
-			RIWO_TEST_CHECK(diagnostics.reply);
-			RIWO_TEST_CHECK_EQ(diagnostics.reply->status(),
-				riwo::http::status::service_unavailable);
-			RIWO_TEST_CHECK_EQ(co_await diagnostics.reply->read<std::string>(
-				riwo::use_awaitable), "WebSocket accept queue unavailable\n");
-			RIWO_TEST_CHECK_EQ(service.pending_handshake_count(), 0U);
-			service.stop();
-			co_return;
-		}, asio::use_future);
-	context.run();
-	completed.get();
-}
-
-void owned_client_cancellation()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context,
-		{asio::ip::address_v4::loopback(), 0});
-	asio::ip::tcp::socket peer(context);
-	acceptor.async_accept(peer, [](riwo::error_code error) {
-		RIWO_TEST_CHECK(not error);
-	});
-
-	ws::client_config config;
-	config.handshake_timeout = 1s;
-	ws::client client(context.get_executor(), config);
-	const auto port = acceptor.local_endpoint().port();
-	auto opening = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			auto open_result = co_await client.open(
-				std::format("ws://127.0.0.1:{}/stall", port),
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[error, stream] = open_result;
-			RIWO_TEST_CHECK_EQ(error,
-				riwo::error_code(asio::error::operation_aborted));
-			RIWO_TEST_CHECK(not stream.is_open());
-			RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
-			co_return;
-		}, asio::use_future);
-	auto cancellation = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			asio::steady_timer delay(context.get_executor());
-			delay.expires_after(10ms);
-			co_await delay.async_wait(riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(client.pending_open_count(), 1U);
-			client.cancel();
-			co_return;
-		}, asio::use_future);
-
-	context.run();
-	opening.get();
-	cancellation.get();
-}
-
-void owned_client_handshake_timeout()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context,
-		{asio::ip::address_v4::loopback(), 0});
-	asio::ip::tcp::socket peer(context);
-	acceptor.async_accept(peer, [](riwo::error_code error) {
-		RIWO_TEST_CHECK(not error);
-	});
-
-	ws::client_config config;
-	config.handshake_timeout = 20ms;
-	ws::client client(context.get_executor(), config);
-	const auto port = acceptor.local_endpoint().port();
-	auto opening = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			auto open_result = co_await client.open(
-				std::format("ws://127.0.0.1:{}/stall", port),
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[error, stream] = open_result;
-			RIWO_TEST_CHECK_EQ(error,
-				riwo::error_code(asio::error::timed_out));
-			RIWO_TEST_CHECK(not stream.is_open());
-			RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
-		}, asio::use_future);
-	context.run();
-	opening.get();
-}
-
-void pending_handshake_timeout()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server_config config;
-	config.max_pending_handshakes = 1;
-	config.pending_handshake_timeout = 20ms;
-	config.default_upgrade.handshake_timeout = 1s;
-	ws::server service(std::move(acceptor), config);
-
-	asio::cancellation_signal cancellation;
-	service.accept(asio::bind_cancellation_slot(cancellation.slot(),
-		[](riwo::error_code error, ws::accept_result)
-		{
-			RIWO_TEST_CHECK_EQ(error,
-				riwo::error_code(asio::error::operation_aborted));
-		}));
-	cancellation.emit(asio::cancellation_type::all);
-	context.poll();
-	context.restart();
-
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	ws::client client(context.get_executor());
-	auto completed = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			ws::open_diagnostics diagnostics;
-			auto open_result = co_await client.open(ws::connect_request(
-				std::format("ws://127.0.0.1:{}/timeout", port)), diagnostics,
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[error, stream] = open_result;
-			RIWO_TEST_CHECK_EQ(error,
-				ws::make_error_code(ws::errc::handshake_rejected));
-			RIWO_TEST_CHECK(not stream.is_open());
-			RIWO_TEST_CHECK(diagnostics.reply);
-			RIWO_TEST_CHECK_EQ(diagnostics.reply->status(),
-				riwo::http::status::service_unavailable);
-			RIWO_TEST_CHECK_EQ(service.pending_handshake_count(), 0U);
-			service.stop();
-		}, asio::use_future);
-	context.run();
-	completed.get();
-}
-
-void pending_handshake_fifo_and_capacity()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server_config config;
-	config.max_pending_handshakes = 2;
-	config.pending_handshake_timeout = 1s;
-	ws::server service(std::move(acceptor), config);
-
-	asio::cancellation_signal cancellation;
-	service.accept(asio::bind_cancellation_slot(cancellation.slot(),
-		[](riwo::error_code error, ws::accept_result)
-		{
-			RIWO_TEST_CHECK_EQ(error,
-				riwo::error_code(asio::error::operation_aborted));
-		}));
-	cancellation.emit(asio::cancellation_type::all);
-	context.poll();
-	context.restart();
-
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	const auto endpoint = [&](std::string_view path) {
-		return std::format("ws://127.0.0.1:{}{}", port, path);
-	};
-	ws::client first_client(context.get_executor());
-	ws::client second_client(context.get_executor());
-	ws::client overflow_client(context.get_executor());
-	bool overflow_rejected = false;
-
-	auto first = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			auto stream = co_await first_client.open(
-				endpoint("/first"), riwo::use_awaitable);
-			auto closed = co_await stream.close(riwo::use_awaitable);
-			RIWO_TEST_CHECK(closed.clean);
-		}, asio::use_future);
-
-	auto second = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			asio::steady_timer delay(context.get_executor());
-			while( service.pending_handshake_count() < 1 )
-			{
-				delay.expires_after(1ms);
-				co_await delay.async_wait(riwo::use_awaitable);
-			}
-			auto stream = co_await second_client.open(
-				endpoint("/second"), riwo::use_awaitable);
-			auto closed = co_await stream.close(riwo::use_awaitable);
-			RIWO_TEST_CHECK(closed.clean);
-		}, asio::use_future);
-
-	auto overflow = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			asio::steady_timer delay(context.get_executor());
-			while( service.pending_handshake_count() < 2 )
-			{
-				delay.expires_after(1ms);
-				co_await delay.async_wait(riwo::use_awaitable);
-			}
-			ws::open_diagnostics diagnostics;
-			auto open_result = co_await overflow_client.open(
-				ws::connect_request(endpoint("/overflow")), diagnostics,
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[error, stream] = open_result;
-			RIWO_TEST_CHECK_EQ(error,
-				ws::make_error_code(ws::errc::handshake_rejected));
-			RIWO_TEST_CHECK(not stream.is_open());
-			RIWO_TEST_CHECK(diagnostics.reply);
-			RIWO_TEST_CHECK_EQ(diagnostics.reply->status(),
-				riwo::http::status::service_unavailable);
-			overflow_rejected = true;
-		}, asio::use_future);
-
-	auto accepted = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			asio::steady_timer delay(context.get_executor());
-			while( not overflow_rejected )
-			{
-				delay.expires_after(1ms);
-				co_await delay.async_wait(riwo::use_awaitable);
-			}
-			RIWO_TEST_CHECK_EQ(service.pending_handshake_count(), 2U);
-			auto first_connection = co_await service.accept(riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(first_connection.request.path, "/first");
-			RIWO_TEST_CHECK((co_await first_connection.stream.close(
-				riwo::use_awaitable)).clean);
-
-			auto second_connection = co_await service.accept(riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(second_connection.request.path, "/second");
-			RIWO_TEST_CHECK((co_await second_connection.stream.close(
-				riwo::use_awaitable)).clean);
-			service.stop();
-		}, asio::use_future);
-
-	context.run();
-	first.get();
-	second.get();
-	overflow.get();
-	accepted.get();
-}
-
-void simultaneous_close()
-{
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-
-	auto accepted = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			auto connection = co_await service.accept(riwo::use_awaitable);
-			auto closed = co_await connection.stream.close(
-				ws::close_frame(ws::close_code::normal_closure, "server"),
-				riwo::use_awaitable);
-			RIWO_TEST_CHECK(closed.clean);
-			RIWO_TEST_CHECK_EQ(closed.code.value_or(0), 1000);
-		}, asio::use_future);
-
-	ws::client client(context.get_executor());
-	auto connected = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			auto stream = co_await client.open(std::format(
-				"ws://127.0.0.1:{}/close", port), riwo::use_awaitable);
-			auto closed = co_await stream.close(
-				ws::close_frame(ws::close_code::normal_closure, "client"),
-				riwo::use_awaitable);
-			RIWO_TEST_CHECK(closed.clean);
-			RIWO_TEST_CHECK_EQ(closed.code.value_or(0), 1000);
-			service.stop();
-		}, asio::use_future);
-
-	context.run();
-	accepted.get();
-	connected.get();
-}
-
-void explicit_retry_open_recovery()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-	size_t accepted_count = 0;
-	service.on_default([&](ws::accept_result accepted) -> riwo::awaitable<void>
-	{
-		const auto index = ++accepted_count;
-		co_await accepted.stream.write_text(std::to_string(index),
+		ws::connect_request request;
+		request.endpoint = endpoint;
+		request.subprotocols = {"riwo.echo.v1"};
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+	if( compression )
+		request.extensions.push_back(ws::permessage_deflate_extension());
+#endif
+		ws::open_diagnostics diagnostics;
+		auto stream = co_await client.open(std::move(request), diagnostics,
 			riwo::use_awaitable);
-		if( index == 1 )
+		RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "riwo.echo.v1");
+		RIWO_TEST_CHECK_EQ(!stream.negotiated_extensions().empty(),
+			compression);
+		RIWO_TEST_CHECK(diagnostics.selected_protocol.has_value());
+#if RIWO_HTTP_HTTP2_SUPPORT
+		RIWO_TEST_CHECK_EQ(*diagnostics.selected_protocol,
+			use_http2 ? http::protocol::v2 : http::protocol::v1_1);
+#else
+		RIWO_TEST_CHECK(not use_http2);
+		RIWO_TEST_CHECK_EQ(*diagnostics.selected_protocol,
+			http::protocol::v1_1);
+#endif
+		struct overlap_state
 		{
-			auto close_result = co_await accepted.stream.close(
-				ws::close_frame(ws::close_code::service_restart, "restart"),
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[error, close] = close_result;
-			RIWO_TEST_CHECK(not error);
-			RIWO_TEST_CHECK(close.clean);
-		}
-		else
+			std::string body {};
+			riwo::error_code error {};
+			bool done = false;
+		};
+		auto overlap = std::make_shared<overlap_state>();
+		const std::string first = "websocket-exp-overlap";
+		asio::co_spawn(context,
+		[&stream, overlap]() -> riwo::awaitable<void>
 		{
-			auto read_result = co_await accepted.stream.read<std::string>(
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[error, trailing] = read_result;
-			RIWO_TEST_CHECK(error);
-			riwo::ignore_unused(trailing);
-		}
-	});
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-	const auto endpoint = std::format("ws://127.0.0.1:{}/recovery", port);
-
-	asio::ip::tcp::acceptor unavailable(context,
-		{asio::ip::address_v4::loopback(), 0});
-	const auto unavailable_port = unavailable.local_endpoint().port();
-	unavailable.close();
-
-	std::vector<ws::retry_open_event> observed_events;
-	ws::retry_open_options options;
-	options.initial_delay = 1ms;
-	options.max_delay = 2ms;
-	options.jitter = 0.0;
-	options.max_attempts = 4;
-	options.observe = [&](ws::retry_open_event event,
-		const ws::retry_open_context&) {
-		observed_events.push_back(event);
-	};
-	ws::client client(context.get_executor());
-
-	size_t request_count = 0;
-	std::vector<std::string> messages;
-	auto completed = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			// Startup remains one ordinary open outside retry_open().
-			auto stream = co_await client.open(
-				ws::connect_request(endpoint), riwo::use_awaitable);
-			auto message = co_await stream.read<std::string>(
-				riwo::use_awaitable);
-			messages.push_back(std::move(message.body));
-
 			auto read_result = co_await stream.read<std::string>(
 				asio::as_tuple(riwo::use_awaitable));
-			auto &[read_error, trailing] = read_result;
-			RIWO_TEST_CHECK(read_error);
-			riwo::ignore_unused(trailing);
-			stream.shutdown();
-
-			auto recovered = co_await ws::retry_open(client,
-				[&](const ws::retry_open_context &previous)
-					-> ws::connect_request
-				{
-					++request_count;
-					RIWO_TEST_CHECK_EQ(previous.attempt,
-						request_count - 1);
-					const auto target = request_count == 1 ?
-						std::format("ws://127.0.0.1:{}/unavailable",
-							unavailable_port) : endpoint;
-					ws::connect_request request(target);
-					request.request_options.set_header("X-Recovery-Attempt",
-						std::to_string(request_count));
-					return request;
-				}, options, riwo::use_awaitable);
-
-			RIWO_TEST_CHECK_EQ(recovered.attempts, 2U);
-			RIWO_TEST_CHECK(recovered.last_failure.error);
-			RIWO_TEST_CHECK_EQ(recovered.last_failure.attempt, 1U);
-			RIWO_TEST_CHECK_EQ(recovered.diagnostics.endpoint.to_string(),
-				endpoint);
-
-			stream = std::move(recovered.stream);
-			message = co_await stream.read<std::string>(riwo::use_awaitable);
-			messages.push_back(std::move(message.body));
-			auto closed = co_await stream.close(riwo::use_awaitable);
-			RIWO_TEST_CHECK(closed.clean);
-			service.stop();
-		}, asio::use_future);
-
-	context.run();
-	completed.get();
-	RIWO_TEST_CHECK_EQ(request_count, 2U);
-	RIWO_TEST_CHECK_EQ(accepted_count, 2U);
-	RIWO_TEST_CHECK_EQ(messages,
-		(std::vector<std::string>{"1", "2"}));
-	RIWO_TEST_CHECK_EQ(std::ranges::count(observed_events,
-		ws::retry_open_event::opening), 2);
-	RIWO_TEST_CHECK_EQ(std::ranges::count(observed_events,
-		ws::retry_open_event::waiting), 1);
-}
-
-void retry_open_cancellation()
-{
-	using namespace std::chrono_literals;
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor probe(context,
-		{asio::ip::address_v4::loopback(), 0});
-	const auto port = probe.local_endpoint().port();
-	probe.close();
-
-	ws::retry_open_options options;
-	options.initial_delay = 1s;
-	options.max_delay = 1s;
-	options.jitter = 0.0;
-	options.decide = [](const ws::retry_open_context&,
-		std::chrono::milliseconds suggested) {
-		return ws::retry_open_decision::retry_after(suggested);
-	};
-	bool waiting = false;
-	asio::cancellation_signal cancellation;
-	options.observe = [&](ws::retry_open_event event,
-		const ws::retry_open_context&) {
-		if( event != ws::retry_open_event::waiting )
-			return;
-		waiting = true;
-		asio::post(context, [&] {
-			cancellation.emit(asio::cancellation_type::all);
-		});
-	};
-	ws::client client(context.get_executor());
-
-	bool completed = false;
-	riwo::error_code completion_error;
-	ws::retry_open(client, ws::connect_request(std::format(
-		"ws://127.0.0.1:{}/cancel", port)), options,
-		asio::bind_cancellation_slot(cancellation.slot(),
-		[&](riwo::error_code error, ws::retry_open_result result)
+			auto &[error, response] = read_result;
+			overlap->error = error;
+			if( not error ) overlap->body = response.body;
+			overlap->done = true;
+		}, asio::detached);
+		co_await stream.write_text(first, riwo::use_awaitable);
+		while( not overlap->done )
 		{
-			completion_error = error;
-			RIWO_TEST_CHECK_EQ(result.attempts, 1U);
-			RIWO_TEST_CHECK_EQ(result.last_failure.error,
-				asio::error::make_error_code(asio::error::operation_aborted));
-			completed = true;
-		}));
-
-	context.run();
-	RIWO_TEST_CHECK(waiting);
-	RIWO_TEST_CHECK(completed);
-	RIWO_TEST_CHECK_EQ(completion_error,
-		asio::error::make_error_code(asio::error::operation_aborted));
-	RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
-}
-
-#if RIWO_WEBSOCKET_ZLIB_SUPPORT
-void permessage_deflate_round_trip()
-{
-	riwo::io_context_t context;
-	asio::ip::tcp::acceptor acceptor(context);
-	ws::server service(std::move(acceptor));
-	service.bind({riwo::ip_type::v4, 0}).start();
-	const auto port = service.http_server().acceptor_wrap()
-		.acceptor().local_endpoint().port();
-
-	ws::upgrade_options options;
-	ws::permessage_deflate_options server_compression;
-	server_compression.server_max_window_bits = 11;
-	server_compression.client_max_window_bits = 10;
-	auto server_extension_policy =
-		ws::permessage_deflate_extension(server_compression);
-	options.supported_extensions = {
-		server_extension_policy
-	};
-	size_t extension_selector_calls = 0;
-	options.extension_selector =
-		[&, server_extension_policy](const ws::request_info &request,
-			std::span<const ws::extension> offered)
-			-> std::vector<ws::extension>
-	{
-		++extension_selector_calls;
-		if( request.path != "/compressed" or offered.size() != 1 )
-			return {};
-		auto selected = ws::detail::negotiate_permessage_deflate(
-			offered.front(), server_extension_policy);
-		return selected ? std::vector<ws::extension>{std::move(*selected)} :
-			std::vector<ws::extension>{};
-	};
-	options.stream.write_fragment_size = 7;
-	auto accepted = asio::co_spawn(context,
-		[&, options = std::move(options)]() mutable -> riwo::awaitable<void>
+			asio::steady_timer timer(context);
+			timer.expires_after(std::chrono::milliseconds(1));
+			co_await timer.async_wait(riwo::use_awaitable);
+		}
+		RIWO_TEST_CHECK(not overlap->error);
+		RIWO_TEST_CHECK_EQ(overlap->body, first);
+		for(int index = 0; index < 2; ++index)
 		{
-			auto connection = co_await service.accept(
-				std::move(options), riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(connection.handshake.extensions.size(), 1U);
-			RIWO_TEST_CHECK(ws::is_permessage_deflate_extension(
-				connection.handshake.extensions.front()));
-			RIWO_TEST_CHECK_EQ(connection.stream.negotiated_extensions().size(), 1U);
-
-			for(size_t index = 0; index < 4; ++index)
-			{
-				auto request = co_await connection.stream.read<>(
-					riwo::use_awaitable);
-				co_await connection.stream.write(request.type,
-					riwo::const_buffer(request.body.data(), request.body.size()),
-					riwo::use_awaitable);
-			}
-			auto close_result = co_await connection.stream.read<>(
-				asio::as_tuple(riwo::use_awaitable));
-			auto &[close_error, trailing] = close_result;
-			riwo::ignore_unused(close_error, trailing);
-		}, asio::use_future);
-
-	ws::client client(context.get_executor());
-	auto connected = asio::co_spawn(context,
-		[&]() -> riwo::awaitable<void>
-		{
-			ws::connect_request request(std::format(
-				"ws://127.0.0.1:{}/compressed", port));
-			ws::permessage_deflate_options client_compression;
-			client_compression.server_max_window_bits = 12;
-			client_compression.offer_client_max_window_bits = true;
-			request.extensions = {
-				ws::permessage_deflate_extension(client_compression)
-			};
-			ws::stream_config stream_config;
-			stream_config.write_fragment_size = 5;
-			stream_config.compression.min_message_size = 16;
-			stream_config.compression.level = 6;
-			request.stream_options = stream_config;
-			auto stream = co_await client.open(
-				std::move(request), riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(stream.negotiated_extensions().size(), 1U);
-
-			RIWO_TEST_CHECK_EQ(co_await stream.write_text(
-				"", riwo::use_awaitable), 0U);
-			auto empty = co_await stream.read_frame<std::string>(
-				riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(empty.type, ws::message_type::text);
-			RIWO_TEST_CHECK(empty.body.empty());
-			RIWO_TEST_CHECK(empty.fin);
-
-			const std::array<std::byte,8> binary_payload {
-				std::byte {0x00}, std::byte {0xFF}, std::byte {0x01},
-				std::byte {0x02}, std::byte {0x80}, std::byte {0x7F},
-				std::byte {0x00}, std::byte {0x55}
-			};
-			RIWO_TEST_CHECK_EQ(co_await stream.write_binary(
-				riwo::const_buffer(binary_payload.data(), binary_payload.size()),
-				ws::write_options {.compression = ws::compression_mode::enabled},
-				riwo::use_awaitable), binary_payload.size());
-			std::vector<std::byte> binary;
-			auto binary_info = co_await stream.consume(
-				[&](const ws::message_chunk &chunk) {
-					const auto *data = static_cast<const std::byte*>(chunk.body.data());
-					binary.insert(binary.end(), data, data + chunk.body.size());
-				}, riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(binary_info.type, ws::message_type::binary);
-			RIWO_TEST_CHECK(std::ranges::equal(binary, binary_payload));
-
-			ws::basic_data_frame<std::string> frame {
-				.type = ws::message_type::text,
-				.body = "frame",
-			};
-			RIWO_TEST_CHECK_EQ(co_await stream.write_frame(
-				frame, riwo::use_awaitable), frame.body.size());
-			auto frame_echo = co_await stream.read<std::string>(riwo::use_awaitable);
-			RIWO_TEST_CHECK_EQ(frame_echo.body, frame.body);
-
-			std::string payload;
-			for(size_t index = 0; index < 128; ++index)
-				payload += "compressible websocket payload ";
-			RIWO_TEST_CHECK_EQ(co_await stream.write_text(
-				payload,
-				ws::write_options {.compression = ws::compression_mode::disabled},
-				riwo::use_awaitable), payload.size());
+			const auto payload = std::format("websocket-exp-{}", index);
+			co_await stream.write_text(payload, riwo::use_awaitable);
 			auto response = co_await stream.read<std::string>(
 				riwo::use_awaitable);
 			RIWO_TEST_CHECK_EQ(response.body, payload);
-			auto closed = co_await stream.close(riwo::use_awaitable);
-			RIWO_TEST_CHECK(closed.clean);
-			service.stop();
-		}, asio::use_future);
+		}
+		auto close_result = co_await stream.close(
+			asio::as_tuple(riwo::use_awaitable));
+		auto &[close_error, close_info] = close_result;
+		RIWO_TEST_CHECK(not close_error);
+		RIWO_TEST_CHECK(close_info.clean);
+		service.stop();
+		context.stop();
+	}, asio::use_future);
 
-	context.run();
-	accepted.get();
-	connected.get();
-	RIWO_TEST_CHECK_EQ(extension_selector_calls, 1U);
+	riwo::ignore_unused(context.run_for(std::chrono::seconds(10)));
+	RIWO_TEST_CHECK(completed.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
+	completed.get();
+	RIWO_TEST_CHECK(validated_request.has_value());
+	RIWO_TEST_CHECK_EQ(validated_request->path, "/echo");
+	RIWO_TEST_CHECK(validated_request->target.starts_with("/echo?"));
+	auto query = validated_request->query_parameters.find("case");
+	RIWO_TEST_CHECK(query != validated_request->query_parameters.end());
+	RIWO_TEST_CHECK_EQ(query->second.to_string(), "roundtrip");
+	RIWO_TEST_CHECK(not validated_request->remote_address.empty());
+	RIWO_TEST_CHECK(validated_request->remote_port != 0);
+	RIWO_TEST_CHECK(validated_request->remote_endpoint.port() != 0);
+	RIWO_TEST_CHECK(validated_request->local_endpoint.port() != 0);
 }
-#endif
 
-void invalid_owned_config()
+void http1_upgrade() { websocket_round_trip(false, false); }
+
+void standalone_accept_queue()
 {
 	riwo::io_context_t context;
-	ws::client preflight_client(context.get_executor());
-	riwo::error_code error;
-	auto stream = preflight_client.open(
-		ws::connect_request("ftp://example.test/socket"), error);
-	RIWO_TEST_CHECK_EQ(error,
-		std::make_error_code(std::errc::protocol_not_supported));
-	RIWO_TEST_CHECK(not stream.is_open());
-	RIWO_TEST_CHECK_EQ(preflight_client.pending_open_count(), 0U);
-
-	ws::connect_request unsupported("ws://example.test/socket");
-	unsupported.extensions.push_back({
-		.name = "permessage-deflate",
-		.parameters = {{.name = "unknown"}},
-	});
-	stream = preflight_client.open(std::move(unsupported), error);
-	RIWO_TEST_CHECK_EQ(error,
-		ws::make_error_code(ws::errc::unsupported_extension));
-	RIWO_TEST_CHECK(not stream.is_open());
-	RIWO_TEST_CHECK_EQ(preflight_client.pending_open_count(), 0U);
-
-#if !RIWO_WEBSOCKET_ZLIB_SUPPORT
-	ws::connect_request unavailable("ws://example.test/socket");
-	unavailable.extensions = {ws::permessage_deflate_extension()};
-	stream = preflight_client.open(std::move(unavailable), error);
-	RIWO_TEST_CHECK_EQ(error,
-		ws::make_error_code(ws::errc::unsupported_extension));
-	RIWO_TEST_CHECK(not stream.is_open());
-#endif
-
-	ws::client_config client_config;
-	client_config.stream.read_buffer_size = 0;
-	RIWO_TEST_CHECK_THROWS(ws::client(client_config), std::system_error);
-	client_config.stream.read_buffer_size = ws::stream_config{}.read_buffer_size;
-	client_config.stream.ping_interval = std::chrono::milliseconds(-1);
-	RIWO_TEST_CHECK_THROWS(ws::client(client_config), std::system_error);
-	client_config.stream.ping_interval =
-		ws::stream_config{}.ping_interval;
-
 	asio::ip::tcp::acceptor acceptor(context);
 	ws::server_config server_config;
-	server_config.default_upgrade.stream.read_buffer_size = 0;
-	RIWO_TEST_CHECK_THROWS(
-		ws::server(std::move(acceptor), server_config), std::system_error);
+	server_config.http.protocols.requirement =
+		http::protocol_requirement::v1;
+	ws::server service(std::move(acceptor), server_config);
+	service.bind({riwo::ip_type::v4, 0}).start();
 
-	asio::ip::tcp::acceptor ping_acceptor(context);
-	server_config.default_upgrade.stream.read_buffer_size =
-		ws::stream_config{}.read_buffer_size;
-	server_config.default_upgrade.stream.ping_interval =
-		std::chrono::milliseconds(-1);
-	RIWO_TEST_CHECK_THROWS(
-		ws::server(std::move(ping_acceptor), server_config), std::system_error);
+	auto accepted = asio::co_spawn(context,
+	[&]() -> riwo::awaitable<void>
+	{
+		auto connection = co_await service.accept(riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(connection.request.path, "/accept");
+		auto message = co_await connection.stream.read<std::string>(
+			riwo::use_awaitable);
+		co_await connection.stream.write_text(message.body,
+			riwo::use_awaitable);
+	}, asio::use_future);
 
+	ws::client_config client_config;
+	client_config.http.protocols.requirement =
+		http::protocol_requirement::v1;
+	ws::client client(context, client_config);
+	const auto endpoint = std::format("ws://127.0.0.1:{}/accept",
+		service.http_server().acceptor().local_endpoint().port());
+	auto connected = asio::co_spawn(context,
+	[&]() -> riwo::awaitable<void>
+	{
+		auto stream = co_await client.open(endpoint, riwo::use_awaitable);
+		co_await stream.write_text("queued accept", riwo::use_awaitable);
+		auto response = co_await stream.read<std::string>(
+			riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(response.body, "queued accept");
+		riwo::error_code ignored;
+		stream.cancel(ignored);
+		service.stop();
+	}, asio::use_future);
+
+	riwo::ignore_unused(context.run_for(std::chrono::seconds(10)));
+	RIWO_TEST_CHECK(accepted.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
+	RIWO_TEST_CHECK(connected.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
+	accepted.get();
+	connected.get();
+}
+
+void redirect_and_external_client()
+{
+	riwo::io_context_t context;
+	asio::ip::tcp::acceptor acceptor(context);
+	http::server_config server_config;
+	server_config.protocols.requirement =
+		http::protocol_requirement::v1;
+	http::server service(std::move(acceptor), server_config);
+	service.bind({riwo::ip_type::v4, 0});
+	service.on_request<http::method::get>("/redirect",
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
+	{
+		http::response_head response;
+		response.status = http::status::temporary_redirect;
+		response.headers.set("Location", "/echo");
+		co_await exchange.respond(std::move(response), std::string_view{},
+			riwo::use_awaitable);
+	});
+	service.on_request<http::method::get>("/echo",
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
+	{
+		auto accepted = co_await ws::upgrade(exchange, riwo::use_awaitable);
+		for(;;)
+		{
+			auto read_result = co_await accepted.stream.read<std::string>(
+				asio::as_tuple(riwo::use_awaitable));
+			auto &[error, message] = read_result;
+			if( error ) break;
+			co_await accepted.stream.write_text(message.body,
+				riwo::use_awaitable);
+		}
+	});
+	service.start();
+
+	http::client_config client_config;
+	client_config.protocols.requirement =
+		http::protocol_requirement::v1;
+	http::client http_client(context, client_config);
+	const auto base = std::format("ws://127.0.0.1:{}",
+		service.acceptor().local_endpoint().port());
+	auto completed = asio::co_spawn(context,
+	[&]() -> riwo::awaitable<void>
+	{
+		ws::open_diagnostics diagnostics;
+		ws::connect_request limited(riwo::url(base + "/redirect"));
+		auto open_result = co_await ws::open(http_client,
+			std::move(limited), diagnostics,
+			asio::as_tuple(riwo::use_awaitable));
+		auto &[redirect_error, idle] = open_result;
+		RIWO_TEST_CHECK_EQ(redirect_error,
+			ws::make_error_code(ws::errc::redirect_limit_exceeded));
+		RIWO_TEST_CHECK(not idle.is_open());
+		RIWO_TEST_CHECK(diagnostics.response.has_value());
+		RIWO_TEST_CHECK_EQ(diagnostics.response->status,
+			http::status::temporary_redirect);
+
+		ws::connect_request followed(riwo::url(base + "/redirect"));
+		followed.max_redirects = 1;
+		auto stream = co_await ws::open(http_client, std::move(followed),
+			diagnostics, riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(diagnostics.endpoint.path(), "/echo");
+		co_await stream.write_text("redirected", riwo::use_awaitable);
+		auto response = co_await stream.read<std::string>(
+			riwo::use_awaitable);
+		RIWO_TEST_CHECK_EQ(response.body, "redirected");
+		riwo::error_code ignored;
+		stream.cancel(ignored);
+		service.stop();
+		context.stop();
+	}, asio::use_future);
+
+	riwo::ignore_unused(context.run_for(std::chrono::seconds(10)));
+	RIWO_TEST_CHECK(completed.wait_for(std::chrono::milliseconds(0)) ==
+		std::future_status::ready);
+	completed.get();
+}
+
+void cancel_pending_open()
+{
+	riwo::io_context_t context;
+	asio::ip::tcp::acceptor acceptor(context);
+	http::server_config server_config;
+	server_config.protocols.requirement =
+		http::protocol_requirement::v1;
+	http::server service(std::move(acceptor), server_config);
+	service.bind({riwo::ip_type::v4, 0});
+	service.on_request<http::method::get>("/stall",
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
+	{
+		asio::steady_timer timer(exchange.get_executor());
+		timer.expires_after(std::chrono::seconds(10));
+		auto [error] = co_await timer.async_wait(
+			asio::as_tuple(riwo::use_awaitable));
+		riwo::ignore_unused(error);
+		exchange.cancel();
+	});
+	service.start();
+
+	ws::client_config client_config;
+	client_config.http.protocols.requirement =
+		http::protocol_requirement::v1;
+	ws::client client(context, client_config);
+	const auto endpoint = std::format("ws://127.0.0.1:{}/stall",
+		service.acceptor().local_endpoint().port());
+	bool completed = false;
+	client.open(endpoint, [&](riwo::error_code error, ws::stream stream)
+	{
+		RIWO_TEST_CHECK_EQ(error,
+			asio::error::make_error_code(asio::error::operation_aborted));
+		RIWO_TEST_CHECK(not stream.is_open());
+		RIWO_TEST_CHECK_EQ(client.pending_open_count(), 0U);
+		completed = true;
+		service.stop();
+		context.stop();
+	});
+	RIWO_TEST_CHECK_EQ(client.pending_open_count(), 1U);
+	asio::steady_timer cancellation(context);
+	cancellation.expires_after(std::chrono::milliseconds(10));
+	cancellation.async_wait([&](riwo::error_code error)
+	{
+		if( not error ) client.cancel();
+	});
+	asio::steady_timer watchdog(context);
+	watchdog.expires_after(std::chrono::seconds(2));
+	watchdog.async_wait([&](riwo::error_code error)
+	{
+		if( not error )
+		{
+			service.stop();
+			context.stop();
+		}
+	});
+	context.run();
+	RIWO_TEST_CHECK(completed);
+}
+
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+void http1_upgrade_compression() { websocket_round_trip(false, true); }
+#endif
+
+#if RIWO_HTTP_HTTP2_SUPPORT
+void http2_extended_connect() { websocket_round_trip(true, false); }
+# if RIWO_WEBSOCKET_ZLIB_SUPPORT
+void http2_extended_connect_compression() { websocket_round_trip(true, true); }
+# endif
+#endif
+
+[[nodiscard]] std::string rejection_response(uint16_t port)
+{
+	riwo::io_context_t context;
+	asio::ip::tcp::socket socket(context);
+	riwo::error_code error;
+	socket.connect({asio::ip::make_address("127.0.0.1"), port}, error);
+	if( error ) throw std::system_error(error);
+
+	static constexpr std::string_view request =
+		"GET /deny HTTP/1.1\r\n"
+		"Host: 127.0.0.1\r\n"
+		"Connection: Upgrade\r\n"
+		"Upgrade: websocket\r\n"
+		"Sec-WebSocket-Version: 13\r\n"
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+		"\r\n";
+	(void)asio::write(socket, asio::buffer(request), error);
+	if( error ) throw std::system_error(error);
+
+	asio::streambuf buffer;
+	const auto head_size = asio::read_until(socket, buffer, "\r\n\r\n", error);
+	if( error ) throw std::system_error(error);
+	std::string response(asio::buffers_begin(buffer.data()),
+		asio::buffers_begin(buffer.data()) +
+			static_cast<std::ptrdiff_t>(head_size));
+	buffer.consume(head_size);
+
+	const auto marker = response.find("\r\nContent-Length:");
+	if( marker == std::string::npos )
+		return response;
+	const auto value_begin = marker + std::string_view("\r\nContent-Length:").size();
+	const auto value_end = response.find("\r\n", value_begin);
+	const auto size = static_cast<std::size_t>(std::stoul(
+		response.substr(value_begin, value_end - value_begin)));
+	while( buffer.size() < size )
+	{
+		const auto read = socket.read_some(buffer.prepare(size - buffer.size()),
+			error);
+		if( error ) throw std::system_error(error);
+		buffer.commit(read);
+	}
+	response.append(asio::buffers_begin(buffer.data()),
+		asio::buffers_begin(buffer.data()) +
+			static_cast<std::ptrdiff_t>(size));
+	return response;
+}
+
+void upgrade_rejection_preserved()
+{
+	riwo::io_context_t context;
+	asio::ip::tcp::acceptor acceptor(context);
+	http::server_config config;
+	config.protocols.requirement = http::protocol_requirement::v1;
+	http::server service(std::move(acceptor), config);
+	service.bind({riwo::ip_type::v4, 0});
+	service.on_request<http::method::get>("/deny",
+		[](http::server_exchange &exchange) -> riwo::awaitable<void>
+		{
+			ws::upgrade_options options;
+			options.request_validator = [](const ws::request_info &) {
+				ws::upgrade_rejection rejection;
+				rejection.status = http::status::forbidden;
+				rejection.headers.add("X-Reject-Reason", "policy");
+				rejection.body = "denied by policy";
+				return ws::upgrade_validation_result {
+					std::move(rejection)};
+			};
+			try {
+				(void)co_await ws::upgrade(exchange, std::move(options),
+					riwo::use_awaitable);
+			}
+			catch(const std::system_error &error) {
+				RIWO_TEST_CHECK(error.code() ==
+					make_error_code(ws::errc::handshake_rejected));
+			}
+		});
+	service.start();
+
+	const auto port = service.acceptor().local_endpoint().port();
+	std::jthread server_thread([&] { context.run(); });
+	const auto response = rejection_response(port);
+	// Server state transitions must stay on the executor that owns them.  Keep
+	// stop and io_context::stop in one queued handler so the socket cannot be
+	// closed concurrently with its outstanding receive/write operations.
+	asio::post(context, [&] {
+		service.stop();
+		context.stop();
+	});
+	server_thread.join();
+
+	RIWO_TEST_CHECK(response.starts_with("HTTP/1.1 403 Forbidden\r\n"));
+	RIWO_TEST_CHECK(response.find("\r\nX-Reject-Reason: policy\r\n") !=
+		std::string::npos);
+	RIWO_TEST_CHECK(response.ends_with("denied by policy"));
 }
 
 } //namespace
@@ -1150,24 +635,21 @@ void invalid_owned_config()
 int main(int argc, const char *const argv[])
 {
 	return riwo::test::run(argc, argv, {
-		{"owned handler round trip", owned_handler_round_trip},
-		{"owned accept round trip", owned_accept_round_trip},
-		{"owned configuration and resources", owned_configuration_and_resources},
-		{"client TCP_NODELAY modes", client_no_delay_modes},
-		{"delivery modes and cancellation", delivery_modes_and_cancellation},
-		{"pending handshake queue", pending_handshake_queue},
-		{"unavailable handshake queue", unavailable_handshake_queue},
-		{"owned client cancellation", owned_client_cancellation},
-		{"owned client handshake timeout", owned_client_handshake_timeout},
-		{"pending handshake timeout", pending_handshake_timeout},
-		{"pending handshake FIFO and capacity",
-			pending_handshake_fifo_and_capacity},
-		{"simultaneous close", simultaneous_close},
-		{"explicit retry open recovery", explicit_retry_open_recovery},
-		{"retry open cancellation", retry_open_cancellation},
+		{"environment proxy selection", environment_proxy_selection},
+		{"HTTP/1 WebSocket upgrade", http1_upgrade},
+		{"standalone server accept queue", standalone_accept_queue},
+		{"redirect and external HTTP client", redirect_and_external_client},
+		{"cancel pending open", cancel_pending_open},
 #if RIWO_WEBSOCKET_ZLIB_SUPPORT
-		{"permessage-deflate round trip", permessage_deflate_round_trip},
+		{"HTTP/1 WebSocket compression", http1_upgrade_compression},
 #endif
-		{"invalid owned config", invalid_owned_config},
+#if RIWO_HTTP_HTTP2_SUPPORT
+		{"HTTP/2 extended CONNECT", http2_extended_connect},
+# if RIWO_WEBSOCKET_ZLIB_SUPPORT
+		{"HTTP/2 extended CONNECT compression",
+			http2_extended_connect_compression},
+# endif
+#endif
+		{"validator rejection response", upgrade_rejection_preserved},
 	});
 }

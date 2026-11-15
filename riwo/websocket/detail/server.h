@@ -4,470 +4,406 @@
 #ifndef RIWO_WEBSOCKET_DETAIL_SERVER_H
 #define RIWO_WEBSOCKET_DETAIL_SERVER_H
 
-#if defined(__GNUC__) && !defined(__clang__)
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wmismatched-new-delete"
-#endif
-
 #include <riwo/websocket/protocol/handshake.h>
-#include <riwo/websocket/detail/permessage_deflate.h>
 #include <riwo/websocket/detail/handshake_io.h>
+#include <condition_variable>
+#include <deque>
 
 namespace riwo::websocket { namespace detail
 {
 
-constexpr const char
-	*sec_websocket_accept = "Sec-WebSocket-Accept",
-	*sec_websocket_version = "Sec-WebSocket-Version",
-	*sec_websocket_protocol = "Sec-WebSocket-Protocol",
-	*sec_websocket_extensions = "Sec-WebSocket-Extensions";
-
-[[nodiscard]] RIWO_WEBSOCKET_API bool server_ascii_equal_case_insensitive (
-	std::string_view lhs, std::string_view rhs
-) noexcept;
-
-[[nodiscard]] RIWO_WEBSOCKET_API bool server_deadline_expired (
-	std::chrono::steady_clock::time_point deadline
-) noexcept;
-
-[[nodiscard]] RIWO_WEBSOCKET_API std::chrono::milliseconds server_remaining_timeout (
-	std::chrono::steady_clock::time_point deadline
-) noexcept;
-
-template <typename Exec>
-RIWO_WEBSOCKET_TAPI void close_upgrade_connection(http::basic_service_context<Exec> &context) noexcept
-{
-	auto connection = context.hand_over_connection();
-	context.request().cancel();
-	context.response().cancel();
-
-	if( connection )
-	{
-		ignore_unused(connection->cancel());
-		ignore_unused(connection->close());
-	}
-}
-
-template <typename Exec>
-[[nodiscard]] RIWO_WEBSOCKET_TAPI
-request_info snapshot_request(const http::basic_request<Exec> &request)
-{
-	return request_info {
-		.method = request.method(),
-		.version = request.version(),
-		.target = std::string(request.target()),
-		.path = std::string(request.path()),
-		.request_headers = request.headers(),
-		.query_parameters = request.parameters(),
-		.path_arguments = request.path_args(),
-		.remote_endpoint = request.remote_endpoint(),
-		.local_endpoint = request.local_endpoint()
-	};
-}
+[[nodiscard]] RIWO_WEBSOCKET_API
+bool server_equal_ci(std::string_view lhs, std::string_view rhs) noexcept;
 
 [[nodiscard]] RIWO_WEBSOCKET_API
-bool valid_rejection_status(http::status_enum status) noexcept;
+bool server_is_h2(http::protocol version) noexcept;
 
-RIWO_WEBSOCKET_API
-void erase_protocol_response_headers(http::headers &headers) noexcept;
+[[nodiscard]] RIWO_WEBSOCKET_API
+bool server_deadline_expired(std::chrono::steady_clock::time_point deadline) noexcept;
+
+RIWO_WEBSOCKET_API bool header_has_token
+(const http::fields &headers, std::string_view name, std::string_view wanted) noexcept;
 
 struct server_upgrade_plan
 {
 	request_info request {};
 	opening_request opening {};
-	opening_response response {};
 
-	http::status_enum status = http::status::bad_request;
-	http::headers headers {};
+	opening_response response_message {};
+	http::response_head response {};
+
 	std::string body {};
-
 	error_code error {};
+
 	bool accepted = false;
 	bool preserve_error_on_write_failure = false;
 };
 
-RIWO_WEBSOCKET_API void reject_upgrade(server_upgrade_plan &plan,
-	error_code error, http::status_enum status = http::status::bad_request
-);
-RIWO_WEBSOCKET_API void reject_upgrade(server_upgrade_plan &plan,
-	upgrade_rejection rejection, error_code error
+RIWO_WEBSOCKET_API void reject_upgrade (
+	server_upgrade_plan &plan, error_code error,
+	http::status status = http::status::bad_request
 );
 
-RIWO_WEBSOCKET_API void reject_selector_exception (
-	server_upgrade_plan &plan, const std::exception_ptr &exception
+RIWO_WEBSOCKET_API void reject_upgrade
+(server_upgrade_plan &plan, upgrade_rejection rejection, error_code error);
+
+RIWO_WEBSOCKET_API void reject_selector_exception
+(server_upgrade_plan &plan, const std::exception_ptr &exception) noexcept;
+
+RIWO_WEBSOCKET_API void select_server_subprotocol
+(server_upgrade_plan &plan, const upgrade_options &options) noexcept;
+
+RIWO_WEBSOCKET_API void validate_server_subprotocol (
+	server_upgrade_plan &plan, const upgrade_options &options,
+	std::chrono::steady_clock::time_point deadline
 ) noexcept;
 
-RIWO_WEBSOCKET_API void select_server_subprotocol (
-	server_upgrade_plan &plan, const upgrade_options &options
+RIWO_WEBSOCKET_API void select_server_extensions
+(server_upgrade_plan &plan, const upgrade_options &options) noexcept;
+
+RIWO_WEBSOCKET_API void validate_server_extensions (
+	server_upgrade_plan &plan, const upgrade_options &options,
+	std::chrono::steady_clock::time_point deadline
 ) noexcept;
 
-RIWO_WEBSOCKET_API void validate_server_subprotocol(server_upgrade_plan &plan,
-	const upgrade_options &options, std::chrono::steady_clock::time_point deadline
+RIWO_WEBSOCKET_API void finalize_server_upgrade_plan (
+	server_upgrade_plan &plan, const upgrade_options &options,
+	std::chrono::steady_clock::time_point deadline
 ) noexcept;
 
-RIWO_WEBSOCKET_API void select_server_extensions (
-	server_upgrade_plan &plan, const upgrade_options &options
-) noexcept;
-
-RIWO_WEBSOCKET_API void validate_server_extensions(server_upgrade_plan &plan,
-	const upgrade_options &options, std::chrono::steady_clock::time_point deadline
-) noexcept;
-
-RIWO_WEBSOCKET_API void finalize_server_upgrade_plan(server_upgrade_plan &plan,
-	const upgrade_options &options, std::chrono::steady_clock::time_point deadline
-) noexcept;
-
-RIWO_WEBSOCKET_API void complete_server_upgrade_plan(server_upgrade_plan &plan,
-	const upgrade_options &options, std::chrono::steady_clock::time_point deadline
+RIWO_WEBSOCKET_API void complete_server_upgrade_plan (
+	server_upgrade_plan &plan, const upgrade_options &options,
+	std::chrono::steady_clock::time_point deadline
 ) noexcept;
 
 [[nodiscard]] RIWO_WEBSOCKET_API server_upgrade_plan make_server_upgrade_plan (
 	request_info request, const upgrade_options &options, std::chrono::steady_clock::time_point deadline,
-	bool permit_async_callbacks = false
+	bool extended_connect, bool permit_async_callbacks = false
 ) noexcept;
 
-template <typename Exec>
-[[nodiscard]] RIWO_WEBSOCKET_TAPI server_upgrade_plan make_server_upgrade_plan(
-	http::basic_service_context<Exec> &context, const upgrade_options &options,
-	std::chrono::steady_clock::time_point deadline, bool permit_async_callbacks = false) noexcept
+[[nodiscard]] RIWO_WEBSOCKET_API
+http::server_config websocket_http_config(http::server_config config);
+
+[[nodiscard]] RIWO_WEBSOCKET_API
+server_config validate_server_config(server_config config);
+
+template <core_concepts::exec Exec>
+RIWO_WEBSOCKET_TAPI request_info
+snapshot_request(const http::basic_server_exchange<Exec> &exchange)
 {
-	return make_server_upgrade_plan(snapshot_request(context.request()),
-		options, deadline, permit_async_callbacks
+	request_info result {};
+	const auto &head = exchange.request();
+
+	result.method = head.method;
+	result.version = exchange.selected_protocol();
+	result.target = head.target;
+
+	const auto query = result.target.find('?');
+	result.path = result.target.substr(0, query);
+
+	if( result.path.empty() )
+		result.path = "/";
+
+	result.request_headers = head.headers;
+	if( result.target.starts_with('/') )
+	{
+		try {
+			result.query_parameters = url (
+				"ws://request.invalid" + result.target
+			).parameters();
+		}
+		catch(...) {}
+	}
+	else if( head.url.is_valid() )
+		result.query_parameters = head.url.parameters();
+
+	result.remote_address = exchange.remote_address();
+	result.remote_port = exchange.remote_port();
+
+	if( auto endpoint = exchange.remote_endpoint() )
+		result.remote_endpoint = *endpoint;
+
+	if( auto endpoint = exchange.local_endpoint() )
+		result.local_endpoint = *endpoint;
+	return result;
+}
+
+template <core_concepts::exec Exec>
+RIWO_WEBSOCKET_TAPI server_upgrade_plan
+prepare_server_upgrade(const http::basic_server_exchange<Exec> &exchange,
+	const upgrade_options &options, bool permit_async_callbacks) noexcept
+{
+	if( options.handshake_timeout <= std::chrono::milliseconds::zero() )
+	{
+		server_upgrade_plan plan {};
+		reject_upgrade(plan, asio::error::make_error_code(asio::error::timed_out));
+		return plan;
+	}
+	const auto deadline = std::chrono::steady_clock::now() + options.handshake_timeout;
+	const auto &head = exchange.request();
+
+	const bool extended =
+		server_is_h2(exchange.selected_protocol()) and
+		head.connect_protocol and
+		server_equal_ci(*head.connect_protocol, "websocket");
+
+	return make_server_upgrade_plan(snapshot_request(exchange),
+		options, deadline, extended, permit_async_callbacks
 	);
 }
 
-template <typename Exec>
-RIWO_WEBSOCKET_TAPI void
-prepare_response(http::basic_response<Exec> &response, const server_upgrade_plan &plan)
+template <core_concepts::exec Exec>
+RIWO_WEBSOCKET_TAPI void write_rejection
+(http::basic_server_exchange<Exec> &exchange, server_upgrade_plan &plan, error_code &error) noexcept
 {
-	response.unset_header(http::header::content_length);
-	response.unset_header(http::header::transfer_encoding);
-
-	response.unset_header(http::header::connection);
-	response.unset_header(http::header::upgrade);
-
-	response.unset_header(sec_websocket_accept);
-	response.unset_header(sec_websocket_version);
-
-	response.unset_header(sec_websocket_protocol);
-	response.unset_header(sec_websocket_extensions);
-
-	response.set_status(plan.status);
-	for(const auto &[name, value] : plan.headers)
-		response.set_header(name, value);
+	exchange.respond(std::move(plan.response), asio::buffer(plan.body), error);
+	if( not error or plan.preserve_error_on_write_failure )
+		error = plan.error;
 }
 
-template <typename Exec>
-RIWO_WEBSOCKET_TAPI void upgrade_sync(http::basic_service_context<Exec> &context,
+template <core_concepts::exec Exec>
+RIWO_WEBSOCKET_TAPI void upgrade_sync(http::basic_server_exchange<Exec> &exchange,
 	upgrade_options options, basic_accept_result<Exec> &result, error_code &error) noexcept
+try
 {
-	try {
-		result.stream = basic_stream<Exec>(context.get_executor(), options.stream);
-		if( options.handshake_timeout <= std::chrono::milliseconds::zero() )
-		{
-			close_upgrade_connection(context);
-			error = asio::error::timed_out;
-			return ;
-		}
-		const auto deadline = std::chrono::steady_clock::now() + options.handshake_timeout;
-		auto plan = make_server_upgrade_plan(context, options, deadline);
+	result.stream = basic_stream<Exec>(exchange.get_executor(), options.stream);
+	auto plan = prepare_server_upgrade(exchange, options, false);
+	result.request = plan.request;
 
-		result.request = plan.request;
-		if( plan.error == asio::error::timed_out or server_deadline_expired(deadline) )
+	if( not plan.accepted )
+	{
+		if( plan.error == asio::error::make_error_code(asio::error::timed_out) )
 		{
-			close_upgrade_connection(context);
-			error = asio::error::timed_out;
-			return ;
-		}
-		prepare_response(context.response(), plan);
-		ignore_unused(context.response().write(asio::buffer(plan.body), error));
-		if( error )
-		{
-			close_upgrade_connection(context);
-			if( plan.preserve_error_on_write_failure )
-				error = plan.error;
-			return ;
-		}
-		if( server_deadline_expired(deadline) )
-		{
-			close_upgrade_connection(context);
-			error = asio::error::timed_out;
-			return ;
-		}
-		if( not plan.accepted )
-		{
+			exchange.cancel();
 			error = plan.error;
 			return ;
 		}
-		auto pending = context.request().take_pending_data();
-		auto connection = context.hand_over_connection();
+		write_rejection(exchange, plan, error);
+		return ;
+	}
+	auto channel = exchange.accept_duplex(std::move(plan.response), error);
+	if( error )
+		return ;
 
-		adopt_options adopt {
+	result.handshake.subprotocol = plan.response_message.subprotocol.value_or("");
+	result.handshake.extensions = plan.response_message.extensions;
+
+	result.stream.adopt (
+		std::make_shared<http::basic_duplex_channel<Exec>>(std::move(channel)),
+		adopt_options {
 			.stream_role = role::server,
-			.pending_data = std::vector<std::byte>(pending.size()),
-			.negotiated_subprotocol = plan.response.subprotocol.value_or(""),
-			.negotiated_extensions = plan.response.extensions,
-		};
-		if( not pending.empty() )
-			std::memcpy(adopt.pending_data.data(), pending.data(), pending.size());
-
-		result.handshake.subprotocol = adopt.negotiated_subprotocol;
-		result.handshake.extensions = adopt.negotiated_extensions;
-		result.stream.adopt(std::move(connection), std::move(adopt), error);
-	}
-	catch(...)
-	{
-		error = exception_error(std::current_exception());
-		close_upgrade_connection(context);
-	}
+			.negotiated_subprotocol = result.handshake.subprotocol,
+			.negotiated_extensions = result.handshake.extensions,
+		},
+		error
+	);
+}
+catch(...) {
+	error = exception_error(std::current_exception());
 }
 
-template <typename Exec>
-RIWO_WEBSOCKET_TAPI asio::awaitable<optional<std::tuple<error_code,basic_accept_result<Exec>>>,Exec>
-co_upgrade(http::basic_service_context<Exec> *active_context, upgrade_options active_options)
+template <core_concepts::exec Exec>
+asio::awaitable<optional<std::tuple<error_code,basic_accept_result<Exec>>>,Exec>
+co_upgrade(http::basic_server_exchange<Exec> *exchange, upgrade_options options)
 {
 	using result_t = basic_accept_result<Exec>;
-	result_t result(active_context->get_executor());
-
-	error_code adopt_error {};
+	result_t result(exchange->get_executor());
 	try {
-		result.stream = basic_stream<Exec>(
-			active_context->get_executor(), active_options.stream
-		);
-		if( active_options.handshake_timeout <= std::chrono::milliseconds::zero() )
-		{
-			close_upgrade_connection(*active_context);
-			co_return std::tuple<error_code,result_t> {
-				asio::error::timed_out, std::move(result)
-			};
-		}
-		const auto deadline = std::chrono::steady_clock::now() +
-			active_options.handshake_timeout;
+		result.stream = basic_stream<Exec>(exchange->get_executor(), options.stream);
 
-		auto plan = make_server_upgrade_plan (
-			*active_context, active_options, deadline, true
-		);
-		if( plan.accepted and active_options.async_request_validator )
+		const auto deadline = std::chrono::steady_clock::now() + options.handshake_timeout;
+		auto plan = prepare_server_upgrade(*exchange, options, true);
+
+		if( plan.accepted and options.async_request_validator )
 		{
-			auto invoke = [&active_options, &plan]() -> awaitable<upgrade_validation_result>
-			{
-				co_return co_await active_options.async_request_validator (
-					plan.request
-				);
-			};
-			upgrade_validation_result rejection;
-			error_code validation_error;
-			// Keep co_spawn's exception disposition separate from its value. With
-			// as_tuple, GCC may diagnose a move from an empty optional's storage.
 			try {
-				rejection = co_await asio::co_spawn (
-					active_context->get_executor(), invoke(),
+				if( auto rejection = co_await asio::co_spawn(exchange->get_executor(),
+						options.async_request_validator(plan.request), asio::use_awaitable_t<Exec>{}
+					) )
+				{
+					reject_upgrade(plan, std::move(*rejection),
+						make_error_code(errc::handshake_rejected)
+					);
+				}
+			}
+			catch(...)
+			{
+				reject_upgrade(plan, exception_error(std::current_exception()),
+					http::status::internal_server_error
+				);
+				plan.preserve_error_on_write_failure = true;
+			}
+		}
+		if( plan.accepted and server_deadline_expired(deadline) )
+			reject_upgrade(plan, asio::error::make_error_code(asio::error::timed_out));
+
+		if( plan.accepted and options.async_origin_validator )
+		{
+			optional<std::string> origin {};
+			if( auto value = plan.request.request_headers.find_first("Origin") )
+				origin = std::string(*value);
+			try {
+				if( auto rejection = co_await asio::co_spawn(exchange->get_executor(),
+						options.async_origin_validator(std::move(origin)), asio::use_awaitable_t<Exec>{}
+					) )
+				{
+					reject_upgrade(plan, std::move(*rejection),
+						make_error_code(errc::handshake_rejected)
+					);
+				}
+			}
+			catch(...)
+			{
+				reject_upgrade(plan, exception_error(std::current_exception()),
+					http::status::internal_server_error
+				);
+				plan.preserve_error_on_write_failure = true;
+			}
+		}
+		if( plan.accepted and server_deadline_expired(deadline) )
+			reject_upgrade(plan, asio::error::make_error_code(asio::error::timed_out));
+
+		if( plan.accepted and options.async_subprotocol_selector )
+		{
+			try {
+				plan.response_message.subprotocol = co_await asio::co_spawn (
+					exchange->get_executor(),
+					options.async_subprotocol_selector(plan.request, plan.opening.subprotocols),
 					asio::use_awaitable_t<Exec>{}
 				);
 			}
 			catch(...) {
-				validation_error = exception_error(std::current_exception());
-			}
-			if( validation_error )
-			{
-				reject_upgrade(plan,
-					upgrade_rejection {
-						.status = http::status::internal_server_error
-					},
-					validation_error
-				);
-				plan.preserve_error_on_write_failure = true;
-			}
-			else if( rejection )
-			{
-				reject_upgrade(plan, std::move(*rejection),
-					make_error_code(errc::handshake_rejected)
-				);
+				reject_selector_exception(plan, std::current_exception());
 			}
 		}
-		if( plan.accepted and server_deadline_expired(deadline) )
-			reject_upgrade(plan, asio::error::timed_out);
+		else if( plan.accepted )
+			select_server_subprotocol(plan, options);
+		validate_server_subprotocol(plan, options, deadline);
 
-		if( plan.accepted and active_options.async_origin_validator )
+		if( plan.accepted and options.async_extension_selector )
 		{
-			optional<std::string> origin;
-			if( auto it = plan.request.request_headers.find(http::header::origin);
-				it != plan.request.request_headers.end() )
-				origin = it->second.to_string();
-
-			auto invoke = [&active_options, origin = std::move(origin)]
-			() mutable -> awaitable<upgrade_validation_result>
-			{
-				co_return co_await active_options.async_origin_validator (
-					std::move(origin)
-				);
-			};
-			upgrade_validation_result rejection;
-			error_code validation_error;
 			try {
-				rejection = co_await asio::co_spawn (
-					active_context->get_executor(), invoke(),
+				plan.response_message.extensions = co_await asio::co_spawn (
+					exchange->get_executor(),
+					options.async_extension_selector(plan.request, plan.opening.extensions),
 					asio::use_awaitable_t<Exec>{}
 				);
 			}
 			catch(...) {
-				validation_error = exception_error(std::current_exception());
+				reject_selector_exception(plan, std::current_exception());
 			}
-			if( validation_error )
-			{
-				reject_upgrade(plan,
-					upgrade_rejection {
-						.status = http::status::internal_server_error
-					},
-					validation_error
-				);
-				plan.preserve_error_on_write_failure = true;
-			}
-			else if( rejection )
-			{
-				reject_upgrade(plan, std::move(*rejection),
-					make_error_code(errc::handshake_rejected)
-				);
-			}
-		}
-		if( plan.accepted and server_deadline_expired(deadline) )
-			reject_upgrade(plan, asio::error::timed_out);
-
-		if( plan.accepted and active_options.async_subprotocol_selector )
-		{
-			auto invoke = [&active_options, &plan]() -> awaitable<optional<std::string>>
-			{
-				co_return co_await active_options.async_subprotocol_selector(
-					plan.request, plan.opening.subprotocols);
-			};
-			auto selection_result = co_await asio::co_spawn (
-				active_context->get_executor(), invoke(), asio::as_tuple(deferred)
-			);
-			auto &[exception, selected] = selection_result;
-
-			if( exception_error(exception) )
-				reject_selector_exception(plan, exception);
-			else
-				plan.response.subprotocol = std::move(selected);
 		}
 		else if( plan.accepted )
-			select_server_subprotocol(plan, active_options);
+			select_server_extensions(plan, options);
 
-		validate_server_subprotocol(plan, active_options, deadline);
-
-		if( plan.accepted and active_options.async_extension_selector )
-		{
-			auto invoke = [&active_options, &plan]() -> awaitable<std::vector<extension>>
-			{
-				co_return co_await active_options.async_extension_selector(
-					plan.request, plan.opening.extensions
-				);
-			};
-			auto selection_result = co_await asio::co_spawn (
-				active_context->get_executor(), invoke(), asio::as_tuple(deferred)
-			);
-			auto &[exception, selected] = selection_result;
-			if( exception_error(exception) )
-				reject_selector_exception(plan, exception);
-			else
-				plan.response.extensions = std::move(selected);
-		}
-		else if( plan.accepted )
-			select_server_extensions(plan, active_options);
-
-		validate_server_extensions(plan, active_options, deadline);
-		finalize_server_upgrade_plan(plan, active_options, deadline);
-
+		validate_server_extensions(plan, options, deadline);
+		finalize_server_upgrade_plan(plan, options, deadline);
 		result.request = plan.request;
-		if( plan.error == asio::error::timed_out or server_deadline_expired(deadline) )
-		{
-			close_upgrade_connection(*active_context);
-			co_return std::tuple<error_code,result_t> {
-				asio::error::timed_out, std::move(result)
-			};
-		}
-		prepare_response(active_context->response(), plan);
-		auto remaining = server_remaining_timeout(deadline);
 
-		if( remaining <= std::chrono::milliseconds::zero() )
-		{
-			close_upgrade_connection(*active_context);
-			co_return std::tuple<error_code,result_t> {
-				asio::error::timed_out, std::move(result)
-			};
-		}
-		auto [write_error, transferred] =
-			co_await active_context->response().write (
-				asio::buffer(plan.body), asio::as_tuple(asio::use_awaitable_t<Exec>{})
-			);
-		ignore_unused(transferred);
-		if( write_error )
-		{
-			close_upgrade_connection(*active_context);
-			co_return std::tuple<error_code,result_t> {
-				plan.preserve_error_on_write_failure ?
-					plan.error : write_error, std::move(result)
-			};
-		}
-		if( server_deadline_expired(deadline) )
-		{
-			close_upgrade_connection(*active_context);
-			co_return std::tuple<error_code,result_t> {
-				asio::error::timed_out, std::move(result)
-			};
-		}
 		if( not plan.accepted )
 		{
-			co_return std::tuple<error_code,result_t> {
-				plan.error, std::move(result)
+			if( plan.error == asio::error::make_error_code(asio::error::timed_out) )
+			{
+				exchange->cancel();
+				co_return std::tuple {plan.error, std::move(result)};
+			}
+			auto original_error = plan.error;
+			const bool preserve = plan.preserve_error_on_write_failure;
+
+			auto [write_error] = co_await exchange->respond (
+				std::move(plan.response), asio::buffer(plan.body),
+				asio::as_tuple(asio::use_awaitable_t<Exec>{})
+			);
+			co_return std::tuple {
+				write_error and not preserve ? write_error : original_error,
+				std::move(result)
 			};
 		}
-		auto pending = active_context->request().take_pending_data();
-		auto connection = active_context->hand_over_connection();
 
-		adopt_options adopt {
-			.stream_role = role::server,
-			.pending_data = std::vector<std::byte>(pending.size()),
-			.negotiated_subprotocol = plan.response.subprotocol.value_or(""),
-			.negotiated_extensions = plan.response.extensions,
-		};
-		if( not pending.empty() )
-			std::memcpy(adopt.pending_data.data(), pending.data(), pending.size());
+		auto accept_result = co_await exchange->accept_duplex(
+			std::move(plan.response), asio::as_tuple(asio::use_awaitable_t<Exec>{})
+		);
+		auto &[accept_error, channel] = accept_result;
+		if( accept_error )
+		{
+			co_return std::tuple {
+				accept_error, std::move(result)
+			};
+		}
+		result.handshake.subprotocol = plan.response_message.subprotocol.value_or("");
+		result.handshake.extensions = plan.response_message.extensions;
 
-		result.handshake.subprotocol = adopt.negotiated_subprotocol;
-		result.handshake.extensions = adopt.negotiated_extensions;
-		result.stream.adopt(std::move(connection), std::move(adopt), adopt_error);
-
-		co_return std::tuple<error_code,result_t> {
+		error_code adopt_error {};
+		result.stream.adopt (
+			std::make_shared<http::basic_duplex_channel<Exec>>(std::move(channel)),
+			adopt_options {
+				.stream_role = role::server,
+				.negotiated_subprotocol = result.handshake.subprotocol,
+				.negotiated_extensions = result.handshake.extensions,
+			},
+			adopt_error
+		);
+		co_return std::tuple {
 			adopt_error, std::move(result)
 		};
 	}
 	catch(...)
 	{
-		close_upgrade_connection(*active_context);
-		adopt_error = exception_error(std::current_exception());
+		co_return std::tuple {
+			exception_error(std::current_exception()),
+			std::move(result)
+		};
 	}
-	co_return std::tuple<error_code,result_t> {
-		adopt_error, std::move(result)
-	};
 }
 
-template <typename Exec, typename Handler>
-RIWO_WEBSOCKET_TAPI void start_upgrade
-(http::basic_service_context<Exec> &context, upgrade_options options, Handler &&handler)
+template <core_concepts::exec Exec, typename Handler>
+void start_upgrade
+(http::basic_server_exchange<Exec> &exchange, upgrade_options options, Handler &&handler)
 {
-	using result_t = basic_accept_result<Exec>;
-	auto exec = context.get_executor();
+	auto executor = exchange.get_executor();
+	auto coroutine_cancellation = std::make_shared<asio::cancellation_signal>();
 
-	using handler_t = std::remove_cvref_t<Handler>;
-	auto fallback = [exec] {
-		return result_t(exec);
+	auto slot = asio::get_associated_cancellation_slot(handler);
+	if( slot.is_connected() )
+	{
+		std::weak_ptr weak = coroutine_cancellation;
+		slot.assign([exchange = std::addressof(exchange), weak](asio::cancellation_type type) noexcept
+		{
+			if( type == asio::cancellation_type::none )
+				return ;
+
+			exchange->cancel();
+			if( auto signal = weak.lock() )
+				signal->emit(type);
+		});
+	}
+	auto completion =
+	[handler = std::forward<Handler>(handler), executor, slot, coroutine_cancellation]
+	(const std::exception_ptr &exception, optional<std::tuple<error_code,basic_accept_result<Exec>>> value) mutable
+	{
+		ignore_unused(coroutine_cancellation);
+		if( slot.is_connected() )
+			slot.clear();
+
+		if( exception )
+		{
+			std::move(handler)(exception_error(exception),
+				basic_accept_result<Exec>(executor)
+			);
+		}
+		else if( value )
+		{
+			std::move(handler)(std::get<0>(*value),
+				std::move(std::get<1>(*value))
+			);
+		}
+		else
+			std::move(handler)(asio::error::operation_aborted,
+			basic_accept_result<Exec>(executor)
+		);
 	};
-	using factory_t = decltype(fallback);
-	riwo::detail::launch_awaitable(exec, co_upgrade(&context, std::move(options)),
-		riwo::detail::awaitable_optional_tuple_io_handler<result_t,handler_t,decltype(exec),factory_t>(
-			std::forward<Handler>(handler), exec, std::move(fallback)
-		)
+	asio::co_spawn(executor, co_upgrade(&exchange, std::move(options)),
+		asio::bind_cancellation_slot(coroutine_cancellation->slot(), std::move(completion))
 	);
 }
 
@@ -475,30 +411,31 @@ RIWO_WEBSOCKET_TAPI void start_upgrade
 
 template <core_concepts::exec Exec>
 basic_accept_result<Exec>::basic_accept_result
-(core_concepts::match_sched<executor_t> auto &&exec) :
-	stream(std::forward<decltype(exec)>(exec))
-{
-
-}
-
-template <core_concepts::exec Exec>
-basic_accept_result<Exec>::basic_accept_result(stream_t value) :
-	stream(std::move(value))
-{
-
-}
-
-template <core_concepts::exec Exec>
-basic_accept_result<Exec>::basic_accept_result
-(stream_t value, request_info request_value, upgrade_result handshake_value) :
+(basic_stream<Exec> value, request_info request_value, upgrade_result handshake_value) :
 	stream(std::move(value)), request(std::move(request_value)),
 	handshake(std::move(handshake_value))
 {
 
 }
 
-template <http::concepts::any_exec_stream Stream>
-class RIWO_WEBSOCKET_TAPI basic_server<Stream>::impl :
+template <core_concepts::exec Exec>
+basic_accept_result<Exec>::basic_accept_result(basic_stream<Exec> value) :
+	stream(std::move(value))
+{
+
+}
+
+template <core_concepts::exec Exec>
+template <typename Exec0>
+basic_accept_result<Exec>::basic_accept_result(Exec0 &&executor)
+	requires core_concepts::match_sched<Exec0,Exec> :
+	stream(get_executor_helper(std::forward<Exec0>(executor)))
+{
+
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+class basic_server<Exec,ServiceExec>::impl :
 	public std::enable_shared_from_this<impl>
 {
 	RIWO_DISABLE_COPY_MOVE(impl)
@@ -532,53 +469,39 @@ class RIWO_WEBSOCKET_TAPI basic_server<Stream>::impl :
 			}
 		}
 	};
+	using accept_waiter_ptr = std::shared_ptr<accept_waiter>;
 
 	struct pending_handshake
 	{
-		explicit pending_handshake(const executor_t &exec) :
-			timer(exec) {}
+		explicit pending_handshake(const service_executor_t &executor) :
+			timer(executor) {}
 
 		asio::steady_timer timer;
-		std::shared_ptr<accept_waiter> waiter {};
-		std::chrono::milliseconds rejection_timeout {};
+		accept_waiter_ptr waiter {};
 
+		std::chrono::milliseconds rejection_timeout {};
 		bool queued = false;
 		bool stopped = false;
 	};
+	using pending_handshake_ptr = std::shared_ptr<pending_handshake>;
 
 	struct acquisition
 	{
-		std::shared_ptr<accept_waiter> waiter {};
+		accept_waiter_ptr waiter {};
 		std::chrono::milliseconds rejection_timeout {};
 		bool stopped = false;
 	};
 
 public:
-	impl(acceptor_wrap_t &&wrap, asio::any_io_executor service_exec, config_t config) :
-		m_http_server(std::move(wrap), std::move(service_exec)),
-		m_config(validate_config(std::move(config))) {}
+	impl(acceptor_wrap_t &&acceptor, service_executor_t service_executor, config_t config) :
+		m_config(detail::validate_server_config(std::move(config))),
+		m_http_server(std::move(acceptor), std::move(service_executor), m_config.http) {}
 
-	explicit impl(acceptor_wrap_t &&wrap, config_t config) :
-		m_http_server(std::move(wrap)), m_config(validate_config(std::move(config))) {}
+	impl(acceptor_wrap_t &&acceptor, config_t config) :
+		m_config(detail::validate_server_config(std::move(config))),
+		m_http_server(std::move(acceptor), m_config.http) {}
 
-private:
-	[[nodiscard]] static config_t validate_config(config_t config)
-	{
-		if( config.default_upgrade.stream.read_buffer_size == 0 or
-			config.default_upgrade.stream.ping_interval < std::chrono::milliseconds::zero() )
-		{
-			system_error::loc_throw (
-				make_system_error_code(std::errc::invalid_argument),
-				"riwo::websocket::basic_server"
-			);
-		}
-		return config;
-	}
-
-	[[nodiscard]] accept_result_t idle_result() noexcept {
-		return accept_result_t(m_http_server.get_executor());
-	}
-
+public:
 	[[nodiscard]] bool enter_accept_mode()
 	{
 		bool install_handler = false;
@@ -596,13 +519,13 @@ private:
 		if( install_handler )
 		{
 			std::weak_ptr<impl> weak = this->shared_from_this();
-			m_http_server.on_default([weak](context_t &context) -> awaitable<void>
+			m_http_server.on_default(
+			[weak](context_t &context) -> awaitable<void>
 			{
 				if( auto self = weak.lock() )
 					co_await self->serve_accept(context);
 				else
-					detail::close_upgrade_connection(context);
-				co_return ;
+					context.cancel();
 			});
 		}
 		return true;
@@ -612,17 +535,13 @@ private:
 	{
 		std::lock_guard lock(m_mutex);
 		if( m_mode == delivery_mode::accept )
-		{
-			logic_error::loc_throw (
-				"riwo::websocket::basic_server: accept mode is already active"
-			);
-		}
+			logic_error::loc_throw("riwo::websocket::basic_server: accept mode is already active");
 		m_mode = delivery_mode::handler;
 	}
 
-	void post_timer_cancel(const std::shared_ptr<pending_handshake> &pending)
+	void post_timer_cancel(const pending_handshake_ptr &pending)
 	{
-		asio::post(m_http_server.get_executor(), [pending]
+		asio::post(m_http_server.get_service_executor(), [pending]
 		{
 			try {
 				ignore_unused(pending->timer.cancel());
@@ -631,9 +550,9 @@ private:
 		});
 	}
 
-	[[nodiscard]] std::shared_ptr<pending_handshake> pop_pending_handshake_locked()
+	[[nodiscard]] pending_handshake_ptr pop_pending_handshake_locked()
 	{
-		while(not m_pending_handshakes.empty())
+		while( not m_pending_handshakes.empty() )
 		{
 			auto pending = m_pending_handshakes.front();
 			m_pending_handshakes.pop_front();
@@ -647,9 +566,9 @@ private:
 		return {};
 	}
 
-	[[nodiscard]] std::shared_ptr<accept_waiter> pop_accept_locked()
+	[[nodiscard]] accept_waiter_ptr pop_accept_locked()
 	{
-		while(not m_accepts.empty())
+		while( not m_accepts.empty() )
 		{
 			auto waiter = m_accepts.front();
 			m_accepts.pop_front();
@@ -662,9 +581,9 @@ private:
 		return {};
 	}
 
-	void enqueue_accept(const std::shared_ptr<accept_waiter> &waiter, bool front = false)
+	void enqueue_accept(const accept_waiter_ptr &waiter, bool front = false)
 	{
-		std::shared_ptr<pending_handshake> pending;
+		pending_handshake_ptr pending {};
 		bool abort = false;
 		{
 			std::lock_guard lock(m_mutex);
@@ -676,6 +595,7 @@ private:
 
 			else if( front )
 				m_accepts.emplace_front(waiter);
+
 			else
 				m_accepts.emplace_back(waiter);
 		}
@@ -686,43 +606,45 @@ private:
 			waiter->complete(asio::error::operation_aborted, idle_result());
 	}
 
-	void cancel_waiter(const std::shared_ptr<accept_waiter> &waiter) noexcept
+	void cancel_waiter(const accept_waiter_ptr &waiter) noexcept
 	{
 		if( waiter->cancelled.exchange(true, std::memory_order_acq_rel) )
 			return ;
 		{
 			std::lock_guard lock(m_mutex);
-			auto it = std::find(m_accepts.begin(), m_accepts.end(), waiter);
+			auto iterator = std::find(m_accepts.begin(), m_accepts.end(), waiter);
 
-			if( it != m_accepts.end() )
-				m_accepts.erase(it);
+			if( iterator != m_accepts.end() )
+				m_accepts.erase(iterator);
 		}
 		waiter->cancellation.emit(asio::cancellation_type::all);
 		waiter->complete(asio::error::operation_aborted, idle_result());
 	}
 
 	template <typename Handler>
-	[[nodiscard]] std::shared_ptr<accept_waiter> make_waiter(upgrade_options_t options, Handler &&handler)
+	[[nodiscard]] accept_waiter_ptr make_waiter(upgrade_options_t options, Handler &&handler)
 	{
 		using handler_t = std::remove_cvref_t<Handler>;
-		auto owned_handler = std::make_shared<handler_t>(
-			std::forward<Handler>(handler)
-		);
+
+		auto owned_handler = std::make_shared<handler_t>(std::forward<Handler>(handler));
 		auto waiter = std::make_shared<accept_waiter>();
+
 		waiter->options = std::move(options);
 		waiter->caller_slot = asio::get_associated_cancellation_slot(*owned_handler);
 
-		auto completion_exec = asio::get_associated_executor(
-			*owned_handler, m_http_server.get_executor()
+		auto completion_executor = asio::get_associated_executor (
+			*owned_handler, m_http_server.get_service_executor()
 		);
 		auto allocator = asio::get_associated_allocator(*owned_handler);
-		waiter->completion = [owned_handler, completion_exec, allocator]
+
+		waiter->completion = [owned_handler, completion_executor, allocator]
 		(error_code error, accept_result_t result) mutable
 		{
-			asio::post(completion_exec, asio::bind_allocator(allocator,
-			[owned_handler, error, result = std::move(result)]() mutable {
-				std::move(*owned_handler)(error, std::move(result));
-			}));
+			asio::post(completion_executor, asio::bind_allocator(allocator,
+				[owned_handler, error, result = std::move(result)]() mutable {
+					std::move(*owned_handler)(error, std::move(result));
+				})
+			);
 		};
 		if( waiter->caller_slot.is_connected() )
 		{
@@ -743,20 +665,16 @@ private:
 			});
 		}
 		std::lock_guard lock(m_mutex);
-		m_all_accepts.erase(std::remove_if (
-			m_all_accepts.begin(), m_all_accepts.end(),
-			[](const auto &item) {
-				return item.expired();
-			}),
-			m_all_accepts.end()
-		);
+		std::erase_if(m_all_accepts, [](const auto &item) {
+			return item.expired();
+		});
 		m_all_accepts.emplace_back(waiter);
 		return waiter;
 	}
 
 	[[nodiscard]] awaitable<acquisition> acquire_accept()
 	{
-		std::shared_ptr<pending_handshake> pending;
+		pending_handshake_ptr pending {};
 		{
 			std::lock_guard lock(m_mutex);
 			if( m_stopped )
@@ -774,31 +692,29 @@ private:
 					.rejection_timeout = config.default_upgrade.handshake_timeout
 				};
 			}
-			pending = std::make_shared<pending_handshake>(
-				m_http_server.get_executor()
-			);
+			pending = std::make_shared<pending_handshake>(m_http_server.get_service_executor());
 			pending->timer.expires_after(config.pending_handshake_timeout);
-			pending->rejection_timeout = config.default_upgrade.handshake_timeout;
 
+			pending->rejection_timeout = config.default_upgrade.handshake_timeout;
 			pending->queued = true;
+
 			m_pending_handshakes.emplace_back(pending);
 		}
-		auto [timer_error] = co_await pending->timer.async_wait (
-			asio::as_tuple(use_awaitable)
-		);
+		auto [timer_error] = co_await pending->timer.async_wait(asio::as_tuple(use_awaitable));
 		ignore_unused(timer_error);
-		std::lock_guard lock(m_mutex);
 
+		std::lock_guard lock(m_mutex);
 		if( pending->waiter )
 			co_return acquisition {.waiter = std::move(pending->waiter)};
 
 		if( pending->queued )
 		{
-			auto it = std::find(m_pending_handshakes.begin(),
-				m_pending_handshakes.end(), pending
+			auto iterator = std::find (
+				m_pending_handshakes.begin(), m_pending_handshakes.end(), pending
 			);
-			if( it != m_pending_handshakes.end() )
-				m_pending_handshakes.erase(it);
+			if( iterator != m_pending_handshakes.end() )
+				m_pending_handshakes.erase(iterator);
+
 			pending->queued = false;
 		}
 		co_return acquisition {
@@ -811,43 +727,44 @@ private:
 	{
 		if( timeout <= std::chrono::milliseconds::zero() )
 		{
-			detail::close_upgrade_connection(context);
+			context.cancel();
 			co_return ;
 		}
-		constexpr std::string_view body =
+		static constexpr std::string_view body =
 			"WebSocket accept queue unavailable\n";
 
-		context.response()
-			.set_status(http::status::service_unavailable)
-			.set_header(http::header::connection, "close");
+		http::response_head response {};
+		response.status = http::status::service_unavailable;
 
-		auto [error, transferred] = co_await context.response().write(
-			asio::buffer(body), redirect_time(asio::as_tuple(use_awaitable), timeout)
+		if( not detail::server_is_h2(context.selected_protocol()) )
+			response.headers.set("Connection", "close");
+
+		auto [error] = co_await context.respond(std::move(response),
+			asio::buffer(body), asio::as_tuple(use_awaitable)
 		);
-		ignore_unused(error, transferred);
-		detail::close_upgrade_connection(context);
-		co_return ;
+		ignore_unused(error);
+		context.cancel();
 	}
 
 	awaitable<void> serve_accept(context_t &context)
 	{
-		if( not is_upgrade_request(context.request()) )
+		if( not is_upgrade_request(context) )
 		{
-			upgrade_options_t options;
+			upgrade_options_t options {};
 			{
 				std::lock_guard lock(m_mutex);
 				options = m_config.default_upgrade;
 			}
-			auto upgrade_result = co_await websocket::upgrade (
-				context, std::move(options), asio::as_tuple(use_awaitable)
+			auto result = co_await websocket::upgrade(context,
+				std::move(options), asio::as_tuple(use_awaitable)
 			);
-			ignore_unused(upgrade_result);
+			ignore_unused(result);
 			co_return ;
 		}
 		auto acquired = co_await acquire_accept();
 		if( acquired.stopped )
 		{
-			detail::close_upgrade_connection(context);
+			context.cancel();
 			co_return ;
 		}
 		if( not acquired.waiter )
@@ -859,17 +776,18 @@ private:
 		if( waiter->cancelled.load(std::memory_order_acquire) )
 		{
 			waiter->complete(asio::error::operation_aborted, idle_result());
+
 			co_await reject_unavailable(context,
 				config_snapshot().default_upgrade.handshake_timeout
 			);
 			co_return ;
 		}
-		auto upgrade_result = co_await websocket::upgrade (
-			context, waiter->options, asio::bind_cancellation_slot (
+		auto upgraded = co_await websocket::upgrade(context,
+			waiter->options, asio::bind_cancellation_slot(
 				waiter->cancellation.slot(), asio::as_tuple(use_awaitable)
 			)
 		);
-		auto &[error, result] = upgrade_result;
+		auto &[error, result] = upgraded;
 		if( not error )
 		{
 			waiter->complete({}, std::move(result));
@@ -880,40 +798,20 @@ private:
 			waiter->complete(asio::error::operation_aborted, std::move(result));
 			co_return ;
 		}
-		// A malformed/rejected request must not consume a pending accept. The
-		// same options and FIFO position are retained for the next request.
+		// Rejected or malformed handshakes do not consume a queued accept.
 		enqueue_accept(waiter, true);
-		co_return ;
 	}
 
 public:
-	[[nodiscard]] bool stopped() const noexcept
-	{
-		std::lock_guard lock(m_mutex);
-		return m_stopped;
-	}
-
-	[[nodiscard]] config_t config_snapshot() const
-	{
-		std::lock_guard lock(m_mutex);
-		return m_config;
-	}
-
-	void set_config(config_t config)
-	{
-		config = validate_config(std::move(config));
-		std::lock_guard lock(m_mutex);
-		m_config = std::move(config);
-	}
-
 	template <typename Token>
 	[[nodiscard]] auto async_accept(upgrade_options_t options, Token &&token)
 	{
 		using token_t = std::remove_cvref_t<Token>;
-		token_t completion_token(std::forward<Token>(token));
 
+		token_t completion_token(std::forward<Token>(token));
 		auto self = this->shared_from_this();
-		return asio::async_initiate<token_t,void(error_code,accept_result_t)>(
+
+		return asio::async_initiate<token_t, void(error_code,accept_result_t)>(
 		[self = std::move(self), options = std::move(options)](auto completion_handler) mutable
 		{
 			auto waiter = self->make_waiter (
@@ -936,10 +834,10 @@ public:
 	{
 		struct sync_state
 		{
-			std::mutex mutex;
-			std::condition_variable changed;
-			std::unique_ptr<accept_result_t> result;
-			error_code error;
+			std::mutex mutex {};
+			std::condition_variable changed {};
+			std::unique_ptr<accept_result_t> result {};
+			error_code error {};
 		};
 		auto state = std::make_shared<sync_state>();
 		try {
@@ -953,13 +851,15 @@ public:
 				}
 				state->changed.notify_one();
 			});
-			waiter->completion = [state](error_code accept_error, accept_result_t result) mutable
+			// Synchronous accept waits on the caller and therefore completes
+			// directly instead of posting back to the same executor.
+			waiter->completion =
+			[state](error_code accept_error, accept_result_t result) mutable
 			{
 				{
 					std::lock_guard lock(state->mutex);
 					state->error = accept_error;
-					state->result = std::make_unique<accept_result_t>(
-						std::move(result));
+					state->result = std::make_unique<accept_result_t>(std::move(result));
 				}
 				state->changed.notify_one();
 			};
@@ -972,10 +872,11 @@ public:
 			}
 			else
 				enqueue_accept(waiter);
-
 			std::unique_lock lock(state->mutex);
-			state->changed.wait(lock, [&] { return static_cast<bool>(state->result); });
 
+			state->changed.wait(lock, [&]{
+				return static_cast<bool>(state->result);
+			});
 			error = state->error;
 			return std::move(*state->result);
 		}
@@ -986,26 +887,23 @@ public:
 	}
 
 	template <typename Func>
-	void bind_connection
-	(const path_opt_token_t &path_rules, Func &&func, optional<upgrade_options_t> options)
+	void bind_connection(std::string path, Func &&func, optional<upgrade_options_t> options)
 	{
 		enter_handler_mode();
-		auto selected = options.value_or(config_snapshot().default_upgrade);
 
-		auto handler = std::make_shared<std::remove_cvref_t<Func>>(
-			std::forward<Func>(func)
-		);
-		m_http_server.template on_request<http::method::get>(path_rules,
+		auto selected = options.value_or(config_snapshot().default_upgrade);
+		auto handler = std::make_shared<std::remove_cvref_t<Func>>(std::forward<Func>(func));
+
+		m_http_server.template on_request
+		<http::method::get, http::method::connect>(std::move(path),
 		[handler, selected = std::move(selected)](context_t &context) mutable -> awaitable<void>
 		{
-			auto upgrade_result = co_await websocket::upgrade (
+			auto upgraded = co_await websocket::upgrade (
 				context, selected, asio::as_tuple(use_awaitable)
 			);
-			auto &[error, result] = upgrade_result;
-
+			auto &[error, result] = upgraded;
 			if( not error )
 				co_await (*handler)(std::move(result));
-			co_return ;
 		});
 	}
 
@@ -1013,29 +911,36 @@ public:
 	void bind_default(Func &&func, optional<upgrade_options_t> options)
 	{
 		enter_handler_mode();
-		auto selected = options.value_or(config_snapshot().default_upgrade);
 
-		auto handler = std::make_shared<std::remove_cvref_t<Func>>(
-			std::forward<Func>(func)
-		);
-		m_http_server.on_default (
-		[handler, selected = std::move(selected)](context_t &context) mutable -> awaitable<void>
+		auto selected = options.value_or(config_snapshot().default_upgrade);
+		auto handler = std::make_shared<std::remove_cvref_t<Func>>(std::forward<Func>(func));
+
+		m_http_server.on_default([handler, selected = std::move(selected)]
+		(context_t &context) mutable -> awaitable<void>
 		{
-			auto upgrade_result = co_await websocket::upgrade (
+			auto upgraded = co_await websocket::upgrade (
 				context, selected, asio::as_tuple(use_awaitable)
 			);
-			auto &[error, result] = upgrade_result;
-
+			auto &[error, result] = upgraded;
 			if( not error )
 				co_await (*handler)(std::move(result));
-			co_return ;
 		});
+	}
+
+public:
+	void set_config(config_t config)
+	{
+		config = detail::validate_server_config(std::move(config));
+		m_http_server.set_config(config.http);
+
+		std::lock_guard lock(m_mutex);
+		m_config = std::move(config);
 	}
 
 	void cancel_all() noexcept
 	{
-		std::vector<std::shared_ptr<accept_waiter>> accepts;
-		std::deque<std::shared_ptr<pending_handshake>> handshakes;
+		std::vector<accept_waiter_ptr> accepts {};
+		std::deque<pending_handshake_ptr> handshakes {};
 		{
 			std::lock_guard lock(m_mutex);
 			m_stopped = true;
@@ -1073,120 +978,85 @@ public:
 	}
 
 public:
-	http_server_t m_http_server;
-	mutable std::mutex m_mutex;
+	[[nodiscard]] config_t config_snapshot() const
+	{
+		std::lock_guard lock(m_mutex);
+		return m_config;
+	}
 
+	[[nodiscard]] accept_result_t idle_result() const noexcept {
+		return accept_result_t(m_http_server.get_service_executor());
+	}
+
+	[[nodiscard]] bool stopped() const noexcept
+	{
+		std::lock_guard lock(m_mutex);
+		return m_stopped;
+	}
+
+public:
 	config_t m_config {};
+	http_server_t m_http_server;
+
 	delivery_mode m_mode = delivery_mode::unset;
 	bool m_stopped = false;
 
-	std::deque<std::shared_ptr<accept_waiter>> m_accepts {};
-	std::deque<std::shared_ptr<pending_handshake>> m_pending_handshakes {};
+	std::deque<accept_waiter_ptr> m_accepts {};
+	std::deque<pending_handshake_ptr> m_pending_handshakes {};
+
 	std::vector<std::weak_ptr<accept_waiter>> m_all_accepts {};
+	mutable std::mutex m_mutex {};
 };
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream>::basic_server(acceptor_wrap_t &&wrap,
-	core_concepts::sched auto &&service_exec, config_t config) :
-	m_impl(std::make_shared<impl>(std::move(wrap),
-		asio::any_io_executor(get_executor_helper(std::forward<decltype(service_exec)>(service_exec))),
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+basic_server<Exec,ServiceExec>::basic_server() requires (
+	core_concepts::match_sched<io_executor_t,executor_t> and
+	core_concepts::match_sched<executor_t,service_executor_t>
+) :
+	basic_server(acceptor_wrap_t{})
+{
+
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+basic_server<Exec,ServiceExec>::basic_server(acceptor_wrap_t &&acceptor, config_t config)
+	requires core_concepts::match_sched<executor_t,service_executor_t> :
+	m_impl(std::make_shared<impl>(std::move(acceptor), std::move(config)))
+{
+
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+template <typename ServiceExec0>
+basic_server<Exec,ServiceExec>::basic_server
+(acceptor_wrap_t &&acceptor, ServiceExec0 &&service_executor, config_t config) requires
+	core_concepts::match_sched<ServiceExec0,service_executor_t> :
+	m_impl(std::make_shared<impl>(std::move(acceptor),
+		get_executor_helper(std::forward<ServiceExec0>(service_executor)),
 		std::move(config)
 	))
 {
 
 }
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream>::basic_server(acceptor_wrap_t &&wrap, config_t config) :
-	m_impl(std::make_shared<impl>(std::move(wrap), std::move(config)))
-{
-
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream>::~basic_server()
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+basic_server<Exec,ServiceExec>::~basic_server()
 {
 	if( m_impl )
 		m_impl->stop();
 }
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::bind(endpoint_wrapper_t endpoint)
-{
-	m_impl->m_http_server.bind(std::move(endpoint));
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::bind
-(endpoint_wrapper_t endpoint, error_code &error) noexcept
-{
-	m_impl->m_http_server.bind(std::move(endpoint), error);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::start(size_t max)
-{
-	m_impl->m_http_server.start(max);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::start(size_t max, error_code &error) noexcept
-{
-	m_impl->m_http_server.start(max, error);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::start(error_code &error) noexcept
-{
-	m_impl->m_http_server.start(error);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::start
-(core_concepts::sched auto &&service_exec, size_t max)
-{
-	m_impl->m_http_server.start (
-		std::forward<decltype(service_exec)>(service_exec), max
-	);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::start
-(core_concepts::sched auto &&service_exec, size_t max, error_code &error) noexcept
-{
-	m_impl->m_http_server.start (
-		std::forward<decltype(service_exec)>(service_exec), max, error
-	);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::start
-(core_concepts::sched auto &&service_exec, error_code &error) noexcept
-{
-	m_impl->m_http_server.start (
-		std::forward<decltype(service_exec)>(service_exec), error
-	);
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Token>
-auto basic_server<Stream>::accept(Token &&token)
+auto basic_server<Exec,ServiceExec>::accept(Token &&token)
 	requires accept_token_v<Token>
 {
 	return accept(config().default_upgrade, std::forward<Token>(token));
 }
 
-template <http::concepts::any_exec_stream Stream>
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Token>
-auto basic_server<Stream>::accept(upgrade_options_t options, Token &&token)
+auto basic_server<Exec,ServiceExec>::accept(upgrade_options_t options, Token &&token)
 	requires accept_token_v<Token>
 {
 	if constexpr( is_error_code_token_v<Token> )
@@ -1196,192 +1066,266 @@ auto basic_server<Stream>::accept(upgrade_options_t options, Token &&token)
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
-		error_code error;
+		error_code error {};
 		auto result = m_impl->accept_sync(std::move(options), error);
+
 		if( error )
-		{
-			system_error::loc_throw(error,
-				"riwo::websocket::basic_server::accept"
-			);
-		}
+			system_error::loc_throw(error, "riwo::websocket::basic_server::accept");
 		return result;
 	}
 	else
-	{
-		return m_impl->async_accept(std::move(options),
-			std::forward<Token>(token)
-		);
-	}
+		return m_impl->async_accept(std::move(options), std::forward<Token>(token));
 }
 
-template <http::concepts::any_exec_stream Stream>
-size_t basic_server<Stream>::pending_accept_count() const noexcept
-{
-	std::lock_guard lock(m_impl->m_mutex);
-	return m_impl->m_accepts.size();
-}
-
-template <http::concepts::any_exec_stream Stream>
-size_t basic_server<Stream>::pending_handshake_count() const noexcept
-{
-	std::lock_guard lock(m_impl->m_mutex);
-	return m_impl->m_pending_handshakes.size();
-}
-
-template <http::concepts::any_exec_stream Stream>
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Func>
-basic_server<Stream> &basic_server<Stream>::on_connection
-(const path_opt_token_t &path_rules, Func &&func, optional<upgrade_options_t> options)
+auto basic_server<Exec,ServiceExec>::on_connection
+(std::string path, Func &&func, optional<upgrade_options_t> options) -> basic_server&
 	requires connection_handler_v<Func>
 {
 	m_impl->bind_connection (
-		path_rules, std::forward<Func>(func), std::move(options)
+		std::move(path), std::forward<Func>(func), std::move(options)
 	);
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
 template <typename Func>
-basic_server<Stream> &basic_server<Stream>::on_default(Func &&func, optional<upgrade_options_t> options)
+auto basic_server<Exec,ServiceExec>::on_default
+(Func &&func, optional<upgrade_options_t> options) -> basic_server&
 	requires connection_handler_v<Func>
 {
 	m_impl->bind_default(std::forward<Func>(func), std::move(options));
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-template <core_concepts::text_p<char> Text>
-basic_server<Stream> &basic_server<Stream>::unbound_connection(const Text &path_rule)
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::on_server_error(server_error_handler_t handler) -> basic_server&
 {
-	if( auto rule = strtls::to_string(path_rule); rule.empty() )
+	m_impl->m_http_server.on_server_error(std::move(handler));
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::on_service_error(service_error_handler_t handler) -> basic_server&
+{
+	m_impl->m_http_server.on_service_error(std::move(handler));
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::bind(endpoint_wrapper_t endpoint) -> basic_server&
+{
+	m_impl->m_http_server.bind(std::move(endpoint));
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::bind
+(endpoint_wrapper_t endpoint, error_code &error) noexcept -> basic_server&
+{
+	m_impl->m_http_server.bind(std::move(endpoint), error);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::start(size_t max) -> basic_server&
+{
+	m_impl->m_http_server.start(max);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::start(size_t max, error_code &error) noexcept -> basic_server&
+{
+	m_impl->m_http_server.start(max, error);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::start(error_code &error) noexcept -> basic_server&
+{
+	m_impl->m_http_server.start(error);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::serve(negotiated_transport_t transport) -> basic_server&
+{
+	m_impl->m_http_server.serve(std::move(transport));
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::serve
+(negotiated_transport_t transport, error_code &error) noexcept -> basic_server&
+{
+	m_impl->m_http_server.serve(std::move(transport), error);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+template <typename ServiceExec0>
+auto basic_server<Exec,ServiceExec>::start(ServiceExec0 &&service_executor, size_t max) -> basic_server&
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t>
+{
+	m_impl->m_http_server.start(std::forward<ServiceExec0>(service_executor), max);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+template <typename ServiceExec0>
+auto basic_server<Exec,ServiceExec>::start
+(ServiceExec0 &&service_executor, size_t max, error_code &error) noexcept -> basic_server&
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t>
+{
+	m_impl->m_http_server.start(std::forward<ServiceExec0>(service_executor), max, error);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+template <typename ServiceExec0>
+auto basic_server<Exec,ServiceExec>::start
+(ServiceExec0 &&service_executor, error_code &error) noexcept -> basic_server&
+	requires core_concepts::match_sched<ServiceExec0,service_executor_t>
+{
+	m_impl->m_http_server.start(std::forward<ServiceExec0>(service_executor), error);
+	return *this;
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::unbound_connection(std::string_view path) -> basic_server&
+{
+	if( path.empty() )
 	{
-		m_impl->m_http_server.on_default (
-			[](context_t&) -> awaitable<void> { co_return ; }
-		);
+		m_impl->m_http_server.on_default([](context_t&) -> awaitable<void> {
+			co_return ;
+		});
 	}
 	else
-		m_impl->m_http_server.unbound_request(rule);
+		m_impl->m_http_server.unbound_request(path);
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::on_server_error(server_error_handler_t func)
-{
-	m_impl->m_http_server.on_server_error(std::move(func));
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::on_service_error(service_error_handler_t func)
-{
-	m_impl->m_http_server.on_service_error(std::move(func));
-	return *this;
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::unbound_server_error()
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::unbound_server_error() -> basic_server&
 {
 	m_impl->m_http_server.unbound_server_error();
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::unbound_service_error()
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::unbound_service_error() -> basic_server&
 {
 	m_impl->m_http_server.unbound_service_error();
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::set_config(const config_t &config)
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::set_config(config_t config) -> basic_server&
 {
-	m_impl->set_config(config);
+	m_impl->set_config(std::move(config));
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-auto basic_server<Stream>::config() const -> config_t
-{
-	return m_impl->config_snapshot();
-}
-
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::cancel() noexcept
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::cancel() noexcept -> basic_server&
 {
 	m_impl->stop();
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-basic_server<Stream> &basic_server<Stream>::stop() noexcept
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::stop() noexcept -> basic_server&
 {
 	m_impl->stop();
 	return *this;
 }
 
-template <http::concepts::any_exec_stream Stream>
-auto basic_server<Stream>::http_server() const noexcept -> const http_server_t&
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+size_t basic_server<Exec,ServiceExec>::pending_accept_count() const noexcept
+{
+	std::lock_guard lock(m_impl->m_mutex);
+	return m_impl->m_accepts.size();
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+size_t basic_server<Exec,ServiceExec>::pending_handshake_count() const noexcept
+{
+	std::lock_guard lock(m_impl->m_mutex);
+	return m_impl->m_pending_handshakes.size();
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::http_server() const noexcept -> const http_server_t&
 {
 	return m_impl->m_http_server;
 }
 
-template <http::concepts::any_exec_stream Stream>
-auto basic_server<Stream>::http_server() noexcept -> http_server_t&
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::http_server() noexcept -> http_server_t&
 {
 	return m_impl->m_http_server;
 }
 
-template <http::concepts::any_exec_stream Stream>
-auto basic_server<Stream>::get_executor() noexcept -> executor_t
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::get_executor() noexcept -> executor_t
 {
 	return m_impl->m_http_server.get_executor();
 }
 
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::get_service_executor() const noexcept -> service_executor_t
+{
+	return m_impl->m_http_server.get_service_executor();
+}
+
+template <core_concepts::exec Exec, core_concepts::exec ServiceExec>
+auto basic_server<Exec,ServiceExec>::config() const -> config_t
+{
+	return m_impl->config_snapshot();
+}
+
 template <core_concepts::exec Exec>
-bool is_upgrade_request(const http::basic_request<Exec> &request) noexcept
+bool is_upgrade_request(const http::basic_server_exchange<Exec> &exchange) noexcept
 {
-	if( not request.is_upgrade() )
-		return false;
-
-	auto protocol = http::upgrade_protocol(request.headers());
-	if( not protocol )
-		return false;
-
-	std::string_view value(*protocol);
-	while(not value.empty() and (value.front() == ' ' or value.front() == '\t'))
-		value.remove_prefix(1);
-
-	while(not value.empty() and (value.back() == ' ' or value.back() == '\t'))
-		value.remove_suffix(1);
-
-	return detail::server_ascii_equal_case_insensitive(value, "websocket");
+	const auto &request = exchange.request();
+	if( detail::server_is_h2(exchange.selected_protocol()) )
+	{
+		return request.method.known() == http::method::connect and request.connect_protocol and
+			detail::server_equal_ci(*request.connect_protocol, "websocket");
+	}
+	return request.method.known() == http::method::get and
+		detail::header_has_token(request.headers, "Connection", "Upgrade") and
+		detail::header_has_token(request.headers, "Upgrade", "websocket");
 }
 
-template <core_concepts::exec Exec, typename Token>
-auto upgrade(http::basic_service_context<Exec> &context, Token &&token)
-	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,basic_accept_result<Exec>>
+template <core_concepts::exec Exec,
+	core_concepts::dis_detached_tf_opt_token<error_code,basic_accept_result<Exec>> Token>
+auto upgrade(http::basic_server_exchange<Exec> &exchange, Token &&token)
 {
-	return upgrade(context, upgrade_options{}, std::forward<Token>(token));
+	return upgrade(exchange, upgrade_options{}, std::forward<Token>(token));
 }
 
-template <core_concepts::exec Exec, typename Token>
-auto upgrade(http::basic_service_context<Exec> &context, upgrade_options options, Token &&token)
-	requires core_concepts::dis_detached_tf_opt_token<Token,error_code,basic_accept_result<Exec>>
+template <core_concepts::exec Exec,
+	core_concepts::dis_detached_tf_opt_token<error_code,basic_accept_result<Exec>> Token>
+auto upgrade(http::basic_server_exchange<Exec> &exchange, upgrade_options options, Token &&token)
 {
+	using result_t = basic_accept_result<Exec>;
 	if constexpr( is_error_code_token_v<Token> )
 	{
-		basic_accept_result<Exec> result(context.get_executor());
+		result_t result(exchange.get_executor());
 		auto adapted_error = adapt_error_code(token);
 
-		detail::upgrade_sync(context, std::move(options), result, adapted_error.get());
+		detail::upgrade_sync(exchange, std::move(options), result, adapted_error.get());
 		return result;
 	}
 	else if constexpr( is_sync_opt_token_v<Token> )
 	{
-		basic_accept_result<Exec> result(context.get_executor());
-		error_code error;
+		error_code error {};
+		result_t result(exchange.get_executor());
 
-		detail::upgrade_sync(context, std::move(options), result, error);
+		detail::upgrade_sync(exchange, std::move(options), result, error);
 		if( error )
 			system_error::loc_throw(error, "riwo::websocket::upgrade");
 		return result;
@@ -1389,13 +1333,10 @@ auto upgrade(http::basic_service_context<Exec> &context, upgrade_options options
 	else
 	{
 		const auto timeout = options.handshake_timeout;
-		return detail::initiate_handshake_io<basic_accept_result<Exec>>(
-			context.get_executor(),
-			[&context, options = std::move(options)]<typename Handler>(Handler &&handler) mutable
-			{
-				detail::start_upgrade(context, std::move(options),
-					std::forward<Handler>(handler)
-				);
+		return detail::initiate_handshake_io<result_t>(
+			exchange.get_executor(),
+			[&exchange, options = std::move(options)](auto handler) mutable {
+				detail::start_upgrade(exchange, std::move(options), std::move(handler));
 			},
 			timeout, nullopt,
 			unbound_redirect_time(std::forward<Token>(token))
@@ -1405,8 +1346,5 @@ auto upgrade(http::basic_service_context<Exec> &context, upgrade_options options
 
 } //namespace riwo::websocket
 
-#if defined(__GNUC__) && !defined(__clang__)
-# pragma GCC diagnostic pop
-#endif
 
 #endif //RIWO_WEBSOCKET_DETAIL_SERVER_H

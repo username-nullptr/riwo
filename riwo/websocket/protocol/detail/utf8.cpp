@@ -33,7 +33,7 @@ utf8_validator::utf8_validator(const utf8_validator &other) :
 }
 
 utf8_validator::utf8_validator(utf8_validator &&other) noexcept :
-	m_impl(std::exchange(other.m_impl, nullptr))
+	m_impl(std::exchange(other.m_impl, new impl()))
 {
 
 }
@@ -45,6 +45,7 @@ utf8_validator &utf8_validator::operator=(const utf8_validator &other)
 
 	auto replacement = other.m_impl ?
 		std::make_unique<impl>(*other.m_impl) : std::make_unique<impl>();
+
 	delete m_impl;
 	m_impl = replacement.release();
 	return *this;
@@ -55,16 +56,14 @@ utf8_validator &utf8_validator::operator=(utf8_validator &&other) noexcept
 	if( this == &other )
 		return *this;
 
+	auto replacement = std::make_unique<impl>();
 	delete m_impl;
-	m_impl = std::exchange(other.m_impl, nullptr);
+	m_impl = std::exchange(other.m_impl, replacement.release());
 	return *this;
 }
 
 bool utf8_validator::consume(std::string_view text) noexcept
 {
-	if( not m_impl )
-		return false;
-
 	return std::ranges::all_of(text, [this](auto value)
 	{
 		const auto byte = static_cast<uint8_t>(value);
@@ -118,7 +117,7 @@ bool utf8_validator::consume(std::string_view text) noexcept
 
 bool utf8_validator::complete() const noexcept
 {
-	return m_impl and m_impl->m_remaining == 0;
+	return m_impl->m_remaining == 0;
 }
 
 bool is_valid_utf8(std::string_view text) noexcept

@@ -20,17 +20,16 @@ int run_server()
 	ws::upgrade_options options;
 	options.supported_subprotocols = {"interop.v1"};
 	options.require_subprotocol = true;
-	options.response_headers["X-Riwo-Interop"] = "server";
+	options.response_headers.set("X-Riwo-Interop", "server");
 	service.on_connection("/interop",
 		[&](ws::accept_result accepted) -> riwo::awaitable<void>
 		{
 			try
 			{
-				const auto marker = accepted.request.request_headers.find(
+				const auto marker = accepted.request.request_headers.find_first(
 					"X-Interop-Client");
 				const auto value = accepted.request.query_parameters.find("value");
-				succeeded = marker != accepted.request.request_headers.end() and
-					marker->second.to_string() == "external" and
+				succeeded = marker == "external" and
 					value != accepted.request.query_parameters.end() and
 					value->second.to_string() == "42" and
 					accepted.handshake.subprotocol == "interop.v1";
@@ -65,20 +64,36 @@ int run_server()
 int run_client(std::string endpoint)
 {
 	riwo::io_context_t context;
-	ws::client requester(context.get_executor());
+	ws::client_config config;
+	config.http.proxy.use_environment = false;
+	ws::client requester(context.get_executor(), config);
 	auto completed = asio::co_spawn(context,
 		[&]() -> riwo::awaitable<void>
 		{
 			ws::connect_request request(std::move(endpoint));
 			request.subprotocols = {"interop.v1"};
-			request.request_options.set_header("X-Interop-Client", "riwo");
+			request.headers.set("X-Interop-Client", "riwo");
 			ws::open_diagnostics diagnostics;
-			auto stream = co_await requester.open(
-				std::move(request), diagnostics, riwo::use_awaitable);
-			RIWO_TEST_CHECK(diagnostics.reply);
-			const auto marker = diagnostics.reply->header("X-Interop-Server");
+			ws::stream stream;
+			try {
+				stream = co_await requester.open(
+					std::move(request), diagnostics, riwo::use_awaitable);
+			}
+			catch(...) {
+				if( diagnostics.response )
+				{
+					std::cerr << "WebSocket handshake status: "
+						<< diagnostics.response->status.code() << '\n';
+					for(const auto &[name, value] : diagnostics.response->headers)
+						std::cerr << name << ": " << value.to_string() << '\n';
+				}
+				throw;
+			}
+			RIWO_TEST_CHECK(diagnostics.response);
+			const auto marker = diagnostics.response->headers.find_first(
+				"X-Interop-Server");
 			RIWO_TEST_CHECK(marker);
-			RIWO_TEST_CHECK_EQ(marker->to_string(), "node-ws");
+			RIWO_TEST_CHECK_EQ(*marker, "node-ws");
 			RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "interop.v1");
 			co_await stream.write_text("riwo-client", riwo::use_awaitable);
 			auto response = co_await stream.read<std::string>(riwo::use_awaitable);

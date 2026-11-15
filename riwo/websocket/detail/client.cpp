@@ -1,210 +1,85 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
+#include "permessage_deflate.h"
 #include <riwo/websocket/client.h>
+#include <riwo/http/client/detail/connector.h>
 #include <riwo/crypto/secure_random.h>
 
-namespace riwo::websocket
+namespace riwo::websocket::detail { namespace
 {
 
-proxy_config &proxy_config::set_basic_auth(std::string_view user, std::string_view secret)
-{
-	if( type == proxy_type::socks5 )
-	{
-		username = user;
-		password = secret;
-		authorization.reset();
-		return *this;
-	}
-	http::request_arg options;
-	options.set_proxy_basic_auth(user, secret);
-
-	auto value = options.headers().find(http::header::proxy_authorization);
-	if( value == options.headers().end() )
-		throw std::runtime_error("Unable to create proxy credentials");
-
-	authorization = value->second.to_string();
-	username = user;
-	password = secret;
-	return *this;
-}
-
-proxy_config &proxy_config::set_bearer_auth(std::string_view token)
-{
-	if( type == proxy_type::socks5 )
-		throw std::invalid_argument("SOCKS5 does not support Bearer authentication");
-
-	authorization = "Bearer " + std::string(token);
-	username.reset();
-	password.reset();
-	return *this;
-}
-
-namespace detail
-{
-
-bool ascii_equal_case_insensitive(std::string_view lhs, std::string_view rhs) noexcept
+[[nodiscard]] bool equal_ci(std::string_view lhs, std::string_view rhs) noexcept
 {
 	return strtls::ascii_equal(lhs, rhs, false);
 }
 
-bool websocket_owned_request_header(std::string_view name) noexcept
+[[nodiscard]] bool websocket_owned_request_header(std::string_view name) noexcept
 {
-	return ascii_equal_case_insensitive(name, http::header::host) or
-		   ascii_equal_case_insensitive(name, http::header::connection) or
-		   ascii_equal_case_insensitive(name, http::header::upgrade) or
-		   ascii_equal_case_insensitive(name, http::header::proxy_authorization) or
-		   (name.size() >= 14 and ascii_equal_case_insensitive(name.substr(0, 14), "Sec-WebSocket-"));
+	return equal_ci(name, "Host") or equal_ci(name, "Connection") or
+		   equal_ci(name, "Upgrade") or equal_ci(name, "Proxy-Authorization") or
+		   (name.size() >= 14 and equal_ci(name.substr(0, 14), "Sec-WebSocket-"));
 }
 
-sys_expected<url> canonical_websocket_url(const url &endpoint) noexcept
+[[nodiscard]] sys_expected<url> canonical_websocket_url(const url &endpoint) noexcept
+try
 {
-	try {
-		if( not endpoint.is_valid() or endpoint.host().empty() or endpoint.has_fragment() )
-			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
+	if( not endpoint.is_valid() or endpoint.host().empty() or endpoint.has_fragment() )
+		return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
-		const auto scheme = strtls::to_lower(endpoint.protocol());
-		std::string_view canonical_scheme;
+	auto scheme = strtls::to_lower(endpoint.protocol());
+	if( scheme != "ws" and scheme != "wss" and scheme != "http" and scheme != "https" )
+		return sys_unexpected(make_system_error_code(std::errc::protocol_not_supported));
 
-		if( scheme == "ws" or scheme == "http" )
-			canonical_scheme = "ws";
+	auto text = endpoint.to_string();
+	auto separator = text.find("://");
 
-		else if( scheme == "wss" or scheme == "https" )
-			canonical_scheme = "wss";
-		else
-		{
-			return sys_unexpected (
-				make_system_error_code(std::errc::protocol_not_supported)
-			);
-		}
-		auto text = endpoint.to_string();
-		auto separator = text.find("://");
+	if( separator == std::string::npos )
+		return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
-		if( separator == std::string::npos )
-			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
-
-		text.replace(0, separator, canonical_scheme);
-		url result(text);
-
-		if( not result.is_valid() )
-			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
-		return result;
-	}
-	catch(const std::bad_alloc&) {
-		return sys_unexpected(make_system_error_code(std::errc::not_enough_memory));
-	}
-	catch(...) {}
-	return sys_unexpected(make_system_error_code(std::errc::io_error));
+	text.replace(0, separator,
+		scheme == "wss" or scheme == "https" ? "wss" : "ws"
+	);
+	return url(text);
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
 }
 
-error_code validate_open_request(connect_request &request, const stream_config &stream) noexcept
+[[nodiscard]] sys_expected<url> websocket_transport_url(const url &endpoint) noexcept
+try
 {
-	try {
-		auto endpoint = canonical_websocket_url(request.endpoint);
-		if( not endpoint )
-			return endpoint.error();
+	auto canonical = canonical_websocket_url(endpoint);
+	if( not canonical )
+		return sys_unexpected(canonical.error());
 
-		request.endpoint = std::move(*endpoint);
-		if( stream.read_buffer_size == 0 or
-			stream.ping_interval < std::chrono::milliseconds::zero() or
-			stream.compression.level < -1 or stream.compression.level > 9 )
-			return make_system_error_code(std::errc::invalid_argument);
+	auto text = canonical->to_string();
+	auto separator = text.find("://");
 
-		if( not supported_extension_offers(request.extensions) )
-			return make_error_code(errc::unsupported_extension);
-
-		if( request.proxy )
-		{
-			if( const auto *proxy = std::get_if<proxy_config>(&*request.proxy) )
-			{
-				const auto proxy_scheme = strtls::to_lower(proxy->endpoint.protocol());
-
-				if( not proxy->endpoint.is_valid() or proxy->endpoint.host().empty() or
-					proxy->endpoint.has_fragment() or proxy->endpoint.has_query() or
-					(not proxy->endpoint.path().empty() and proxy->endpoint.path() != "/") )
-					return make_system_error_code(std::errc::invalid_argument);
-
-				if( proxy->type == proxy_type::http )
-				{
-					if( proxy_scheme != "http" and proxy_scheme != "https" )
-						return make_system_error_code(std::errc::protocol_not_supported);
-
-					if( request.endpoint.protocol() == "wss" and proxy_scheme == "https" )
-						return make_system_error_code(std::errc::operation_not_supported);
-				}
-				else if( proxy->type == proxy_type::socks5 )
-				{
-					if( proxy_scheme != "socks5" and proxy_scheme != "socks5h" )
-						return make_system_error_code(std::errc::protocol_not_supported);
-
-					if( request.endpoint.host().size() > 255 or
-						(proxy->username and proxy->username->size() > 255) or
-						(proxy->password and proxy->password->size() > 255) )
-						return make_system_error_code(std::errc::invalid_argument);
-				}
-				else
-					return make_system_error_code(std::errc::invalid_argument);
-
-				if( proxy->authorization and
-					(proxy->authorization->find('\r') != std::string::npos or
-					 proxy->authorization->find('\n') != std::string::npos) )
-					return make_system_error_code(std::errc::invalid_argument);
-			}
-		}
-		for(const auto &[name, value] : request.request_options.headers())
-		{
-			ignore_unused(value);
-			if( websocket_owned_request_header(name) )
-				return make_error_code(errc::invalid_upgrade);
-		}
-		return {};
-	}
-	catch(const std::bad_alloc&) {
-		return make_system_error_code(std::errc::not_enough_memory);
-	}
-	catch(...) {}
-	return make_system_error_code(std::errc::io_error);
+	text.replace(0, separator,
+		equal_ci(canonical->protocol(), "wss") ? "https" : "http"
+	);
+	return url(text);
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
 }
 
-sys_expected<url> http_transport_url(const url &endpoint) noexcept
-{
-	try {
-		auto text = endpoint.to_string();
-		auto separator = text.find("://");
-
-		if( separator == std::string::npos )
-			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
-
-		const auto scheme = strtls::to_lower(endpoint.protocol());
-		text.replace(0, separator, scheme == "wss" ? "https" : "http");
-
-		url result(text);
-		if( not result.is_valid() )
-			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
-		return result;
-	}
-	catch(const std::bad_alloc&) {
-		return sys_unexpected(make_system_error_code(std::errc::not_enough_memory));
-	}
-	catch(...) {}
-	return sys_unexpected(make_system_error_code(std::errc::io_error));
-}
-
-uint16_t websocket_effective_port(const url &value) noexcept
+[[nodiscard]] uint16_t websocket_effective_port(const url &value) noexcept
 {
 	if( value.port() != 0 )
 		return value.port();
-	return ascii_equal_case_insensitive(value.protocol(), "wss") ? 443 : 80;
+	return equal_ci(value.protocol(), "wss") ? 443 : 80;
 }
 
-bool same_websocket_origin(const url &lhs, const url &rhs) noexcept
+[[nodiscard]] bool same_websocket_origin(const url &lhs, const url &rhs) noexcept
 {
-	return ascii_equal_case_insensitive(lhs.protocol(), rhs.protocol()) and
-		   ascii_equal_case_insensitive(lhs.host(), rhs.host()) and
+	return equal_ci(lhs.protocol(), rhs.protocol()) and
+		   equal_ci(lhs.host(), rhs.host()) and
 		   websocket_effective_port(lhs) == websocket_effective_port(rhs);
 }
 
-bool websocket_redirect_status(http::status_enum status) noexcept
+[[nodiscard]] bool websocket_redirect_status(http::status status) noexcept
 {
 	return status == http::status::moved_permanently or
 		   status == http::status::found or
@@ -213,11 +88,251 @@ bool websocket_redirect_status(http::status_enum status) noexcept
 		   status == http::status::permanent_redirect;
 }
 
-std::vector<std::byte> pending_bytes(const std::string &pending)
+[[nodiscard]] sys_expected<optional<http::proxy_policy>>
+websocket_environment_proxy
+(const url &endpoint, const http::proxy_policy &config) noexcept
 {
-	std::vector<std::byte> result(pending.size());
-	if( not pending.empty() )
-		std::memcpy(result.data(), pending.data(), pending.size());
+	try {
+		if( not config.use_environment or config.forward_proxy )
+			return nullopt;
+
+		auto environment = equal_ci(endpoint.protocol(), "wss") ?
+			http::detail::resolve_environment_proxy(endpoint, {
+				"wss_proxy", "WSS_PROXY",
+				"https_proxy", "HTTPS_PROXY",
+				"all_proxy", "ALL_PROXY"
+			}) :
+			http::detail::resolve_environment_proxy(endpoint, {
+				"ws_proxy", "WS_PROXY",
+				"http_proxy", "HTTP_PROXY",
+				"all_proxy", "ALL_PROXY"
+			});
+		if( not environment )
+			return sys_unexpected(environment.error());
+
+		auto result = config;
+		// Resolve WS/WSS-specific variables here, then pass a fully selected
+		// policy to the HTTP client to avoid its HTTP-only environment lookup.
+		result.use_environment = false;
+		result.forward_proxy.reset();
+
+		if( environment->proxy )
+		{
+			result.forward_proxy = environment->proxy->endpoint;
+			if( environment->proxy->username )
+			{
+				result.username = environment->proxy->username;
+				result.password = environment->proxy->password;
+			}
+		}
+		return result;
+	}
+	catch(...) {
+		return sys_unexpected(exception_error(std::current_exception()));
+	}
+}
+
+} //namespace
+
+error_code validate_open_request(connect_request &request, const stream_config &stream) noexcept
+try
+{
+	auto endpoint = canonical_websocket_url(request.endpoint);
+	if( not endpoint )
+		return endpoint.error();
+
+	request.endpoint = std::move(*endpoint);
+
+	if( stream.read_buffer_size == 0 or
+		stream.ping_interval < std::chrono::milliseconds::zero() or
+		stream.compression.level < -1 or stream.compression.level > 9 )
+		return make_system_error_code(std::errc::invalid_argument);
+
+	if( not supported_extension_offers(request.extensions) )
+		return make_error_code(errc::unsupported_extension);
+
+	for(const auto &field : request.headers)
+	{
+		if( websocket_owned_request_header(field.name) )
+			return make_error_code(errc::invalid_upgrade);
+	}
+	return {};
+}
+catch(...) {
+	return exception_error(std::current_exception());
+}
+
+bool extended_connect(const http::client_config &config) noexcept
+{
+#if RIWO_HTTP_HTTP2_SUPPORT
+	return config.protocols.requirement == http::protocol_requirement::v2;
+
+#else //RIWO_HTTP_HTTP2_SUPPORT
+	ignore_unused(config);
+	return false;
+#endif //RIWO_HTTP_HTTP2_SUPPORT
+}
+
+http::client_config websocket_http_config
+(http::client_config config, std::chrono::milliseconds handshake_timeout)
+{
+#if RIWO_HTTP_HTTP2_SUPPORT
+	if( config.protocols.requirement == http::protocol_requirement::v2 )
+		config.h2.enable_extended_connect = true;
+	else
+		config.protocols.requirement = http::protocol_requirement::v1;
+
+#else ////RIWO_HTTP_HTTP2_SUPPORT
+	config.protocols.requirement = http::protocol_requirement::v1;
+#endif //RIWO_HTTP_HTTP2_SUPPORT
+
+	config.redirects.max_redirects = 0;
+	config.auto_decompression = false;
+
+	if( handshake_timeout > std::chrono::milliseconds::zero() )
+	{
+		config.timeout.connect = std::min(config.timeout.connect, handshake_timeout);
+		config.timeout.header = std::min(config.timeout.header, handshake_timeout);
+		config.timeout.pool_wait = std::min(config.timeout.pool_wait, handshake_timeout);
+	}
+	return config;
+}
+
+prepared_open::prepared_open
+(http::request request_value, http::body_spec spec_value, opening_request opening_value) :
+	request(std::move(request_value)), spec(std::move(spec_value)), opening(std::move(opening_value))
+{
+
+}
+
+sys_expected<prepared_open> prepare_open(const connect_request &request,
+	const url &endpoint, bool use_extended_connect,
+	const http::client_config &config) noexcept
+try
+{
+	auto target = websocket_transport_url(endpoint);
+	if( not target )
+		return sys_unexpected(target.error());
+
+	std::array<std::byte,16> nonce {};
+	if( auto random = crypto::secure_random_bytes(asio::buffer(nonce)); not random )
+		return sys_unexpected(random.error());
+
+	auto key = make_client_key(nonce);
+	if( not key )
+		return sys_unexpected(key.error());
+
+	opening_request opening {
+		.key = std::move(*key),
+		.subprotocols = request.subprotocols,
+		.extensions = request.extensions,
+	};
+	auto version = http::protocol::v1_1;
+
+#if RIWO_HTTP_HTTP2_SUPPORT
+	if( use_extended_connect )
+		version = http::protocol::v2;
+#endif //RIWO_HTTP_HTTP2_SUPPORT
+
+	auto handshake = make_opening_request_headers(opening, version);
+	if( not handshake )
+		return sys_unexpected(handshake.error());
+
+	http::request result(use_extended_connect ?
+		http::method::connect : http::method::get, std::move(*target)
+	);
+	for(const auto &[name, value] : request.headers)
+		result.headers().add(name, value);
+
+	for(const auto &[name, value] : *handshake)
+	{
+		if( not use_extended_connect and
+			(equal_ci(name, "Connection") or
+			 equal_ci(name, "Upgrade")) )
+			continue;
+		result.headers().set(name, value);
+	}
+	if( use_extended_connect )
+		result.set_connect_protocol("websocket");
+	else
+		result.set_upgrade_protocol("websocket");
+
+	auto proxy = websocket_environment_proxy(endpoint, config.proxy);
+	if( not proxy )
+		return sys_unexpected(proxy.error());
+	if( *proxy )
+		result.set_proxy(std::move(**proxy));
+
+	auto spec = use_extended_connect ?
+		http::body_spec::streaming() : http::body_spec::empty();
+
+	return prepared_open(std::move(result), std::move(spec), std::move(opening));
+}
+catch(...) {
+	return sys_unexpected(exception_error(std::current_exception()));
+}
+
+open_response_decision evaluate_open_response(const http::response_head &response,
+	const opening_request &opening, const connect_request &request, const url &endpoint,
+	http::protocol selected_protocol, size_t redirects) noexcept
+{
+	open_response_decision result {};
+	try {
+		if( websocket_redirect_status(response.status) )
+		{
+			if( redirects >= request.max_redirects )
+			{
+				result.error = make_error_code(errc::redirect_limit_exceeded);
+				return result;
+			}
+			auto location = response.location();
+			if( not location )
+			{
+				result.error = make_error_code(errc::handshake_rejected);
+				return result;
+			}
+			auto probe = request;
+			probe.endpoint = url::resolve(endpoint, *location);
+
+			const auto stream = request.stream_options.value_or(stream_config{});
+			if( auto error = validate_open_request(probe, stream) )
+			{
+				result.error = error;
+				return result;
+			}
+			if( equal_ci(endpoint.protocol(), "wss") and
+				equal_ci(probe.endpoint.protocol(), "ws") and
+				not request.allow_insecure_redirects )
+			{
+				result.error = make_error_code(errc::insecure_redirect);
+				return result;
+			}
+			result.action = open_response_action::redirect;
+			result.clear_credentials = not same_websocket_origin(endpoint, probe.endpoint);
+
+			result.redirect_endpoint = std::move(probe.endpoint);
+			return result;
+		}
+		auto accepted = parse_opening_response (
+			response.status, response.headers, opening, selected_protocol
+		);
+		if( not accepted )
+		{
+			result.error = accepted.error();
+			return result;
+		}
+		if( not supported_extension_response(accepted->extensions, request.extensions) )
+		{
+			result.error = make_error_code(errc::unsupported_extension);
+			return result;
+		}
+		result.action = open_response_action::accept;
+		result.response = std::move(*accepted);
+		return result;
+	}
+	catch(...) {
+		result.error = exception_error(std::current_exception());
+	}
 	return result;
 }
 
@@ -234,196 +349,9 @@ std::chrono::milliseconds remaining_timeout(std::chrono::steady_clock::time_poin
 		remaining : std::chrono::milliseconds(1);
 }
 
-sys_expected<open_http_request> prepare_open_http_request(const connect_request &request,
-	const url &endpoint, const http::request_arg &base_options, bool inherit_global_proxy) noexcept
+error_code cancellation_error(bool cancelled, const error_code &error) noexcept
 {
-	try {
-		std::array<std::byte,16> nonce {};
-		if( auto random = crypto::secure_random_bytes(asio::buffer(nonce)); not random )
-			return sys_unexpected(random.error());
-
-		auto key = make_client_key(nonce);
-		if( not key )
-			return sys_unexpected(key.error());
-
-		open_http_request result;
-		result.opening = opening_request {
-			.key = std::move(*key),
-			.subprotocols = request.subprotocols,
-			.extensions = request.extensions,
-		};
-		auto opening_headers = make_opening_request_headers(result.opening);
-		if( not opening_headers )
-			return sys_unexpected(opening_headers.error());
-
-		auto transport = http_transport_url(endpoint);
-		if( not transport )
-			return sys_unexpected(transport.error());
-
-		result.transport = std::move(*transport);
-		result.options = base_options;
-
-		for(auto &[name, value] : *opening_headers)
-			result.options.set_header(name, value);
-
-		const bool use_global = request.proxy ?
-			std::holds_alternative<use_global_proxy_t>(*request.proxy) :
-			inherit_global_proxy;
-
-		if( not request.proxy and not use_global )
-			return result;
-
-		if( use_global )
-		{
-			auto resolved = [&]() -> sys_expected<http::detail::resolved_proxy>
-			{
-				if( ascii_equal_case_insensitive(endpoint.protocol(), "ws") )
-				{
-					return http::detail::resolve_global_proxy(endpoint, {
-						"ws_proxy", "WS_PROXY", "http_proxy", "HTTP_PROXY",
-						"all_proxy", "ALL_PROXY"
-					});
-				}
-				if( ascii_equal_case_insensitive(endpoint.protocol(), "wss") )
-				{
-					return http::detail::resolve_global_proxy(endpoint, {
-						"wss_proxy", "WSS_PROXY", "https_proxy", "HTTPS_PROXY",
-						"all_proxy", "ALL_PROXY"
-					});
-				}
-				return sys_unexpected (
-					make_system_error_code(std::errc::protocol_not_supported)
-				);
-			}();
-			if( not resolved )
-				return sys_unexpected(resolved.error());
-
-			if( resolved->forward )
-			{
-				result.proxy = std::move(*resolved->forward);
-				if( resolved->authorization and
-					result.options.headers().find(http::header::proxy_authorization) ==
-					result.options.headers().end() )
-				{
-					result.options.set_header(http::header::proxy_authorization,
-						*resolved->authorization);
-				}
-			}
-			else if( resolved->tunnel )
-				result.proxy = std::move(*resolved->tunnel);
-			else
-				result.proxy = no_proxy;
-			return result;
-		}
-		if( std::holds_alternative<no_proxy_t>(*request.proxy) )
-		{
-			result.proxy = no_proxy;
-			return result;
-		}
-		const auto &config = std::get<proxy_config>(*request.proxy);
-		const auto endpoint_scheme = strtls::to_lower(endpoint.protocol());
-		const auto proxy_scheme = strtls::to_lower(config.endpoint.protocol());
-
-		if( config.type == proxy_type::http and endpoint_scheme == "ws" )
-		{
-			if( config.authorization )
-				result.options.set_header(http::header::proxy_authorization, *config.authorization);
-
-			result.proxy = config.endpoint;
-			return result;
-		}
-		http::proxy_tunnel tunnel;
-		tunnel.type = config.type == proxy_type::http ?
-			http::proxy_tunnel_type::http_connect :
-			http::proxy_tunnel_type::socks5;
-
-		tunnel.host = config.endpoint.host();
-		tunnel.port = config.endpoint.port();
-
-		if( tunnel.port == 0 )
-		{
-			tunnel.port = config.type == proxy_type::socks5 ? 1080 :
-				proxy_scheme == "https" ? 443 : 80;
-		}
-		tunnel.security = proxy_scheme == "https" ?
-			http::security_mode::tls : http::security_mode::plain;
-
-		tunnel.authorization = config.authorization;
-		tunnel.username = config.username;
-		tunnel.password = config.password;
-		result.proxy = std::move(tunnel);
-		return result;
-	}
-	catch(const std::bad_alloc&) {
-		return sys_unexpected(make_system_error_code(std::errc::not_enough_memory));
-	}
-	catch(...) {}
-	return sys_unexpected(make_system_error_code(std::errc::io_error));
+	return cancelled ? asio::error::make_error_code(asio::error::operation_aborted) : error;
 }
 
-open_response_decision evaluate_open_response(http::status_enum status, const http::headers &headers,
-	const opening_request &opening, const connect_request &request, const url &endpoint,
-	const stream_config &stream, size_t redirects) noexcept
-{
-	open_response_decision result;
-	try {
-		if( websocket_redirect_status(status) )
-		{
-			if( redirects >= request.max_redirects )
-			{
-				result.error = make_error_code(errc::redirect_limit_exceeded);
-				result.record_diagnostics = true;
-				return result;
-			}
-			auto location = headers.find(http::header::location);
-			if( location == headers.end() )
-			{
-				result.error = make_error_code(errc::handshake_rejected);
-				result.record_diagnostics = true;
-				return result;
-			}
-			auto probe = request;
-			probe.endpoint = url::resolve(endpoint, location->second.to_string());
-
-			if( auto error = validate_open_request(probe, stream) )
-			{
-				result.error = error;
-				return result;
-			}
-			if( ascii_equal_case_insensitive(endpoint.protocol(), "wss") and
-				ascii_equal_case_insensitive(probe.endpoint.protocol(), "ws") and
-				not request.allow_insecure_redirects )
-			{
-				result.error = make_error_code(errc::insecure_redirect);
-				return result;
-			}
-			result.action = open_response_action::redirect;
-			result.clear_credentials = not same_websocket_origin(endpoint, probe.endpoint);
-			result.redirect_endpoint = std::move(probe.endpoint);
-			return result;
-		}
-		result.record_diagnostics = true;
-		auto response = parse_opening_response(status, headers, opening);
-		if( not response )
-		{
-			result.error = response.error();
-			result.close_connection = status == http::status::switching_protocols;
-			return result;
-		}
-		if( not supported_extension_response(response->extensions, request.extensions) )
-		{
-			result.error = make_error_code(errc::unsupported_extension);
-			result.close_connection = true;
-			return result;
-		}
-		result.action = open_response_action::accept;
-		result.response = std::move(*response);
-		return result;
-	}
-	catch(...) {
-		result.error = exception_error(std::current_exception());
-	}
-	return result;
-}
-
-}} //namespace riwo::websocket::detail
+} //namespace riwo::websocket::detail

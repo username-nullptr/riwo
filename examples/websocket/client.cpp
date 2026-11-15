@@ -1,37 +1,79 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <riwo/websocket/client.h>
+#include <riwo/websocket.h>
 #include <iostream>
 
+namespace
+{
+
+namespace http = riwo::http;
 namespace ws = riwo::websocket;
 
+[[nodiscard]] http::protocol_requirement protocol_requirement(
+	std::string_view value)
+{
+	if( value == "http1" ) return http::protocol_requirement::v1;
+#if RIWO_HTTP_HTTP2_SUPPORT
+	if( value == "http2" ) return http::protocol_requirement::v2;
+#endif
+	throw std::invalid_argument(
+		"protocol must be http1"
+#if RIWO_HTTP_HTTP2_SUPPORT
+		" or http2"
+#endif
+	);
+}
+
+[[nodiscard]] std::string_view protocol_name(http::protocol value) noexcept
+{
+	switch(value)
+	{
+	case http::protocol::v1_0: return "HTTP/1.0 Upgrade";
+	case http::protocol::v1_1: return "HTTP/1.1 Upgrade";
+#if RIWO_HTTP_HTTP2_SUPPORT
+	case http::protocol::v2: return "HTTP/2 Extended CONNECT";
+#endif
+	}
+	return "unknown";
+}
+
+} //namespace
+
 int main(int argc, const char *argv[])
+try
 {
 	const std::string endpoint = argc > 1 ?
-		argv[1] : "ws://127.0.0.1:8080/echo";
+		argv[1] : "ws://127.0.0.1:8085/echo";
+	const std::string_view policy = argc > 2 ? argv[2] : "http1";
 
-	ws::client client;
-	riwo::dispatch([&client, endpoint]() -> riwo::awaitable<void>
-	{
-		try {
-			auto stream = co_await client.open (
-				ws::connect_request(endpoint), riwo::use_awaitable
-			);
-			co_await stream.write_text("hello", riwo::use_awaitable);
-			auto message = co_await stream.read<std::string>(riwo::use_awaitable);
+	riwo::io_context_t context;
+	ws::client_config config;
+	config.http.protocols.requirement = protocol_requirement(policy);
+	ws::client client(context, config);
 
-			std::cout << message.body << '\n';
-			co_await stream.close(riwo::use_awaitable);
-		}
-		catch(const std::exception &exception)
-		{
-			std::cerr << "WebSocket client failed: " << exception.what() << '\n';
-			riwo::exit(1);
-			co_return ;
-		}
-		riwo::exit();
-		co_return ;
-	});
-	return riwo::exec();
+	ws::connect_request request;
+	request.endpoint = endpoint;
+	request.subprotocols = {"riwo.echo.v1"};
+#if RIWO_WEBSOCKET_ZLIB_SUPPORT
+	request.extensions.push_back(ws::permessage_deflate_extension());
+#endif
+	ws::open_diagnostics diagnostics;
+	auto stream = client.open(std::move(request), diagnostics);
+	stream.write_text("hello from websocket");
+	auto response = stream.read<std::string>();
+
+	std::cout << "Connected with "
+		<< protocol_name(diagnostics.selected_protocol.value()) << '\n'
+		<< "Subprotocol: " << stream.negotiated_subprotocol() << '\n'
+		<< "Echo: " << response.body << '\n';
+	const auto closed = stream.close(
+		ws::close_frame(ws::close_code::normal_closure, "example complete"));
+	std::cout << "Clean close: " << std::boolalpha << closed.clean << '\n';
+	return 0;
+}
+catch(const std::exception &exception)
+{
+	std::cerr << "WebSocket client failed: " << exception.what() << '\n';
+	return 1;
 }

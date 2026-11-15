@@ -10,11 +10,9 @@ application utilities without requiring applications to adopt every module.
 riwo.core
 ├── riwo.crypto
 ├── riwo.coro
-│   ├── riwo.http (+ riwo.crypto, riwo.system)
-│   │   └── riwo.websocket
-│   └── riwo.utils
-└── riwo.exp_http (+ riwo.crypto, riwo.system)
-    └── riwo.exp_websocket
+├── riwo.http (+ riwo.crypto, riwo.system)
+│   └── riwo.websocket
+└── riwo.utils (+ riwo.coro, riwo.system)
 ```
 
 | Module | Build switch | Default | Primary include | Source-tree target |
@@ -23,9 +21,7 @@ riwo.core
 | Crypto | `RIWO_BUILD_CRYPTO` | ON | `<riwo/crypto.h>` | `riwo.crypto` |
 | Coroutines | `RIWO_BUILD_CORO` | ON | `<riwo/coro.h>` | `riwo.coro` |
 | HTTP | `RIWO_BUILD_HTTP` | OFF | `<riwo/http.h>` | `riwo.http` |
-| HTTP (experimental) | `RIWO_BUILD_EXP_HTTP` | OFF | `<riwo/experimental/http.h>` | `riwo.exp_http` |
 | WebSocket | `RIWO_BUILD_WEBSOCKET` | OFF | `<riwo/websocket.h>` | `riwo.websocket` |
-| WebSocket (experimental) | `RIWO_BUILD_EXP_WEBSOCKET` | OFF | `<riwo/experimental/websocket.h>` | `riwo.exp_websocket` |
 | Utilities | `RIWO_BUILD_UTILITIES` | OFF | `<riwo/utils.h>` | `riwo.utils` |
 
 Link each module your application uses directly. CMake propagates that

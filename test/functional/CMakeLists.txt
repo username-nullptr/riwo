@@ -39,74 +39,48 @@ if (RIWO_BUILD_CRYPTO)
 endif ()
 
 if (RIWO_BUILD_HTTP)
-	add_riwo_test(http http/basic.cpp riwo.http)
-	add_riwo_test(http.protocol http/protocol.cpp riwo.http)
-
 	add_riwo_test(http.public-api http/public_api.cpp riwo.http)
-	add_riwo_test(http.loopback http/loopback.cpp riwo.http)
-endif ()
-
-if (RIWO_BUILD_EXP_HTTP)
-	add_riwo_test(exp_http.public-api experimental/http/public_api.cpp riwo.exp_http)
-	add_riwo_test(exp_http.protocol-api experimental/http/protocol_api.cpp riwo.exp_http)
-	add_riwo_test(exp_http.transport-extension experimental/http/transport_extension.cpp riwo.exp_http)
-	add_riwo_test(exp_http.body experimental/http/body.cpp riwo.exp_http)
-	add_riwo_test(exp_http.http1 experimental/http/http1.cpp riwo.exp_http)
-	add_riwo_test(exp_http.session-pool experimental/http/session_pool.cpp riwo.exp_http)
+	add_riwo_test(http.protocol-api http/protocol_api.cpp riwo.http)
+	add_riwo_test(http.transport-extension http/transport_extension.cpp riwo.http)
+	add_riwo_test(http.body http/body.cpp riwo.http)
+	add_riwo_test(http.http1 http/http1.cpp riwo.http)
+	add_riwo_test(http.session-pool http/session_pool.cpp riwo.http)
 	# Static builds expose the private implementation to the test through the
 	# archive. Shared builds cannot reach that hidden implementation, so only
 	# those builds compile a private copy. Its default factory deliberately
 	# remains imported from the shared library.
 	if (NOT RIWO_BUILD_STATIC)
-		target_sources(riwo.test.exp_http.session-pool PRIVATE
-			${PROJECT_SOURCE_DIR}/riwo/experimental/http/client/detail/session_pool.cpp
+		target_sources(riwo.test.http.session-pool PRIVATE
+			${PROJECT_SOURCE_DIR}/riwo/http/client/detail/session_pool.cpp
 		)
 	endif ()
 
 	# This white-box test owns a private implementation copy so it does not
 	# reach across the shared-library boundary for hidden symbols.
-	add_riwo_test(exp_http.preface-internal experimental/http/preface.cpp riwo.exp_http)
-	target_sources(riwo.test.exp_http.preface-internal PRIVATE
-		${PROJECT_SOURCE_DIR}/riwo/experimental/http/transport/preface.cpp
+	add_riwo_test(http.preface-internal http/preface.cpp riwo.http)
+	target_sources(riwo.test.http.preface-internal PRIVATE
+		${PROJECT_SOURCE_DIR}/riwo/http/transport/preface.cpp
 	)
-	if (TARGET Riwo::exp_http_nghttp2)
-		add_riwo_test(exp_http.http2-client experimental/http/http2_client.cpp riwo.exp_http)
-		target_link_libraries(riwo.test.exp_http.http2-client PRIVATE
-			Riwo::exp_http_nghttp2
+	if (TARGET Riwo::http_nghttp2)
+		add_riwo_test(http.http2-client http/http2_client.cpp riwo.http)
+		target_link_libraries(riwo.test.http.http2-client PRIVATE
+			Riwo::http_nghttp2
 		)
-		add_riwo_test(exp_http.http2-server experimental/http/http2_server.cpp riwo.exp_http)
+		add_riwo_test(http.http2-server http/http2_server.cpp riwo.http)
 	endif ()
-	add_riwo_test(exp_http.application experimental/http/application.cpp riwo.exp_http)
-	add_riwo_test(exp_http.compatibility experimental/http/compatibility.cpp riwo.exp_http)
-	add_riwo_test(exp_http.reliability experimental/http/reliability.cpp riwo.exp_http)
-	add_riwo_test(exp_http.regressions experimental/http/regressions.cpp riwo.exp_http)
-endif ()
 
-if (RIWO_BUILD_EXP_WEBSOCKET)
-	add_riwo_test(exp_websocket.public-api experimental/websocket/public_api.cpp
-		riwo.exp_websocket)
-	add_riwo_test(exp_websocket.protocol experimental/websocket/protocol.cpp
-		riwo.exp_websocket)
-	add_riwo_test(exp_websocket.stream experimental/websocket/stream.cpp
-		riwo.exp_websocket)
-	add_riwo_test(exp_websocket.reliability experimental/websocket/reliability.cpp
-		riwo.exp_websocket)
-	add_riwo_test(exp_websocket.client-server experimental/websocket/client_server.cpp
-		riwo.exp_websocket)
+	add_riwo_test(http.application http/application.cpp riwo.http)
+	add_riwo_test(http.compatibility http/compatibility.cpp riwo.http)
+	add_riwo_test(http.reliability http/reliability.cpp riwo.http)
+	add_riwo_test(http.regressions http/regressions.cpp riwo.http)
 endif ()
 
 if (RIWO_BUILD_WEBSOCKET)
-	add_riwo_test(websocket.protocol websocket/protocol.cpp riwo.websocket)
 	add_riwo_test(websocket.public-api websocket/public_api.cpp riwo.websocket)
-
-	add_riwo_test(websocket.handshake websocket/handshake.cpp riwo.websocket)
-	add_riwo_test(websocket.client-server websocket/client_server.cpp riwo.websocket)
-
-	if (RIWO_OPENSSL_SUPPORT)
-		add_riwo_test(websocket.wss websocket/wss.cpp riwo.websocket)
-	endif ()
-
+	add_riwo_test(websocket.protocol websocket/protocol.cpp riwo.websocket)
 	add_riwo_test(websocket.stream websocket/stream.cpp riwo.websocket)
+	add_riwo_test(websocket.reliability websocket/reliability.cpp riwo.websocket)
+	add_riwo_test(websocket.client-server websocket/client_server.cpp riwo.websocket)
 endif ()
 
 if (RIWO_BUILD_UTILITIES)
@@ -125,12 +99,12 @@ find_package(Python3 3.8 QUIET COMPONENTS Interpreter)
 
 if (Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
 	if (RIWO_BUILD_HTTP)
-		find_program(RIWO_TEST_CURL_EXECUTABLE NAMES curl)
+		find_program(RIWO_TEST_HTTP_CURL_EXECUTABLE NAMES curl)
 
-		if (RIWO_TEST_CURL_EXECUTABLE)
+		if (RIWO_TEST_HTTP_CURL_EXECUTABLE)
 			set(riwo_http_interop_backend curl)
 			set(riwo_http_interop_arguments
-				--curl ${RIWO_TEST_CURL_EXECUTABLE}
+				--curl ${RIWO_TEST_HTTP_CURL_EXECUTABLE}
 			)
 		else ()
 			set(riwo_http_interop_backend python-stdlib)
@@ -148,45 +122,12 @@ if (Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
 			${riwo_http_interop_arguments}
 		)
 		configure_riwo_functional_test(riwo.http.interop)
-
-		set_property(TEST riwo.http.interop APPEND PROPERTY LABELS interop external)
-
-		message(STATUS
-			"${PRO_NAME}: HTTP interoperability backend: ${riwo_http_interop_backend}"
-		)
-	endif ()
-
-	if (RIWO_BUILD_EXP_HTTP)
-		find_program(RIWO_TEST_EXP_HTTP_CURL_EXECUTABLE NAMES curl)
-
-		if (RIWO_TEST_EXP_HTTP_CURL_EXECUTABLE)
-			set(riwo_exp_http_interop_backend curl)
-			set(riwo_exp_http_interop_arguments
-				--curl ${RIWO_TEST_EXP_HTTP_CURL_EXECUTABLE}
-			)
-		else ()
-			set(riwo_exp_http_interop_backend python-stdlib)
-			set(riwo_exp_http_interop_arguments)
-		endif ()
-
-		add_riwo_test_program(riwo.test.exp_http.interop-peer
-			experimental/http/interop_peer.cpp riwo.exp_http
-		)
-		add_riwo_ctest(riwo.exp_http.interop
-			${Python3_EXECUTABLE}
-			${CMAKE_CURRENT_SOURCE_DIR}/interop/http_interop.py
-			--peer $<TARGET_FILE:riwo.test.exp_http.interop-peer>
-			--backend ${riwo_exp_http_interop_backend}
-			${riwo_exp_http_interop_arguments}
-		)
-		configure_riwo_functional_test(riwo.exp_http.interop)
-		set_property(TEST riwo.exp_http.interop APPEND PROPERTY
+		set_property(TEST riwo.http.interop APPEND PROPERTY
 			LABELS interop external
 		)
-
 		message(STATUS
-			"${PRO_NAME}: EXP_HTTP interoperability backend: "
-			"${riwo_exp_http_interop_backend}"
+			"${PRO_NAME}: HTTP interoperability backend: "
+			"${riwo_http_interop_backend}"
 		)
 	endif ()
 

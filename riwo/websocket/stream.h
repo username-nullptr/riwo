@@ -5,7 +5,7 @@
 #define RIWO_WEBSOCKET_STREAM_H
 
 #include <riwo/websocket/types.h>
-#include <riwo/http/utils/connection.h>
+#include <riwo/http/protocol/duplex_channel.h>
 
 namespace riwo::websocket
 {
@@ -39,7 +39,7 @@ public:
 	using message_info_t = message_info;
 	using adopt_options_t = adopt_options;
 
-	using connection_t = http::basic_connection<executor_t>;
+	using connection_t = http::basic_duplex_channel<executor_t>;
 	using connection_ptr = std::shared_ptr<connection_t>;
 
 	template <typename Buffer>
@@ -211,8 +211,8 @@ public:
 	[[nodiscard]] config_t config() const noexcept;
 	[[nodiscard]] optional<close_info_t> peer_close() const;
 
-	[[nodiscard]] http::endpoint remote_endpoint() const noexcept;
-	[[nodiscard]] http::endpoint local_endpoint() const noexcept;
+	[[nodiscard]] asio::ip::tcp::endpoint remote_endpoint() const noexcept;
+	[[nodiscard]] asio::ip::tcp::endpoint local_endpoint() const noexcept;
 
 private:
 	class impl;

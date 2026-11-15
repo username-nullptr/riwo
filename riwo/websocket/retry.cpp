@@ -75,7 +75,7 @@ retry_open_decision default_retry_open_decision
 
 	if( context.http_status )
 	{
-		const auto status = static_cast<uint32_t>(*context.http_status);
+		const auto status = context.http_status->code();
 		if( status == 408 or status == 429 or status >= 500 )
 			return retry_open_decision::retry_after(suggested_delay);
 

@@ -1,65 +1,81 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <riwo/http/server.h>
+#include "common.h"
 #include <iostream>
-#include <format>
+
+namespace http = riwo::http;
 
 int main(int argc, const char *argv[])
+try
 {
-	if(argc < 2)
+	if( argc < 2 )
 	{
-		std::cerr << "Usage: server_file <download-file> [port] [upload-file]\n";
+		std::cerr << "Usage: server_file <download-file> [port] "
+			"[upload-file] [auto|http1|http2]\n";
 		return 2;
 	}
 	const auto download_file = std::filesystem::absolute(argv[1]);
-	const auto resource_root = download_file.parent_path();
-	const auto download_name = download_file.filename();
 
 	const auto port = static_cast<std::uint16_t>(
 		argc > 2 ? std::stoul(argv[2]) : 8083
 	);
-	const std::filesystem::path upload_file = argc > 3 ?
-		argv[3] : "riwo-uploaded.bin";
+	const auto upload_file = std::filesystem::absolute (
+		argc > 3 ? argv[3] : "riwo-http-exp-uploaded.bin"
+	);
+	http::server_config config;
+	config.protocols.requirement = http::example::parse_protocol (
+		argc > 4 ? argv[4] : "auto"
+	);
+	config.resource_root = download_file.parent_path();
 
-	asio::ip::tcp::acceptor acceptor(riwo::get_executor());
-	riwo::http::server server(std::move(acceptor));
-
-	auto config = server.config();
-	config.resource_root = resource_root;
-	server.set_config(config);
-
-	server
+	http::server service(config);
+	service
 	.bind({riwo::ip_type::v4, port})
-	.on_request<riwo::http::method::get>(
-		"/download",
-		[download_name](riwo::http::server::context_t &context) -> riwo::awaitable<void>
-		{
-			co_await context.response().send_file (
-				download_name, riwo::use_awaitable
-			);
-			co_return;
-		}
-	)
-	.on_request<riwo::http::method::put>(
-		"/upload",
-		[upload_file](riwo::http::server::context_t &context) -> riwo::awaitable<void>
-		{
-			auto bytes = co_await context.request().save_file (
-				upload_file, riwo::use_awaitable
-			);
-			const auto body = std::format("Uploaded {} bytes\n", bytes);
-			co_await context.response().write (
-				asio::buffer(body), riwo::use_awaitable
-			);
-			co_return;
-		}
-	)
+
+	.on_request<http::method::get>("/download",
+	[download_name = download_file.filename()](http::server_exchange &exchange) -> riwo::awaitable<void>
+	{
+		co_await exchange.respond_file (
+			download_name, riwo::use_awaitable
+		);
+	})
+	.on_request<http::method::post>("/upload",
+	[upload_file](http::server_exchange &exchange) -> riwo::awaitable<void>
+	{
+		const auto saved = co_await exchange.save_file (
+			upload_file, riwo::use_awaitable
+		);
+		http::response_head head { http::status::created };
+		head.headers.add("Content-Type", "text/plain; charset=utf-8");
+
+		co_await exchange.respond(std::move(head),
+			std::format("uploaded {} bytes\n", saved),
+			riwo::use_awaitable
+		);
+	})
+	.on_default (
+	[](http::server_exchange &exchange) -> riwo::awaitable<void>
+	{
+		co_await exchange.respond({ http::status::not_found },
+			"not found\n", riwo::use_awaitable
+		);
+	})
+	.on_server_error([](riwo::error_code error)
+	{
+		std::cerr << "Server error: " << error.message() << '\n';
+		return true;
+	})
 	.start();
 
-	std::cout << "Resource root: " << resource_root << '\n'
-		<< "Download: http://127.0.0.1:" << port << "/download\n"
-		<< "Uploads: " << upload_file << '\n';
+	std::cout << "Listening on http://127.0.0.1:" << port << '\n'
+		<< "Download: " << download_file << " (ETag and Range enabled)\n"
+		<< "Upload:   POST /upload -> " << upload_file << '\n';
 
 	return riwo::exec();
+}
+catch(const std::exception &exception)
+{
+	std::cerr << "HTTP file server failed: " << exception.what() << '\n';
+	return 1;
 }

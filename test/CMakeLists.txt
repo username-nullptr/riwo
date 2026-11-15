@@ -98,7 +98,7 @@ function(add_riwo_test_program test_target source library)
 	riwo_enable_strict_warnings(${test_target})
 	target_link_libraries(${test_target} PRIVATE ${library})
 
-	if ("${library}" MATCHES "^riwo\\.(http|exp_http|websocket|exp_websocket)$")
+	if ("${library}" MATCHES "^riwo\\.(http|websocket)$")
 		riwo_limit_heavy_compile(${test_target})
 	endif ()
 

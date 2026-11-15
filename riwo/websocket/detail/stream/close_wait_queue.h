@@ -20,7 +20,7 @@ public:
 	close_wait_queue() noexcept;
 	~close_wait_queue();
 
-	[[nodiscard]] bool notified() const noexcept;
+public:
 	void set_callback(closed_callback callback);
 	void notify(const close_info &result) noexcept;
 
@@ -34,9 +34,11 @@ public:
 	void cancel(uint64_t id) noexcept;
 	void complete(error_code error, const close_info &result) noexcept;
 
+	[[nodiscard]] bool notified() const noexcept;
+
 private:
 	closed_callback m_callback {};
-	std::deque<std::shared_ptr<close_wait_operation>> m_waiters {};
+	std::deque<close_wait_operation_ptr> m_waiters {};
 
 	uint64_t m_next_id = 0;
 	bool m_notified = false;

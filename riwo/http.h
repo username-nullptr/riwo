@@ -4,7 +4,8 @@
 #ifndef RIWO_HTTP_H
 #define RIWO_HTTP_H
 
-#include <riwo/http/server.h>
+#include <riwo/http/protocol.h>
 #include <riwo/http/client.h>
+#include <riwo/http/server.h>
 
 #endif //RIWO_HTTP_H

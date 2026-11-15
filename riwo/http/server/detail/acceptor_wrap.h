@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
 #ifndef RIWO_HTTP_SERVER_DETAIL_ACCEPTOR_WRAP_H
@@ -8,162 +8,193 @@ namespace riwo::http
 {
 
 template <core_concepts::exec Exec>
-basic_acceptor_wrap<asio::basic_stream_socket<asio::ip::tcp,Exec>>::
-basic_acceptor_wrap(acceptor_t &&acceptor) :
-	m_acceptor(std::move(acceptor))
+class RIWO_HTTP_TAPI basic_acceptor_wrap<Exec>::interface
 {
+	RIWO_DISABLE_COPY_MOVE(interface)
 
-}
+public:
+	interface() = default;
+	virtual ~interface() = default;
+
+	virtual void accept(accept_handler_t) = 0;
+	virtual void cancel() noexcept = 0;
+
+	[[nodiscard]] virtual const acceptor_t &acceptor() const noexcept = 0;
+	[[nodiscard]] virtual acceptor_t &acceptor() noexcept = 0;
+
+	[[nodiscard]] virtual executor_t get_executor() noexcept = 0;
+};
 
 template <core_concepts::exec Exec>
-void basic_acceptor_wrap<asio::basic_stream_socket<asio::ip::tcp,Exec>>::accept
-(core_concepts::match_sched<executor_t> auto &&service_exec, std::function<void(connection_ptr)> callback)
+template <typename Acceptor>
+class RIWO_HTTP_TAPI basic_acceptor_wrap<Exec>::model final : public interface
 {
-	auto exec = get_executor_helper(
-		std::forward<decltype(service_exec)>(service_exec)
-	);
-	m_acceptor.async_accept(exec,
-	[this, exec, accept_callback = std::move(callback)](const error_code &error, auto socket) mutable
+public:
+	explicit model(Acceptor value) :
+		m_acceptor(std::move(value)) {}
+
+	void accept(accept_handler_t handler) override {
+		m_acceptor.accept(std::move(handler));
+	}
+	void cancel() noexcept override {
+		m_acceptor.cancel();
+	}
+
+	[[nodiscard]] const acceptor_t &acceptor() const noexcept override {
+		return m_acceptor.acceptor();
+	}
+	[[nodiscard]] acceptor_t &acceptor() noexcept override {
+		return m_acceptor.acceptor();
+	}
+
+	[[nodiscard]] executor_t get_executor() noexcept override {
+		return executor_t(m_acceptor.get_executor());
+	}
+
+private:
+	Acceptor m_acceptor;
+};
+
+template <core_concepts::exec Exec>
+class RIWO_HTTP_TAPI basic_acceptor_wrap<Exec>::tcp_acceptor
+{
+public:
+	using executor_type = executor_t;
+
+	explicit tcp_acceptor(acceptor_t value) :
+		m_acceptor(std::move(value)) {}
+
+public:
+	void accept(accept_handler_t handler)
 	{
-		if( error )
+		auto socket = std::make_shared<socket_t>(m_acceptor.get_executor());
+
+		m_acceptor.async_accept(*socket,
+		[socket, handler = std::move(handler)](error_code error) mutable
 		{
-			accept_callback(nullptr);
-			if( m_acceptor.is_open() )
-				accept(exec, std::move(accept_callback));
-			return ;
-		}
-		// Keep an accept pending before handing the connection to the server.
-		// This also keeps TCP and TLS accept behavior consistent.
-		accept(exec, accept_callback);
-		accept_callback(std::make_shared<basic_tcp_connection<executor_t>>(
-			socket_t(std::move(socket))
-		));
-	});
-}
+			if( error )
+				return std::move(handler)(error, accepted_t{});
 
-template <core_concepts::exec Exec>
-auto basic_acceptor_wrap<asio::basic_stream_socket<asio::ip::tcp,Exec>>::
-get_executor() noexcept -> executor_t
-{
-	return m_acceptor.get_executor();
-}
+			std::move(handler)(error_code{},
+				accepted_t(std::in_place_type<socket_t>, std::move(*socket))
+			);
+		});
+	}
 
-template <core_concepts::exec Exec>
-auto basic_acceptor_wrap<asio::basic_stream_socket<asio::ip::tcp,Exec>>::
-acceptor() const noexcept -> const acceptor_t&
-{
-	return m_acceptor;
-}
-
-template <core_concepts::exec Exec>
-auto basic_acceptor_wrap<asio::basic_stream_socket<asio::ip::tcp,Exec>>::
-acceptor() noexcept -> acceptor_t&
-{
-	return m_acceptor;
-}
-
-#if RIWO_OPENSSL_SUPPORT
-
-template <core_concepts::exec Exec>
-basic_acceptor_wrap<asio::ssl::stream<asio::basic_stream_socket<asio::ip::tcp,Exec>>>::
-basic_acceptor_wrap(acceptor_t &&acceptor, asio::ssl::context &ctx) :
-	m_acceptor(std::move(acceptor)), m_ctx(&ctx)
-{
-
-}
-
-template <core_concepts::exec Exec>
-void basic_acceptor_wrap<asio::ssl::stream<asio::basic_stream_socket<asio::ip::tcp,Exec>>>::accept
-(core_concepts::match_sched<executor_t> auto &&service_exec, std::function<void(connection_ptr)> callback_arg,
-	std::chrono::milliseconds handshake_timeout)
-{
-	using namespace std::chrono_literals;
-	if( handshake_timeout <= 0ms )
-		handshake_timeout = 1ms;
-
-	auto exec = get_executor_helper (
-		std::forward<decltype(service_exec)>(service_exec)
-	);
-	m_acceptor.async_accept(exec,
-	[this, exec, callback = std::move(callback_arg), handshake_timeout]
-	(const error_code &error, auto tcp_socket) mutable
+	void cancel() noexcept
 	{
-		if( error )
-		{
-			callback(nullptr);
-			if( m_acceptor.is_open() )
-				accept(exec, std::move(callback), handshake_timeout);
-			return ;
-		}
-		auto ssl_socket = std::make_shared<socket_t>(
-			socket_t(std::move(tcp_socket), *m_ctx)
-		);
-		auto strand = asio::make_strand(ssl_socket->get_executor());
-		auto timer = std::make_shared<asio::steady_timer>(strand);
-		auto completed = std::make_shared<std::atomic_bool>(false);
+		error_code ignored;
+		m_acceptor.cancel(ignored);
+		m_acceptor.close(ignored);
+	}
 
-		timer->expires_after(handshake_timeout);
-		timer->async_wait(asio::bind_executor(strand,
-		[ssl_socket, timer, completed, callback](const error_code &timer_error) mutable
-		{
-			if( timer_error or completed->exchange(true) )
-				return ;
+public:
+	[[nodiscard]] const acceptor_t &acceptor() const noexcept {
+		return m_acceptor;
+	}
+	[[nodiscard]] acceptor_t &acceptor() noexcept {
+		return m_acceptor;
+	}
 
-			error_code ignored {};
-			ssl_socket->next_layer().cancel(ignored);
-			ssl_socket->next_layer().close(ignored);
-			callback(nullptr);
-		}));
-		ssl_socket->async_handshake(asio::ssl::stream_base::server,
-		asio::bind_executor(strand,
-		[ssl_socket, timer, completed, callback](const error_code &handshake_error) mutable
-		{
-			if( completed->exchange(true) )
-				return ;
-			try {
-				ignore_unused(timer->cancel());
-			}
-			catch(...) {}
+	[[nodiscard]] executor_type get_executor() noexcept {
+		return m_acceptor.get_executor();
+	}
 
-			error_code ignored {};
-			if( handshake_error )
-			{
-				ssl_socket->next_layer().close(ignored);
-				callback(nullptr);
-				return ;
-			}
-			callback(std::make_shared<basic_tls_connection<executor_t>>(
-				std::move(*ssl_socket)
-			));
-		}));
-		// The next TCP accept is started immediately. TLS handshakes already in
-		// progress therefore cannot serialize admission of later clients.
-		accept(exec, std::move(callback), handshake_timeout);
-	});
+private:
+	acceptor_t m_acceptor;
+};
+
+template <core_concepts::exec Exec>
+basic_acceptor_wrap<Exec>::basic_acceptor_wrap() requires
+	core_concepts::match_sched<io_executor_t,executor_t> :
+	basic_acceptor_wrap(acceptor_t(riwo::get_executor()))
+{
+
 }
 
 template <core_concepts::exec Exec>
-auto basic_acceptor_wrap<asio::ssl::stream<asio::basic_stream_socket<asio::ip::tcp,Exec>>>::
-get_executor() noexcept -> executor_t
+basic_acceptor_wrap<Exec>::basic_acceptor_wrap(acceptor_t &&acceptor) :
+	m_interface(std::make_unique<model<tcp_acceptor>>(
+		tcp_acceptor(std::move(acceptor))))
 {
-	return m_acceptor.get_executor();
+
 }
 
 template <core_concepts::exec Exec>
-auto basic_acceptor_wrap<asio::ssl::stream<asio::basic_stream_socket<asio::ip::tcp,Exec>>>::
-acceptor() const noexcept -> const acceptor_t&
+template <typename Acceptor>
+basic_acceptor_wrap<Exec>::basic_acceptor_wrap(Acceptor acceptor) requires
+(
+	not std::same_as<std::remove_cvref_t<Acceptor>,basic_acceptor_wrap> and
+	requires(Acceptor &value, const Acceptor &const_value,accept_handler_t handler)
+	{
+		typename Acceptor::executor_type;
+		{ value.get_executor() } -> std::convertible_to<executor_t>;
+		{ value.acceptor() } -> std::same_as<acceptor_t&>;
+		{ const_value.acceptor() } -> std::same_as<const acceptor_t&>;
+		value.accept(std::move(handler));
+		{ value.cancel() } noexcept;
+	}
+) :
+	m_interface(std::make_unique<model<Acceptor>>(std::move(acceptor)))
 {
-	return m_acceptor;
+
 }
 
 template <core_concepts::exec Exec>
-auto basic_acceptor_wrap<asio::ssl::stream<asio::basic_stream_socket<asio::ip::tcp,Exec>>>::
-acceptor() noexcept -> acceptor_t&
+basic_acceptor_wrap<Exec>::basic_acceptor_wrap(basic_acceptor_wrap &&other) noexcept :
+	m_interface(std::move(other.m_interface))
 {
-	return m_acceptor;
+	other.m_interface = std::make_unique<model<tcp_acceptor>>(
+		tcp_acceptor(acceptor_t(m_interface->get_executor()))
+	);
 }
 
-#endif //RIWO_OPENSSL_SUPPORT
+template <core_concepts::exec Exec>
+basic_acceptor_wrap<Exec> &basic_acceptor_wrap<Exec>::operator=(basic_acceptor_wrap &&other) noexcept
+{
+	if( this == &other )
+		return *this;
+
+	auto replacement = std::make_unique<model<tcp_acceptor>>(
+		tcp_acceptor(acceptor_t(other.m_interface->get_executor()))
+	);
+	m_interface = std::move(other.m_interface);
+	other.m_interface = std::move(replacement);
+	return *this;
+}
+
+template <core_concepts::exec Exec>
+basic_acceptor_wrap<Exec>::~basic_acceptor_wrap() = default;
+
+template <core_concepts::exec Exec>
+void basic_acceptor_wrap<Exec>::accept(accept_handler_t handler)
+{
+	m_interface->accept(std::move(handler));
+}
+
+template <core_concepts::exec Exec>
+void basic_acceptor_wrap<Exec>::cancel() noexcept
+{
+	m_interface->cancel();
+}
+
+template <core_concepts::exec Exec>
+auto basic_acceptor_wrap<Exec>::acceptor() const noexcept -> const acceptor_t&
+{
+	return m_interface->acceptor();
+}
+
+template <core_concepts::exec Exec>
+auto basic_acceptor_wrap<Exec>::acceptor() noexcept -> acceptor_t&
+{
+	return m_interface->acceptor();
+}
+
+template <core_concepts::exec Exec>
+auto basic_acceptor_wrap<Exec>::get_executor() noexcept -> executor_t
+{
+	return m_interface->get_executor();
+}
 
 } //namespace riwo::http
 

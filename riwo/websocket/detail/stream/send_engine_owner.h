@@ -22,8 +22,8 @@ public:
 	[[nodiscard]] virtual send_engine &send_side() noexcept = 0;
 	[[nodiscard]] virtual asio::any_io_executor send_executor() const noexcept = 0;
 
-	virtual void start_transport_write(prepared_frame frame,
-		wire_frame_kind kind, std::shared_ptr<send_operation> operation
+	virtual void start_transport_write(const prepared_frame &frame,
+		wire_frame_kind kind, send_operation_ptr operation
 	) noexcept = 0;
 
 	virtual void handle_send_failure(error_code error) noexcept = 0;
@@ -40,7 +40,9 @@ public:
 	[[nodiscard]] virtual bool send_transport_ready() const noexcept = 0;
 	[[nodiscard]] virtual bool protocol_failure_active() const noexcept = 0;
 };
+using send_engine_owner_ptr = std::shared_ptr<send_engine_owner>;
 
 } //namespace riwo::websocket::detail
+
 
 #endif //RIWO_WEBSOCKET_DETAIL_STREAM_SEND_ENGINE_OWNER_H

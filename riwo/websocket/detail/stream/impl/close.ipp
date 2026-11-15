@@ -161,7 +161,7 @@ sys_expected<> basic_stream<Exec>::impl::handle_sync_peer_close
 	if( not frame )
 		return sys_unexpected(frame.error());
 
-	error_code error;
+	error_code error {};
 	ignore_unused(write_prepared(*frame, error));
 	if( error )
 		return sys_unexpected(error);
@@ -192,15 +192,13 @@ void basic_stream<Exec>::impl::on_closed(closed_callback_t callback)
 template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::notify_closed() noexcept
 {
-	m_close_wait_queue.notify(
-		m_close_result.value_or(retained_close_info()));
+	m_close_wait_queue.notify(m_close_result.value_or(retained_close_info()));
 }
 
 template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::complete_close_waiters(error_code error) noexcept
 {
-	m_close_wait_queue.complete(error,
-		m_close_result.value_or(retained_close_info()));
+	m_close_wait_queue.complete(error, m_close_result.value_or(retained_close_info()));
 }
 
 template <core_concepts::exec Exec>
@@ -456,8 +454,9 @@ auto basic_stream<Exec>::impl::wait_closed(error_code &error) noexcept -> close_
 template <core_concepts::exec Exec>
 bool basic_stream<Exec>::impl::add_close_waiter(close_handler_t completion) noexcept
 {
-	return m_close_wait_queue.add(std::move(completion), m_exec,
-		this->weak_from_this(), &impl::cancel_close_waiter);
+	return m_close_wait_queue.add(std::move(completion),
+		m_exec, this->weak_from_this(), &impl::cancel_close_waiter
+	);
 }
 
 template <core_concepts::exec Exec>

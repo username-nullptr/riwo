@@ -33,7 +33,7 @@ public:
 
 	[[nodiscard]] sys_expected<prepared_frame> prepare_close(const close_frame &frame) const noexcept;
 
-	[[nodiscard]] sys_expected<std::vector<prepared_frame>> prepare_message (
+	[[nodiscard]] sys_expected<prepared_message> prepare_message (
 		message_type type, std::span<const const_buffer> buffers, write_options options = {}
 	) const noexcept;
 
@@ -91,8 +91,9 @@ public:
 
 	// Transport is owned by stream::impl.  The engine only records the active
 	// frame and consumes its completion to advance the outbound state machine.
-	void complete_wire_frame(const prepared_frame &frame, wire_frame_kind kind,
-		const std::shared_ptr<send_operation> &operation, error_code error, size_t wire_size
+	void complete_wire_frame(size_t header_size, size_t payload_size,
+		size_t application_size, wire_frame_kind kind, const send_operation_ptr &operation,
+		error_code error, size_t wire_size
 	) noexcept;
 
 private:
@@ -102,32 +103,30 @@ private:
 	[[nodiscard]] error_code observe_write_error(uint64_t target) noexcept;
 	void complete_write_waiters();
 
-	void deliver_write_waiter(const std::shared_ptr<write_waiter> &waiter,
+	void deliver_write_waiter(const write_waiter_ptr &waiter,
 		error_code error, bool clear_slot = true
 	) noexcept;
 
 	void cancel_write_waiter(uint64_t id) noexcept;
 
-	void deliver_send_completion(const std::shared_ptr<send_operation> &operation,
+	void deliver_send_completion(const send_operation_ptr &operation,
 		error_code error
 	) noexcept;
 
-	void complete_send_operation(const std::shared_ptr<send_operation> &operation,
+	void complete_send_operation(const send_operation_ptr &operation,
 		error_code error
 	) noexcept;
 
 	void commit_data_frame(send_operation &operation) noexcept;
 
-	void install_send_cancellation(const std::shared_ptr<send_operation> &operation);
+	void install_send_cancellation(const send_operation_ptr &operation);
 	void cancel_queued_send(uint64_t id) noexcept;
 
-	void start_wire_frame(prepared_frame frame, wire_frame_kind kind,
-		std::shared_ptr<send_operation> operation = {}
+	void start_wire_frame(const prepared_frame &frame, wire_frame_kind kind,
+		send_operation_ptr operation = {}
 	) noexcept;
 
-	[[nodiscard]] error_code enqueue_send_operation(
-		std::shared_ptr<send_operation> operation
-	) noexcept;
+	[[nodiscard]] error_code enqueue_send_operation(send_operation_ptr operation) noexcept;
 
 	[[nodiscard]] static sys_expected<> retain_protocol_payload (
 		optional<std::vector<std::byte>> &slot, const std::vector<std::byte> &payload
@@ -154,9 +153,9 @@ private:
 	bool m_wire_write_active = false;
 	bool m_last_wire_was_control = false;
 
-	std::shared_ptr<send_operation> m_current_data {};
-	std::deque<std::shared_ptr<send_operation>> m_data_write_queue {};
-	std::deque<std::shared_ptr<send_operation>> m_control_write_queue {};
+	send_operation_ptr m_current_data {};
+	std::deque<send_operation_ptr> m_data_write_queue {};
+	std::deque<send_operation_ptr> m_control_write_queue {};
 
 	size_t m_queued_write_operations = 0;
 	size_t m_queued_write_bytes = 0;
@@ -166,7 +165,7 @@ private:
 	uint64_t m_next_send_operation_id = 0;
 
 	optional<std::pair<uint64_t,error_code>> m_unobserved_write_error {};
-	std::deque<std::shared_ptr<write_waiter>> m_write_waiters {};
+	std::deque<write_waiter_ptr> m_write_waiters {};
 
 	uint64_t m_next_write_waiter_id = 0;
 };

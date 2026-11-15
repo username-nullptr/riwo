@@ -29,14 +29,16 @@ concept adopts_connection = requires(Stream &stream,
 
 using native_executor = riwo::io_context_t::executor_type;
 using native_stream = ws::basic_stream<native_executor>;
-using native_connection = riwo::http::basic_connection<native_executor>;
+using native_connection = riwo::http::basic_duplex_channel<native_executor>;
 static_assert(std::same_as<native_stream::connection_t,native_connection>);
 static_assert(adopts_connection<native_stream,native_connection>);
 static_assert(not adopts_connection<ws::stream,native_connection>);
 
-class memory_connection final : public riwo::http::basic_connection<>
+class memory_connection final : public riwo::http::detail::duplex_state
 {
 public:
+	using executor_t = asio::any_io_executor;
+
 	explicit memory_connection(executor_t exec) : m_exec(std::move(exec)) {}
 
 	void feed(std::vector<std::byte> input) {
@@ -76,7 +78,7 @@ public:
 		return static_cast<bool>(m_pending_read);
 	}
 
-	riwo::sys_expected<> cancel() noexcept override
+	void cancel() noexcept override
 	{
 		m_cancel_count++;
 		complete_pending_read(asio::error::operation_aborted);
@@ -87,55 +89,52 @@ public:
 				std::move(handler)(asio::error::operation_aborted, 0);
 			});
 		}
-		return riwo::make_sys_expected();
 	}
 
-	riwo::sys_expected<> close() noexcept override
+	void close_sync(riwo::error_code &error) noexcept override
 	{
 		m_close_count++;
 		m_open = false;
-		return riwo::make_sys_expected();
+		error.clear();
 	}
 
-	riwo::sys_expected<> set_options(
-		const riwo::http::tcp_socket_options&) noexcept override
+	void close(close_handler_t completion) override
 	{
-		return riwo::make_sys_expected();
-	}
-
-	riwo::sys_expected<riwo::http::tcp_socket_state>
-	options() const noexcept override
-	{
-		return riwo::http::tcp_socket_state {};
+		riwo::error_code error;
+		close_sync(error);
+		asio::post(m_exec,
+			[handler = std::move(completion), error]() mutable {
+				std::move(handler)(error);
+			});
 	}
 
 	bool is_open() const noexcept override {
 		return m_open;
 	}
 
-	riwo::sys_expected<probe_state_t> probe() noexcept override {
-		return probe_state_t::no_event;
+	riwo::http::protocol selected_protocol() const noexcept override {
+		return riwo::http::protocol::v1_1;
 	}
 
-	riwo::http::endpoint remote_endpoint() const noexcept override
+	asio::ip::tcp::endpoint remote_endpoint(
+		riwo::error_code &error) const noexcept override
 	{
-		return {.address = asio::ip::make_address_v4("192.0.2.10"), .port = 443};
+		error.clear();
+		return {asio::ip::make_address_v4("192.0.2.10"), 443};
 	}
 
-	riwo::http::endpoint local_endpoint() const noexcept override
+	asio::ip::tcp::endpoint local_endpoint(
+		riwo::error_code &error) const noexcept override
 	{
-		return {.address = asio::ip::make_address_v4("192.0.2.20"), .port = 49152};
+		error.clear();
+		return {asio::ip::make_address_v4("192.0.2.20"), 49152};
 	}
 
-	executor_t get_executor() noexcept override {
+	executor_t get_executor() const noexcept override {
 		return m_exec;
 	}
 
-protected:
-	using riwo::http::basic_connection<>::write_all;
-	using riwo::http::basic_connection<>::co_write_all;
-
-	size_t read_some(riwo::mutable_buffer buffer,
+	size_t read_some_sync(riwo::mutable_buffer buffer,
 		riwo::error_code &error) noexcept override
 	{
 		if( m_input_offset == m_input.size() )
@@ -154,25 +153,32 @@ protected:
 		return size;
 	}
 
-	size_t write_all(const riwo::const_buffer &buffer,
+	size_t write_sync(std::span<const riwo::const_buffer> buffers,
 		riwo::error_code &error) noexcept override
 	{
+		size_t requested = 0;
+		for(const auto &buffer : buffers)
+			requested += buffer.size();
 		const auto available = m_fail_after ?
 			(*m_fail_after > m_wire.size() ? *m_fail_after - m_wire.size() : 0) :
 			std::numeric_limits<size_t>::max();
-		const auto size = std::min(buffer.size(), available);
-		if( size != 0 )
+		const auto total = std::min(requested, available);
+		size_t remaining = total;
+		for(const auto &buffer : buffers)
 		{
+			const auto size = std::min(buffer.size(), remaining);
+			if( size == 0 ) break;
 			const auto *data = static_cast<const std::byte*>(buffer.data());
 			m_wire.insert(m_wire.end(), data, data + size);
+			remaining -= size;
 		}
-		error = size == buffer.size() ? riwo::error_code{} :
+		error = total == requested ? riwo::error_code{} :
 			riwo::make_system_error_code(std::errc::broken_pipe);
-		return size;
+		return total;
 	}
 
-	void co_read_some(riwo::mutable_buffer buffer,
-		io_handler_t completion) noexcept override
+	void read_some(riwo::mutable_buffer buffer,
+		io_handler_t completion) override
 	{
 		if( m_stall_reads and m_input_offset == m_input.size() )
 		{
@@ -189,14 +195,14 @@ protected:
 			return;
 		}
 		riwo::error_code error;
-		auto size = read_some(buffer, error);
+		auto size = read_some_sync(buffer, error);
 		asio::post(m_exec, [handler = std::move(completion), error, size]() mutable {
 			std::move(handler)(error, size);
 		});
 	}
 
-	void co_write_all(riwo::const_buffer buffer,
-		io_handler_t completion) noexcept override
+	void write(std::span<const riwo::const_buffer> buffers,
+		io_handler_t completion) override
 	{
 		if( m_stall_writes )
 		{
@@ -204,7 +210,7 @@ protected:
 			return;
 		}
 		riwo::error_code error;
-		auto size = write_all(buffer, error);
+		auto size = write_sync(buffers, error);
 		asio::post(m_exec,
 			[handler = std::move(completion), error, size]() mutable {
 				std::move(handler)(error, size);
@@ -244,6 +250,13 @@ private:
 	bool m_stall_writes = false;
 	bool m_open = true;
 };
+
+std::shared_ptr<ws::stream::connection_t> make_channel(
+	const std::shared_ptr<memory_connection> &state)
+{
+	return std::make_shared<ws::stream::connection_t>(
+		state->get_executor(), state);
+}
 
 uint8_t octet(const std::vector<std::byte> &wire, size_t offset)
 {
@@ -384,7 +397,7 @@ void test_adopt_and_lifecycle()
 	RIWO_TEST_CHECK_EQ(stream.state(), ws::connection_state::idle);
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection), {
+	stream.adopt(make_channel(connection), {
 		.stream_role = ws::role::server,
 		.pending_data = {std::byte {'p'}, std::byte {'e'}, std::byte {'n'},
 			std::byte {'d'}, std::byte {'i'}, std::byte {'n'}, std::byte {'g'}},
@@ -394,11 +407,11 @@ void test_adopt_and_lifecycle()
 	RIWO_TEST_CHECK(stream.is_open());
 	RIWO_TEST_CHECK_EQ(stream.stream_role(), ws::role::server);
 	RIWO_TEST_CHECK_EQ(stream.negotiated_subprotocol(), "chat");
-	RIWO_TEST_CHECK_EQ(stream.remote_endpoint().port, uint16_t {443});
-	RIWO_TEST_CHECK_EQ(stream.local_endpoint().port, uint16_t {49152});
+	RIWO_TEST_CHECK_EQ(stream.remote_endpoint().port(), uint16_t {443});
+	RIWO_TEST_CHECK_EQ(stream.local_endpoint().port(), uint16_t {49152});
 
 	auto second = std::make_shared<memory_connection>(context.get_executor());
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(second), {}, error);
+	stream.adopt(make_channel(second), {}, error);
 	RIWO_TEST_CHECK_EQ(error, ws::make_error_code(ws::errc::already_open));
 	RIWO_TEST_CHECK(second->is_open());
 
@@ -419,7 +432,7 @@ void test_adopt_validation()
 	riwo::error_code error;
 
 	ws::stream null_stream(context.get_executor(), manual_control_mode());
-	null_stream.adopt(std::shared_ptr<riwo::http::connection> {}, {}, error);
+	null_stream.adopt(std::shared_ptr<ws::stream::connection_t> {}, {}, error);
 	RIWO_TEST_CHECK_EQ(error,
 		std::make_error_code(std::errc::invalid_argument));
 	RIWO_TEST_CHECK_EQ(null_stream.state(), ws::connection_state::idle);
@@ -432,7 +445,7 @@ void test_adopt_validation()
 		.parameters = {{.name = "unknown"}},
 	});
 	extension_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(connection),
+		make_channel(connection),
 		std::move(options), error);
 	RIWO_TEST_CHECK_EQ(error,
 		ws::make_error_code(ws::errc::unsupported_extension));
@@ -445,7 +458,7 @@ void test_adopt_validation()
 		ws::permessage_deflate_extension()
 	};
 	unavailable_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(connection),
+		make_channel(connection),
 		std::move(unavailable_options), error);
 	RIWO_TEST_CHECK_EQ(error,
 		ws::make_error_code(ws::errc::unsupported_extension));
@@ -456,21 +469,21 @@ void test_adopt_validation()
 	bad_config.read_buffer_size = 0;
 	ws::stream invalid_stream(context.get_executor(), bad_config);
 	invalid_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(connection), {}, error);
+		make_channel(connection), {}, error);
 	RIWO_TEST_CHECK_EQ(error,
 		std::make_error_code(std::errc::invalid_argument));
 	bad_config.read_buffer_size = ws::stream_config{}.read_buffer_size;
 	bad_config.ping_interval = std::chrono::milliseconds(-1);
 	ws::stream invalid_ping_stream(context.get_executor(), bad_config);
 	invalid_ping_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(connection), {}, error);
+		make_channel(connection), {}, error);
 	RIWO_TEST_CHECK_EQ(error,
 		std::make_error_code(std::errc::invalid_argument));
 	bad_config.ping_interval = std::chrono::milliseconds::zero();
 	bad_config.compression.level = 10;
 	ws::stream invalid_compression_stream(context.get_executor(), bad_config);
 	invalid_compression_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(connection), {}, error);
+		make_channel(connection), {}, error);
 	RIWO_TEST_CHECK_EQ(error,
 		std::make_error_code(std::errc::invalid_argument));
 
@@ -479,7 +492,7 @@ void test_adopt_validation()
 	auto other_connection =
 		std::make_shared<memory_connection>(other_context.get_executor());
 	mismatched_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(other_connection), {}, error);
+		make_channel(other_connection), {}, error);
 	RIWO_TEST_CHECK_EQ(error,
 		std::make_error_code(std::errc::invalid_argument));
 	RIWO_TEST_CHECK(other_connection->is_open());
@@ -494,7 +507,7 @@ void test_server_write_and_fragmentation()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -531,7 +544,7 @@ void test_client_write_is_masked()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::client}, error);
 
 	const std::array<std::byte,4> payload {
@@ -584,7 +597,7 @@ void test_write_frame_symmetry_and_validation()
 	ws::stream stream(context.get_executor(), manual_control_mode());
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -643,7 +656,7 @@ void test_write_frame_symmetry_and_validation()
 	auto async_connection =
 		std::make_shared<memory_connection>(async_context.get_executor());
 	async_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(async_connection),
+		make_channel(async_connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -684,7 +697,7 @@ void test_preflight_and_partial_failure()
 	auto text_connection =
 		std::make_shared<memory_connection>(context.get_executor());
 	text_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(text_connection),
+		make_channel(text_connection),
 		{.stream_role = ws::role::server}, error);
 	const std::array<std::byte,3> invalid_utf8 {
 		std::byte {'a'}, std::byte {0xC0}, std::byte {0x80}
@@ -719,7 +732,7 @@ void test_preflight_and_partial_failure()
 	auto limited_connection =
 		std::make_shared<memory_connection>(context.get_executor());
 	limited_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(limited_connection),
+		make_channel(limited_connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK_EQ(limited_stream.write_text("hello", error), size_t {0});
 	RIWO_TEST_CHECK_EQ(error,
@@ -732,7 +745,7 @@ void test_preflight_and_partial_failure()
 		std::make_shared<memory_connection>(context.get_executor());
 	partial_connection->fail_after(4); // 2-byte header plus 2 payload bytes.
 	partial_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(partial_connection),
+		make_channel(partial_connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK_EQ(partial_stream.write_text("hello", error), size_t {2});
 	RIWO_TEST_CHECK_EQ(error,
@@ -755,7 +768,7 @@ void test_async_write()
 	ws::stream stream(context.get_executor(), manual_control_mode());
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -775,7 +788,7 @@ void test_control_write()
 	ws::stream stream(context.get_executor(), manual_control_mode());
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -803,7 +816,7 @@ void test_manual_control_rejected_in_automatic_mode()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -837,7 +850,7 @@ void test_write_queue_fairness_and_barrier()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -875,7 +888,7 @@ void test_write_queue_limits()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -914,7 +927,7 @@ void test_queued_write_cancellation()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -978,7 +991,7 @@ void test_write_barrier_cancellation()
 	ws::stream stream(context.get_executor(), manual_control_mode());
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1021,7 +1034,7 @@ void test_detached_write_barrier_error()
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	connection->fail_after(4); // 2-byte header plus 2 payload bytes.
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1055,7 +1068,7 @@ void test_detached_write_owns_payload()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1089,7 +1102,7 @@ void test_control_failure_completes_paused_data()
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	connection->fail_after(5); // First data frame, then one Ping header byte.
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1137,7 +1150,7 @@ void test_shutdown_aborts_write_queue()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1196,7 +1209,7 @@ void test_read_fragmentation_and_auto_pong()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1222,7 +1235,7 @@ void test_read_pending_multiple_messages()
 	append_frame(pending, ws::opcode::text, true, "two");
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection), {
+	stream.adopt(make_channel(connection), {
 		.stream_role = ws::role::server,
 		.pending_data = std::move(pending),
 	}, error);
@@ -1254,7 +1267,7 @@ void test_read_frame_sync_and_async()
 		connection->feed(std::move(input));
 
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 		std::string ping_payload;
@@ -1307,7 +1320,7 @@ void test_read_frame_sync_and_async()
 		connection->feed(std::move(input));
 
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 
@@ -1347,7 +1360,7 @@ void test_consume_streams_one_message()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1400,7 +1413,7 @@ void test_consume_streams_one_message()
 	std::vector<std::byte> pending;
 	append_frame(pending, ws::opcode::binary, true, "pending-data");
 	pending_stream.adopt(
-		std::static_pointer_cast<riwo::http::connection>(pending_connection), {
+		make_channel(pending_connection), {
 			.stream_role = ws::role::server,
 			.pending_data = std::move(pending),
 		}, error);
@@ -1431,7 +1444,7 @@ void test_async_consume()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1462,7 +1475,7 @@ void test_async_read()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1488,7 +1501,7 @@ void test_async_read_cancellation_preserves_parser()
 	connection->feed(std::move(prefix));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1529,7 +1542,7 @@ void test_async_read_timeout()
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	connection->stall_reads();
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -1576,7 +1589,7 @@ void test_read_limits_and_utf8()
 	append_frame(oversized, ws::opcode::binary, false, "123");
 	append_frame(oversized, ws::opcode::continuation, true, "45");
 	limited_connection->feed(std::move(oversized));
-	limited.adopt(std::static_pointer_cast<riwo::http::connection>(
+	limited.adopt(make_channel(
 		limited_connection), {.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	riwo::ignore_unused(limited.read<>(error));
@@ -1595,7 +1608,7 @@ void test_read_limits_and_utf8()
 	std::vector<std::byte> invalid_wire;
 	append_frame(invalid_wire, ws::opcode::text, true, invalid_text);
 	invalid_connection->feed(std::move(invalid_wire));
-	invalid.adopt(std::static_pointer_cast<riwo::http::connection>(
+	invalid.adopt(make_channel(
 		invalid_connection), {.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	riwo::ignore_unused(invalid.read<>(error));
@@ -1622,6 +1635,14 @@ void test_invalid_compressed_payload()
 		};
 		auto compressed = ws::detail::deflate_message(input);
 		RIWO_TEST_CHECK(compressed.has_value());
+		ws::detail::permessage_deflater reused_deflater;
+		RIWO_TEST_CHECK(not reused_deflater.reset(15, -1));
+		auto reused_first = reused_deflater.deflate(input);
+		auto reused_second = reused_deflater.deflate(input);
+		RIWO_TEST_CHECK(reused_first.has_value());
+		RIWO_TEST_CHECK(reused_second.has_value());
+		RIWO_TEST_CHECK_EQ(*reused_first, *compressed);
+		RIWO_TEST_CHECK_EQ(*reused_second, *compressed);
 		auto inflated = ws::detail::inflate_message(*compressed, 0);
 		RIWO_TEST_CHECK(inflated.has_value());
 		RIWO_TEST_CHECK_EQ(*inflated, exact_block);
@@ -1652,7 +1673,7 @@ void test_invalid_compressed_payload()
 		connection->feed(std::move(wire));
 
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection), {
+		stream.adopt(make_channel(connection), {
 			.stream_role = ws::role::server,
 			.negotiated_extensions = {ws::permessage_deflate_extension()},
 		}, error);
@@ -1684,7 +1705,7 @@ void test_invalid_compressed_payload()
 		connection->feed(std::move(wire));
 
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection), {
+		stream.adopt(make_channel(connection), {
 			.stream_role = ws::role::server,
 			.negotiated_extensions = {ws::permessage_deflate_extension()},
 		}, error);
@@ -1727,7 +1748,7 @@ void test_compressed_frame_chunk_and_write_policy()
 		std::make_shared<memory_connection>(context.get_executor());
 	framed_connection->read_chunk_size(3);
 	framed_connection->feed(wire);
-	framed.adopt(std::static_pointer_cast<riwo::http::connection>(
+	framed.adopt(make_channel(
 		framed_connection), {
 			.stream_role = ws::role::server,
 			.negotiated_extensions = {extension},
@@ -1748,7 +1769,7 @@ void test_compressed_frame_chunk_and_write_policy()
 		std::make_shared<memory_connection>(context.get_executor());
 	chunked_connection->read_chunk_size(2);
 	chunked_connection->feed(std::move(wire));
-	chunked.adopt(std::static_pointer_cast<riwo::http::connection>(
+	chunked.adopt(make_channel(
 		chunked_connection), {
 			.stream_role = ws::role::server,
 			.negotiated_extensions = {extension},
@@ -1768,7 +1789,7 @@ void test_compressed_frame_chunk_and_write_policy()
 	ws::stream policy(context.get_executor(), policy_config);
 	auto policy_connection =
 		std::make_shared<memory_connection>(context.get_executor());
-	policy.adopt(std::static_pointer_cast<riwo::http::connection>(
+	policy.adopt(make_channel(
 		policy_connection), {
 			.stream_role = ws::role::server,
 			.negotiated_extensions = {extension},
@@ -1781,7 +1802,7 @@ void test_compressed_frame_chunk_and_write_policy()
 	ws::stream forced(context.get_executor(), policy_config);
 	auto forced_connection =
 		std::make_shared<memory_connection>(context.get_executor());
-	forced.adopt(std::static_pointer_cast<riwo::http::connection>(
+	forced.adopt(make_channel(
 		forced_connection), {
 			.stream_role = ws::role::server,
 			.negotiated_extensions = {extension},
@@ -1795,7 +1816,7 @@ void test_compressed_frame_chunk_and_write_policy()
 	ws::stream unavailable(context.get_executor(), manual_control_mode());
 	auto unavailable_connection =
 		std::make_shared<memory_connection>(context.get_executor());
-	unavailable.adopt(std::static_pointer_cast<riwo::http::connection>(
+	unavailable.adopt(make_channel(
 		unavailable_connection), {.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	RIWO_TEST_CHECK_EQ(unavailable.write_text("small", {
@@ -1865,7 +1886,7 @@ void test_protocol_failure_during_async_write()
 		std::byte {0x33}, std::byte {0x44},
 	};
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection), {
+	stream.adopt(make_channel(connection), {
 		.stream_role = ws::role::server,
 		.pending_data = std::move(invalid_frame),
 	}, error);
@@ -1918,7 +1939,7 @@ void test_protocol_failure_close_deadline()
 		std::byte {0x33}, std::byte {0x44},
 	};
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection), {
+	stream.adopt(make_channel(connection), {
 		.stream_role = ws::role::server,
 		.pending_data = std::move(invalid_frame),
 	}, error);
@@ -1960,7 +1981,7 @@ void test_control_callbacks_and_payload_rewrite()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -2002,7 +2023,7 @@ void test_coroutine_control_callbacks()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -2047,7 +2068,7 @@ void test_control_callbacks_manual_pong()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	std::vector<std::byte> ping_payload;
@@ -2077,7 +2098,7 @@ void test_control_callback_failure()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -2103,7 +2124,7 @@ void test_automatic_ping_timer()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -2117,7 +2138,7 @@ void test_automatic_ping_timer()
 	ws::stream disabled(disabled_context.get_executor(), config);
 	auto disabled_connection =
 		std::make_shared<memory_connection>(disabled_context.get_executor());
-	disabled.adopt(std::static_pointer_cast<riwo::http::connection>(
+	disabled.adopt(make_channel(
 		disabled_connection), {.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	asio::steady_timer disabled_wait(disabled_context.get_executor(), 3ms);
@@ -2137,7 +2158,7 @@ void test_automatic_ping_timeout_and_retries()
 		auto connection = std::make_shared<memory_connection>(
 			context.get_executor());
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 
@@ -2159,7 +2180,7 @@ void test_automatic_ping_timeout_and_retries()
 		auto connection = std::make_shared<memory_connection>(
 			context.get_executor());
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 
@@ -2177,7 +2198,7 @@ void test_automatic_ping_timeout_and_retries()
 		auto connection = std::make_shared<memory_connection>(
 			context.get_executor());
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 
@@ -2217,7 +2238,7 @@ void test_peer_close()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	riwo::ignore_unused(stream.read<>(error));
@@ -2248,7 +2269,7 @@ void test_closed_callback_and_waiter()
 		connection->feed(std::move(input));
 
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 
@@ -2290,7 +2311,7 @@ void test_closed_callback_and_waiter()
 		connection->feed(std::move(input));
 
 		riwo::error_code error;
-		stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+		stream.adopt(make_channel(connection),
 			{.stream_role = ws::role::server}, error);
 		RIWO_TEST_CHECK(not error);
 		riwo::ignore_unused(stream.read<>(error));
@@ -2322,7 +2343,7 @@ void test_auto_pong_during_async_write()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	auto written = stream.write_text("hello", riwo::use_future);
@@ -2372,7 +2393,7 @@ void test_peer_close_during_async_write()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	auto written = stream.write_text("hello", riwo::use_future);
@@ -2425,7 +2446,7 @@ void test_local_close_sync()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	riwo::ignore_unused(stream.close(ws::close_frame {1005}, error));
@@ -2470,7 +2491,7 @@ void test_local_close_async_join_and_drain()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 	auto first_write = stream.write_text("one", riwo::use_future);
@@ -2521,7 +2542,7 @@ void test_local_close_takes_over_read()
 	connection->feed(std::move(input));
 
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	auto received = stream.read<>(riwo::use_future);
 	auto closed = stream.close(riwo::use_future);
@@ -2549,7 +2570,7 @@ void test_local_close_immediate_timeout()
 	ws::stream stream(context.get_executor(), config);
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 
@@ -2586,7 +2607,7 @@ void test_local_close_deadline_cancels_read()
 	auto connection = std::make_shared<memory_connection>(context.get_executor());
 	connection->stall_reads();
 	riwo::error_code error;
-	stream.adopt(std::static_pointer_cast<riwo::http::connection>(connection),
+	stream.adopt(make_channel(connection),
 		{.stream_role = ws::role::server}, error);
 	RIWO_TEST_CHECK(not error);
 

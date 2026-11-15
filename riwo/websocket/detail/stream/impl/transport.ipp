@@ -15,7 +15,7 @@ template <core_concepts::exec Exec>
 size_t basic_stream<Exec>::impl::read_transport
 (const mutable_buffer &buffer, error_code &error) noexcept
 {
-	return m_connection->read(buffer, error);
+	return m_connection->read_some(buffer, error);
 }
 
 template <core_concepts::exec Exec>
@@ -27,24 +27,9 @@ awaitable<std::tuple<error_code,size_t>> basic_stream<Exec>::impl::async_read_tr
 
 template <core_concepts::exec Exec>
 void basic_stream<Exec>::impl::start_transport_write
-(prepared_frame frame, detail::wire_frame_kind kind, std::shared_ptr<detail::send_operation> operation) noexcept
+(const prepared_frame &frame, detail::wire_frame_kind kind, detail::send_operation_ptr operation) noexcept
 {
-	m_stream_transport.start_write(send_owner(), std::move(frame), kind,
-		std::move(operation));
-}
-
-template <core_concepts::exec Exec>
-void basic_stream<Exec>::impl::start_async_transport_read
-(void *connection, const mutable_buffer &buffer, io_handler_t handler)
-{
-	static_cast<connection_t*>(connection)->read(buffer, std::move(handler));
-}
-
-template <core_concepts::exec Exec>
-void basic_stream<Exec>::impl::start_async_transport_write
-(void *connection, std::span<const const_buffer> buffers, io_handler_t handler)
-{
-	static_cast<connection_t*>(connection)->write(buffers, std::move(handler));
+	m_stream_transport.start_write(send_owner(), frame, kind, operation);
 }
 
 template <core_concepts::exec Exec>
@@ -56,11 +41,10 @@ void basic_stream<Exec>::impl::close_transport(error_code &error, bool cancel_fi
 		return ;
 	}
 	m_transport_closed = true;
-	if( cancel_first )
-		ignore_unused(m_connection->cancel());
 
-	auto result = m_connection->close();
-	error = result ? error_code{} : result.error();
+	if( cancel_first )
+		m_connection->cancel();
+	m_connection->close(error);
 }
 
 } //namespace riwo::websocket

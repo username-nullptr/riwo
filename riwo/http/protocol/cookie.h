@@ -1,118 +1,77 @@
-// SPDX-FileCopyrightText: 2025-2026 Xiaoqiang <username_nullptr@163.com>
+// SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
 #ifndef RIWO_HTTP_PROTOCOL_COOKIE_H
 #define RIWO_HTTP_PROTOCOL_COOKIE_H
 
-#include <riwo/http/global.h>
+#include <riwo/http/protocol/fields.h>
 #include <riwo/core/value.h>
 
 namespace riwo::http
 {
 
-struct cookie_attribute
+struct cookie_pair
 {
-static constexpr const char
-	*domain    = "Domain"  ,
-	*path      = "Path"    ,
-	*size      = "Size"    ,
-	*expires   = "Expires" ,
-	*max_age   = "Max-Age" ,
-	*http_only = "HttpOnly",
-	*secure    = "Secure"  ,
-	*same_site = "SameSite",
-	*priority  = "Priority";
+	std::string name {};
+	riwo::value value {};
+
+	friend bool operator== (
+		const cookie_pair&, const cookie_pair&
+	) = default;
 };
 
-class RIWO_HTTP_API cookie final
-{
-public:
-	using value_t = riwo::value;
-	using attributes_t = value_map;
-
-public:
-	cookie();
-	cookie(value_t value);
-	~cookie();
-
-	cookie(const cookie &other);
-	cookie &operator=(const cookie &other);
-
-	cookie(cookie &&other) noexcept;
-	cookie &operator=(cookie &&other) noexcept;
-
-public:
-	cookie &set_value(value_t value) noexcept;
-	cookie &operator=(value_t v) noexcept;
-
-	template <typename T>
-	[[nodiscard]] decltype(auto) value() requires
-		core_concepts::value_get<T,char>;
-
-	[[nodiscard]] value_t value() const noexcept;
-	operator value_t() const noexcept;
-
-public:
-	[[nodiscard]] optional<std::string> domain() const noexcept;
-	[[nodiscard]] optional<std::string> path() const noexcept;
-
-	[[nodiscard]] optional<std::string> same_site() const noexcept;
-	[[nodiscard]] optional<std::string> priority() const noexcept;
-
-	[[nodiscard]] optional<uint64_t> expires() const noexcept;
-	[[nodiscard]] optional<uint64_t> max_age() const noexcept;
-	[[nodiscard]] optional<size_t> size() const noexcept;
-
-	[[nodiscard]] optional<bool> http_only() const noexcept;
-	[[nodiscard]] optional<bool> secure() const noexcept;
-
-public:
-	cookie &set_domain(value_t domain);
-	cookie &set_path(value_t path);
-
-	cookie &set_same_site(value_t sst);
-	cookie &set_priority(value_t pt);
-
-	cookie &set_expires(uint64_t seconds);
-	cookie &set_max_age(uint64_t seconds);
-	cookie &set_size(size_t size);
-
-	cookie &set_http_only(bool flag);
-	cookie &set_secure(bool flag);
-
-public:
-	cookie &unset_domain();
-	cookie &unset_path();
-
-	cookie &unset_same_site();
-	cookie &unset_priority();
-
-	cookie &unset_expires();
-	cookie &unset_max_age();
-	cookie &unset_size();
-
-	cookie &unset_http_only();
-	cookie &unset_secure();
-
-public:
-	cookie &set_attribute(core_concepts::text_p<char> auto &&key, value_t attr) noexcept;
-	cookie &unset_attribute(const core_concepts::text_p<char> auto &key) noexcept;
-
-	[[nodiscard]] optional<value_t> attribute(const core_concepts::text_p<char> auto &key) noexcept;
-	[[nodiscard]] const attributes_t &attributes() const noexcept;
-	[[nodiscard]] attributes_t &attributes() noexcept;
-
-private:
-	class impl;
-	impl *m_impl;
+enum class cookie_same_site {
+	unspecified, strict, lax, none
 };
 
-using cookie_attributes = cookie::attributes_t;
-using cookie_values = value_map;
-using cookies = map<cookie>;
+struct cookie_extension
+{
+	std::string name {};
+	optional<riwo::value> value {};
 
-} //namespace riwo::http::concepts
-#include <riwo/http/protocol/detail/cookie.h>
+	friend bool operator== (
+		const cookie_extension&, const cookie_extension&
+	) = default;
+};
+
+struct response_cookie
+{
+	std::string name {};
+	riwo::value value {};
+
+	optional<std::string> domain {};
+	optional<std::string> path {};
+
+	optional<std::chrono::system_clock::time_point> expires {};
+	optional<std::chrono::seconds> max_age {};
+
+	cookie_same_site same_site = cookie_same_site::unspecified;
+	bool secure = false;
+	bool http_only = false;
+
+	std::vector<cookie_extension> extensions {};
+
+	friend bool operator== (
+		const response_cookie&, const response_cookie&
+	) = default;
+};
+
+[[nodiscard]] RIWO_HTTP_API
+sys_expected<std::vector<cookie_pair>> parse_cookie_fields(const fields &values) noexcept;
+
+[[nodiscard]] RIWO_HTTP_API
+sys_expected<response_cookie> parse_set_cookie(std::string_view value) noexcept;
+
+[[nodiscard]] RIWO_HTTP_API
+std::string serialize_cookie(std::span<const cookie_pair> values);
+
+[[nodiscard]] RIWO_HTTP_API
+std::string serialize_set_cookie(const response_cookie &value);
+
+RIWO_HTTP_API
+void set_cookie(fields &headers, const response_cookie &value);
+
+} //namespace riwo::http
 
 
 #endif //RIWO_HTTP_PROTOCOL_COOKIE_H
