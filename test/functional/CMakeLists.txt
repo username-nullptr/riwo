@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 add_riwo_test(core core/basic.cpp riwo.core)
+add_riwo_test(core.global-header core/global_header.cpp riwo.core)
 add_riwo_test(core.facilities core/facilities.cpp riwo.core)
 add_riwo_test(core.runtime core/runtime.cpp riwo.core)
 add_riwo_test(core.jthread core/jthread.cpp riwo.core)

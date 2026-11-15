@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_PROTOCOL_TYPES_H
 #define RIWO_HTTP_PROTOCOL_TYPES_H
 
-#include <riwo/core/utils/flags.h>
+#include <riwo/core/flags.h>
 #include <riwo/http/protocol/version.h>
 #include <riwo/http/protocol/header.h>
 #include <riwo/http/protocol/cookie.h>

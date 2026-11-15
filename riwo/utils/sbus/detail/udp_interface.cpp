@@ -6,6 +6,7 @@
 
 #include <riwo/core/shared_mutex.h>
 #include <riwo/utils/logger.h>
+#include <deque>
 
 namespace riwo::utils::sbus { namespace
 {

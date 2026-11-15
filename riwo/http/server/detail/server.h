@@ -392,7 +392,7 @@ private:
 				auto status = std::format (
 					"<h2>{} ({})</h2>",
 					status::description(context.response().status()),
-					context.response().status()
+					static_cast<uint32_t>(context.response().status())
 				);
 				data = std::format(def_html_v, "RIWO", status);
 			}

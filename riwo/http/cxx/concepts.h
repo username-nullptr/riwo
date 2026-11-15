@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_CXX_CONCEPTS_H
 #define RIWO_HTTP_CXX_CONCEPTS_H
 
-#include <riwo/core/global.h>
+#include <riwo/core/operation.h>
 
 namespace riwo::http
 {

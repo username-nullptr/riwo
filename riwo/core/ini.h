@@ -6,6 +6,7 @@
 
 #include <riwo/core/async_expected.h>
 #include <riwo/core/string_vector.h>
+#include <riwo/core/optional.h>
 #include <riwo/core/value.h>
 #include <map>
 

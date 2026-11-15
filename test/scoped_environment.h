@@ -5,7 +5,6 @@
 #define RIWO_TEST_SCOPED_ENVIRONMENT_H
 
 #include <riwo/system/environment.h>
-
 #include <initializer_list>
 #include <optional>
 #include <vector>

@@ -5,8 +5,9 @@
 #define RIWO_HTTP_UTILS_CONNECTION_H
 
 #include <riwo/http/utils/opt_token.h>
+#include <riwo/core/sys_expected.h>
 #include <riwo/core/execution.h>
-#include <span>
+#include <riwo/core/optional.h>
 
 namespace riwo::http
 {

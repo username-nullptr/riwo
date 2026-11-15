@@ -8,6 +8,7 @@
 #include <riwo/core/jthread.h>
 
 #include <riwo/utils/logger.h>
+#include <unordered_set>
 
 namespace riwo::utils::sbus { namespace detail
 {

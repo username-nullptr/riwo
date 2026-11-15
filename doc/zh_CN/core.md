@@ -23,11 +23,20 @@ Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算
 | 算法 | `<riwo/core/algorithm.h>`、`mime_type.h` | UUID、SHA-1、通配/编码/数学辅助与 MIME |
 | 同步 | `<riwo/core/atomic_mutex.h>`、`shared_mutex.h`、`lock_free_queue.h` | 线程锁与队列 |
 | 线程生命周期 | `<riwo/core/jthread.h>` | 自动汇合线程、停止源/令牌/回调 |
-| 运行时基础 | `<riwo/core/executable.h>`、`cpu.h`、`library.h` | 可执行文件相对路径、CPU pause 与动态库 |
-| 语言支持 | `<riwo/core/cxx/...>`、`<riwo/core/utils/...>` | Concepts、traits、expected/optional、格式化与 Asio 适配 |
+| 运行时基础 | `<riwo/core/executable.h>`、`library.h` | 可执行文件相对路径与动态库 |
+| C++ 基础 | `<riwo/core/global.h>`、`cxx.h`、`cxx/...` | 公共宏、Concepts、traits、运算符与异常基础 |
+| 可选值与格式化 | `<riwo/core/optional.h>`、`expected.h`、`sys_expected.h`、`formatters.h` | 可选值、预期结果、系统错误结果与格式化适配 |
+| Asio 适配 | `<riwo/core/asio.h>`、`asio/...` | Asio provider、executor/buffer concepts、缓冲区与 endpoint 包装 |
+| 序列化 | `<riwo/core/serialization/endian.h>`、`codec.h` | 字节序转换与类型编解码 |
+| 通用基础类型 | `<riwo/core/string_tools.h>`、`flags.h`、`static_registration.h` | 字符串工具、类型安全 flags 与静态注册 |
 
 `<riwo/core.h>` 聚合常用数据、解析、算法、同步和系统头文件。Execution、value、
 MIME、无锁队列等专用能力有独立入口，应直接包含对应头文件。
+
+`<riwo/core/global.h>` 分别通过 `<riwo/core/cxx.h>` 与 `<riwo/core/asio.h>` 保留 C++
+基础设施和 Asio 适配的传递包含链；它不提供 `optional`、`expected`、`sys_expected` 或
+格式化适配。使用这些能力时应显式包含上表对应的独立头文件。
+`<riwo/core/formatters.h>` 自身依赖 `global.h`，而不是反向由 `global.h` 提供。
 
 ## 运行时
 

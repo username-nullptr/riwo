@@ -543,7 +543,7 @@ public:
 			if constexpr( is_as_expected_v<std::remove_cvref_t<Token>> )
 			{
 				if( error )
-					return sys_expected(sys_unexpected(error));
+					return sys_expected<>(sys_unexpected(error));
 
 				set_data(std::move(loaded_data));
 				return sys_expected<>();
@@ -633,7 +633,7 @@ public:
 			if constexpr( is_as_expected_v<std::remove_cvref_t<Token>> )
 			{
 				if( error )
-					return sys_expected(sys_unexpected(error));
+					return sys_expected<>(sys_unexpected(error));
 				return sys_expected<>();
 			}
 			else if constexpr( is_as_tuple_v<std::remove_cvref_t<Token>> )

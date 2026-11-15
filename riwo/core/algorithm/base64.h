@@ -5,6 +5,7 @@
 #define RIWO_CORE_ALGORITHM_BASE64_H
 
 #include <riwo/core/global.h>
+#include <span>
 
 namespace riwo
 {

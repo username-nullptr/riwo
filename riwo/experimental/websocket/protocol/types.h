@@ -5,7 +5,7 @@
 #define RIWO_EXP_WEBSOCKET_PROTOCOL_TYPES_H
 
 #include <riwo/experimental/websocket/global.h>
-#include <riwo/core/utils/flags.h>
+#include <riwo/core/flags.h>
 
 namespace riwo::experimental::websocket
 {

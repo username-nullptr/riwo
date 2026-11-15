@@ -4,8 +4,6 @@
 #ifndef RIWO_EXP_HTTP_PROTOCOL_DETAIL_FIELDS_H
 #define RIWO_EXP_HTTP_PROTOCOL_DETAIL_FIELDS_H
 
-#include <riwo/core/utils/string_tools.h>
-
 namespace riwo::experimental::http
 {
 

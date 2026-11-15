@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_ALGORITHM_UUID_H
 #define RIWO_CORE_ALGORITHM_UUID_H
 
-#include <riwo/core/global.h>
+#include <riwo/core/optional.h>
 
 namespace riwo { namespace uuid_version
 {

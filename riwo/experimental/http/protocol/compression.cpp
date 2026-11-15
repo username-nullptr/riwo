@@ -3,7 +3,6 @@
 
 #include "compression.h"
 #include "detail/syntax.h"
-#include <riwo/core/utils/string_tools.h>
 
 #if RIWO_EXP_HTTP_ZLIB_SUPPORT
 # include <zlib.h>

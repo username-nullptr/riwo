@@ -4,11 +4,10 @@
 #ifndef RIWO_CORE_OPERATION_DETAIL_ERROR_TOKEN_H
 #define RIWO_CORE_OPERATION_DETAIL_ERROR_TOKEN_H
 
-#include <riwo/core/utils/asio_concepts.h>
-#include <riwo/core/cxx/type_traits.h>
+#include <riwo/core/asio/type_traits.h>
 #include <riwo/core/cxx/attributes.h>
 
-namespace riwo { namespace detail
+namespace riwo::detail
 {
 
 template <typename CompletionToken>
@@ -151,7 +150,7 @@ struct std_error_signature<Return(error_code,Args...)> {
 	using type = Return(std::exception_ptr,Args...);
 };
 
-}} //namespace riwo::detail
+} //namespace riwo::detail
 
 #if RIWO_USING_BOOST_ASIO
 namespace boost::asio

@@ -3,8 +3,6 @@
 
 #include "cookie.h"
 #include "detail/syntax.h"
-
-#include <riwo/core/utils/string_tools.h>
 #include <riwo/experimental/http/error.h>
 
 namespace riwo::experimental::http { namespace

@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "handshake.h"
-#include <riwo/core/utils/string_tools.h>
-
 #include <riwo/core/algorithm/base64.h>
 #include <riwo/core/algorithm/sha1.h>
 

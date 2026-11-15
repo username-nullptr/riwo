@@ -5,7 +5,7 @@
 
 #include <riwo/experimental/http.h>
 #include <riwo/experimental/http/transport/detail/timeout.h>
-#include <riwo/core/cxx/asio.h>
+#include <riwo/core/asio/asio.h>
 
 namespace
 {

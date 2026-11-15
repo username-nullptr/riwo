@@ -15,6 +15,7 @@
 #include <riwo/http/protocol/utils/core/upgrade.h>
 #include <riwo/http/protocol/utils/core/range.h>
 #include <riwo/core/shared_mutex.h>
+#include <list>
 
 namespace riwo::http
 {

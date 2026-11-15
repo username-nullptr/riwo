@@ -5,7 +5,7 @@
 #define RIWO_CORE_VALUE_H
 
 #include <riwo/core/detail/value_format.h>
-#include <riwo/core/global.h>
+#include <riwo/core/optional.h>
 
 namespace riwo
 {

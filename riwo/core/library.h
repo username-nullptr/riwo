@@ -4,7 +4,8 @@
 #ifndef RIWO_CORE_LIBRARY_H
 #define RIWO_CORE_LIBRARY_H
 
-#include <riwo/core/global.h>
+#include <riwo/core/sys_expected.h>
+#include <riwo/core/optional.h>
 
 namespace riwo
 {

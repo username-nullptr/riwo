@@ -5,7 +5,6 @@
 #define RIWO_EXP_HTTP_CLIENT_DETAIL_REQUEST_H
 
 #include <riwo/experimental/http/body/detail/source.h>
-#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::experimental::http
 {

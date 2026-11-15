@@ -4,8 +4,8 @@
 #ifndef RIWO_EXP_WEBSOCKET_H
 #define RIWO_EXP_WEBSOCKET_H
 
-#include <riwo/experimental/websocket/retry.h>
 #include <riwo/experimental/websocket/client.h>
 #include <riwo/experimental/websocket/server.h>
+#include <riwo/experimental/websocket/retry.h>
 
 #endif //RIWO_EXP_WEBSOCKET_H

@@ -5,6 +5,7 @@
 #define RIWO_HTTP_PROTOCOL_UTILS_CORE_COMPRESSION_H
 
 #include <riwo/http/global.h>
+#include <riwo/core/sys_expected.h>
 
 namespace riwo::http
 {

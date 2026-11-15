@@ -35,7 +35,7 @@ template <typename T>
 template <typename T>
 [[nodiscard]] constexpr const T *as_const(const T *v);
 
-[[nodiscard]] constexpr decltype(auto) return_reference(auto &&value);
+[[nodiscard]] constexpr decltype(auto) return_reference(auto &&input);
 
 template <typename...Args>
 constexpr void ignore_unused(Args&&...) {}

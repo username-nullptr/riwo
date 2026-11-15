@@ -3,6 +3,8 @@
 
 #include "cookie_jar.h"
 #include <riwo/http/protocol/utils/core/conditional.h>
+#include <riwo/core/string_tools.h>
+#include <list>
 
 namespace riwo::http { namespace
 {

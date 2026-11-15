@@ -3,7 +3,7 @@
 
 #include <riwo/http/client/detail/proxy.h>
 #include <riwo/system/environment.h>
-#include <riwo/core/utils/string_tools.h>
+
 #include <riwo/core/algorithm/base64.h>
 #include <riwo/core/algorithm/misc.h>
 

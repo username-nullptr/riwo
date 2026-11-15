@@ -4,6 +4,7 @@
 #include "global.h"
 
 #ifdef __unix__
+# include <csignal>
 # include <sys/types.h>
 # include <unistd.h>
 #elif _WIN32

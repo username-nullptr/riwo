@@ -5,6 +5,7 @@
 #define RIWO_HTTP_CLIENT_DETAIL_CONNECTION_POOL_H
 
 #include <riwo/core/async_expected.h>
+#include <list>
 
 namespace riwo::http
 {

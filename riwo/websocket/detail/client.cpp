@@ -3,7 +3,6 @@
 
 #include <riwo/websocket/client.h>
 #include <riwo/core/algorithm/secure_random.h>
-#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::websocket
 {

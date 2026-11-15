@@ -3,7 +3,7 @@
 
 #include "test.h"
 #include <riwo/experimental/http.h>
-#include <riwo/core/cxx/asio.h>
+#include <riwo/core/asio/asio.h>
 #include <fstream>
 
 namespace

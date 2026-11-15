@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "generator.h"
-#include <riwo/http/protocol/utils/core/generator.h>
 #include <riwo/http/protocol/utils/core/conditional.h>
+#include <riwo/http/protocol/utils/core/generator.h>
+#include <riwo/core/formatters.h>
 
 namespace riwo::http { namespace
 {

@@ -8,6 +8,7 @@
 #include <riwo/experimental/http/client/detail/factory.h>
 #include <riwo/experimental/http/client/detail/session_pool.h>
 #include <riwo/experimental/http/session/client_session.h>
+#include <map>
 #include <riwo/experimental/http/session/session_stream.h>
 
 // Shared-library tests compile a private copy of session_pool.cpp because its

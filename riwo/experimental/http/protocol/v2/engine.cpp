@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "engine.h"
-#include <riwo/core/utils/string_tools.h>
 
 #if RIWO_EXP_HTTP_HTTP2_SUPPORT
 #include <riwo/experimental/http/protocol/v2/detail/nghttp2_compat.h>

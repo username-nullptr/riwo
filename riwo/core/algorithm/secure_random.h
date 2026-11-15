@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_ALGORITHM_SECURE_RANDOM_H
 #define RIWO_CORE_ALGORITHM_SECURE_RANDOM_H
 
-#include <riwo/core/global.h>
+#include <riwo/core/sys_expected.h>
 
 namespace riwo
 {

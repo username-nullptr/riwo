@@ -5,6 +5,9 @@
 #define RIWO_SYSTEM_ENVIRONMENT_H
 
 #include <riwo/system/global.h>
+#include <riwo/core/sys_expected.h>
+#include <riwo/core/optional.h>
+#include <map>
 
 namespace riwo::system::environment
 {

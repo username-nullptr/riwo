@@ -6,6 +6,8 @@
 
 #include <riwo/http/cxx/attributes.h>
 #include <riwo/http/cxx/concepts.h>
+#include <riwo/core/sys_expected.h>
+#include <riwo/core/optional.h>
 #include <fstream>
 
 namespace riwo::http

@@ -5,7 +5,6 @@
 #define RIWO_EXP_HTTP_SERVER_DETAIL_EXCHANGE_H
 
 #include <riwo/core/executable.h>
-#include <riwo/core/utils/string_tools.h>
 
 #include <riwo/experimental/http/body/detail/source_transfer.h>
 #include <riwo/experimental/http/body/detail/encoder.h>

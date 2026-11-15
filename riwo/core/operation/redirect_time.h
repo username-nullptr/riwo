@@ -5,6 +5,7 @@
 #define RIWO_CORE_OPERATION_REDIRECT_TIME_H
 
 #include <riwo/core/cxx/type_traits.h>
+#include <riwo/core/cxx/attributes.h>
 
 namespace riwo
 {

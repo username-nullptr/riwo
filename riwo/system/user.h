@@ -5,6 +5,7 @@
 #define RIWO_SYSTEM_USER_H
 
 #include <riwo/system/global.h>
+#include <riwo/core/sys_expected.h>
 
 namespace riwo::system
 {

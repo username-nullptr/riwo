@@ -3,6 +3,7 @@
 
 #include "router.h"
 #include <riwo/core/algorithm/misc.h>
+#include <unordered_set>
 
 namespace riwo::experimental::http { namespace
 {

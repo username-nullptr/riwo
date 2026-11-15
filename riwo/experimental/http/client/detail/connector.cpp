@@ -7,9 +7,7 @@
 #include <riwo/experimental/http/error.h>
 
 #include <riwo/system/environment.h>
-#include <riwo/core/utils/string_tools.h>
 #include <riwo/core/algorithm/misc.h>
-#include <riwo/core/cxx/asio.h>
 
 #if RIWO_OPENSSL_SUPPORT
 # include <riwo/experimental/http/transport/tls_connection.h>

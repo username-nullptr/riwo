@@ -7,6 +7,7 @@
 #include <riwo/utils/sbus/subscribe.h>
 #include <riwo/utils/sbus/publish.h>
 #include <riwo/utils/signal_slot.h>
+#include <riwo/core/optional.h>
 
 namespace riwo::utils::sbus
 {

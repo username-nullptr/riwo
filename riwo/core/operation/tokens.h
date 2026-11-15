@@ -5,6 +5,7 @@
 #define RIWO_CORE_OPERATION_TOKENS_H
 
 #include <riwo/core/operation/detail/error_token.h>
+#include <riwo/core/asio/concepts.h>
 
 #if RIWO_USING_BOOST_ASIO
 # include <boost/asio/experimental/awaitable_operators.hpp>

@@ -4,9 +4,11 @@
 #ifndef RIWO_UTILS_MODULES_H
 #define RIWO_UTILS_MODULES_H
 
+#include <riwo/utils/global.h>
+#include <riwo/core/static_registration.h>
 #include <riwo/core/string_vector.h>
 #include <riwo/core/string_set.h>
-#include <riwo/utils/global.h>
+#include <riwo/core/operation.h>
 
 namespace riwo::utils
 {

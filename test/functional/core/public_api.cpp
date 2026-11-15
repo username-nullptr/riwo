@@ -7,14 +7,14 @@
 #include <riwo/core/algorithm/math.h>
 #include <riwo/core/cxx/exception.h>
 #include <riwo/core/container.h>
+#include <riwo/core/flags.h>
 #include <riwo/core/string_deque.h>
 #include <riwo/core/string_list.h>
 #include <riwo/core/string_set.h>
-#include <riwo/core/cpu.h>
 #include <riwo/core/executable.h>
 #include <riwo/core/library.h>
-#include <riwo/core/utils/formatter.h>
-#include <riwo/core/utils/utils.h>
+#include <riwo/core/formatters.h>
+#include <riwo/core/asio/endpoint.h>
 
 namespace
 {
@@ -207,7 +207,6 @@ void executable_paths()
 	RIWO_TEST_CHECK(resolved);
 	RIWO_TEST_CHECK(directory and resolved and
 		*resolved == (*directory / "relative.txt").lexically_normal());
-	riwo::none_instruction();
 }
 
 std::filesystem::path fixture_path;

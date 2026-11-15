@@ -151,7 +151,7 @@ public:
 	}
 
 	template <typename...Args>
-	void set(const path_t &cmd, Args&&...args)
+	void set(const path_t &cmd, Args&&...args) requires is_args_v<Args...>
 	{
 		m_detail.set(cmd, {});
 		(m_detail.add_arg(path_t(std::forward<Args>(args))), ...);
@@ -160,6 +160,7 @@ public:
 public:
 	template <typename...Args>
 	[[nodiscard]] sys_expected<> start(const path_t &cmd, Args&&...args) noexcept
+		requires is_args_v<Args...>
 	{
 		if( joinable() )
 		{

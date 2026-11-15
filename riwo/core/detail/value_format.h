@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_DETAIL_VALUE_SERIALIZER_H
 #define RIWO_CORE_DETAIL_VALUE_SERIALIZER_H
 
-#include <riwo/core/utils/string_tools.h>
+#include <riwo/core/string_tools.h>
 
 namespace riwo
 {

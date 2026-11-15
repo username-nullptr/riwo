@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_EXECUTABLE_H
 #define RIWO_CORE_EXECUTABLE_H
 
-#include <riwo/core/value.h>
+#include <riwo/core/sys_expected.h>
 
 namespace riwo::executable
 {

@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_ALGORITHM_MISC_H
 #define RIWO_CORE_ALGORITHM_MISC_H
 
-#include <riwo/core/global.h>
+#include <riwo/core/string_tools.h>
 
 namespace riwo
 {

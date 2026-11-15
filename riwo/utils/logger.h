@@ -5,7 +5,7 @@
 #define RIWO_UTILS_LOG_H
 
 #include <riwo/utils/global.h>
-#include <source_location>
+#include <riwo/core/formatters.h>
 
 namespace riwo::utils
 {

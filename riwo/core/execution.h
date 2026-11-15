@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_EXECUTION_H
 #define RIWO_CORE_EXECUTION_H
 
-#include <riwo/core/jthread.h>
+#include <riwo/core/operation.h>
 
 namespace riwo
 {

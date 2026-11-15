@@ -4,9 +4,7 @@
 #ifndef RIWO_CORE_CXX_TYPE_TRAITS_H
 #define RIWO_CORE_CXX_TYPE_TRAITS_H
 
-#include <riwo/core/cxx/configs.h>
 #include <riwo/core/cxx/string_concepts.h>
-#include <riwo/core/cxx/asio.h>
 
 namespace riwo
 {
@@ -31,25 +29,6 @@ using years  = std::chrono::years ;
 
 template<typename Clock, typename Duration>
 using time_point = std::chrono::time_point<Clock, Duration>;
-
-#if RIWO_USING_BOOST_ASIO
-
-using error_code = boost::system::error_code;
-using error_category_t = boost::system::error_category;
-using boost::system::system_category;
-
-#else //RIWO_USING_BOOST_ASIO
-
-using error_code = std::error_code;
-using error_category_t = std::error_category;
-using std::system_category;
-
-#endif //RIWO_USING_BOOST_ASIO
-
-[[nodiscard]] inline error_code make_system_error_code(std::errc value) noexcept {
-	return { std::make_error_code(value) };
-}
-namespace errc = asio::error;
 
 template <size_t>
 struct byte_type {};

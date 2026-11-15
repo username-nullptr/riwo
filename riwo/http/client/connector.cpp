@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "connector.h"
+#include <riwo/core/static_registration.h>
 
 namespace riwo::http::detail
 {

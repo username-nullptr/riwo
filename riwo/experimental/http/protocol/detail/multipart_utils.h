@@ -5,7 +5,6 @@
 #define RIWO_EXP_HTTP_PROTOCOL_DETAIL_MULTIPART_UTILS_H
 
 #include <riwo/experimental/http/protocol/detail/syntax.h>
-#include <riwo/core/utils/string_tools.h>
 #include <random>
 
 namespace riwo::experimental::http::detail

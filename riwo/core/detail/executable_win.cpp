@@ -21,7 +21,7 @@ namespace riwo::executable
 	));
 }
 
-sys_expected<path_type> path() noexcept
+sys_expected<path_t> path() noexcept
 {
 	std::vector<wchar_t> buffer(MAX_PATH);
 	for(;;)
@@ -34,7 +34,7 @@ sys_expected<path_type> path() noexcept
 			return sys_error();
 
 		if( size < buffer.size() )
-			return path_type(std::wstring(buffer.data(), size));
+			return path_t(std::wstring(buffer.data(), size));
 
 		if( buffer.size() >= 32768 )
 		{

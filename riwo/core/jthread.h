@@ -16,6 +16,7 @@
 
 #if RIWO_HAS_STD_JTHREAD
 # include <stop_token>
+# include <thread>
 #endif //RIWO_HAS_STD_JTHREAD
 
 namespace riwo

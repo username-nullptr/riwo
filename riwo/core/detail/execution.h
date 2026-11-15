@@ -4,6 +4,9 @@
 #ifndef RIWO_CORE_DETAIL_EXECUTION_H
 #define RIWO_CORE_DETAIL_EXECUTION_H
 
+#include <riwo/core/optional.h>
+#include <riwo/core/jthread.h>
+
 namespace riwo { namespace concepts::detail
 {
 

@@ -10,14 +10,14 @@
 #include <riwo/core/algorithm/sha1.h>
 #include <riwo/core/algorithm/uuid.h>
 #include <riwo/core/async_expected.h>
-#include <riwo/core/cxx/expected.h>
-#include <riwo/core/cxx/optional.h>
+#include <riwo/core/expected.h>
+#include <riwo/core/optional.h>
 #include <riwo/core/cxx/tools.h>
 #include <riwo/core/shared_mutex.h>
 #include <riwo/core/atomic_mutex.h>
-#include <riwo/core/utils/byte_order.h>
-#include <riwo/core/utils/streamer.h>
-#include <riwo/core/utils/string_tools.h>
+#include <riwo/core/serialization/endian.h>
+#include <riwo/core/serialization/codec.h>
+#include <riwo/core/string_tools.h>
 #include <memory>
 
 namespace

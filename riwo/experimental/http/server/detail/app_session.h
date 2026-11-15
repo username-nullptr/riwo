@@ -4,8 +4,6 @@
 #ifndef RIWO_EXP_HTTP_SERVER_DETAIL_APP_SESSION_H
 #define RIWO_EXP_HTTP_SERVER_DETAIL_APP_SESSION_H
 
-#include <riwo/core/utils/string_tools.h>
-
 namespace riwo::experimental::http
 {
 

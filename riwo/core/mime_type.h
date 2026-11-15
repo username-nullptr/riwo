@@ -5,7 +5,6 @@
 #define RIWO_CORE_MIME_TYPE_H
 
 #include <riwo/core/global.h>
-#include <unordered_map>
 #include <map>
 
 namespace riwo::mime_type

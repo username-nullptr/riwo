@@ -24,13 +24,23 @@ thread-level synchronization.
 | Algorithms | `<riwo/core/algorithm.h>`, `mime_type.h` | UUID, SHA-1, wildcard/encoding/math helpers, MIME lookup |
 | Synchronization | `<riwo/core/atomic_mutex.h>`, `shared_mutex.h`, `lock_free_queue.h` | Thread locks and queues |
 | Thread lifecycle | `<riwo/core/jthread.h>` | Joining thread, stop source/token/callback |
-| Runtime foundation | `<riwo/core/executable.h>`, `cpu.h`, `library.h` | Executable-relative paths, CPU pause, dynamic libraries |
-| Language support | `<riwo/core/cxx/...>`, `<riwo/core/utils/...>` | Concepts, traits, expected/optional, formatting, Asio adapters |
+| Runtime foundation | `<riwo/core/executable.h>`, `library.h` | Executable-relative paths and dynamic libraries |
+| C++ foundation | `<riwo/core/global.h>`, `cxx.h`, `cxx/...` | Common macros, concepts, traits, operators, and exception foundations |
+| Optional values and formatting | `<riwo/core/optional.h>`, `expected.h`, `sys_expected.h`, `formatters.h` | Optional values, expected results, system-error results, and formatting adapters |
+| Asio adapters | `<riwo/core/asio.h>`, `asio/...` | Asio provider, executor/buffer concepts, buffers, and endpoint wrappers |
+| Serialization | `<riwo/core/serialization/endian.h>`, `codec.h` | Byte-order conversion and type codecs |
+| Common primitives | `<riwo/core/string_tools.h>`, `flags.h`, `static_registration.h` | String helpers, type-safe flags, and static registration |
 
 `<riwo/core.h>` aggregates the common data, parsing, algorithm,
 synchronization, and system headers. Execution, value, MIME, lock-free queues,
 and other specialized facilities have their own entry headers and should be
 included directly.
+
+`<riwo/core/global.h>` preserves the transitive C++ foundation and Asio adapter
+chains through `<riwo/core/cxx.h>` and `<riwo/core/asio.h>`. It does not provide
+`optional`, `expected`, `sys_expected`, or formatting adapters; include the
+corresponding standalone header above when using one of those facilities.
+`<riwo/core/formatters.h>` depends on `global.h`, not the other way around.
 
 ## Runtime
 

@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "wire.h"
-#include <riwo/core/utils/string_tools.h>
-
 #include <riwo/experimental/http/protocol/detail/syntax.h>
 #include <riwo/experimental/http/protocol/range.h>
 

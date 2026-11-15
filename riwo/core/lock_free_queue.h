@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_LOCK_FREE_QUEUE_H
 #define RIWO_CORE_LOCK_FREE_QUEUE_H
 
-#include <riwo/core/global.h>
+#include <riwo/core/optional.h>
 
 namespace riwo
 {

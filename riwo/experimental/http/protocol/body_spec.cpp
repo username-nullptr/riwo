@@ -3,7 +3,6 @@
 
 #include "body_spec.h"
 #include <riwo/experimental/http/protocol/fields.h>
-#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::experimental::http { namespace
 {

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "cookie_jar.h"
-#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::experimental::http { namespace
 {

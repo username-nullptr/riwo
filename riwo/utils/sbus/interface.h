@@ -5,6 +5,7 @@
 #define RIWO_UTILS_UTILS_SBUS_INTERFACE_H
 
 #include <riwo/utils/global.h>
+#include <riwo/core/serialization/codec.h>
 
 namespace riwo::utils::sbus::concepts
 {

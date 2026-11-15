@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "version.h"
+#include <riwo/core/formatters.h>
 
 namespace riwo::http
 {

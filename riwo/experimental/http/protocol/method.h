@@ -5,7 +5,6 @@
 #define RIWO_EXP_HTTP_PROTOCOL_METHOD_H
 
 #include <riwo/experimental/http/global.h>
-#include <riwo/core/cxx/string_concepts.h>
 
 namespace riwo::experimental::http
 {

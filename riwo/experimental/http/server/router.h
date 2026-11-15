@@ -5,7 +5,6 @@
 #define RIWO_EXP_HTTP_SERVER_ROUTER_H
 
 #include <riwo/experimental/http/protocol/parameters.h>
-#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::experimental::http
 {

@@ -5,7 +5,6 @@
 #define RIWO_EXP_HTTP_TRANSPORT_DETAIL_TIMEOUT_H
 
 #include <riwo/experimental/http/transport/connection.h>
-#include <riwo/core/cxx/asio.h>
 #include <riwo/core/jthread.h>
 
 namespace riwo::experimental::http::detail

@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "request_head.h"
-#include <riwo/core/utils/string_tools.h>
-
-#include <utility>
 
 namespace riwo::experimental::http { namespace
 {

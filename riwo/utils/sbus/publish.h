@@ -5,6 +5,7 @@
 #define RIWO_UTILS_UTILS_SBUS_PUBLISH_H
 
 #include <riwo/utils/sbus/interface.h>
+#include <riwo/core/serialization/codec.h>
 
 namespace riwo::utils::sbus
 {

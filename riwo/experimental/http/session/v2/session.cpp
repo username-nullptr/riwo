@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
-#include <riwo/core/utils/string_tools.h>
 #include <riwo/experimental/http/protocol/duplex_channel.h>
 #include <riwo/experimental/http/protocol/v2/extension.h>
-
-#include <utility>
 
 #if RIWO_EXP_HTTP_HTTP2_SUPPORT
 

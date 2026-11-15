@@ -4,13 +4,8 @@
 #ifndef RIWO_CORE_GLOBAL_H
 #define RIWO_CORE_GLOBAL_H
 
-#include <riwo/core/utils.h>
-#include <riwo/core/operation.h>
-
-#include <riwo/core/cxx/memory_concepts.h>
-#include <riwo/core/cxx/sys_expected.h>
-#include <riwo/core/cxx/operators.h>
-#include <riwo/core/cxx/configs.h>
+#include <riwo/core/cxx.h>
+#include <riwo/core/asio.h>
 
 namespace riwo
 {

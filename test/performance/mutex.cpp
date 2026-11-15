@@ -94,7 +94,7 @@ std::chrono::steady_clock::duration measure_exclusive(
 				std::lock_guard lock(mutex);
 				++value;
 				for(size_t count = 0; count < work; ++count)
-					riwo::none_instruction();
+					riwo::detail::none_instruction();
 			}
 		});
 	}

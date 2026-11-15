@@ -7,7 +7,6 @@
 #include <riwo/experimental/http/transport/detail/byte_stream_connection.h>
 #include <riwo/experimental/http/server/detail/session.h>
 #include <riwo/experimental/http/server/router.h>
-#include <riwo/core/utils/string_tools.h>
 
 namespace riwo::experimental::http
 {

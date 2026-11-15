@@ -4,8 +4,7 @@
 #ifndef RIWO_CORE_OPERATION_DETAIL_AS_EXPECTED_H
 #define RIWO_CORE_OPERATION_DETAIL_AS_EXPECTED_H
 
-#include <riwo/core/cxx/type_traits.h>
-#include <riwo/core/cxx/expected.h>
+#include <riwo/core/expected.h>
 
 namespace riwo { namespace detail
 {

@@ -5,6 +5,7 @@
 #define RIWO_CORE_ASYNC_EXPECTED_H
 
 #include <riwo/core/execution.h>
+#include <riwo/core/sys_expected.h>
 
 namespace riwo
 {

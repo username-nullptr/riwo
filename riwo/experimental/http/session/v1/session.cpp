@@ -2,15 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 #include "session.h"
-#include <riwo/experimental/http/protocol/v1/detail/wire.h>
-
-#include <riwo/core/utils/string_tools.h>
 #include <riwo/experimental/http/transport/tcp_connection.h>
-
+#include <riwo/experimental/http/protocol/v1/detail/wire.h>
 #include <riwo/experimental/http/protocol/duplex_channel.h>
 #include <riwo/experimental/http/protocol/detail/syntax.h>
-
-#include <utility>
 
 namespace riwo::experimental::http::v1
 {

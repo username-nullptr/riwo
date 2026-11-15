@@ -4,9 +4,7 @@
 #ifndef RIWO_CORE_STRING_CONTAINER_H
 #define RIWO_CORE_STRING_CONTAINER_H
 
-#include <riwo/core/global.h>
-#include <stdexcept>
-#include <string>
+#include <riwo/core/string_tools.h>
 
 namespace riwo { namespace concepts
 {
