@@ -1298,7 +1298,7 @@ private:
 		using namespace std::chrono;
 
 		auto boundary = std::format("{}_{}",
-			uuid::generate().to_string(),
+			crypto::uuid::generate().to_string(),
 			duration_cast<milliseconds>(
 				system_clock::now().time_since_epoch()
 			).count()
@@ -1369,7 +1369,7 @@ private:
 		using namespace std::chrono;
 
 		auto boundary = std::format("{}_{}",
-			uuid::generate().to_string(),
+			crypto::uuid::generate().to_string(),
 			duration_cast<milliseconds>(
 				system_clock::now().time_since_epoch()
 			).count()

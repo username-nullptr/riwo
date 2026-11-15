@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "parser.h"
-#include <riwo/core/algorithm/misc.h>
 #include <riwo/core/string_vector.h>
 
 namespace riwo::http { namespace

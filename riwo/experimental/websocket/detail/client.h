@@ -6,7 +6,6 @@
 
 #include <riwo/experimental/websocket/protocol/handshake.h>
 #include <riwo/experimental/websocket/detail/handshake_io.h>
-#include <riwo/core/algorithm/secure_random.h>
 
 namespace riwo::experimental::websocket { namespace detail
 {

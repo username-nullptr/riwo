@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "request_arg.h"
-#include <riwo/core/algorithm/base64.h>
+#include <riwo/crypto/base64.h>
 #include <riwo/http/protocol/utils/core/compression.h>
 
 namespace riwo::http { namespace
@@ -14,7 +14,7 @@ namespace riwo::http { namespace
 	if( username.find(':') != std::string_view::npos )
 		invalid_argument::loc_throw("HTTP Basic user name cannot contain ':'.");
 
-	return "Basic " + riwo::base64_encode (
+	return "Basic " + crypto::base64_encode (
 		std::string(username) + ":" + std::string(password)
 	);
 }

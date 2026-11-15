@@ -169,6 +169,25 @@ add_riwo_configure_case(system-disabled SUCCESS
 		"RIWO_BUILD_CORO=OFF"
 	COMPONENTS core
 )
+add_riwo_configure_case(crypto-disabled SUCCESS
+	OPTIONS
+		"RIWO_BUILD_CRYPTO=OFF"
+		"RIWO_BUILD_HTTP=OFF"
+		"RIWO_BUILD_EXP_HTTP=OFF"
+	COMPONENTS core system coro
+)
+add_riwo_configure_case(http-without-crypto
+	ERROR "<HTTP> module depends on <Crypto> module"
+	OPTIONS
+		"RIWO_BUILD_CRYPTO=OFF"
+		"RIWO_BUILD_HTTP=ON"
+)
+add_riwo_configure_case(http-exp-without-crypto
+	ERROR "<EXP_HTTP> module depends on <Crypto> module"
+	OPTIONS
+		"RIWO_BUILD_CRYPTO=OFF"
+		"RIWO_BUILD_EXP_HTTP=ON"
+)
 add_riwo_configure_case(http-without-system
 	ERROR "<HTTP> module depends on <System> module"
 	OPTIONS
@@ -463,6 +482,16 @@ add_riwo_package_probe_case(system-component-found FOUND
 	OPTIONS "RIWO_BUILD_CORO=OFF"
 	COMPONENTS core system
 )
+add_riwo_package_probe_case(crypto-component-found FOUND
+	COMPONENT crypto
+	COMPONENTS core crypto system coro
+)
+add_riwo_package_probe_case(crypto-component-disabled
+	COMPONENT crypto
+	ERROR "Required Riwo components are unavailable: crypto"
+	OPTIONS "RIWO_BUILD_CRYPTO=OFF"
+	COMPONENTS core system coro
+)
 add_riwo_package_probe_case(core-ignores-unused-spdlog FOUND
 	COMPONENT core
 	OPTIONS
@@ -530,6 +559,10 @@ add_riwo_package_probe_case(http-exp-restores-zlib
 	PROBE_OPTIONS "CMAKE_DISABLE_FIND_PACKAGE_ZLIB=TRUE"
 )
 set(riwo_consumer_components core)
+
+if (RIWO_BUILD_CRYPTO)
+	list(APPEND riwo_consumer_components crypto)
+endif ()
 
 foreach(component system coro http websocket utils)
 	string(TOUPPER "${component}" component_upper)

@@ -8,17 +8,19 @@ application utilities without requiring applications to adopt every module.
 
 ```text
 riwo.core
+├── riwo.crypto
 ├── riwo.coro
-│   ├── riwo.http
+│   ├── riwo.http (+ riwo.crypto, riwo.system)
 │   │   └── riwo.websocket
 │   └── riwo.utils
-└── riwo.exp_http
+└── riwo.exp_http (+ riwo.crypto, riwo.system)
     └── riwo.exp_websocket
 ```
 
 | Module | Build switch | Default | Primary include | Source-tree target |
 | --- | --- | :---: | --- | --- |
 | Core | always built | ON | `<riwo/core.h>` | `riwo.core` |
+| Crypto | `RIWO_BUILD_CRYPTO` | ON | `<riwo/crypto.h>` | `riwo.crypto` |
 | Coroutines | `RIWO_BUILD_CORO` | ON | `<riwo/coro.h>` | `riwo.coro` |
 | HTTP | `RIWO_BUILD_HTTP` | OFF | `<riwo/http.h>` | `riwo.http` |
 | HTTP (experimental) | `RIWO_BUILD_EXP_HTTP` | OFF | `<riwo/experimental/http.h>` | `riwo.exp_http` |
@@ -35,7 +37,7 @@ every module enabled when Riwo was configured.
 Requirements: CMake 3.15+, C++20, and GCC 13+, Clang 17+, or MSVC 19.30+
 (Visual Studio 2022+).
 
-The default build contains Core and Coroutines:
+The default build contains Core, Crypto, and Coroutines:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

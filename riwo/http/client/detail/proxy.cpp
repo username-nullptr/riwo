@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/http/client/detail/proxy.h>
+#include <riwo/core/percent_encoding.h>
 #include <riwo/system/environment.h>
-
-#include <riwo/core/algorithm/base64.h>
-#include <riwo/core/algorithm/misc.h>
+#include <riwo/crypto/base64.h>
 
 namespace riwo::http::detail { namespace
 {
@@ -245,7 +244,7 @@ parse_proxy_environment(std::string text) noexcept
 		if( username.find(':') != std::string_view::npos )
 			return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
 
-		return "Basic " + riwo::base64_encode (
+		return "Basic " + crypto::base64_encode (
 			std::string(username) + ":" + std::string(password)
 		);
 	}

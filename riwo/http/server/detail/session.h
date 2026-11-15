@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_SERVER_DETAIL_SESSION_H
 #define RIWO_HTTP_SERVER_DETAIL_SESSION_H
 
-#include <riwo/core/algorithm/uuid.h>
+#include <riwo/crypto/uuid.h>
 
 namespace riwo::http
 {
@@ -25,7 +25,7 @@ private:
 
 public:
 	session *q_ptr = nullptr;
-	const std::string m_id = uuid::generate();
+	const std::string m_id = crypto::uuid::generate();
 	time_point_t m_create_time = sys_clock_t::now();
 
 	attributes_t m_attributes {};

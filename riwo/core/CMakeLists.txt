@@ -59,7 +59,6 @@ if (UNIX)
 	target_link_libraries(${target_name} PUBLIC pthread dl)
 
 elseif (WIN32)
-	target_link_libraries(${target_name} PUBLIC bcrypt)
 	# OpenSSL is an Asio dependency and is linked above. Keep its Windows API
 	# closure after the static archive; compression remains in HTTP/WebSocket.
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

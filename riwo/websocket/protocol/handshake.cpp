@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "handshake.h"
-#include <riwo/core/algorithm/base64.h>
-#include <riwo/core/algorithm/sha1.h>
+#include <riwo/crypto/base64.h>
+#include <riwo/crypto/sha1.h>
 
 namespace riwo::websocket { namespace
 {
@@ -347,7 +347,7 @@ template <typename Result, typename Function>
 sys_expected<std::string> make_client_key(std::span<const std::byte,16> nonce) noexcept
 {
 	return guard_allocation<std::string>([&]{
-		return riwo::base64_encode(nonce);
+		return crypto::base64_encode(nonce);
 	});
 }
 
@@ -359,7 +359,7 @@ sys_expected<std::string> make_accept_key(std::string_view client_key) noexcept
 		if( not is_client_key(client_key) )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		sha1 hash;
+		crypto::sha1 hash;
 		hash.append(client_key).append(websocket_guid).finalize();
 		return hash.base64();
 	});

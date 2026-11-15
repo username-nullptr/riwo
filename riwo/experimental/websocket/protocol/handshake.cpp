@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "handshake.h"
-#include <riwo/core/algorithm/base64.h>
-#include <riwo/core/algorithm/sha1.h>
+#include <riwo/crypto/base64.h>
+#include <riwo/crypto/sha1.h>
 
 namespace riwo::experimental::websocket { namespace
 {
@@ -44,16 +44,16 @@ constexpr auto
 
 [[nodiscard]] bool contains_header_token(std::string_view value, std::string_view wanted) noexcept
 {
-	while( true )
+	for(;;)
 	{
 		const auto comma = value.find(',');
-		const auto item = trim_ows(value.substr(0, comma));
 
-		if( ascii_equal_case_insensitive(item, wanted) )
+		if( const auto item = trim_ows(value.substr(0, comma));
+			ascii_equal_case_insensitive(item, wanted) )
 			return true;
 
 		if( comma == std::string_view::npos )
-			return false;
+			break;
 
 		value.remove_prefix(comma + 1);
 	}
@@ -339,7 +339,7 @@ private:
 template <typename Result, typename Function>
 [[nodiscard]] sys_expected<Result> guard_allocation(Function &&function) noexcept
 {
-	error_code error {};
+	error_code error;
 	try {
 		return std::forward<Function>(function)();
 	}
@@ -357,7 +357,7 @@ template <typename Result, typename Function>
 sys_expected<std::string> make_client_key(std::span<const std::byte,16> nonce) noexcept
 {
 	return guard_allocation<std::string>([&] {
-		return base64_encode(nonce);
+		return crypto::base64_encode(nonce);
 	});
 }
 
@@ -369,7 +369,7 @@ sys_expected<std::string> make_accept_key(std::string_view client_key) noexcept
 		if( not is_client_key(client_key) )
 			return sys_unexpected(make_error_code(errc::invalid_upgrade));
 
-		sha1 hash;
+		crypto::sha1 hash;
 		hash.append(client_key).append(websocket_guid).finalize();
 		return hash.base64();
 	});

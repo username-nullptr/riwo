@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "form_data.h"
-#include <riwo/core/algorithm/uuid.h>
+#include <riwo/crypto/uuid.h>
 #include <riwo/core/string_vector.h>
 
 namespace riwo::http { namespace
@@ -120,7 +120,7 @@ public:
 		m_boundary(std::move(boundary))
 	{
 		if( m_boundary.empty() )
-			m_boundary = "riwo-" + uuid::generate().to_string();
+			m_boundary = "riwo-" + crypto::uuid::generate().to_string();
 		if( not valid_boundary(m_boundary) )
 			invalid_argument::loc_throw("Invalid multipart/form-data boundary.");
 	}

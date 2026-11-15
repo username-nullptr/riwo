@@ -10,7 +10,7 @@
 | 聚合头 | `<riwo/core.h>` |
 | 依赖 | 选定的 Asio provider；可选 OpenSSL/liburing |
 
-Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算法、可执行文件相对路径、
+Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、文本编码/匹配、可执行文件相对路径、
 文件和线程级同步。
 
 ## 头文件地图
@@ -20,7 +20,8 @@ Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算
 | 执行 | `<riwo/core/execution.h>` | 默认 context、调度、Timer、等待与异步任务 |
 | 值 | `<riwo/core/value.h>`、`container.h`、字符串容器 | 文本值、转换与参数容器 |
 | 结构化输入 | `<riwo/core/url.h>`、`ini.h`、`args_parser.h` | URL、INI 与命令行解析 |
-| 算法 | `<riwo/core/algorithm.h>`、`mime_type.h` | UUID、SHA-1、通配/编码/数学辅助与 MIME |
+| 文本算法 | `<riwo/core/percent_encoding.h>`、`wildcard.h` | Percent 编解码与带排序权重的通配匹配 |
+| 文件分类 | `<riwo/core/mime_type.h>` | 按后缀和内容查询 MIME |
 | 同步 | `<riwo/core/atomic_mutex.h>`、`shared_mutex.h`、`lock_free_queue.h` | 线程锁与队列 |
 | 线程生命周期 | `<riwo/core/jthread.h>` | 自动汇合线程、停止源/令牌/回调 |
 | 运行时基础 | `<riwo/core/executable.h>`、`library.h` | 可执行文件相对路径与动态库 |
@@ -30,7 +31,7 @@ Core 是其他 Riwo 模块的基础，负责公共运行时、值与容器、算
 | 序列化 | `<riwo/core/serialization/endian.h>`、`codec.h` | 字节序转换与类型编解码 |
 | 通用基础类型 | `<riwo/core/string_tools.h>`、`flags.h`、`static_registration.h` | 字符串工具、类型安全 flags 与静态注册 |
 
-`<riwo/core.h>` 聚合常用数据、解析、算法、同步和系统头文件。Execution、value、
+`<riwo/core.h>` 聚合常用数据、解析、文本算法、同步和系统头文件。Execution、value、
 MIME、无锁队列等专用能力有独立入口，应直接包含对应头文件。
 
 `<riwo/core/global.h>` 分别通过 `<riwo/core/cxx.h>` 与 `<riwo/core/asio.h>` 保留 C++
@@ -65,7 +66,8 @@ token、取消、生命周期、strand 和关闭顺序统一见
 - `url` 解析并合并层次 URL；具体接受哪些 scheme 由协议模块决定。
 - `ini` 提供 group/key 访问，以及同步和 token 化文件 I/O。
 - `cmdline::args_parser` 处理别名、值选项、组合标志、位置参数、帮助和版本。
-- 算法头文件提供 Hash、标识符、匹配、编码、字节序与数学辅助。
+- Core 提供 Percent 编解码、通配匹配与字节序辅助。
+- Hash、安全随机数、Base64 与 UUID 属于 [Crypto](crypto.md)。
 - MIME 辅助通过后缀和内容检查对文件分类。
 
 ## 线程与系统访问

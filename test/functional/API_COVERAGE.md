@@ -8,7 +8,7 @@ behavior rather than by implementation source file.
 
 ## Core
 
-- `core/basic.cpp`: algorithms, hashes, UUIDs, byte order, string tools,
+- `core/basic.cpp`: percent encoding, wildcard matching, byte order, string tools,
   optional/expected values, buffer helpers, spin/shared locks, and type utilities.
 - `core/facilities.cpp`: value/string containers, URL parse/resolve, command-line
   parsing, INI memory/file/token APIs, lock-free queue variants, MIME detection,
@@ -22,6 +22,11 @@ behavior rather than by implementation source file.
 - `core/public_api.cpp`: flags, parameter containers, value conversion overloads,
   formatting, endpoint wrappers, executable paths, dynamic libraries, and
   compile-time public type properties.
+
+## Crypto
+
+- `crypto/basic.cpp`: SHA-1 vectors and object semantics, Base64 vectors,
+  secure random error handling, and UUID parsing/generation/version behavior.
 
 ## System
 

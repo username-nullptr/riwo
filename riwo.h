@@ -14,6 +14,10 @@
 # include <riwo/system.h>
 #endif //RIWO_SYSTEM_SUPPORT
 
+#if RIWO_CRYPTO_SUPPORT
+# include <riwo/crypto.h>
+#endif //RIWO_CRYPTO_SUPPORT
+
 #if RIWO_HTTP_SUPPORT
 # include <riwo/http.h>
 #endif //RIWO_HTTP_SUPPORT

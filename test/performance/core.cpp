@@ -4,8 +4,7 @@
 #include "benchmark.h"
 #include "test.h"
 
-#include <riwo/core/algorithm/misc.h>
-#include <riwo/core/algorithm/sha1.h>
+#include <riwo/core/percent_encoding.h>
 #include <riwo/core/url.h>
 
 namespace
@@ -14,11 +13,9 @@ namespace
 #ifdef NDEBUG
 constexpr size_t text_cycle_count = 100'000 * riwo::test::performance_scale;
 constexpr size_t url_cycle_count = 100'000 * riwo::test::performance_scale;
-constexpr size_t hash_cycle_count = 20'000 * riwo::test::performance_scale;
 #else
 constexpr size_t text_cycle_count = 5'000 * riwo::test::performance_scale;
 constexpr size_t url_cycle_count = 5'000 * riwo::test::performance_scale;
-constexpr size_t hash_cycle_count = 1'000 * riwo::test::performance_scale;
 #endif
 
 using duration_t = std::chrono::steady_clock::duration;
@@ -69,22 +66,6 @@ duration_t measure_url_round_trip(size_t count)
 	return elapsed;
 }
 
-duration_t measure_sha1(size_t count)
-{
-	std::string payload(4096, 'x');
-	size_t checksum = 0;
-	const auto begin = std::chrono::steady_clock::now();
-	for(size_t index = 0; index < count; ++index)
-	{
-		payload[0] = static_cast<char>(index);
-		auto digest = riwo::sha1(payload).finalize().hex(false);
-		checksum += digest.size() + static_cast<unsigned char>(digest[0]);
-	}
-	const auto elapsed = std::chrono::steady_clock::now() - begin;
-	RIWO_TEST_CHECK(checksum > count * 40);
-	return elapsed;
-}
-
 void core_hot_paths()
 {
 	riwo::test::print_performance_result(
@@ -94,10 +75,6 @@ void core_hot_paths()
 	riwo::test::print_performance_result(
 		"core/URL parse + serialize (median of 3)", url_cycle_count,
 		median_duration(url_cycle_count, measure_url_round_trip), "cycle"
-	);
-	riwo::test::print_performance_result(
-		"core/SHA-1 4 KiB (median of 3)", hash_cycle_count,
-		median_duration(hash_cycle_count, measure_sha1), "digest"
 	);
 }
 

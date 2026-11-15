@@ -20,7 +20,7 @@ are discovered only when the corresponding capability is enabled.
 
 ## Choose a build profile
 
-Default library: Core plus Coroutines.
+Default library: Core, Crypto, and Coroutines.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -54,9 +54,10 @@ cmake --build build-secure --parallel
 | Option | Default | Built target | Requires |
 | --- | :---: | --- | --- |
 | Core, no option | ON | `riwo.core` | selected Asio provider |
+| `RIWO_BUILD_CRYPTO` | ON | `riwo.crypto` | Core |
 | `RIWO_BUILD_SYSTEM` | ON | `riwo.system` | Core |
 | `RIWO_BUILD_CORO` | ON | `riwo.coro` | Core |
-| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Coroutines and System |
+| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Crypto, Coroutines, and System |
 | `RIWO_BUILD_WEBSOCKET` | OFF | `riwo.websocket` | HTTP |
 | `RIWO_BUILD_UTILITIES` | OFF | `riwo.utils` | Coroutines, System, and spdlog |
 | `RIWO_BUILD_EXAMPLES` | OFF | `riwo.example.*` | corresponding enabled modules |

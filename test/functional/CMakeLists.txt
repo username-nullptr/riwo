@@ -34,6 +34,10 @@ if (RIWO_BUILD_SYSTEM)
 	add_riwo_test(system.process system/process.cpp riwo.system)
 endif ()
 
+if (RIWO_BUILD_CRYPTO)
+	add_riwo_test(crypto crypto/basic.cpp riwo.crypto)
+endif ()
+
 if (RIWO_BUILD_HTTP)
 	add_riwo_test(http http/basic.cpp riwo.http)
 	add_riwo_test(http.protocol http/protocol.cpp riwo.http)

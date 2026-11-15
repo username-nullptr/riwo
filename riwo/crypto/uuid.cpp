@@ -5,7 +5,7 @@
 #include "sha1.h"
 #include <random>
 
-namespace riwo::detail { namespace
+namespace riwo::crypto::detail { namespace
 {
 
 void uuid_fill_random(uuid_data_t &data)
@@ -124,4 +124,4 @@ uuid_data_t uuid_generate_v5(const uuid_data_t &ns_uuid, std::string_view name)
 	return data;
 }
 
-} //namespace riwo::detail
+} //namespace riwo::crypto::detail

@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_ALGORITHM_SHA1_H
-#define RIWO_CORE_ALGORITHM_SHA1_H
+#ifndef RIWO_CRYPTO_SHA1_H
+#define RIWO_CRYPTO_SHA1_H
 
-#include <riwo/core/global.h>
+#include <riwo/crypto/global.h>
 
-namespace riwo
+namespace riwo::crypto
 {
 
-class RIWO_CORE_API sha1
+class RIWO_CRYPTO_API sha1
 {
 public:
 	sha1();
@@ -44,7 +44,7 @@ private:
 	impl *m_impl;
 };
 
-} //namespace riwo
+} //namespace riwo::crypto
 
 
-#endif //RIWO_CORE_ALGORITHM_SHA1_H
+#endif //RIWO_CRYPTO_SHA1_H

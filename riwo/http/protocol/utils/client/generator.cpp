@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "generator.h"
-#include <riwo/core/algorithm/misc.h>
 
 namespace riwo::http
 {

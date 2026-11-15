@@ -4,13 +4,14 @@
 #ifndef RIWO_CORE_H
 #define RIWO_CORE_H
 
+#include <riwo/core/percent_encoding.h>
 #include <riwo/core/atomic_mutex.h>
 #include <riwo/core/shared_mutex.h>
 #include <riwo/core/args_parser.h>
 #include <riwo/core/string_list.h>
 #include <riwo/core/executable.h>
 #include <riwo/core/container.h>
-#include <riwo/core/algorithm.h>
+#include <riwo/core/wildcard.h>
 #include <riwo/core/jthread.h>
 #include <riwo/core/library.h>
 #include <riwo/core/flags.h>

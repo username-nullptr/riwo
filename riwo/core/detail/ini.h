@@ -4,7 +4,7 @@
 #ifndef RIWO_CORE_DETAIL_INI_H
 #define RIWO_CORE_DETAIL_INI_H
 
-#include <riwo/core/algorithm/misc.h>
+#include <riwo/core/percent_encoding.h>
 #include <riwo/core/executable.h>
 
 namespace riwo { namespace detail
@@ -95,10 +95,10 @@ template <concepts::character CharT>
 			if( code < 0x20U or code == 0x7fU )
 			{
 				append_escape(static_cast<CharT>('x'));
-				result.push_back(detail::to_hex_upper<CharT>(
+				result.push_back(to_hex_upper<CharT>(
 					static_cast<unsigned int>(code >> 4U)
 				));
-				result.push_back(detail::to_hex_upper<CharT>(
+				result.push_back(to_hex_upper<CharT>(
 					static_cast<unsigned int>(code)
 				));
 			}

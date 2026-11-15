@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "url.h"
-#include "algorithm/misc.h"
+#include "percent_encoding.h"
 #include "string_vector.h"
 
 namespace riwo { namespace

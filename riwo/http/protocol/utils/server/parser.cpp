@@ -4,8 +4,10 @@
 #include "parser.h"
 #include <riwo/http/protocol/utils/core/parser.h>
 #include <riwo/http/protocol/utils/core/compression.h>
-#include <riwo/core/algorithm/misc.h>
+
+#include <riwo/core/percent_encoding.h>
 #include <riwo/core/string_vector.h>
+#include <riwo/core/wildcard.h>
 
 namespace riwo::http
 {

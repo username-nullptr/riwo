@@ -3,7 +3,7 @@
 
 #include "authentication.h"
 #include "detail/syntax.h"
-#include <riwo/core/algorithm/base64.h>
+#include <riwo/crypto/base64.h>
 
 namespace riwo::experimental::http { namespace
 {
@@ -88,7 +88,7 @@ std::string make_basic_authorization(std::string_view username, std::string_view
 	if( username.find(':') != std::string_view::npos )
 		invalid_argument::loc_throw("HTTP Basic username cannot contain ':'");
 
-	return "Basic " + base64_encode (
+	return "Basic " + crypto::base64_encode (
 		std::string(username) + ':' + std::string(password)
 	);
 }

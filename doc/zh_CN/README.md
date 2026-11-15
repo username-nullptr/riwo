@@ -19,7 +19,8 @@
 
 | 模块 | 定位 | 指南 |
 | --- | --- | --- |
-| `riwo.core` | 通用数据、执行、算法、可执行文件路径与同步能力 | [核心模块](core.md) |
+| `riwo.core` | 通用数据、执行、文本算法、可执行文件路径与同步能力 | [核心模块](core.md) |
+| `riwo.crypto` | Hash、安全随机数、Base64 与 UUID | [Crypto 模块](crypto.md) |
 | `riwo.system` | 环境、用户目录与子进程管理 | [System 模块](system.md) |
 | `riwo.coro` | 协程等待与同步 | [协程](coroutines.md) |
 | `riwo.http` | HTTP/1.0 和 HTTP/1.1 客户端、服务端与协议工具 | [HTTP](http.md) |

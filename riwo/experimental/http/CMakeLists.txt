@@ -18,7 +18,7 @@ if (RIWO_EXP_HTTP_HTTP2_SUPPORT AND NOT RIWO_OPENSSL_SUPPORT)
 endif ()
 
 set(target_name riwo.exp_http)
-add_project(${target_name} riwo.core riwo.system)
+add_project(${target_name} riwo.crypto riwo.system)
 target_compile_definitions(${target_name} PRIVATE RIWO_EXP_HTTP_SHARED)
 
 # Keep the protocol layer usable as a pure byte-in/byte-out engine.  Session

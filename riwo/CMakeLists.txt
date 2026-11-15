@@ -16,6 +16,11 @@ if (RIWO_BUILD_SYSTEM)
 	add_subdirectory(system)
 endif ()
 
+if (RIWO_BUILD_CRYPTO)
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES crypto.h)
+	add_subdirectory(crypto)
+endif ()
+
 if (RIWO_BUILD_HTTP)
 	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES http.h)
 	add_subdirectory(http)
@@ -35,6 +40,7 @@ add_subdirectory(experimental)
 
 set(TARGET_LIST
 	riwo.core
+	riwo.crypto
 	riwo.coro
 	riwo.system
 	riwo.http

@@ -20,7 +20,7 @@
 # include <unistd.h>
 #endif //OS
 
-namespace riwo { namespace
+namespace riwo::crypto { namespace
 {
 
 [[nodiscard]] sys_expected<> invalid_output() noexcept
@@ -135,4 +135,4 @@ sys_expected<> secure_random_bytes(const mutable_buffer &output) noexcept
 	return make_sys_expected();
 }
 
-} //namespace riwo
+} //namespace riwo::crypto

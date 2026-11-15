@@ -56,6 +56,15 @@ if (RIWO_BUILD_SYSTEM)
 	message(STATUS "${PRO_NAME}: Build module <System>.")
 endif ()
 
+option(RIWO_BUILD_CRYPTO
+	"-- ${PRO_NAME}: Build module <Crypto>." ON
+)
+set(RIWO_CRYPTO_SUPPORT ${RIWO_BUILD_CRYPTO})
+
+if (RIWO_BUILD_CRYPTO)
+	message(STATUS "${PRO_NAME}: Build module <Crypto>.")
+endif ()
+
 option(RIWO_BUILD_HTTP
 	"-- ${PRO_NAME}: Build module <HTTP>." OFF
 )
@@ -67,6 +76,9 @@ if (RIWO_BUILD_HTTP)
 		unset(RIWO_BUILD_HTTP)
 	elseif (NOT RIWO_BUILD_SYSTEM)
 		message(FATAL_ERROR "${PRO_NAME}: <HTTP> module depends on <System> module.")
+		unset(RIWO_BUILD_HTTP)
+	elseif (NOT RIWO_BUILD_CRYPTO)
+		message(FATAL_ERROR "${PRO_NAME}: <HTTP> module depends on <Crypto> module.")
 		unset(RIWO_BUILD_HTTP)
 	elseif (RIWO_OPENSSL_SUPPORT)
 		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS>.")
@@ -83,6 +95,9 @@ set(RIWO_EXP_HTTP_SUPPORT ${RIWO_BUILD_EXP_HTTP})
 if (RIWO_BUILD_EXP_HTTP)
 	if (NOT RIWO_BUILD_SYSTEM)
 		message(FATAL_ERROR "${PRO_NAME}: <EXP_HTTP> module depends on <System> module.")
+		unset(RIWO_BUILD_EXP_HTTP)
+	elseif (NOT RIWO_BUILD_CRYPTO)
+		message(FATAL_ERROR "${PRO_NAME}: <EXP_HTTP> module depends on <Crypto> module.")
 		unset(RIWO_BUILD_EXP_HTTP)
 	elseif (RIWO_OPENSSL_SUPPORT)
 		message(STATUS "${PRO_NAME}: Build module <HTTP/HTTPS_EXP>.")

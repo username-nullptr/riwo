@@ -4,7 +4,7 @@
 #ifndef RIWO_HTTP_PROTOCOL_UTILS_CORE_DETAIL_CONTAINER_HELPER_H
 #define RIWO_HTTP_PROTOCOL_UTILS_CORE_DETAIL_CONTAINER_HELPER_H
 
-#include <riwo/core/algorithm/uuid.h>
+#include <riwo/crypto/uuid.h>
 
 namespace riwo::http
 {
@@ -177,7 +177,7 @@ auto mutable_headers<Derived>::set_header(Opt &&opt)
 			{
 				using namespace std::chrono;
 				norms.boundary = std::format("{}_{}",
-					uuid::generate().to_string(),
+					crypto::uuid::generate().to_string(),
 					duration_cast<milliseconds>(
 						system_clock::now().time_since_epoch()
 					).count()

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "app_session.h"
-#include <riwo/core/algorithm/base64.h>
-#include <riwo/core/algorithm/secure_random.h>
+#include <riwo/crypto/secure_random.h>
+#include <riwo/crypto/base64.h>
 
 namespace riwo::experimental::http { namespace
 {
@@ -11,10 +11,10 @@ namespace riwo::experimental::http { namespace
 [[nodiscard]] std::string make_session_id()
 {
 	std::array<std::byte,32> bytes {};
-	auto random = secure_random_bytes(mutable_buffer(bytes.data(), bytes.size()));
+	auto random = crypto::secure_random_bytes(mutable_buffer(bytes.data(), bytes.size()));
 	sys_expected_loc_throw(random, "Failed to generate HTTP application session ID");
 
-	auto result = base64_encode(bytes);
+	auto result = crypto::base64_encode(bytes);
 	for(auto &value : result)
 	{
 		if( value == '+' ) value = '-';

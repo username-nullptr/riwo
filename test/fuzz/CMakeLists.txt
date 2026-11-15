@@ -134,7 +134,7 @@ function(add_riwo_fuzzer module name source library)
 endfunction()
 
 
-foreach(target riwo.core riwo.coro riwo.http riwo.exp_http riwo.websocket
+foreach(target riwo.core riwo.crypto riwo.coro riwo.http riwo.exp_http riwo.websocket
 	riwo.exp_websocket riwo.utils)
 	if (TARGET ${target})
 		if (MSVC)

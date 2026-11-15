@@ -3,7 +3,7 @@
 
 #include "base64.h"
 
-namespace riwo
+namespace riwo::crypto
 {
 
 std::string base64_encode(std::span<const std::byte> input)
@@ -42,4 +42,4 @@ std::string base64_encode(std::string_view input)
 	return base64_encode(std::as_bytes(std::span(input.data(), input.size())));
 }
 
-} //namespace riwo
+} //namespace riwo::crypto

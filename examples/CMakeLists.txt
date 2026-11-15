@@ -94,6 +94,11 @@ if (RIWO_BUILD_CORO)
 	riwo_add_example(coro condition_variable LIBRARIES riwo.coro)
 endif ()
 
+# Crypto
+if (RIWO_BUILD_CRYPTO)
+	riwo_add_example(crypto algorithms LIBRARIES riwo.crypto)
+endif ()
+
 # HTTP/1.0 and HTTP/1.1
 if (RIWO_BUILD_HTTP)
 	riwo_add_example(http client_sync      LIBRARIES riwo.http)
@@ -178,6 +183,7 @@ endif ()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	core/algorithms.cpp
+	crypto/algorithms.cpp
 	core/executable_paths.cpp
 	core/args_parser.cpp
 	core/dynamic_library.cpp

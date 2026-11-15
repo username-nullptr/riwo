@@ -1,48 +1,19 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_ALGORITHM_DETAIL_UUID_H
-#define RIWO_CORE_ALGORITHM_DETAIL_UUID_H
+#ifndef RIWO_CRYPTO_DETAIL_UUID_H
+#define RIWO_CRYPTO_DETAIL_UUID_H
 
-namespace riwo::detail
+namespace riwo::crypto::detail
 {
 
-[[nodiscard]] RIWO_CORE_API uuid_data_t uuid_generate(uint8_t version);
-[[nodiscard]] RIWO_CORE_API uuid_data_t uuid_generate_v5(const uuid_data_t &ns_uuid, std::string_view name);
-
-inline bool uuid_append_utf8(std::string &output, uint32_t code_point)
-{
-	if( code_point <= 0x7F )
-		output.push_back(static_cast<char>(code_point));
-
-	else if( code_point <= 0x7FF )
-	{
-		output.push_back(static_cast<char>(0xC0 | (code_point >> 6)));
-		output.push_back(static_cast<char>(0x80 | (code_point & 0x3F)));
-	}
-	else if( code_point >= 0xD800 and code_point <= 0xDFFF )
-		return false;
-
-	else if( code_point <= 0xFFFF )
-	{
-		output.push_back(static_cast<char>(0xE0 | (code_point >> 12)));
-		output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3F)));
-		output.push_back(static_cast<char>(0x80 | (code_point & 0x3F)));
-	}
-	else if( code_point <= 0x10FFFF )
-	{
-		output.push_back(static_cast<char>(0xF0 | (code_point >> 18)));
-		output.push_back(static_cast<char>(0x80 | ((code_point >> 12) & 0x3F)));
-		output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3F)));
-		output.push_back(static_cast<char>(0x80 | (code_point & 0x3F)));
-	}
-	else
-		return false;
-	return true;
-}
+[[nodiscard]] RIWO_CRYPTO_API uuid_data_t uuid_generate(uint8_t version);
+[[nodiscard]] RIWO_CRYPTO_API uuid_data_t uuid_generate_v5(const uuid_data_t &ns_uuid, std::string_view name);
+[[nodiscard]] RIWO_CRYPTO_API bool uuid_append_utf8(std::string &output, uint32_t code_point);
 
 template <concepts::character CharT>
-[[nodiscard]] optional<std::string> uuid_name_to_utf8(std::basic_string_view<CharT> name)
+[[nodiscard]] RIWO_CRYPTO_TAPI
+optional<std::string> uuid_name_to_utf8(std::basic_string_view<CharT> name)
 {
 	std::string output;
 	output.reserve(name.size());
@@ -104,9 +75,9 @@ template <concepts::character CharT>
 	return -1;
 }
 
-} //namespace riwo::detail
+} //namespace riwo::crypto::detail
 
-namespace riwo
+namespace riwo::crypto
 {
 
 template <concepts::character CharT>
@@ -337,12 +308,12 @@ bool basic_uuid<CharT>::is_nil() const noexcept
 	});
 }
 
-} //namespace riwo
+} //namespace riwo::crypto
 
 template <riwo::concepts::character CharT>
-struct std::formatter<riwo::basic_uuid<CharT>, CharT>
+struct std::formatter<riwo::crypto::basic_uuid<CharT>, CharT>
 {
-	auto format(const riwo::basic_uuid<CharT> &uuid, auto &context) const {
+	auto format(const riwo::crypto::basic_uuid<CharT> &uuid, auto &context) const {
 		return m_formatter.format(uuid.to_string(), context);
 	}
 	constexpr auto parse(auto &context) noexcept {
@@ -354,4 +325,4 @@ private:
 };
 
 
-#endif //RIWO_CORE_ALGORITHM_DETAIL_UUID_H
+#endif //RIWO_CRYPTO_DETAIL_UUID_H

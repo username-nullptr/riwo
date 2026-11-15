@@ -9,6 +9,10 @@ if (RIWO_BUILD_CORO)
 	add_riwo_performance_test(coro coro.cpp riwo.coro)
 endif ()
 
+if (RIWO_BUILD_CRYPTO)
+	add_riwo_performance_test(crypto crypto.cpp riwo.crypto)
+endif ()
+
 if (RIWO_BUILD_HTTP)
 	add_riwo_performance_test(http http.cpp riwo.http)
 	add_riwo_performance_test(http-protocol http_protocol.cpp riwo.http)

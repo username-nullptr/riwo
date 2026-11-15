@@ -11,7 +11,7 @@ Language: English | [简体中文](../zh_CN/core.md)
 | Depends on | Selected Asio provider; optional OpenSSL/liburing |
 
 Core is the foundation for every other Riwo module. It owns the common runtime,
-value and container types, algorithms, executable-relative paths, files, and
+value and container types, text encoding/matching, executable-relative paths, files, and
 thread-level synchronization.
 
 ## Header map
@@ -21,7 +21,8 @@ thread-level synchronization.
 | Execution | `<riwo/core/execution.h>` | Default context, scheduling, timers, sleeps, async work |
 | Values | `<riwo/core/value.h>`, `container.h`, string containers | Text-backed values, conversion, parameter containers |
 | Structured input | `<riwo/core/url.h>`, `ini.h`, `args_parser.h` | URL, INI, command-line parsing |
-| Algorithms | `<riwo/core/algorithm.h>`, `mime_type.h` | UUID, SHA-1, wildcard/encoding/math helpers, MIME lookup |
+| Text algorithms | `<riwo/core/percent_encoding.h>`, `wildcard.h` | Percent encoding and ranked wildcard matching |
+| File classification | `<riwo/core/mime_type.h>` | MIME lookup by suffix and content |
 | Synchronization | `<riwo/core/atomic_mutex.h>`, `shared_mutex.h`, `lock_free_queue.h` | Thread locks and queues |
 | Thread lifecycle | `<riwo/core/jthread.h>` | Joining thread, stop source/token/callback |
 | Runtime foundation | `<riwo/core/executable.h>`, `library.h` | Executable-relative paths and dynamic libraries |
@@ -31,7 +32,7 @@ thread-level synchronization.
 | Serialization | `<riwo/core/serialization/endian.h>`, `codec.h` | Byte-order conversion and type codecs |
 | Common primitives | `<riwo/core/string_tools.h>`, `flags.h`, `static_registration.h` | String helpers, type-safe flags, and static registration |
 
-`<riwo/core.h>` aggregates the common data, parsing, algorithm,
+`<riwo/core.h>` aggregates the common data, parsing, text-algorithm,
 synchronization, and system headers. Execution, value, MIME, lock-free queues,
 and other specialized facilities have their own entry headers and should be
 included directly.
@@ -73,8 +74,8 @@ lifetimes, strands, and shutdown order are defined in the
 - `ini` offers group/key access plus synchronous and token-based file I/O.
 - `cmdline::args_parser` handles aliases, value options, combined flags,
   positional arguments, help, and version output.
-- Algorithm headers provide reusable hashes, identifiers, matching, encoding,
-  byte-order, and math helpers.
+- Core provides percent encoding, wildcard matching, and byte-order helpers.
+- Hashes, secure randomness, Base64, and UUIDs belong to [Crypto](crypto.md).
 - MIME helpers inspect suffixes and content to classify files.
 
 ## Threads and system access

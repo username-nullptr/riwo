@@ -4,7 +4,6 @@
 #include "test.h"
 
 #include <riwo/core/async_expected.h>
-#include <riwo/core/algorithm/math.h>
 #include <riwo/core/cxx/exception.h>
 #include <riwo/core/container.h>
 #include <riwo/core/flags.h>
@@ -89,17 +88,6 @@ void value_and_string_algorithms()
 	);
 	RIWO_TEST_CHECK_EQ(replacements, 2U);
 	RIWO_TEST_CHECK_EQ(riwo::strtls::remove(std::string("a-b-c"), '-'), "abc");
-
-	const std::array projected {1, 2, 3};
-	RIWO_TEST_CHECK_EQ(riwo::mean(projected.begin(), projected.end(),
-		[](const int &value) {
-			return &value;
-		}), 2);
-	const std::list<int> iterator_projected {1, 2, 3};
-	RIWO_TEST_CHECK_EQ(riwo::mean(iterator_projected.begin(), iterator_projected.end(),
-		[](std::list<int>::const_iterator it) {
-			return &*it;
-		}), 2);
 
 	const riwo::string_deque deque {"a", "b", "c"};
 	RIWO_TEST_CHECK_EQ(deque.join(1, "::"), "b::c");

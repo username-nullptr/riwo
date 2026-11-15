@@ -20,7 +20,7 @@ zlib 和 liburing。
 
 ## 选择构建配置
 
-默认库只包含 Core 与 Coroutines：
+默认库包含 Core、Crypto 与 Coroutines：
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -54,9 +54,10 @@ cmake --build build-secure --parallel
 | 选项 | 默认值 | 构建 Target | 前置条件 |
 | --- | :---: | --- | --- |
 | Core，无选项 | ON | `riwo.core` | 选定的 Asio provider |
+| `RIWO_BUILD_CRYPTO` | ON | `riwo.crypto` | Core |
 | `RIWO_BUILD_SYSTEM` | ON | `riwo.system` | Core |
 | `RIWO_BUILD_CORO` | ON | `riwo.coro` | Core |
-| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Coroutines 与 System |
+| `RIWO_BUILD_HTTP` | OFF | `riwo.http` | Crypto、Coroutines 与 System |
 | `RIWO_BUILD_WEBSOCKET` | OFF | `riwo.websocket` | HTTP |
 | `RIWO_BUILD_UTILITIES` | OFF | `riwo.utils` | Coroutines、System 与 spdlog |
 | `RIWO_BUILD_EXAMPLES` | OFF | `riwo.example.*` | 对应的已启用模块 |

@@ -3,7 +3,7 @@
 
 #include "test.h"
 
-#include <riwo/core/algorithm/misc.h>
+#include <riwo/core/percent_encoding.h>
 #include <riwo/core/lock_free_queue.h>
 #include <riwo/core/url.h>
 

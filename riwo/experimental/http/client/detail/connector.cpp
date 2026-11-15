@@ -6,8 +6,8 @@
 #include <riwo/experimental/http/protocol/authentication.h>
 #include <riwo/experimental/http/error.h>
 
+#include <riwo/core/percent_encoding.h>
 #include <riwo/system/environment.h>
-#include <riwo/core/algorithm/misc.h>
 
 #if RIWO_OPENSSL_SUPPORT
 # include <riwo/experimental/http/transport/tls_connection.h>

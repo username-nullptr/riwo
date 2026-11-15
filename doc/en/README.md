@@ -20,7 +20,8 @@ you use.
 
 | Module | Purpose | Guide |
 | --- | --- | --- |
-| `riwo.core` | Common data types, execution, algorithms, executable paths, and synchronization | [Core](core.md) |
+| `riwo.core` | Common data types, execution, text algorithms, executable paths, and synchronization | [Core](core.md) |
+| `riwo.crypto` | Hashing, secure randomness, Base64, and UUIDs | [Crypto](crypto.md) |
 | `riwo.system` | Environment, user profile, and child-process management | [System](system.md) |
 | `riwo.coro` | Coroutine waits and synchronization | [Coroutines](coroutines.md) |
 | `riwo.http` | HTTP/1.0 and HTTP/1.1 client, server, and protocol tools | [HTTP](http.md) |

@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
+#include "permessage_deflate.h"
 #include <riwo/experimental/websocket/client.h>
 #include <riwo/experimental/http/client/detail/connector.h>
-#include "permessage_deflate.h"
+#include <riwo/crypto/secure_random.h>
 
 namespace riwo::experimental::websocket::detail { namespace
 {
@@ -214,7 +215,7 @@ try
 		return sys_unexpected(target.error());
 
 	std::array<std::byte,16> nonce {};
-	if( auto random = secure_random_bytes(asio::buffer(nonce)); not random )
+	if( auto random = crypto::secure_random_bytes(asio::buffer(nonce)); not random )
 		return sys_unexpected(random.error());
 
 	auto key = make_client_key(nonce);

@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2024-2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#ifndef RIWO_CORE_ALGORITHM_UUID_H
-#define RIWO_CORE_ALGORITHM_UUID_H
+#ifndef RIWO_CRYPTO_UUID_H
+#define RIWO_CRYPTO_UUID_H
 
+#include <riwo/crypto/global.h>
 #include <riwo/core/optional.h>
 
-namespace riwo { namespace uuid_version
+namespace riwo::crypto { namespace uuid_version
 {
 
 enum enumeration : uint8_t {
@@ -19,7 +20,7 @@ using uuid_version_enum = uuid_version::enumeration;
 using uuid_data_t = std::array<std::byte,16>;
 
 template <concepts::character CharT>
-class RIWO_CORE_TAPI basic_uuid
+class RIWO_CRYPTO_TAPI basic_uuid
 {
 public:
 	using char_t = CharT;
@@ -79,8 +80,8 @@ private:
 using uuid = basic_uuid<char>;
 using wuuid = basic_uuid<wchar_t>;
 
-} //namespace riwo
-#include <riwo/core/algorithm/detail/uuid.h>
+} //namespace riwo::crypto
+#include <riwo/crypto/detail/uuid.h>
 
 
-#endif //RIWO_CORE_ALGORITHM_UUID_H
+#endif //RIWO_CRYPTO_UUID_H

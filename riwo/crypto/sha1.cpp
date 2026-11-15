@@ -4,7 +4,7 @@
 #include "sha1.h"
 #include "base64.h"
 
-namespace riwo
+namespace riwo::crypto
 {
 
 class RIWO_DECL_HIDDEN sha1::impl
@@ -163,8 +163,7 @@ private:
 			   ( static_cast<uint32_t>(p[3]) <<  0 );
 	}
 
-	static uint32_t rol32(uint32_t x, uint32_t n)
-	{
+	static uint32_t rol32(uint32_t x, uint32_t n) {
 		return (x << n) | (x >> (32 - n));
 	}
 
@@ -230,8 +229,10 @@ sha1 &sha1::operator=(sha1 &&other) noexcept
 {
 	if( this == &other )
 		return *this;
+
 	delete m_impl;
 	m_impl = other.m_impl;
+
 	other.m_impl = new impl();
 	return *this;
 }
@@ -253,7 +254,7 @@ sha1 &sha1::append(const void *data, size_t size)
 	if( data == nullptr )
 	{
 		invalid_argument::loc_throw (
-			"riwo::sha1::append: data is nullptr"
+			"riwo::crypto::sha1::append: data is nullptr"
 		);
 	}
 	auto ptr = static_cast<const uint8_t*>(data);
@@ -296,10 +297,13 @@ void sha1::operator+=(const std::string &text)
 sha1& sha1::finalize()
 {
 	m_impl->add_byte_dont_count_bits(0x80);
+
 	while( m_impl->m_i % 64 != 56 )
 		m_impl->add_byte_dont_count_bits(0x00);
+
 	for(int j=7; j>=0; j--)
 		m_impl->add_byte_dont_count_bits(static_cast<uint8_t>(m_impl->m_n_bits >> (j << 3)));
+
 	return *this;
 }
 
@@ -312,7 +316,6 @@ std::string sha1::hex(bool upper_case) const
 	char _hex[64] = "";
 	int k = 0;
 
-//	for(int i=0; i<5; i++)
 	for(int i : {0,1,2,3,4})
 	{
 		for(int j=7; j>=0; j--)
@@ -336,4 +339,4 @@ std::string sha1::base64() const
 	return base64_encode(digest);
 }
 
-} //namespace riwo
+} //namespace riwo::crypto

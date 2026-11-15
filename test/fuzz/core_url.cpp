@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Xiaoqiang <username_nullptr@163.com>
 // SPDX-License-Identifier: MIT
 
-#include <riwo/core/algorithm/misc.h>
+#include <riwo/core/percent_encoding.h>
 #include <riwo/core/url.h>
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)

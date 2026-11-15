@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 set(target_name riwo.exp_websocket)
-add_project(${target_name} riwo.exp_http)
+add_project(${target_name} riwo.crypto riwo.exp_http)
 
 target_compile_definitions (
 	${target_name} PRIVATE RIWO_EXP_WEBSOCKET_SHARED

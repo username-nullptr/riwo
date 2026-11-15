@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <riwo/websocket/client.h>
-#include <riwo/core/algorithm/secure_random.h>
+#include <riwo/crypto/secure_random.h>
 
 namespace riwo::websocket
 {
@@ -239,7 +239,7 @@ sys_expected<open_http_request> prepare_open_http_request(const connect_request 
 {
 	try {
 		std::array<std::byte,16> nonce {};
-		if( auto random = secure_random_bytes(asio::buffer(nonce)); not random )
+		if( auto random = crypto::secure_random_bytes(asio::buffer(nonce)); not random )
 			return sys_unexpected(random.error());
 
 		auto key = make_client_key(nonce);
