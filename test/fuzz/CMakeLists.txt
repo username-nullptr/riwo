@@ -173,6 +173,9 @@ add_riwo_fuzzer(core url core_url.cpp riwo.core
 add_riwo_fuzzer(core public-api core_public_api.cpp riwo.core
 	CORPUS corpus/core DICTIONARY dictionaries/core.dict
 )
+add_riwo_fuzzer(core ini core_ini.cpp riwo.core
+	CORPUS corpus/ini DICTIONARY dictionaries/ini.dict
+)
 add_riwo_fuzzer(core queue core_queue.cpp riwo.core
 	CORPUS corpus/sequences DICTIONARY dictionaries/sequences.dict
 )

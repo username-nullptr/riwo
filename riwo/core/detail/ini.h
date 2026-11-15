@@ -15,7 +15,7 @@ template <concepts::character CharT>
 ini_replace(const concepts::text_p<CharT> auto &text)
 {
 	using text_t = std::remove_cvref_t<decltype(text)>;
-	std::basic_string<CharT> result;
+	std::basic_string<CharT> result {};
 
 	if constexpr( concepts::character<text_t> )
 		result.assign(1, text);
@@ -27,6 +27,194 @@ ini_replace(const concepts::text_p<CharT> auto &text)
 	return strtls::replace(std::move(result),
 		static_cast<CharT>(' '), static_cast<CharT>('_')
 	);
+}
+
+template <concepts::character CharT>
+[[nodiscard]] RIWO_CORE_TAPI bool ini_hex_value(CharT c, unsigned int &value) noexcept
+{
+	if( c >= static_cast<CharT>('0') and c <= static_cast<CharT>('9') )
+		value = static_cast<unsigned int>(c - static_cast<CharT>('0'));
+	else if( c >= static_cast<CharT>('a') and c <= static_cast<CharT>('f') )
+		value = static_cast<unsigned int>(c - static_cast<CharT>('a')) + 10U;
+	else if( c >= static_cast<CharT>('A') and c <= static_cast<CharT>('F') )
+		value = static_cast<unsigned int>(c - static_cast<CharT>('A')) + 10U;
+	else
+		return false;
+	return true;
+}
+
+template <concepts::character CharT>
+[[nodiscard]] RIWO_CORE_TAPI bool ini_identifier_syntax(CharT c) noexcept
+{
+	return c == static_cast<CharT>('[') or c == static_cast<CharT>(']') or
+		   c == static_cast<CharT>('=') or c == static_cast<CharT>('#') or
+		   c == static_cast<CharT>(';') or c == static_cast<CharT>('"');
+}
+
+template <concepts::character CharT>
+[[nodiscard]] RIWO_CORE_TAPI std::basic_string<CharT> ini_escape
+(std::basic_string_view<CharT> text, bool identifier = false)
+{
+	std::basic_string<CharT> result {};
+	result.reserve(text.size());
+
+	const auto append_escape = [&result](CharT c)
+	{
+		result.push_back(static_cast<CharT>('\\'));
+		result.push_back(c);
+	};
+	for(const auto c : text)
+	{
+		switch(c)
+		{
+		case static_cast<CharT>('\\'):
+			append_escape(static_cast<CharT>('\\'));
+			break;
+
+		case static_cast<CharT>('"'):
+			append_escape(static_cast<CharT>('"'));
+			break;
+
+		case static_cast<CharT>('\n'):
+			append_escape(static_cast<CharT>('n'));
+			break;
+
+		case static_cast<CharT>('\r'):
+			append_escape(static_cast<CharT>('r'));
+			break;
+
+		case static_cast<CharT>('\t'):
+			append_escape(static_cast<CharT>('t'));
+			break;
+
+		default:
+		{
+			using unsigned_char_t = std::make_unsigned_t<CharT>;
+			const auto code = static_cast<unsigned_char_t>(c);
+
+			if( code < 0x20U or code == 0x7fU )
+			{
+				append_escape(static_cast<CharT>('x'));
+				result.push_back(detail::to_hex_upper<CharT>(
+					static_cast<unsigned int>(code >> 4U)
+				));
+				result.push_back(detail::to_hex_upper<CharT>(
+					static_cast<unsigned int>(code)
+				));
+			}
+			else if( identifier and ini_identifier_syntax(c) )
+				append_escape(c);
+			else
+				result.push_back(c);
+			break;
+		}}
+	}
+	return result;
+}
+
+template <concepts::character CharT>
+[[nodiscard]] RIWO_CORE_TAPI bool ini_unescape
+(std::basic_string_view<CharT> text, std::basic_string<CharT> &result, bool identifier = false)
+{
+	result.clear();
+	result.reserve(text.size());
+
+	for(size_t i=0; i<text.size(); i++)
+	{
+		const auto c = text[i];
+		if( c != static_cast<CharT>('\\') )
+		{
+			if( (identifier and ini_identifier_syntax(c)) or
+				(not identifier and c == static_cast<CharT>('"')) )
+				return false;
+
+			result.push_back(c);
+			continue;
+		}
+		if( ++i == text.size() )
+			return false;
+
+		switch( const auto escaped = text[i] )
+		{
+		case static_cast<CharT>('\\'):
+		case static_cast<CharT>('"'):
+			result.push_back(escaped);
+			break;
+
+		case static_cast<CharT>('n'):
+			result.push_back(static_cast<CharT>('\n'));
+			break;
+
+		case static_cast<CharT>('r'):
+			result.push_back(static_cast<CharT>('\r'));
+			break;
+
+		case static_cast<CharT>('t'):
+			result.push_back(static_cast<CharT>('\t'));
+			break;
+
+		case static_cast<CharT>('x'):
+		{
+			if( i + 2 >= text.size() )
+				return false;
+			unsigned int high = 0, low = 0;
+			if( not ini_hex_value(text[i+1], high) or
+				not ini_hex_value(text[i+2], low) )
+				return false;
+			result.push_back(static_cast<CharT>((high << 4U) | low));
+			i += 2;
+			break;
+		}
+		default:
+			if( not identifier or not ini_identifier_syntax(escaped) )
+				return false;
+			result.push_back(escaped);
+			break;
+		}
+	}
+	return true;
+}
+
+template <concepts::character CharT>
+[[nodiscard]] RIWO_CORE_TAPI
+size_t ini_find_outside_string(std::basic_string_view<CharT> text, CharT target) noexcept
+{
+	bool quoted = false;
+	bool escaped = false;
+
+	for(size_t i=0; i<text.size(); i++)
+	{
+		const auto c = text[i];
+		if( escaped )
+		{
+			escaped = false;
+			continue;
+		}
+		if( c == static_cast<CharT>('\\') )
+		{
+			escaped = true;
+			continue;
+		}
+		if( c == static_cast<CharT>('"') )
+		{
+			quoted = not quoted;
+			continue;
+		}
+		if( not quoted and c == target )
+			return i;
+	}
+	return std::basic_string_view<CharT>::npos;
+}
+
+template <concepts::character CharT>
+[[nodiscard]] RIWO_CORE_TAPI
+std::basic_string<CharT> ini_strip_comment(std::basic_string_view<CharT> text)
+{
+	const auto hash = ini_find_outside_string(text, static_cast<CharT>('#'));
+	const auto semicolon = ini_find_outside_string(text, static_cast<CharT>(';'));
+
+	const auto pos = std::min(hash, semicolon);
+	return strtls::trimmed(std::basic_string<CharT>(text.substr(0, pos)));
 }
 
 } //namespace detail
@@ -355,16 +543,7 @@ public:
 					data.clear();
 					return data;
 				}
-				buf = strtls::trimmed(buf);
-				if( buf.empty() or buf[0] == static_cast<char_t>('#') or
-					buf[0] == static_cast<char_t>(';') )
-					continue;
-
-				auto list = string_vector_t::from_string(buf, static_cast<char_t>('#'));
-				buf = strtls::trimmed(list[0]);
-
-				list = string_vector_t::from_string(buf, static_cast<char_t>(';'));
-				buf = strtls::trimmed(list[0]);
+				buf = detail::ini_strip_comment<char_t>(buf);
 				if( buf.empty() )
 					continue;
 
@@ -444,7 +623,7 @@ public:
 					break;
 				}
 				file << l_str(char_t,"[")
-					 << (strtls::is_ascii(group) ? group : to_percent_encoding(group))
+					 << detail::ini_escape<char_t>(group, true)
 					 << l_str(char_t,"]\n");
 
 				for(auto &[key, entry_value] : values)
@@ -454,18 +633,14 @@ public:
 						error = make_error_code(asio::error::operation_aborted);
 						break;
 					}
-					if( key.empty() or entry_value->empty() )
+					if( key.empty() )
 						continue;
 
-					file << (strtls::is_ascii(key) ? key : to_percent_encoding(key))
+					file << detail::ini_escape<char_t>(key, true)
 						 << l_str(char_t,"=");
 
 					if( entry_value.is_rlnum() )
-					{
-						if( entry_value->front() == static_cast<char_t>('+') )
-							entry_value = entry_value->substr(1);
 						file << entry_value.to_string();
-					}
 					else
 					{
 						auto str = entry_value.to_string();
@@ -474,7 +649,7 @@ public:
 						else
 						{
 							file << l_str(char_t,"\"")
-								 << (entry_value.is_ascii() ? str : to_percent_encoding(str))
+								 << detail::ini_escape<char_t>(str)
 								 << l_str(char_t,"\"");
 						}
 					}
@@ -775,10 +950,11 @@ private:
 				"riwo::basic_ini"
 			);
 		}
-		auto group = from_percent_encoding (
-			strtls::trimmed(string_t(str.c_str() + 1, str.size() - 2))
+		auto encoded_group = strtls::trimmed (
+			string_t(str.c_str() + 1, str.size() - 2)
 		);
-		if( group.empty() )
+		string_t group {};
+		if( encoded_group.empty() or not detail::ini_unescape<char_t>(encoded_group, group, true) )
 		{
 			system_error::loc_throw (
 				std::error_code(static_cast<int>(line), detail::ini_invalid_group()),
@@ -797,7 +973,9 @@ private:
 				"riwo::basic_ini"
 			);
 		}
-		auto pos = str.find(static_cast<char_t>('='));
+		auto pos = detail::ini_find_outside_string<char_t>(
+			str, static_cast<char_t>('=')
+		);
 		if( pos == 0 )
 		{
 			system_error::loc_throw (
@@ -812,50 +990,55 @@ private:
 				"riwo::basic_ini"
 			);
 		}
-		auto key = from_percent_encoding(strtls::trimmed(str.substr(0,pos)));
-		if( key.empty() )
+		auto encoded_key = strtls::trimmed(str.substr(0,pos));
+		if( encoded_key.empty() )
 		{
 			system_error::loc_throw (
 				std::error_code(static_cast<int>(line), detail::ini_key_is_empty()),
 				"riwo::basic_ini"
 			);
 		}
+		string_t key {};
+		if( not detail::ini_unescape<char_t>(encoded_key, key, true) )
+		{
+			system_error::loc_throw (
+				std::error_code(static_cast<int>(line), detail::ini_invalid_key_value_line()),
+				"riwo::basic_ini"
+			);
+		}
 		auto parsed_value = strtls::trimmed(str.substr(pos+1));
+		bool valid = not parsed_value.empty();
+		string_t decoded_value {};
+
+		if( valid and parsed_value.front() == static_cast<char_t>('"') )
 		{
-			size_t i = 0;
-			for(; i<parsed_value.size(); i++)
-			{
-				if( parsed_value[i] != static_cast<char_t>('=') )
-					break;
-			}
-			if( i > 0 )
-				parsed_value = parsed_value.substr(0, i - 1);
-		}
-		if( parsed_value.size() == 1 )
-		{
-			if( parsed_value[0] == static_cast<char_t>('=') or
-				parsed_value[0] == static_cast<char_t>('\'') or
-				parsed_value[0] == static_cast<char_t>('"') )
-			{
-				system_error::loc_throw (
-					std::error_code(static_cast<int>(line), detail::ini_invalid_value()),
-					"riwo::basic_ini"
+			valid = parsed_value.size() >= 2 and
+				parsed_value.back() == static_cast<char_t>('"') and
+				detail::ini_unescape<char_t>(
+					std::basic_string_view<char_t>(parsed_value).substr (
+						1, parsed_value.size() - 2
+					), decoded_value
 				);
-			}
 		}
-		else if( parsed_value[0] == static_cast<char_t>('\'') or parsed_value[0] == static_cast<char_t>('"') )
+		else if( valid )
 		{
-			if( parsed_value.back() != parsed_value[0] )
-			{
-				system_error::loc_throw (
-					std::error_code(static_cast<int>(line), detail::ini_invalid_value()),
-					"riwo::basic_ini"
-				);
-			}
-			parsed_value = parsed_value.substr(1, parsed_value.size() - 2);
+			value_t bare_value(parsed_value);
+
+			valid = bare_value.is_rlnum() or
+					parsed_value == l_str(char_t,"true") or
+					parsed_value == l_str(char_t,"false");
+			if( valid )
+				decoded_value = std::move(parsed_value);
+		}
+		if( not valid )
+		{
+			system_error::loc_throw (
+				std::error_code(static_cast<int>(line), detail::ini_invalid_value()),
+				"riwo::basic_ini"
+			);
 		}
 		return std::pair<string_t,value_t>(
-			detail::ini_replace<char_t>(key), from_percent_encoding(parsed_value)
+			detail::ini_replace<char_t>(key), std::move(decoded_value)
 		);
 	}
 

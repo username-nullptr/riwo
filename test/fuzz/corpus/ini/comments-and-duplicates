@@ -1,0 +1,4 @@
+# leading comment
+[group] ; trailing comment
+value="first"
+value="second # not a comment; still a value" # trailing comment

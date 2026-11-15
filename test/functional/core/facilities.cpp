@@ -245,8 +245,20 @@ void ini_memory_and_file()
 	config.write("server/host", "127.0.0.1");
 	config.write({"server", "port"}, 8080);
 	config["feature"]["enabled"] = true;
-	RIWO_TEST_CHECK_EQ(config.size(), 2U);
-	RIWO_TEST_CHECK_EQ(config.group("server").size(), 2U);
+
+	const std::string unsafe_group = "unsafe[]#;=\"\\\ngroup";
+	const std::string unsafe_key = "unsafe[]#;=\"\\\nkey";
+	std::string unsafe_value = "中文 \"%2F\" # ; = \\\n\r\t";
+	unsafe_value.push_back('\0');
+	unsafe_value.push_back('\x01');
+	unsafe_value.push_back('\x7f');
+	unsafe_value += "\n[injected]\nowned=true";
+
+	config.write({unsafe_group, unsafe_key}, unsafe_value);
+	config.write({unsafe_group, "empty"}, "");
+	config.write({"server", "signed"}, "+42");
+	RIWO_TEST_CHECK_EQ(config.size(), 3U);
+	RIWO_TEST_CHECK_EQ(config.group("server").size(), 3U);
 	RIWO_TEST_CHECK_EQ(config.read("server/port")->to_int().value_or(0), 8080);
 
 	std::error_code error;
@@ -260,6 +272,18 @@ void ini_memory_and_file()
 	config.sync(error);
 	RIWO_TEST_CHECK(not error);
 	RIWO_TEST_CHECK(std::filesystem::is_regular_file(file));
+	{
+		std::ifstream stream(file, std::ios::binary);
+		const std::string serialized(
+			std::istreambuf_iterator<char>(stream), {}
+		);
+		RIWO_TEST_CHECK(serialized.find("中文") != std::string::npos);
+		RIWO_TEST_CHECK(serialized.find("%2F") != std::string::npos);
+		RIWO_TEST_CHECK(serialized.find("\\n[injected]\\nowned=true") !=
+			std::string::npos);
+		RIWO_TEST_CHECK(serialized.find("\\x00\\x01\\x7F") !=
+			std::string::npos);
+	}
 
 	riwo::ini restored(file);
 	auto load_result = restored.load(riwo::as_expected(riwo::use_sync));
@@ -270,6 +294,11 @@ void ini_memory_and_file()
 	RIWO_TEST_CHECK(not error);
 	RIWO_TEST_CHECK_EQ(restored.read("server/host")->to_string(), "127.0.0.1");
 	RIWO_TEST_CHECK(restored.read("feature/enabled")->to_bool().value_or(false));
+	RIWO_TEST_CHECK_EQ(restored.read({unsafe_group, unsafe_key})->to_string(),
+		unsafe_value);
+	RIWO_TEST_CHECK_EQ(restored.read({unsafe_group, "empty"})->to_string(), "");
+	RIWO_TEST_CHECK_EQ(restored.read("server/signed")->to_string(), "+42");
+	RIWO_TEST_CHECK(restored.find("injected") == restored.end());
 	RIWO_TEST_CHECK_EQ(restored.file_name(), file);
 
 	riwo::ini moved(std::move(restored));
@@ -277,6 +306,23 @@ void ini_memory_and_file()
 	riwo::ini assigned;
 	assigned = std::move(moved);
 	RIWO_TEST_CHECK(assigned.read("feature/enabled")->to_bool().value_or(false));
+
+	const auto invalid_file = directory.path() / "invalid-escape.ini";
+	const auto rejects = [&](const std::string &contents)
+	{
+		{
+			std::ofstream stream(invalid_file, std::ios::binary);
+			stream << contents;
+		}
+		riwo::ini invalid(invalid_file);
+		riwo::error_code parse_error;
+		invalid.load(parse_error);
+		RIWO_TEST_CHECK(parse_error);
+	};
+	rejects("[group]\nvalue=\"bad\\q\"\n");
+	rejects("[group]\nvalue=\"bad\\xGG\"\n");
+	rejects("[group]\nvalue=\"unterminated\n");
+	rejects("[bad]group]\nvalue=true\n");
 }
 
 void ini_text_parameters()
