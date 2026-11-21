@@ -266,6 +266,26 @@ combined with the Performance suite. Fuzz instrumentation is a separate build
 and cannot be combined with either sanitizer option. On Linux, TSan tests use
 `setarch -R` when available to avoid incompatible shadow-memory layouts.
 
+Example TSan build with external Boost.Asio and HTTP stress tests:
+
+```sh
+cmake -S . -B build-tsan -DBUILD_TESTING=ON \
+  -DRIWO_ENABLE_TEST_TSAN=ON -DRIWO_ASIO_PROVIDER=BOOST \
+  -DRIWO_BUILD_STRESS_TESTS=ON -DRIWO_BUILD_HTTP=ON \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build-tsan --parallel
+ctest --test-dir build-tsan -L sanitizer --output-on-failure
+```
+
+For GCC and Clang TSan builds, CMake recognizes the Boost.Asio reference count
+implementation that uses a release decrement followed by an acquire fence.
+It generates a build-local copy of that header with an acquire-release
+decrement so TSan sees the synchronization before deletion. System Boost
+headers stay intact. Installed TSan builds carry the same generated header
+for consumers. With other Boost.Asio implementations CMake uses the provider's
+header directly. GCC still emits `-Wtsan` warnings for remaining fences, and
+CTest still fails on TSan diagnostics.
+
 ## Select tests and cases
 
 List or filter CTest entries:

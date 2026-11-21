@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "test.h"
-
-#include <riwo/utils/sbus.h>
+#include "sbus_udp_fixture.h"
 
 #include <algorithm>
 #include <array>
@@ -24,23 +23,6 @@ constexpr uint32_t wire_magic = 0x4C475342;
 constexpr uint8_t wire_version = 2;
 constexpr size_t wire_header_size = 48;
 constexpr size_t wire_datagram_size = 60 * 1'024;
-
-class udp_config_guard
-{
-public:
-	udp_config_guard() : m_config(udp_interface::config())
-	{
-		udp_interface::set_config({});
-	}
-
-	~udp_config_guard()
-	{
-		udp_interface::set_config(m_config);
-	}
-
-private:
-	udp_interface::config_t m_config;
-};
 
 template <typename Predicate>
 bool wait_until(Predicate predicate, std::chrono::milliseconds timeout = 3s)
@@ -66,7 +48,7 @@ struct burst_message
 
 void concurrent_multicast_burst_and_recovery()
 {
-	udp_config_guard config_guard;
+	riwo::test::sbus_udp_fixture fixture;
 	constexpr std::string_view topic = "riwo.test.stress.sbus.udp.burst";
 	constexpr size_t receiver_count = 4;
 	constexpr size_t publisher_count = 4;
@@ -170,7 +152,7 @@ void concurrent_multicast_burst_and_recovery()
 
 void lifecycle_churn_under_traffic()
 {
-	udp_config_guard config_guard;
+	riwo::test::sbus_udp_fixture fixture;
 	constexpr std::string_view topic = "riwo.test.stress.sbus.udp.lifecycle";
 	const size_t rounds = 16 * RIWO_STRESS_SCALE;
 
@@ -203,7 +185,7 @@ void lifecycle_churn_under_traffic()
 
 void slow_callback_queue_pressure_and_recovery()
 {
-	udp_config_guard config_guard;
+	riwo::test::sbus_udp_fixture fixture;
 	constexpr std::string_view topic =
 		"riwo.test.stress.sbus.udp.slow-callback";
 	constexpr uint64_t recovery_marker = std::numeric_limits<uint64_t>::max();
@@ -306,7 +288,7 @@ void write_u64(std::byte *output, uint64_t value) noexcept
 
 void malformed_and_incomplete_fragment_storm_recovery()
 {
-	udp_config_guard config_guard;
+	riwo::test::sbus_udp_fixture fixture;
 	auto config = udp_interface::config();
 	config.send_range = msg_range::lan;
 	config.recv_range = msg_range::lan;

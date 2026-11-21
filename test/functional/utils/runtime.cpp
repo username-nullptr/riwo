@@ -297,6 +297,8 @@ void local_message_bus()
 	std::this_thread::sleep_for(5ms);
 	RIWO_TEST_CHECK(not received);
 	cache.changed(topic).disconnect();
+	// The cache subscriber synchronously dispatches through the pool.
+	cache.subscriber().cancel();
 	pool.stop();
 	pool.join();
 }

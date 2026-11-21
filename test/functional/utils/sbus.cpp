@@ -6,6 +6,10 @@
 #include <riwo/utils/sbus.h>
 #include <cstring>
 
+#if RIWO_UTILS_SBUS_UDP_INTERFACE_SUPPORT
+# include "sbus_udp_fixture.h"
+#endif
+
 namespace
 {
 
@@ -44,6 +48,9 @@ bool wait_for_count(const std::atomic_size_t &count, size_t expected)
 
 void default_interface_delivery()
 {
+#if RIWO_UTILS_SBUS_DEFAULT_INTERFACE_UDP
+	riwo::test::sbus_udp_fixture fixture;
+#endif
 	constexpr std::string_view topic = "riwo.test.sbus.default-interface";
 	asio::thread_pool pool(1);
 	riwo::utils::sbus::default_subscriber subscriber(pool);
@@ -206,26 +213,10 @@ void indexed_topics_and_empty_topic_cancellation()
 }
 
 #if RIWO_UTILS_SBUS_UDP_INTERFACE_SUPPORT
-class udp_config_guard
-{
-public:
-	udp_config_guard() : m_config(riwo::utils::sbus::udp_interface::config()) {
-		riwo::utils::sbus::udp_interface::set_config({});
-	}
-
-	~udp_config_guard() {
-		riwo::utils::sbus::udp_interface::set_config(m_config);
-	}
-
-private:
-	riwo::utils::sbus::udp_interface::config_t m_config;
-};
-
 void udp_delivery_fragmentation_and_cancellation()
 {
 	using udp_interface = riwo::utils::sbus::udp_interface;
 	using msg_range = udp_interface::msg_range;
-	udp_config_guard config_guard;
 	constexpr std::string_view topic = "riwo.test.sbus.udp";
 	const auto default_config = udp_interface::config();
 	RIWO_TEST_CHECK(default_config == udp_interface::config_t {});
@@ -263,7 +254,9 @@ void udp_delivery_fragmentation_and_cancellation()
 		udp_interface::set_config(invalid_config), riwo::invalid_argument
 	);
 	RIWO_TEST_CHECK(udp_interface::config() == default_config);
-	auto restricted_config = default_config;
+	riwo::test::sbus_udp_fixture fixture;
+	const auto test_config = udp_interface::config();
+	auto restricted_config = test_config;
 	restricted_config.max_topic_size = 8;
 	restricted_config.max_payload_size = 4;
 	udp_interface::set_config(restricted_config);
@@ -276,9 +269,10 @@ void udp_delivery_fragmentation_and_cancellation()
 			oversized_payload.size()),
 		riwo::length_error
 	);
-	auto endpoint_config = default_config;
+	riwo::test::udp_port_reservation endpoint_port;
+	auto endpoint_config = test_config;
 	endpoint_config.multicast_group = {239, 255, 71, 84};
-	endpoint_config.multicast_port = 57'184;
+	endpoint_config.multicast_port = endpoint_port.port();
 	udp_interface::set_config(endpoint_config);
 	auto endpoint_interface = std::make_shared<udp_interface>(endpoint_config);
 	std::atomic_size_t endpoint_received {0};
@@ -289,7 +283,7 @@ void udp_delivery_fragmentation_and_cancellation()
 	udp_interface::publish("riwo.test.sbus.udp.configured-endpoint", nullptr, 0);
 	RIWO_TEST_CHECK(wait_for_count(endpoint_received, 1));
 	endpoint_interface->cancel();
-	udp_interface::set_config(default_config);
+	udp_interface::set_config(test_config);
 	auto topic_interface =
 		std::make_shared<udp_interface>();
 	auto global_interface =
@@ -333,7 +327,7 @@ void udp_delivery_fragmentation_and_cancellation()
 	RIWO_TEST_CHECK(initial_statistics.received_datagrams >= 1);
 	RIWO_TEST_CHECK(initial_statistics.delivered_messages >= 1);
 
-	auto config = default_config;
+	auto config = test_config;
 	config.send_range = msg_range::lan;
 	udp_interface::set_config(config);
 	riwo::utils::sbus::publish<udp_interface>(
@@ -376,7 +370,7 @@ void udp_delivery_fragmentation_and_cancellation()
 	RIWO_TEST_CHECK(wait_for_count(internet_received, 1));
 	lan_interface->cancel();
 	internet_interface->cancel();
-	udp_interface::set_config(default_config);
+	udp_interface::set_config(test_config);
 
 	topic_interface->cancel_sid(topic_sid);
 	riwo::utils::sbus::publish<udp_interface>(

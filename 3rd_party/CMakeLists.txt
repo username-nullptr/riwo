@@ -90,6 +90,11 @@ if (RIWO_ASIO_PROVIDER STREQUAL "BOOST")
 	target_link_libraries(riwo.asio INTERFACE ${RIWO_ASIO_PACKAGE_TARGET})
 	target_compile_definitions(riwo.asio INTERFACE RIWO_USING_BOOST_ASIO=1)
 
+	if (RIWO_ENABLE_TEST_TSAN AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang)$")
+		include(boost_asio_tsan)
+		riwo_enable_boost_asio_tsan_headers(${RIWO_ASIO_PACKAGE_TARGET})
+	endif ()
+
 elseif (RIWO_ASIO_PROVIDER STREQUAL "BUNDLED")
 	message(STATUS "${PRO_NAME}: Use bundled standalone Asio.")
 

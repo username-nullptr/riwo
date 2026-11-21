@@ -428,6 +428,12 @@ if (RIWO_ENABLE_TEST_SANITIZERS OR RIWO_ENABLE_TEST_TSAN)
 	target_compile_options(riwo.test.sanitizer INTERFACE
 		${riwo_sanitizer_compile_options}
 	)
+	if (RIWO_ENABLE_TEST_TSAN AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		# Keep GCC's fence instrumentation warning visible without letting
+		# -Werror prevent a TSan build that still contains other fences.
+		target_compile_options(riwo.test.sanitizer INTERFACE -Wno-error=tsan)
+	endif ()
+
 	target_link_options(riwo.test.sanitizer INTERFACE
 		${riwo_sanitizer_link_options}
 	)
