@@ -12,6 +12,7 @@
 #include <shellapi.h>
 
 #include <riwo/system/process.h>
+#include <map>
 
 #if RIWO_USING_BOOST_ASIO
 # include <boost/asio/readable_pipe.hpp>
@@ -21,14 +22,11 @@
 # include <asio/writable_pipe.hpp>
 #endif //RIWO_USING_BOOST_ASIO
 
-#include <utility>
-#include <map>
-
 #ifdef _MSC_VER
 # pragma comment(lib, "shell32.lib")
 #endif //_MSC_VER
 
-namespace riwo::system::detail
+namespace riwo::system::detail { namespace
 {
 
 namespace fs = std::filesystem;
@@ -47,7 +45,7 @@ using read_channel_t = process::read_channel;
 using args_t = std::vector<std::wstring>;
 using envs_t = std::map<std::string, path_t>;
 
-[[nodiscard]] static error_code sys_error()
+[[nodiscard]] error_code sys_error()
 {
 	return {
 		std::error_code (
@@ -56,7 +54,7 @@ using envs_t = std::map<std::string, path_t>;
 	};
 }
 
-[[nodiscard]] static std::wstring quote_arg(std::wstring_view arg)
+[[nodiscard]] std::wstring quote_arg(std::wstring_view arg)
 {
 	if( arg.empty() )
 		return L"\"\"";
@@ -102,7 +100,7 @@ using envs_t = std::map<std::string, path_t>;
 	return result;
 }
 
-[[nodiscard]] static std::wstring make_cmdline(std::wstring_view cmd, const args_t &args)
+[[nodiscard]] std::wstring make_cmdline(std::wstring_view cmd, const args_t &args)
 {
 	auto cmdline = quote_arg(cmd);
 	for(auto &arg : args)
@@ -113,14 +111,14 @@ using envs_t = std::map<std::string, path_t>;
 	return cmdline;
 }
 
-[[nodiscard]] static bool has_shell_meta(std::wstring_view str) noexcept
+[[nodiscard]] bool has_shell_meta(std::wstring_view str) noexcept
 {
 	return std::ranges::any_of(str, [](auto ch) {
 		return ch == L'|' or ch == L'&' or ch == L'<' or ch == L'>';
 	});
 }
 
-[[nodiscard]] static std::wstring to_wstring(std::string_view str)
+[[nodiscard]] std::wstring to_wstring(std::string_view str)
 {
 	if( str.empty() )
 		return {};
@@ -138,7 +136,7 @@ using envs_t = std::map<std::string, path_t>;
 	return result;
 }
 
-[[nodiscard]] static std::vector<wchar_t> make_environment(const envs_t &envs)
+[[nodiscard]] std::vector<wchar_t> make_environment(const envs_t &envs)
 {
 	std::map<std::wstring,std::wstring> merged;
 	if( auto block = GetEnvironmentStringsW() )
@@ -169,7 +167,7 @@ using envs_t = std::map<std::string, path_t>;
 	return result;
 }
 
-[[nodiscard]] static std::wstring make_pipe_name()
+[[nodiscard]] std::wstring make_pipe_name()
 {
 	static std::atomic_long counter {0};
 	return std::format (
@@ -178,20 +176,65 @@ using envs_t = std::map<std::string, path_t>;
 	);
 }
 
-static void close_handle(HANDLE handle) noexcept
+void close_handle(HANDLE handle) noexcept
 {
 	if( handle != nullptr and handle != INVALID_HANDLE_VALUE )
 		CloseHandle(handle);
 }
 
-[[nodiscard]] static bool connect_pipe_server(HANDLE handle) noexcept
+struct RIWO_DECL_HIDDEN handle_closer
+{
+	void operator()(HANDLE handle) const noexcept {
+		close_handle(handle);
+	}
+};
+using owned_handle_ptr = std::unique_ptr<void,handle_closer>;
+
+class RIWO_DECL_HIDDEN process_attributes
+{
+public:
+	~process_attributes()
+	{
+		if( m_attributes )
+			DeleteProcThreadAttributeList(m_attributes);
+	}
+
+public:
+	[[nodiscard]] error_code set_handles(HANDLE *handles, size_t count)
+	{
+		SIZE_T size = 0;
+		InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+
+		m_storage = std::make_unique<std::byte[]>(size);
+		const auto attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(m_storage.get());
+
+		if( not InitializeProcThreadAttributeList(attributes, 1, 0, &size) )
+			return sys_error();
+
+		m_attributes = attributes;
+		if( not UpdateProcThreadAttribute(m_attributes, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+				handles, count * sizeof(HANDLE), nullptr, nullptr) )
+			return sys_error();
+		return {};
+	}
+
+	[[nodiscard]] LPPROC_THREAD_ATTRIBUTE_LIST get() const noexcept {
+		return m_attributes;
+	}
+
+private:
+	std::unique_ptr<std::byte[]> m_storage {};
+	LPPROC_THREAD_ATTRIBUTE_LIST m_attributes = nullptr;
+};
+
+[[nodiscard]] bool connect_pipe_server(HANDLE handle) noexcept
 {
 	if( ConnectNamedPipe(handle, nullptr) )
 		return true;
 	return GetLastError() == ERROR_PIPE_CONNECTED;
 }
 
-[[nodiscard]] static sys_expected<> make_stdout_pipe(read_pipe_t &parent, HANDLE &child) noexcept
+[[nodiscard]] sys_expected<> make_stdout_pipe(read_pipe_t &parent, HANDLE &child)
 {
 	sys_expected<> expected;
 	auto name = make_pipe_name();
@@ -238,7 +281,7 @@ static void close_handle(HANDLE handle) noexcept
 	return expected;
 }
 
-[[nodiscard]] static sys_expected<> make_stdin_pipe(write_pipe_t &parent, HANDLE &child) noexcept
+[[nodiscard]] sys_expected<> make_stdin_pipe(write_pipe_t &parent, HANDLE &child)
 {
 	sys_expected<> expected;
 	auto name = make_pipe_name();
@@ -285,6 +328,70 @@ static void close_handle(HANDLE handle) noexcept
 	return expected;
 }
 
+template <typename Pipe>
+[[nodiscard]] error_code prepare_child_stream
+(const process_stream &target, DWORD standard_handle, Pipe &pipe, owned_handle_ptr &child)
+{
+	HANDLE handle = nullptr;
+	const bool input = standard_handle == STD_INPUT_HANDLE;
+
+	switch( target.mode )
+	{
+	case process_stream_mode::pipe:
+	{
+		auto result = [&]
+		{
+			if constexpr( std::same_as<Pipe,write_pipe_t> )
+				return make_stdin_pipe(pipe, handle);
+			else
+				return make_stdout_pipe(pipe, handle);
+		}();
+		if( not result )
+			return result.error();
+		break;
+	}
+	case process_stream_mode::inherit:
+	{
+		const auto source = GetStdHandle(standard_handle);
+		const auto self = GetCurrentProcess();
+
+		if( not source )
+			return make_system_error_code(std::errc::bad_file_descriptor);
+
+		if( source == INVALID_HANDLE_VALUE or
+			not DuplicateHandle(self, source, self, &handle, 0, TRUE, DUPLICATE_SAME_ACCESS) )
+			return sys_error();
+		break;
+	}
+	case process_stream_mode::discard:
+	case process_stream_mode::file:
+	{
+		const bool file = target.mode == process_stream_mode::file;
+		if( file and (target.path.empty() or target.path.native().find(L'\0') != path_t::string_type::npos) )
+			return make_system_error_code(std::errc::invalid_argument);
+
+		SECURITY_ATTRIBUTES security {
+			.nLength = sizeof(SECURITY_ATTRIBUTES),
+			.lpSecurityDescriptor = nullptr,
+			.bInheritHandle = TRUE
+		};
+		handle = CreateFileW(file ? target.path.c_str() : L"NUL",
+			input ? GENERIC_READ : GENERIC_WRITE,
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+			&security, file and not input ? CREATE_ALWAYS : OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL, nullptr
+		);
+		if( handle == INVALID_HANDLE_VALUE )
+			return sys_error();
+		break;
+	}
+	default:
+		return make_system_error_code(std::errc::invalid_argument);
+	}
+	child.reset(handle);
+	return {};
+}
+
 class RIWO_DECL_HIDDEN vindicator final :
 	public std::enable_shared_from_this<vindicator>
 {
@@ -300,164 +407,115 @@ public:
 	}
 
 public:
-	[[nodiscard]] sys_expected<> start(bool is_pipe, std::wstring_view cmd,
-		const args_t &args, const path_t &work_path, const envs_t &envs)
+	[[nodiscard]] sys_expected<> start(bool is_pipe, std::wstring_view cmd, const args_t &args,
+		const path_t &work_path, const envs_t &envs, const process_stdio &stdio)
 	{
-		error_code error; RIWO_UNUSED(error);
-		sys_expected<> expected;
-
 		if( m_joinable.load(std::memory_order_acquire) )
-		{
-			return expected.despair(std::make_error_code(
-				std::errc::device_or_resource_busy
-			));
-		}
-		else if( cmd.empty() )
-		{
-			return expected.despair(std::make_error_code (
-				std::errc::no_such_file_or_directory
-			));
-		}
+			return sys_unexpected(make_system_error_code(std::errc::device_or_resource_busy));
+
+		if( cmd.empty() )
+			return sys_unexpected(make_system_error_code(std::errc::no_such_file_or_directory));
+
 		join_monitor_thread();
 		finish_io(m_generation.load(std::memory_order_acquire), true);
 
 		m_released.store(false, std::memory_order_release);
-		auto generation = m_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
+		const auto generation = m_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
 
 		write_pipe_t stdin_write(m_exec);
 		read_pipe_t stdout_read(m_exec);
 		read_pipe_t stderr_read(m_exec);
 
-		HANDLE child_stdin = nullptr;
-		HANDLE child_stdout = nullptr;
-		HANDLE child_stderr = nullptr;
+		owned_handle_ptr child_stdin {};
+		owned_handle_ptr child_stdout {};
+		owned_handle_ptr child_stderr {};
 
-		auto pipe_expected = make_stdin_pipe(stdin_write, child_stdin);
-		if( not pipe_expected )
-			return pipe_expected;
+		if( auto error = prepare_child_stream(stdio.input, STD_INPUT_HANDLE, stdin_write, child_stdin) )
+			return sys_unexpected(error);
 
-		pipe_expected = make_stdout_pipe(stdout_read, child_stdout);
-		if( not pipe_expected )
+		if( auto error = prepare_child_stream(stdio.output, STD_OUTPUT_HANDLE, stdout_read, child_stdout) )
+			return sys_unexpected(error);
+
+		const bool share_output_file = stdio.output.mode == process_stream_mode::file and
+			stdio.error.mode == process_stream_mode::file and stdio.output.path == stdio.error.path;
+		if( not share_output_file )
 		{
-			close_handle(child_stdin);
-			return pipe_expected;
+			if( auto error = prepare_child_stream(stdio.error, STD_ERROR_HANDLE, stderr_read, child_stderr) )
+				return sys_unexpected(error);
 		}
-		pipe_expected = make_stdout_pipe(stderr_read, child_stderr);
-		if( not pipe_expected )
-		{
-			close_handle(child_stdin);
-			close_handle(child_stdout);
-			return pipe_expected;
-		}
-		std::wstring command_line;
+		std::array handles {child_stdin.get(), child_stdout.get(), child_stderr.get()};
+		process_attributes attributes {};
+
+		if( auto error = attributes.set_handles(handles.data(), share_output_file ? 2U : handles.size()) )
+			return sys_unexpected(error);
+
+		std::wstring command_line {};
 		if( is_pipe )
 		{
 			wchar_t comspec[MAX_PATH] {};
-			auto len = GetEnvironmentVariableW(L"COMSPEC", comspec, MAX_PATH);
+			const auto len = GetEnvironmentVariableW(L"COMSPEC", comspec, MAX_PATH);
 
-			std::wstring shell = len > 0 ? std::wstring(comspec, len) : L"cmd.exe";
+			auto shell = len > 0 and len < MAX_PATH ? std::wstring(comspec, len) : L"cmd.exe";
 			command_line = make_cmdline(shell, {L"/C", std::wstring(cmd)});
 		}
 		else
 			command_line = make_cmdline(cmd, args);
 
-		STARTUPINFOW si {};
-		si.cb = sizeof(si);
-		si.dwFlags = STARTF_USESTDHANDLES;
-		si.hStdInput = child_stdin;
-		si.hStdOutput = child_stdout;
-		si.hStdError = child_stderr;
+		STARTUPINFOEXW si {};
+		si.StartupInfo.cb = sizeof(si);
+		si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+		si.StartupInfo.hStdInput = child_stdin.get();
+		si.StartupInfo.hStdOutput = child_stdout.get();
+		si.StartupInfo.hStdError = share_output_file ? child_stdout.get() : child_stderr.get();
+		si.lpAttributeList = attributes.get();
 
 		PROCESS_INFORMATION pi {};
-		auto env_block = envs.empty() ? std::vector<wchar_t>{} : make_environment(envs);
-		auto work_path_str = work_path.empty() ? std::wstring{} : work_path.wstring();
+		auto env_block = envs.empty() ?
+			std::vector<wchar_t>{} : make_environment(envs);
 
-		HANDLE job_handle = CreateJobObjectW(nullptr, nullptr);
-		if( job_handle == nullptr )
-		{
-			auto job_error = sys_error();
-			close_handle(child_stdin);
-			close_handle(child_stdout);
-			close_handle(child_stderr);
-			return expected.despair(job_error);
-		}
+		owned_handle_ptr job(CreateJobObjectW(nullptr, nullptr));
+		if( not job )
+			return sys_unexpected(sys_error());
+
 		JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_info {};
 		job_info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 
-		if( not SetInformationJobObject(job_handle,
+		if( not SetInformationJobObject(job.get(),
 			JobObjectExtendedLimitInformation, &job_info, sizeof(job_info)) )
-		{
-			auto job_error = sys_error();
-			close_handle(job_handle);
-			close_handle(child_stdin);
-			close_handle(child_stdout);
-			close_handle(child_stderr);
-			return expected.despair(job_error);
-		}
+			return sys_unexpected(sys_error());
+
 		if( not CreateProcessW (
 			nullptr, command_line.data(), nullptr, nullptr, TRUE,
-			CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
+			CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT,
 			env_block.empty() ? nullptr : env_block.data(),
-			work_path_str.empty() ? nullptr : work_path_str.c_str(), &si, &pi) )
+			work_path.empty() ? nullptr : work_path.c_str(), &si.StartupInfo, &pi) )
+			return sys_unexpected(sys_error());
+
+		owned_handle_ptr child_process(pi.hProcess);
+		owned_handle_ptr child_thread(pi.hThread);
+
+		if( not AssignProcessToJobObject(job.get(), child_process.get()) or
+			ResumeThread(child_thread.get()) == static_cast<DWORD>(-1) )
 		{
-			auto create_error = sys_error();
-			close_handle(job_handle);
-			close_handle(child_stdin);
-			close_handle(child_stdout);
-			close_handle(child_stderr);
-			return expected.despair(create_error);
+			const auto error = sys_error();
+			TerminateProcess(child_process.get(), static_cast<UINT>(-9));
+			WaitForSingleObject(child_process.get(), INFINITE);
+			return sys_unexpected(error);
 		}
-		if( not AssignProcessToJobObject(job_handle, pi.hProcess) )
-		{
-			auto assign_error = sys_error();
-			TerminateProcess(pi.hProcess, static_cast<UINT>(-9));
-			WaitForSingleObject(pi.hProcess, INFINITE);
+		child_stdin.reset();
+		child_stdout.reset();
+		child_stderr.reset();
 
-			close_handle(pi.hThread);
-			close_handle(pi.hProcess);
-			close_handle(job_handle);
-			close_handle(child_stdin);
-			close_handle(child_stdout);
-			close_handle(child_stderr);
-			return expected.despair(assign_error);
-		}
-		if( ResumeThread(pi.hThread) == static_cast<DWORD>(-1) )
-		{
-			auto resume_error = sys_error();
-			TerminateProcess(pi.hProcess, static_cast<UINT>(-9));
-			WaitForSingleObject(pi.hProcess, INFINITE);
-
-			close_handle(pi.hThread);
-			close_handle(pi.hProcess);
-			close_handle(job_handle);
-			close_handle(child_stdin);
-			close_handle(child_stdout);
-			close_handle(child_stderr);
-			return expected.despair(resume_error);
-		}
-		close_handle(pi.hThread);
-		close_handle(child_stdin);
-		close_handle(child_stdout);
-		close_handle(child_stderr);
-
-		error = m_stdin.close(error);
-		error = m_stdout.close(error);
-		error = m_stderr.close(error);
-
-		error.clear();
 		m_stdin = std::move(stdin_write);
-
-		error.clear();
 		m_stdout = std::move(stdout_read);
-
-		error.clear();
 		m_stderr = std::move(stderr_read);
 		{
 			std::lock_guard resource_lock(m_resource_mutex);
-			m_process = pi.hProcess;
-			m_job = job_handle;
+			m_process = child_process.release();
+			m_job = job.release();
 			m_pid.store(pi.dwProcessId, std::memory_order_release);
 		}
+		sys_expected<> expected;
 		m_state = process_state::running;
 		try {
 			m_thread = std::thread (
@@ -510,6 +568,7 @@ private:
 		{
 			process_state state;
 			int exit_code;
+
 			if( got_exit_code and not forced )
 			{
 				exit_code = static_cast<int>(child_exit_code);
@@ -548,6 +607,7 @@ private:
 		}
 	}
 
+public:
 	void join_monitor_thread() noexcept
 	{
 		if( not m_thread.joinable() )
@@ -561,10 +621,11 @@ private:
 		catch(...) {}
 	}
 
+private:
 	void release_monitor_thread() noexcept
 	{
 		// Once public join ownership has been released, the monitor owns its
-		// control block until the child handle is signalled.  Detach the native
+		// control block until the child handle is signaled.  Detach the native
 		// thread at the same point so process-wide teardown cannot leave a
 		// finished, unjoined thread behind.
 		try {
@@ -583,14 +644,17 @@ private:
 		HANDLE job_handle;
 		{
 			std::lock_guard resource_lock(m_resource_mutex);
-			error_code close_error;
+			error_code close_error {};
 			close_error = m_stdin.close(close_error);
+
 			if( close_output )
 			{
 				close_error.clear();
 				close_error = m_stdout.close(close_error);
+
 				close_error.clear();
 				close_error = m_stderr.close(close_error);
+
 				RIWO_UNUSED(close_error);
 			}
 			process_handle = std::exchange(m_process, nullptr);
@@ -600,7 +664,7 @@ private:
 		close_handle(process_handle);
 		close_handle(job_handle);
 
-		std::vector<std::shared_ptr<asio::steady_timer>> timers;
+		std::vector<std::shared_ptr<asio::steady_timer>> timers {};
 		{
 			std::lock_guard timer_lock(m_timer_mutex);
 			timers = std::move(m_co_join_list);
@@ -653,6 +717,7 @@ private:
 		std::lock_guard timer_lock(m_timer_mutex);
 		if( m_state.load(std::memory_order_acquire) != process_state::running )
 			return false;
+
 		m_co_join_list.emplace_back(timer);
 		return true;
 	}
@@ -704,6 +769,20 @@ public:
 	}
 
 public:
+	[[nodiscard]] sys_expected<> close_stdin() noexcept
+	{
+		std::lock_guard lock(m_resource_mutex);
+		if( not m_stdin.is_open() )
+			return {};
+
+		error_code error {};
+		error = m_stdin.close(error);
+
+		if( error )
+			return sys_unexpected(error);
+		return {};
+	}
+
 	void terminate() const noexcept
 	{
 		if( m_state == process_state::running )
@@ -1091,6 +1170,8 @@ public:
 
 using vindicator_ptr = vindicator::ptr_t;
 
+} //namespace
+
 class RIWO_DECL_HIDDEN process::impl
 {
 	RIWO_DISABLE_COPY_MOVE(impl)
@@ -1104,6 +1185,10 @@ public:
 	{
 		if( m_vindicator->joinable() )
 			m_vindicator->_throw();
+
+		// A completed join can observe the exit before the monitor has posted
+		// its final I/O cleanup. Keep the executor alive until that post ends.
+		m_vindicator->join_monitor_thread();
 	}
 
 public:
@@ -1112,6 +1197,7 @@ public:
 
 	path_t m_work_path {};
 	envs_t m_envs {};
+	process_stdio m_stdio {};
 
 	executor_t m_exec {};
 	vindicator_ptr m_vindicator {};
@@ -1174,8 +1260,27 @@ sys_expected<> process::start() const
 {
 	return m_impl->m_vindicator->start (
 		m_impl->m_is_pipe, m_impl->m_cmd, m_impl->m_args,
-		m_impl->m_work_path, m_impl->m_envs
+		m_impl->m_work_path, m_impl->m_envs, m_impl->m_stdio
 	);
+}
+
+sys_expected<> process::start_program(const path_t &cmd, const std::vector<path_t> &args) const
+{
+	args_t arguments {};
+	arguments.reserve(args.size());
+
+	for(const auto &arg : args)
+		arguments.emplace_back(arg.native());
+
+	return m_impl->m_vindicator->start (
+		false, cmd.native(), arguments, m_impl->m_work_path,
+		m_impl->m_envs, m_impl->m_stdio
+	);
+}
+
+sys_expected<> process::close_stdin() const noexcept
+{
+	return m_impl->m_vindicator->close_stdin();
 }
 
 void process::terminate() const noexcept
@@ -1311,6 +1416,11 @@ void process::protect_io_error(const error_code &error) const noexcept
 void process::set_work_path(path_t path) noexcept
 {
 	m_impl->m_work_path = std::move(path);
+}
+
+void process::set_stdio(process_stdio streams) noexcept
+{
+	m_impl->m_stdio = std::move(streams);
 }
 
 void process::setenv(std::string_view key, path_t value) noexcept

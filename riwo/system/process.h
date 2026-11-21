@@ -7,7 +7,6 @@
 #include <riwo/system/global.h>
 #include <riwo/core/async_expected.h>
 #include <riwo/core/sys_expected.h>
-#include <riwo/core/value.h>
 
 namespace riwo::system
 {
@@ -16,6 +15,40 @@ using pid_t = uint64_t;
 
 enum class process_state {
 	idle, running, exited, crashed
+};
+
+enum class process_stream_mode {
+	pipe, inherit, discard, file
+};
+
+struct process_stream
+{
+	process_stream_mode mode = process_stream_mode::pipe;
+	std::filesystem::path path {};
+};
+
+struct process_stdio
+{
+	process_stream input {};
+	process_stream output {};
+	process_stream error {};
+};
+
+struct process_capture_options
+{
+	std::chrono::steady_clock::duration timeout = std::chrono::seconds(30);
+	size_t max_stdout_bytes = 1024 * 1024;
+	size_t max_stderr_bytes = 1024 * 1024;
+	std::filesystem::path work_path {};
+};
+
+struct process_capture_result
+{
+	int exit_code = 0;
+	std::string stdout_data {};
+	std::string stderr_data {};
+	bool stdout_truncated = false;
+	bool stderr_truncated = false;
 };
 /**
  * @par Thread Safety
@@ -77,6 +110,9 @@ public:
 	void terminate() noexcept;
 	void kill() noexcept;
 	void detach();
+
+	// Close the parent pipe after the last write to deliver EOF to the child.
+	[[nodiscard]] sys_expected<> close_stdin() noexcept;
 
 	enum class cancel_option {
 		none, terminate, kill, detach
@@ -143,6 +179,8 @@ public:
 
 public:
 	void set_work_path(path_t path) noexcept;
+	void set_stdio(process_stdio streams) noexcept;
+
 	void setenv(std::string_view key, path_t value) noexcept;
 	void unsetenv(std::string_view key) noexcept;
 
@@ -176,6 +214,10 @@ public:
 		requires exec_token_v<Token>;
 
 public:
+	// Launch an executable with literal arguments and capture both output streams.
+	[[nodiscard]] static sys_expected<process_capture_result> capture (
+		const path_t &cmd, const args_t &args = {}, const process_capture_options &options = {}
+	);
 	[[nodiscard]] static sys_expected<pid_t> self_pid() noexcept;
 	static sys_expected<> terminate(pid_t pid) noexcept;
 	static sys_expected<> kill(pid_t pid) noexcept;

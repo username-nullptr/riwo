@@ -4,22 +4,21 @@
 #ifdef __unix__
 
 #include <riwo/system/process.h>
-#include <utility>
-#include <cerrno>
-#include <cstring>
-#include <cstdio>
+#include <map>
+
+#include <unistd.h>
+#include <fcntl.h>
 
 #include <sys/wait.h>
 #include <wordexp.h>
 #include <csignal>
 #include <pwd.h>
-#include <map>
 
 #ifdef __linux__
 #include <sys/prctl.h>
-#endif
+#endif //__linux__
 
-namespace riwo::system::detail
+namespace riwo::system::detail { namespace
 {
 
 namespace fs = std::filesystem;
@@ -36,11 +35,11 @@ using args_t = std::vector<std::string>;
 using path_t = process::path_t;
 using envs_t = std::map<std::string, path_t>;
 
-[[nodiscard]] static error_code sys_error() {
+[[nodiscard]] error_code sys_error() {
 	return { std::error_code(errno, std::system_category()) };
 }
 
-[[nodiscard]] static bool is_shell_assignment(std::string_view word) noexcept
+[[nodiscard]] bool is_shell_assignment(std::string_view word) noexcept
 {
 	const auto equal_pos = word.find('=');
 	if( equal_pos == std::string_view::npos or equal_pos == 0 )
@@ -68,442 +67,152 @@ using envs_t = std::map<std::string, path_t>;
 	return true;
 }
 
-[[nodiscard]] static bool exit_on_parent_exit(::pid_t parent_pid) noexcept
+[[nodiscard]] bool exit_on_parent_exit(::pid_t parent_pid) noexcept
 {
 #ifdef __linux__
 	if( prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 )
 		return false;
 	return getppid() == parent_pid;
-#else
+
+#else //__linux__
 	RIWO_UNUSED(parent_pid);
 	return true;
-#endif
+#endif //__linux__
 }
 
-namespace
+class scoped_fd
 {
+	RIWO_DISABLE_COPY_MOVE(scoped_fd)
+
+public:
+	scoped_fd() = default;
+	~scoped_fd() { reset(); }
+
+	[[nodiscard]] int get() const noexcept { return m_fd; }
+	int release() noexcept { return std::exchange(m_fd, -1); }
+	void reset(int fd = -1) noexcept
+	{
+		if( m_fd >= 0 )
+			::close(m_fd);
+		m_fd = fd;
+	}
+
+private:
+	int m_fd = -1;
+};
+
+[[nodiscard]] error_code avoid_standard_fd(scoped_fd &fd) noexcept
+{
+	if( fd.get() > STDERR_FILENO )
+		return {};
+	const int duplicate = ::fcntl(fd.get(), F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+	if( duplicate < 0 )
+		return sys_error();
+	fd.reset(duplicate);
+	return {};
+}
+
+[[nodiscard]] error_code make_pipe(scoped_fd &reader, scoped_fd &writer) noexcept
+{
+	int descriptors[2];
+#ifdef __linux__
+	if( ::pipe2(descriptors, O_CLOEXEC) < 0 )
+		return sys_error();
+
+#else //__linux__
+	if( ::pipe(descriptors) < 0 )
+		return sys_error();
+#endif //__linux__
+
+	reader.reset(descriptors[0]);
+	writer.reset(descriptors[1]);
+
+#ifndef __linux__
+	for(const int fd : descriptors)
+	{
+		if( ::fcntl(fd, F_SETFD, FD_CLOEXEC) < 0 )
+			return sys_error();
+	}
+#endif //__linux__
+
+	if( auto error = avoid_standard_fd(reader) )
+		return error;
+	return avoid_standard_fd(writer);
+}
+
+struct RIWO_DECL_HIDDEN child_stream
+{
+	scoped_fd child {};
+	scoped_fd parent {};
+
+	[[nodiscard]] error_code prepare(const process_stream &target, int number) noexcept
+	{
+		const bool input = number == STDIN_FILENO;
+		const int access_mode = input ? O_RDONLY : O_WRONLY;
+
+		switch( target.mode )
+		{
+		case process_stream_mode::pipe:
+			return input ? make_pipe(child, parent) : make_pipe(parent, child);
+
+		case process_stream_mode::inherit:
+			child.reset(::fcntl(number, F_DUPFD_CLOEXEC, STDERR_FILENO + 1));
+			break;
+
+		case process_stream_mode::discard:
+			child.reset(::open("/dev/null", access_mode | O_CLOEXEC));
+			break;
+
+		case process_stream_mode::file:
+			if( target.path.empty() or target.path.native().find('\0') != path_t::string_type::npos )
+				return make_system_error_code(std::errc::invalid_argument);
+
+			child.reset(::open(target.path.c_str(),
+				access_mode | O_CLOEXEC | (input ? 0 : O_CREAT | O_TRUNC), 0666));
+			break;
+
+		default:
+			return make_system_error_code(std::errc::invalid_argument);
+		}
+		if( child.get() < 0 )
+			return sys_error();
+
+		return avoid_standard_fd(child);
+	}
+
+	[[nodiscard]] error_code assign(descriptor_t &descriptor) noexcept
+	{
+		if( parent.get() < 0 )
+			return {};
+
+		error_code error {};
+		error = descriptor.assign(parent.get(), error);
+
+		if( not error )
+			parent.release();
+
+		return error;
+	}
+};
+
+[[noreturn]] void fail_child_start(int report_fd) noexcept
+{
+	const int error = errno;
+	if( report_fd >= 0 )
+	{
+		ssize_t written;
+		do {
+			written = ::write(report_fd, &error, sizeof(error));
+		}
+		while( written < 0 and errno == EINTR );
+	}
+	_exit(255);
+}
 
 class RIWO_DECL_HIDDEN vindicator final :
 	public std::enable_shared_from_this<vindicator>
 {
 	RIWO_DISABLE_COPY_MOVE(vindicator)
-
-public:
-	using ptr_t = std::shared_ptr<vindicator>;
-	explicit vindicator(const executor_t &exec) :
-		m_exec(exec), m_stdin(exec), m_stdout(exec), m_stderr(exec) {}
-
-	~vindicator() noexcept {
-		stop_and_reap(false);
-	}
-
-public:
-	[[nodiscard]] sys_expected<> start(bool is_pipe, std::string_view cmd,
-		const args_t &args, std::string_view work_path, const envs_t &envs)
-	{
-		error_code error; RIWO_UNUSED(error);
-		sys_expected<> expected;
-
-		if( m_joinable.load(std::memory_order_acquire) )
-		{
-			return expected.despair(std::make_error_code (
-				std::errc::device_or_resource_busy
-			));
-		}
-		else if( cmd.empty() )
-		{
-			return expected.despair(std::make_error_code (
-				std::errc::no_such_file_or_directory
-			));
-		}
-		join_monitor_thread();
-		finish_io(m_generation.load(std::memory_order_acquire), true);
-
-		m_released.store(false, std::memory_order_release);
-		auto generation = m_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
-
-		// From the perspective of the child process.
-		int stdin_pipe [2] {-1,-1};
-		int stdout_pipe[2] {-1,-1};
-		int stderr_pipe[2] {-1,-1};
-		::pid_t parent_pid = -1;
-
-		error = m_stdin.close(error);
-		if( pipe2(stdin_pipe, O_NONBLOCK) < 0 )
-		{
-			expected.despair(sys_error());
-			goto stdin_error;
-		}
-		error = m_stdout.close(error);
-		if( pipe2(stdout_pipe, O_NONBLOCK) < 0 )
-		{
-			expected.despair(sys_error());
-			goto stdout_error;
-		}
-		error = m_stderr.close(error);
-		if( pipe2(stderr_pipe, O_NONBLOCK) < 0 )
-		{
-			expected.despair(sys_error());
-			goto stderr_error;
-		}
-		parent_pid = getpid();
-		m_pid = fork();
-		if( m_pid < 0 )
-		{
-			expected.despair(sys_error());
-			goto fork_error;
-		}
-		else if( m_pid == 0 ) //child
-		{
-			if( not exit_on_parent_exit(parent_pid) )
-				_exit(255);
-
-			fcntl(stdin_pipe[0], F_SETFL,
-				fcntl(stdin_pipe[0], F_GETFL) & ~O_NONBLOCK
-			);
-			fcntl(stdout_pipe[1], F_SETFL,
-				fcntl(stdout_pipe[1], F_GETFL) & ~O_NONBLOCK
-			);
-			fcntl(stderr_pipe[1], F_SETFL,
-				fcntl(stderr_pipe[1], F_GETFL) & ~O_NONBLOCK
-			);
-			dup2(stdin_pipe [0], STDIN_FILENO );
-			dup2(stdout_pipe[1], STDOUT_FILENO);
-			dup2(stderr_pipe[1], STDERR_FILENO);
-
-			close(stdin_pipe [1]);
-			close(stdout_pipe[0]);
-			close(stderr_pipe[0]);
-
-			int res = chdir(work_path.data());
-			RIWO_UNUSED(res);
-
-			for(auto &[key, value] : envs)
-				setenv(key.c_str(), value.c_str(), true);
-
-			if( is_pipe )
-			{
-				default_shell()
-				.transform([&](const std::string &shell)
-				{
-					res = execlp(shell.c_str(),
-						shell.c_str(), "-c", cmd.data(), nullptr
-					);
-					return shell;
-				})
-				.or_else([&]
-				{
-					expected.despair(std::make_error_code(
-						std::errc::no_such_file_or_directory
-					));
-					_exit(-1);
-				});
-			}
-			else
-			{
-				auto _args = new const char*[1 + args.size() + 1] {
-					cmd.data(), nullptr
-				};
-				for(size_t i=0; i<args.size(); i++)
-				{
-					if( not args[i].empty() )
-						_args[1 + i] = args[i].c_str();
-				}
-				res = execvp(cmd.data(), const_cast<char**>(_args));
-				delete[] _args;
-			}
-			perror("||| *** *** *** Error: execvp *** >>> ");
-			_exit(res);
-		}
-		if( not expected )
-			goto exec_error;
-
-		error.clear();
-		error = m_stdin.assign(stdin_pipe[1], error);
-		if( error )
-		{
-			expected.despair(error);
-			stop_and_reap(true);
-			goto exec_error;
-		}
-		stdin_pipe[1] = -1;
-		close(stdin_pipe[0]);
-		stdin_pipe[0] = -1;
-
-		error.clear();
-		error = m_stdout.assign(stdout_pipe[0], error);
-		if( error )
-		{
-			expected.despair(error);
-			stop_and_reap(true);
-			goto exec_error;
-		}
-		stdout_pipe[0] = -1;
-		close(stdout_pipe[1]);
-		stdout_pipe[1] = -1;
-
-		error.clear();
-		error = m_stderr.assign(stderr_pipe[0], error);
-		if( error )
-		{
-			expected.despair(error);
-			stop_and_reap(true);
-			goto exec_error;
-		}
-		stderr_pipe[0] = -1;
-		close(stderr_pipe[1]);
-		stderr_pipe[1] = -1;
-
-		m_state = process_state::running;
-		try {
-			const auto child_pid = m_pid.load(std::memory_order_acquire);
-			m_thread = std::thread([self = shared_from_this(), child_pid, generation]{
-				self->monitor_child(child_pid, generation);
-			});
-			m_joinable.store(true, std::memory_order_release);
-		}
-		catch(const std::system_error &exception)
-		{
-			expected.despair(exception.code());
-			stop_and_reap(true);
-		}
-		catch(const std::bad_alloc&)
-		{
-			expected.despair(make_system_error_code(std::errc::not_enough_memory));
-			stop_and_reap(true);
-		}
-		catch(...)
-		{
-			expected.despair(make_system_error_code(std::errc::io_error));
-			stop_and_reap(true);
-		}
-		return expected;
-
-	exec_error: {
-		m_joinable.store(false, std::memory_order_release);
-		m_join_in_progress.store(false, std::memory_order_release);
-		m_pid = -1;
-
-		publish_terminal_state(process_state::crashed, 255);
-		std::vector<std::shared_ptr<asio::steady_timer>> vector;
-		{
-			std::lock_guard timer_lock(m_timer_mutex);
-			vector = std::move(m_co_join_list);
-		}
-		for(auto &timer : vector)
-			timer->cancel();
-	}
-	fork_error:
-		close(stderr_pipe[0]);
-		close(stderr_pipe[1]);
-		stderr_pipe[0] = stderr_pipe[1] = -1;
-
-	stderr_error:
-		close(stdout_pipe[0]);
-		close(stdout_pipe[1]);
-		stdout_pipe[0] = stdout_pipe[1] = -1;
-
-	stdout_error:
-		close(stdin_pipe[0]);
-		close(stdin_pipe[1]);
-		stdin_pipe[0] = stdin_pipe[1] = -1;
-
-	stdin_error:
-		return expected;
-	}
-
-private:
-	void publish_terminal_state(process_state state, int exit_code) noexcept
-	{
-		{
-			std::lock_guard lock(m_cv_mutex);
-			m_exit_code = exit_code;
-			m_state = state;
-		}
-		m_cv.notify_all();
-	}
-
-	void monitor_child(int child_pid, std::uint64_t generation) noexcept
-	{
-		int status = 0;
-		bool reaped = false;
-		for(;;)
-		{
-			const int result = waitpid(child_pid, &status, 0);
-			if( result == child_pid )
-			{
-				if( WIFSTOPPED(status) or WIFCONTINUED(status) )
-					continue;
-				reaped = true;
-				break;
-			}
-			if( result < 0 and errno == EINTR )
-				continue;
-
-			const int wait_error = errno;
-			std::fprintf(stderr, "Riwo.System process: waitpid failed: '%s' (%d)\n",
-				strerror(wait_error), wait_error);
-			break;
-		}
-		if( generation == m_generation.load(std::memory_order_acquire) )
-		{
-			process_state state;
-			int exit_code;
-
-			if( reaped and WIFEXITED(status) )
-			{
-				exit_code = WEXITSTATUS(status);
-				state = process_state::exited;
-			}
-			else
-			{
-				exit_code = reaped and WIFSIGNALED(status) ?
-					WTERMSIG(status) : 255;
-				state = process_state::crashed;
-			}
-			publish_terminal_state(state, exit_code);
-		}
-		try {
-			if( m_released.load(std::memory_order_acquire) )
-			{
-				// A released control block has no public owner. Keep it alive until
-				// descriptor cleanup has run on its executor, otherwise destruction
-				// may race execution_context shutdown on the monitor thread.
-				riwo::post(m_exec, [self = shared_from_this(), generation]{
-					self->finish_io(generation, false);
-				});
-			}
-			else
-			{
-				// A joined process retains its public owner. Avoid extending that
-				// lifetime merely because executor progress has stopped.
-				std::weak_ptr weak = shared_from_this();
-				riwo::post(m_exec, [weak = std::move(weak), generation]
-				{
-					if( auto self = weak.lock() )
-						self->finish_io(generation, false);
-				});
-			}
-		}
-		catch(...) {
-			finish_io(generation, false);
-		}
-	}
-
-	void join_monitor_thread() noexcept
-	{
-		if( not m_thread.joinable() )
-			return ;
-		try {
-			if( m_thread.get_id() == std::this_thread::get_id() )
-				m_thread.detach();
-			else
-				m_thread.join();
-		}
-		catch(...) {}
-	}
-
-	void release_monitor_thread() noexcept
-	{
-		// Once public join ownership has been released, the monitor owns its
-		// control block until waitpid() completes.  Detach the native thread at
-		// the same point so a process-wide owner can shut down without leaving a
-		// finished, unjoined thread behind.
-		try {
-			if( m_thread.joinable() )
-				m_thread.detach();
-		}
-		catch(...) {}
-	}
-
-	void finish_io(std::uint64_t generation, bool close_output) noexcept
-	{
-		if( generation != m_generation.load(std::memory_order_acquire) )
-			return ;
-
-		error_code error;
-		error = m_stdin.close(error);
-		if( close_output )
-		{
-			error.clear();
-			error = m_stdout.close(error);
-			error.clear();
-			error = m_stderr.close(error);
-		}
-		m_pid.store(-1, std::memory_order_release);
-
-		std::vector<std::shared_ptr<asio::steady_timer>> timers;
-		{
-			std::lock_guard timer_lock(m_timer_mutex);
-			timers = std::move(m_co_join_list);
-		}
-		for(auto &timer : timers)
-		{
-			try {
-				timer->cancel();
-			}
-			catch(...) {}
-		}
-	}
-
-	void stop_and_reap(bool force) noexcept
-	{
-		const auto state = m_state.load(std::memory_order_acquire);
-		const int child_pid = m_pid.load(std::memory_order_acquire);
-		const bool must_stop = force or state == process_state::running;
-
-		if( must_stop and child_pid > 0 )
-			::kill(child_pid, SIGKILL);
-
-		if( m_thread.joinable() )
-			join_monitor_thread();
-
-		else if( must_stop and child_pid > 0 )
-		{
-			int status = 0;
-			int wait_result = -1;
-			do {
-				wait_result = waitpid(child_pid, &status, 0);
-			}
-			while( wait_result < 0 and errno == EINTR );
-
-			const int exit_code = wait_result == child_pid and WIFSIGNALED(status) ?
-				WTERMSIG(status) : 255;
-
-			publish_terminal_state(process_state::crashed, exit_code);
-		}
-		if( m_state.load(std::memory_order_acquire) == process_state::running )
-			publish_terminal_state(process_state::crashed, 255);
-
-		finish_io(m_generation.load(std::memory_order_acquire), true);
-	}
-
-	[[nodiscard]] bool register_join_timer(const std::shared_ptr<asio::steady_timer> &timer)
-	{
-		std::lock_guard timer_lock(m_timer_mutex);
-		if( m_state.load(std::memory_order_acquire) != process_state::running )
-			return false;
-
-		m_co_join_list.emplace_back(timer);
-		return true;
-	}
-
-	[[nodiscard]] error_code claim_join() noexcept
-	{
-		if( not m_joinable.load(std::memory_order_acquire) )
-			return make_system_error_code(std::errc::invalid_argument);
-
-		if( bool expected = false;
-			not m_join_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel) )
-			return make_system_error_code(std::errc::device_or_resource_busy);
-
-		if( not m_joinable.load(std::memory_order_acquire) )
-		{
-			m_join_in_progress.store(false, std::memory_order_release);
-			return make_system_error_code(std::errc::invalid_argument);
-		}
-		return {};
-	}
 
 	class join_claim final
 	{
@@ -528,23 +237,216 @@ private:
 	};
 
 public:
+	using ptr_t = std::shared_ptr<vindicator>;
+	explicit vindicator(const executor_t &exec) :
+		m_exec(exec), m_stdin(exec), m_stdout(exec), m_stderr(exec) {}
+
+	~vindicator() noexcept {
+		stop_and_reap(false);
+	}
+
+public:
+	[[nodiscard]] sys_expected<> start(bool is_pipe, std::string_view cmd, const args_t &args,
+		std::string_view work_path, const envs_t &envs, const process_stdio &stdio, bool literal = false)
+	{
+		if( m_joinable.load(std::memory_order_acquire) )
+			return sys_unexpected(make_system_error_code(std::errc::device_or_resource_busy));
+
+		if( cmd.empty() )
+			return sys_unexpected(make_system_error_code(std::errc::no_such_file_or_directory));
+
+		join_monitor_thread();
+		finish_io(m_generation.load(std::memory_order_acquire), true);
+
+		m_released.store(false, std::memory_order_release);
+		const auto generation = m_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
+
+		std::array<child_stream,3> streams {};
+		const std::array targets {&stdio.input, &stdio.output, &stdio.error};
+
+		for(size_t i=0; i<streams.size(); i++)
+		{
+			if( i == STDERR_FILENO and
+				stdio.output.mode == process_stream_mode::file and
+				stdio.error.mode == process_stream_mode::file and
+				stdio.output.path == stdio.error.path )
+			{
+				const int duplicate = ::fcntl (
+					streams[STDOUT_FILENO].child.get(), F_DUPFD_CLOEXEC, STDERR_FILENO + 1
+				);
+				if( duplicate < 0 )
+					return sys_unexpected(sys_error());
+
+				streams[i].child.reset(duplicate);
+			}
+			else if( auto error = streams[i].prepare(*targets[i], static_cast<int>(i)) )
+				return sys_unexpected(error);
+		}
+		scoped_fd launch_reader {};
+		scoped_fd launch_writer {};
+
+		if( literal )
+		{
+			if( auto error = make_pipe(launch_reader, launch_writer) )
+				return sys_unexpected(error);
+		}
+		auto shell = is_pipe ? default_shell(envs) : std::nullopt;
+		std::vector<char*> arguments {};
+
+		arguments.reserve(args.size() + 2);
+		arguments.push_back(const_cast<char*>(cmd.data()));
+
+		for(const auto &arg : args)
+			arguments.push_back(const_cast<char*>(arg.c_str()));
+		arguments.push_back(nullptr);
+
+		const auto parent_pid = getpid();
+		const auto child_pid = fork();
+
+		if( child_pid < 0 )
+			return sys_unexpected(sys_error());
+
+		if( child_pid == 0 )
+		{
+			launch_reader.reset();
+			const int report_fd = launch_writer.get();
+
+			if( not exit_on_parent_exit(parent_pid) )
+			{
+				errno = ESRCH;
+				fail_child_start(report_fd);
+			}
+			for(size_t i=0; i<streams.size(); i++)
+			{
+				auto &[child, parent] = streams[i];
+				if( ::dup2(child.get(), static_cast<int>(i)) < 0 )
+					fail_child_start(report_fd);
+
+				child.reset();
+				parent.reset();
+			}
+			if( not work_path.empty() and ::chdir(work_path.data()) < 0 and literal )
+				fail_child_start(report_fd);
+
+			for(const auto &[key, value] : envs)
+				::setenv(key.c_str(), value.c_str(), true);
+
+			if( shell )
+				::execlp(shell->c_str(), shell->c_str(), "-c", cmd.data(), nullptr);
+
+			else if( not is_pipe )
+				::execvp(cmd.data(), arguments.data());
+
+			if( not literal )
+				std::perror("Riwo.System process: exec");
+
+			fail_child_start(report_fd);
+		}
+		m_pid = child_pid;
+		launch_writer.reset();
+
+		for(auto &[child, parent] : streams)
+			child.reset();
+
+		if( literal )
+		{
+			int child_error = 0;
+			ssize_t received;
+			do {
+				received = ::read(launch_reader.get(), &child_error, sizeof(child_error));
+			}
+			while( received < 0 and errno == EINTR );
+
+			if( received != 0 )
+			{
+				auto error = received < 0 ? sys_error() : error_code (
+					std::error_code(received == sizeof(child_error) ?
+						child_error : EIO, std::system_category()
+					)
+				);
+				stop_and_reap(true);
+				return sys_unexpected(error);
+			}
+		}
+		const std::array descriptors {&m_stdin, &m_stdout, &m_stderr};
+		for(size_t i=0; i<streams.size(); i++)
+		{
+			if( auto error = streams[i].assign(*descriptors[i]) )
+			{
+				stop_and_reap(true);
+				return sys_unexpected(error);
+			}
+		}
+		sys_expected<> expected;
+		m_state = process_state::running;
+		try {
+			m_thread = std::thread([self = shared_from_this(), child_pid, generation]{
+				self->monitor_child(child_pid, generation);
+			});
+			m_joinable.store(true, std::memory_order_release);
+		}
+		catch(const std::system_error &exception)
+		{
+			expected.despair(exception.code());
+			stop_and_reap(true);
+		}
+		catch(const std::bad_alloc&)
+		{
+			expected.despair(make_system_error_code(std::errc::not_enough_memory));
+			stop_and_reap(true);
+		}
+		catch(...)
+		{
+			expected.despair(make_system_error_code(std::errc::io_error));
+			stop_and_reap(true);
+		}
+		return expected;
+	}
+
+	void join_monitor_thread() noexcept
+	{
+		if( not m_thread.joinable() )
+			return ;
+		try {
+			if( m_thread.get_id() == std::this_thread::get_id() )
+				m_thread.detach();
+			else
+				m_thread.join();
+		}
+		catch(...) {}
+	}
+
+public:
 	[[noreturn]] void _throw() noexcept
 	{
 		stop_and_reap(true);
 		std::terminate();
 	}
 
-public:
+	[[nodiscard]] sys_expected<> close_stdin() noexcept
+	{
+		std::lock_guard lock(m_stdin_mutex);
+		if( not m_stdin.is_open() )
+			return {};
+		error_code error;
+		error = m_stdin.close(error);
+		if( error )
+			return sys_unexpected(error);
+		return {};
+	}
+
 	void terminate() const noexcept
 	{
-		if( m_state == process_state::running )
-			::kill(m_pid.load(std::memory_order_acquire), SIGTERM);
+		const auto pid = m_pid.load(std::memory_order_acquire);
+		if( pid > 0 and m_state == process_state::running )
+			::kill(pid, SIGTERM);
 	}
 
 	void kill() noexcept
 	{
-		if( m_state == process_state::running )
-			::kill(m_pid.load(std::memory_order_acquire), SIGKILL);
+		const auto pid = m_pid.load(std::memory_order_acquire);
+		if( pid > 0 and m_state == process_state::running )
+			::kill(pid, SIGKILL);
 	}
 
 	[[nodiscard]] sys_expected<> detach() noexcept
@@ -825,7 +727,7 @@ public:
 				make_system_error_code(std::errc::no_such_process)
 			);
 		}
-		descriptor_t *stream = nullptr;
+		descriptor_t *stream;
 
 		if( channel == read_channel_t::std_output )
 		{
@@ -873,7 +775,7 @@ public:
 			return ;
 		}
 		error_code error;
-		descriptor_t *stream = nullptr;
+		descriptor_t *stream;
 
 		if( channel == read_channel_t::std_output )
 		{
@@ -921,14 +823,201 @@ public:
 	}
 
 private:
+	void publish_terminal_state(process_state state, int exit_code) noexcept
+	{
+		{
+			std::lock_guard lock(m_cv_mutex);
+			m_exit_code = exit_code;
+			m_state = state;
+		}
+		m_cv.notify_all();
+	}
+
+	void monitor_child(int child_pid, std::uint64_t generation) noexcept
+	{
+		int status = 0;
+		bool reaped = false;
+		for(;;)
+		{
+			const int result = waitpid(child_pid, &status, 0);
+			if( result == child_pid )
+			{
+				if( WIFSTOPPED(status) or WIFCONTINUED(status) )
+					continue;
+				reaped = true;
+				break;
+			}
+			if( result < 0 and errno == EINTR )
+				continue;
+
+			const int wait_error = errno;
+			std::fprintf(stderr, "Riwo.System process: waitpid failed: '%s' (%d)\n",
+				strerror(wait_error), wait_error);
+			break;
+		}
+		if( generation == m_generation.load(std::memory_order_acquire) )
+		{
+			process_state state;
+			int exit_code;
+
+			if( reaped and WIFEXITED(status) )
+			{
+				exit_code = WEXITSTATUS(status);
+				state = process_state::exited;
+			}
+			else
+			{
+				exit_code = reaped and WIFSIGNALED(status) ?
+					WTERMSIG(status) : 255;
+				state = process_state::crashed;
+			}
+			publish_terminal_state(state, exit_code);
+		}
+		try {
+			if( m_released.load(std::memory_order_acquire) )
+			{
+				// A released control block has no public owner. Keep it alive until
+				// descriptor cleanup has run on its executor, otherwise destruction
+				// may race execution_context shutdown on the monitor thread.
+				riwo::post(m_exec, [self = shared_from_this(), generation]{
+					self->finish_io(generation, false);
+				});
+			}
+			else
+			{
+				// A joined process retains its public owner. Avoid extending that
+				// lifetime merely because executor progress has stopped.
+				std::weak_ptr weak = shared_from_this();
+				riwo::post(m_exec, [weak = std::move(weak), generation]
+				{
+					if( auto self = weak.lock() )
+						self->finish_io(generation, false);
+				});
+			}
+		}
+		catch(...) {
+			finish_io(generation, false);
+		}
+	}
+
+	void release_monitor_thread() noexcept
+	{
+		// Once public join ownership has been released, the monitor owns its
+		// control block until waitpid() completes.  Detach the native thread at
+		// the same point so a process-wide owner can shut down without leaving a
+		// finished, unjoined thread behind.
+		try {
+			if( m_thread.joinable() )
+				m_thread.detach();
+		}
+		catch(...) {}
+	}
+
+	void finish_io(std::uint64_t generation, bool close_output) noexcept
+	{
+		if( generation != m_generation.load(std::memory_order_acquire) )
+			return ;
+
+		RIWO_UNUSED(close_stdin());
+		error_code error {};
+
+		if( close_output )
+		{
+			error.clear();
+			error = m_stdout.close(error);
+
+			error.clear();
+			error = m_stderr.close(error);
+		}
+		m_pid.store(-1, std::memory_order_release);
+
+		std::vector<std::shared_ptr<asio::steady_timer>> timers;
+		{
+			std::lock_guard timer_lock(m_timer_mutex);
+			timers = std::move(m_co_join_list);
+		}
+		for(auto &timer : timers)
+		{
+			try {
+				timer->cancel();
+			}
+			catch(...) {}
+		}
+	}
+
+	void stop_and_reap(bool force) noexcept
+	{
+		const auto state = m_state.load(std::memory_order_acquire);
+		const int child_pid = m_pid.load(std::memory_order_acquire);
+		const bool must_stop = force or state == process_state::running;
+
+		if( must_stop and child_pid > 0 )
+			::kill(child_pid, SIGKILL);
+
+		if( m_thread.joinable() )
+			join_monitor_thread();
+
+		else if( must_stop and child_pid > 0 )
+		{
+			int status = 0;
+			int wait_result;
+			do {
+				wait_result = waitpid(child_pid, &status, 0);
+			}
+			while( wait_result < 0 and errno == EINTR );
+
+			const int exit_code = wait_result == child_pid and WIFSIGNALED(status) ?
+				WTERMSIG(status) : 255;
+
+			publish_terminal_state(process_state::crashed, exit_code);
+		}
+		if( m_state.load(std::memory_order_acquire) == process_state::running )
+			publish_terminal_state(process_state::crashed, 255);
+
+		finish_io(m_generation.load(std::memory_order_acquire), true);
+	}
+
+	[[nodiscard]] bool register_join_timer(const std::shared_ptr<asio::steady_timer> &timer)
+	{
+		std::lock_guard timer_lock(m_timer_mutex);
+		if( m_state.load(std::memory_order_acquire) != process_state::running )
+			return false;
+
+		m_co_join_list.emplace_back(timer);
+		return true;
+	}
+
+	[[nodiscard]] error_code claim_join() noexcept
+	{
+		if( not m_joinable.load(std::memory_order_acquire) )
+			return make_system_error_code(std::errc::invalid_argument);
+
+		if( bool expected = false;
+			not m_join_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel) )
+			return make_system_error_code(std::errc::device_or_resource_busy);
+
+		if( not m_joinable.load(std::memory_order_acquire) )
+		{
+			m_join_in_progress.store(false, std::memory_order_release);
+			return make_system_error_code(std::errc::invalid_argument);
+		}
+		return {};
+	}
+
+private:
 	void post_io_result(process::io_handler_t handler, error_code error, size_t size) const {
 		post_completion(m_exec, std::move(handler), error, size);
 	}
 
-	[[nodiscard]] static optional<std::string> default_shell() noexcept
+	[[nodiscard]] static optional<std::string> default_shell(const envs_t &envs)
 	{
-		if( auto shell = getenv("SHELL"); shell and strlen(shell) > 0 )
-			return {shell};
+		if( const auto shell = envs.find("SHELL"); shell != envs.end() )
+		{
+			if( not shell->second.empty() )
+				return shell->second.native();
+		}
+		else if( auto shell_name = getenv("SHELL"); shell_name and *shell_name )
+			return {shell_name};
 
 		auto pw = getpwuid(getuid());
 		if( pw and pw->pw_shell and strlen(pw->pw_shell) > 0 )
@@ -957,10 +1046,12 @@ public:
 
 	std::condition_variable m_cv {};
 	std::mutex m_cv_mutex {};
+	std::mutex m_stdin_mutex {};
 
 	std::vector <
 		std::shared_ptr<asio::steady_timer>
 	> m_co_join_list {};
+
 	std::mutex m_timer_mutex {};
 };
 
@@ -981,6 +1072,10 @@ public:
 	{
 		if( m_vindicator->joinable() )
 			m_vindicator->_throw();
+
+		// A completed join can observe the exit before the monitor has posted
+		// its final I/O cleanup. Keep the executor alive until that post ends.
+		m_vindicator->join_monitor_thread();
 	}
 
 public:
@@ -989,6 +1084,7 @@ public:
 
 	path_t m_work_path {};
 	envs_t m_envs {};
+	process_stdio m_stdio;
 
 	executor_t m_exec {};
 	vindicator_ptr m_vindicator {};
@@ -1076,8 +1172,26 @@ sys_expected<> process::start() const
 {
 	return m_impl->m_vindicator->start (
 		m_impl->m_is_pipe, m_impl->m_cmd, m_impl->m_args,
-		m_impl->m_work_path.string(), m_impl->m_envs
+		m_impl->m_work_path.string(), m_impl->m_envs, m_impl->m_stdio
 	);
+}
+
+sys_expected<> process::start_program(const path_t &cmd, const std::vector<path_t> &args) const
+{
+	args_t arguments;
+	arguments.reserve(args.size());
+
+	for(const auto &arg : args)
+		arguments.emplace_back(arg.native());
+
+	return m_impl->m_vindicator->start(false, cmd.native(), arguments,
+		m_impl->m_work_path.native(), m_impl->m_envs, m_impl->m_stdio, true
+	);
+}
+
+sys_expected<> process::close_stdin() const noexcept
+{
+	return m_impl->m_vindicator->close_stdin();
 }
 
 void process::terminate() const noexcept
@@ -1096,7 +1210,7 @@ sys_expected<> process::detach() const noexcept
 	// kept alive by its monitor thread until waitpid() has reaped the child; the
 	// replacement lets this process object be reused without abandoning that
 	// parent-side resource management.
-	vindicator_ptr replacement;
+	vindicator_ptr replacement {};
 	try {
 		replacement = std::make_shared<vindicator>(m_impl->m_exec);
 	}
@@ -1214,6 +1328,11 @@ void process::protect_io_error(const error_code &error) const noexcept
 void process::set_work_path(path_t path) noexcept
 {
 	m_impl->m_work_path = std::move(path);
+}
+
+void process::set_stdio(process_stdio streams) noexcept
+{
+	m_impl->m_stdio = std::move(streams);
 }
 
 void process::setenv(std::string_view key, path_t value) noexcept

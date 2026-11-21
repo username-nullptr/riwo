@@ -5,6 +5,7 @@
 #define RIWO_CRYPTO_GLOBAL_H
 
 #include <riwo/core/global.h>
+#include <span>
 
 #if RIWO_BUILD_STATIC
 # define RIWO_CRYPTO_API
@@ -16,6 +17,14 @@
 
 #define RIWO_CRYPTO_VAPI RIWO_CORE_VAPI
 #define RIWO_CRYPTO_TAPI RIWO_CORE_TAPI
+
+namespace riwo::crypto
+{
+
+template <size_t Size = std::dynamic_extent>
+using span_t = std::span<const std::byte, Size>;
+
+} //namespace riwo::crypto
 
 
 #endif //RIWO_CRYPTO_GLOBAL_H

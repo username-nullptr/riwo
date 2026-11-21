@@ -59,7 +59,7 @@ Requires `RIWO_BUILD_CRYPTO=ON` (the default).
 
 | Program | Demonstrates | Arguments / side effects |
 | --- | --- | --- |
-| [`algorithms`](crypto/algorithms.cpp) | SHA-1, Base64, and UUID generation | None |
+| [`algorithms`](crypto/algorithms.cpp) | SHA-1 over bytes, incremental SHA-256, Base64 round trip, Base64URL-encoded HMAC-SHA256 tag and verification, UUID generation | None |
 
 ## System
 
@@ -68,7 +68,11 @@ Requires `RIWO_BUILD_SYSTEM=ON` (the default).
 | Program | Demonstrates | Arguments / side effects |
 | --- | --- | --- |
 | [`environment`](system/environment.cpp) | Environment variables, current user, and home directory | Temporarily sets `RIWO_SYSTEM_EXAMPLE` |
+| [`files`](system/files.cpp) | Application paths, scoped temporary files and directories, and exclusive file locks | Writes and cleans up a temporary directory |
+| [`directory_watcher`](system/directory_watcher.cpp) | Synchronous and asynchronous waits for file creation and removal | Watches a temporary directory |
 | [`process`](system/process.cpp) | Child start, stdout, join, exit code | Runs the platform echo command |
+| [`process_capture`](system/process_capture.cpp) | Literal arguments, bounded stdout and stderr capture, and exit code | Runs itself as a child process |
+| [`process_stdio`](system/process_stdio.cpp) | Write to child stdin, signal EOF, and redirect stdout to a file | Runs `sort` and cleans up a temporary output file |
 
 ## Coroutines
 

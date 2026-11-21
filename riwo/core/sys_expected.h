@@ -10,7 +10,7 @@
 namespace riwo
 {
 
-template <concepts::expected_value Value = void>
+template <typename  Value = void>
 using sys_expected = expected<Value,error_code>;
 
 using sys_unexpected = unexpected<error_code>;

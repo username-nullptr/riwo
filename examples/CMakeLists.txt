@@ -74,8 +74,12 @@ add_dependencies(riwo.example.core.dynamic_library
 
 # System
 if (RIWO_BUILD_SYSTEM)
-	riwo_add_example(system environment LIBRARIES riwo.system)
-	riwo_add_example(system process     LIBRARIES riwo.system)
+	riwo_add_example(system directory_watcher LIBRARIES riwo.system)
+	riwo_add_example(system environment       LIBRARIES riwo.system)
+	riwo_add_example(system files             LIBRARIES riwo.system)
+	riwo_add_example(system process           LIBRARIES riwo.system)
+	riwo_add_example(system process_capture   LIBRARIES riwo.system)
+	riwo_add_example(system process_stdio     LIBRARIES riwo.system)
 endif ()
 
 # Coroutines
@@ -155,8 +159,12 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES
 	core/ini.cpp
 	core/lock_free_queue.cpp
 	core/value.cpp
+	system/directory_watcher.cpp
 	system/environment.cpp
+	system/files.cpp
 	system/process.cpp
+	system/process_capture.cpp
+	system/process_stdio.cpp
 	coro/basics.cpp
 	coro/condition_variable.cpp
 	coro/mutex.cpp

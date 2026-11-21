@@ -4,8 +4,12 @@
 #ifndef RIWO_SYSTEM_H
 #define RIWO_SYSTEM_H
 
+#include <riwo/system/directory_watcher.h>
 #include <riwo/system/environment.h>
+#include <riwo/system/file_lock.h>
+#include <riwo/system/temporary.h>
 #include <riwo/system/process.h>
+#include <riwo/system/paths.h>
 #include <riwo/system/user.h>
 
 #endif //RIWO_SYSTEM_H

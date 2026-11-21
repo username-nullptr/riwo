@@ -12,13 +12,13 @@ namespace riwo::crypto
 class RIWO_CRYPTO_API sha1
 {
 public:
-	sha1();
 	sha1(std::string_view text);
-	sha1(const sha1 &other);
-	sha1(sha1 &&other) noexcept;
+	sha1();
 	~sha1();
 
-public:
+	sha1(const sha1 &other);
+	sha1(sha1 &&other) noexcept;
+
 	sha1 &operator=(const sha1 &other);
 	sha1 &operator=(sha1 &&other) noexcept;
 
@@ -26,13 +26,16 @@ public:
 	sha1 &append(uint8_t x);
 	sha1 &append(char c);
 	sha1 &append(const void *data, size_t size);
+
+	sha1 &append(span_t<> data);
 	sha1 &append(std::string_view text);
 
 public:
 	void operator+=(uint8_t x);
 	void operator+=(char c);
-	void operator+=(wchar_t c);
-	void operator+=(const std::string &text);
+
+	void operator+=(span_t<> data);
+	void operator+=(std::string_view text);
 
 public:
 	sha1 &finalize();

@@ -101,6 +101,14 @@ void semantic_helpers()
 	RIWO_TEST_CHECK_EQ(credentials->username, "demo");
 	RIWO_TEST_CHECK_EQ(credentials->password, "secret");
 
+	// Basic Auth has historically accepted nonzero unused bits in the last Base64 digit.
+	const auto legacy_credentials = http::parse_basic_authorization("Basic Oh==");
+	RIWO_TEST_CHECK(legacy_credentials.has_value());
+	RIWO_TEST_CHECK(legacy_credentials->username.empty());
+	RIWO_TEST_CHECK(legacy_credentials->password.empty());
+	RIWO_TEST_CHECK(not http::parse_basic_authorization("Basic Og"));
+	RIWO_TEST_CHECK(not http::parse_basic_authorization("Basic O g="));
+
 	const std::string_view boundary = "riwo-boundary";
 	http::multipart_form form(boundary);
 	const std::string_view field_name = "name";

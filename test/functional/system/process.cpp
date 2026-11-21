@@ -3,18 +3,195 @@
 
 #include "test.h"
 
+#include <riwo/core/executable.h>
+#include <riwo/system/file_lock.h>
 #include <riwo/system/process.h>
+#include <riwo/system/temporary.h>
 
 #include <array>
 #include <chrono>
+#include <cstdio>
+#include <fstream>
 #include <future>
+#include <iterator>
+#include <thread>
 
 namespace
 {
 
 using namespace std::chrono_literals;
+namespace fs = std::filesystem;
+using riwo::system::process;
+using riwo::system::process_stream_mode;
+using riwo::system::process_stdio;
 
 static_assert(riwo::test::canonical_executor_type<riwo::system::process>);
+
+fs::path fixture_command()
+{
+	auto filename = riwo::executable::path().value();
+	fs::path command("\"");
+	command += filename;
+	command += "\"";
+	return command;
+}
+
+int child_fixture(int argc, const char *const argv[])
+{
+	const std::string_view mode = argv[1];
+	if( mode == "--capture" )
+	{
+		if( argc != 4 or std::string_view(argv[2]) != "" or std::string_view(argv[3]) != "  literal & arg  " )
+			return 99;
+		const std::string output(8192, 'o');
+		const std::string errors(8192, 'e');
+		for(int index = 0; index < 40; ++index)
+		{
+			std::cout << output << std::flush;
+			std::cerr << errors;
+		}
+		return 7;
+	}
+	if( mode == "--sleep" or mode == "--sleep-after-eof" )
+	{
+		if( mode == "--sleep-after-eof" )
+		{
+			std::fclose(stdout);
+			std::fclose(stderr);
+		}
+		std::this_thread::sleep_for(10s);
+		return 0;
+	}
+	if( mode == "--working-directory" )
+	{
+		std::cout << fs::current_path().generic_string();
+		return 0;
+	}
+	if( mode == "--copy-stdin" )
+	{
+		const std::string input(std::istreambuf_iterator<char>(std::cin), {});
+		std::cout << input;
+		return 0;
+	}
+	if( mode == "--print-channels" )
+	{
+		std::cout << "stdout" << std::flush;
+		std::cerr << "stderr";
+		return 0;
+	}
+	if( mode == "--inherit-channels" )
+	{
+		process child;
+		process_stdio stdio;
+		stdio.input.mode = process_stream_mode::inherit;
+		stdio.output.mode = process_stream_mode::inherit;
+		stdio.error.mode = process_stream_mode::inherit;
+		child.set_stdio(std::move(stdio));
+		return child.start(fixture_command(), "--print-channels") ? child.join() : 99;
+	}
+	if( mode == "--try-file-lock" and argc == 3 )
+	{
+		const auto attempt = riwo::system::file_lock::try_lock(argv[2]);
+		return not attempt ? 99 : (*attempt ? 0 : 3);
+	}
+	return -1;
+}
+
+void child_process_capture()
+{
+	const auto fixture = riwo::executable::path().value();
+	riwo::system::process_capture_options options;
+	options.max_stdout_bytes = 12345;
+	options.max_stderr_bytes = 0;
+	const auto captured = process::capture(fixture, {"--capture", "", "  literal & arg  "}, options);
+	RIWO_TEST_CHECK(captured);
+	RIWO_TEST_CHECK_EQ(captured->exit_code, 7);
+	RIWO_TEST_CHECK_EQ(captured->stdout_data, std::string(12345, 'o'));
+	RIWO_TEST_CHECK(captured->stderr_data.empty());
+	RIWO_TEST_CHECK(captured->stdout_truncated and captured->stderr_truncated);
+
+	const auto inherited = process::capture(fixture, {"--inherit-channels"});
+	RIWO_TEST_CHECK(inherited);
+	RIWO_TEST_CHECK_EQ(inherited->exit_code, 0);
+	RIWO_TEST_CHECK_EQ(inherited->stdout_data, "stdout");
+	RIWO_TEST_CHECK_EQ(inherited->stderr_data, "stderr");
+	RIWO_TEST_CHECK(not inherited->stdout_truncated and not inherited->stderr_truncated);
+
+	const auto eof = process::capture(fixture, {"--copy-stdin"});
+	RIWO_TEST_CHECK(eof and eof->exit_code == 0 and eof->stdout_data.empty());
+
+	auto directory = riwo::system::temp_directory::create().value();
+	options.work_path = directory.path();
+	const auto work_directory = process::capture(fixture, {"--working-directory"}, options);
+	RIWO_TEST_CHECK(work_directory and fs::path(work_directory->stdout_data) == directory.path());
+	const auto missing = process::capture(directory.path() / "missing-program");
+	RIWO_TEST_CHECK(not missing and missing.error() == std::errc::no_such_file_or_directory);
+
+	options.timeout = 100ms;
+	for(const auto mode : {"--sleep", "--sleep-after-eof"})
+	{
+		const auto timeout = process::capture(fixture, {mode}, options);
+		RIWO_TEST_CHECK(not timeout and timeout.error() == std::errc::timed_out);
+	}
+}
+
+void child_process_redirected_stdio()
+{
+	auto directory = riwo::system::temp_directory::create().value();
+	const auto file = directory.path() / "stdout.txt";
+	const auto input = directory.path() / "stdin.txt";
+	std::ofstream(input, std::ios::binary) << "redirected input";
+	std::ofstream(file, std::ios::binary) << "stale content to be truncated";
+
+	auto read_file = [](const fs::path &path) {
+		std::ifstream content(path, std::ios::binary);
+		return std::string(std::istreambuf_iterator<char>(content), {});
+	};
+	process child;
+	process_stdio stdio;
+	stdio.input = {process_stream_mode::file, input};
+	stdio.output = {process_stream_mode::file, file};
+	stdio.error.mode = process_stream_mode::discard;
+	child.set_stdio(stdio);
+	RIWO_TEST_CHECK(child.start(fixture_command(), "--copy-stdin"));
+	RIWO_TEST_CHECK_EQ(child.join(), 0);
+	RIWO_TEST_CHECK_EQ(read_file(file), "redirected input");
+
+	stdio.input.mode = process_stream_mode::discard;
+	stdio.error = stdio.output;
+	child.set_stdio(stdio);
+	RIWO_TEST_CHECK(child.start(fixture_command(), "--print-channels"));
+	RIWO_TEST_CHECK_EQ(child.join(), 0);
+	RIWO_TEST_CHECK_EQ(read_file(file), "stdoutstderr");
+
+	child.set_stdio({});
+	RIWO_TEST_CHECK(child.start(fixture_command(), "--copy-stdin"));
+	const std::string message = "close sends EOF";
+	std::error_code error;
+	const auto written = child.write(asio::buffer(message), error);
+	const auto closed = child.close_stdin();
+	const auto closed_again = child.close_stdin();
+	const auto output = child.read<std::string>();
+	RIWO_TEST_CHECK_EQ(child.join(), 0);
+	RIWO_TEST_CHECK(not error and written == message.size());
+	RIWO_TEST_CHECK(closed and closed_again);
+	RIWO_TEST_CHECK_EQ(output, message);
+}
+
+void file_lock_across_processes()
+{
+	auto directory = riwo::system::temp_directory::create().value();
+	const auto path = directory.path() / "shared.lock";
+	const auto fixture = riwo::executable::path().value();
+	auto held = riwo::system::file_lock::try_lock(path);
+	RIWO_TEST_CHECK(held and *held and (**held).owns_lock());
+	const auto busy = process::capture(fixture, {"--try-file-lock", path});
+	RIWO_TEST_CHECK(busy and busy->exit_code == 3);
+	held->reset();
+	const auto acquired = process::capture(fixture, {"--try-file-lock", path});
+	RIWO_TEST_CHECK(acquired and acquired->exit_code == 0);
+	RIWO_TEST_CHECK(fs::exists(path));
+}
 
 void child_process_io()
 {
@@ -204,7 +381,15 @@ void child_process_cancel_options()
 
 int main(int argc, const char *const argv[])
 {
+	if( argc >= 2 )
+	{
+		if( const auto result = child_fixture(argc, argv); result >= 0 )
+			return result;
+	}
 	return riwo::test::run(argc, argv, {
+		{"child process capture", child_process_capture},
+		{"child process redirected stdio", child_process_redirected_stdio},
+		{"file lock across processes", file_lock_across_processes},
 		{"child process IO", child_process_io},
 		{"completed child single-byte read", child_process_completed_single_byte_read},
 		{"child process environment and channels", child_process_environment_and_channels},

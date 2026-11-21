@@ -25,6 +25,10 @@ public:
 
 public:
 	[[nodiscard]] sys_expected<> start() const;
+	[[nodiscard]] sys_expected<> start_program(const path_t &cmd, const std::vector<path_t> &args) const;
+
+	[[nodiscard]] sys_expected<> close_stdin() const noexcept;
+
 	void terminate() const noexcept;
 	void kill() const noexcept;
 
@@ -104,6 +108,7 @@ public:
 
 public:
 	void set_work_path(path_t path) noexcept;
+	void set_stdio(process_stdio streams) noexcept;
 	void setenv(std::string_view key, path_t value) noexcept;
 	void unsetenv(std::string_view key) noexcept;
 
@@ -114,6 +119,10 @@ public:
 
 public:
 	[[nodiscard]] static sys_expected<pid_t> self_pid() noexcept;
+	[[nodiscard]] static sys_expected<process_capture_result> capture(
+		const path_t &cmd, const std::vector<path_t> &args,
+		const process_capture_options &options
+	);
 	static sys_expected<> terminate(pid_t pid) noexcept;
 	static sys_expected<> kill(pid_t pid) noexcept;
 
@@ -701,6 +710,12 @@ public:
 	void set_work_path(path_t path) noexcept {
 		m_detail.set_work_path(std::move(path));
 	}
+	void set_stdio(process_stdio streams) noexcept {
+		m_detail.set_stdio(std::move(streams));
+	}
+	[[nodiscard]] sys_expected<> close_stdin() noexcept {
+		return m_detail.close_stdin();
+	}
 	void setenv(std::string_view key, path_t value) noexcept {
 		m_detail.setenv(key, std::move(value));
 	}
@@ -847,6 +862,17 @@ void basic_process<Exec>::detach()
 		));
 	}
 	m_impl->detach();
+}
+
+template <concepts::exec Exec>
+sys_expected<> basic_process<Exec>::close_stdin() noexcept
+{
+	if( not m_impl )
+		return sys_unexpected(make_system_error_code(std::errc::invalid_argument));
+
+	auto result = m_impl->close_stdin();
+	riwo::detail::canonicalize_expected(result);
+	return result;
 }
 
 template <concepts::exec Exec>
@@ -1079,6 +1105,12 @@ void basic_process<Exec>::set_work_path(path_t path) noexcept
 }
 
 template <concepts::exec Exec>
+void basic_process<Exec>::set_stdio(process_stdio streams) noexcept
+{
+	m_impl->set_stdio(std::move(streams));
+}
+
+template <concepts::exec Exec>
 void basic_process<Exec>::setenv(std::string_view key, path_t value) noexcept
 {
 	m_impl->setenv(key, std::move(value));
@@ -1300,6 +1332,15 @@ auto basic_process<Exec>::exec(Exec0 &&exec, const path_t &cmd, Token &&token)
 {
 	return basic_process::exec(std::forward<Exec0>(exec), cmd, {},
 		std::forward<Token>(token));
+}
+
+template <concepts::exec Exec>
+sys_expected<process_capture_result> basic_process<Exec>::capture
+(const path_t &cmd, const args_t &args, const process_capture_options &options)
+{
+	auto result = detail::process::capture(cmd, args, options);
+	riwo::detail::canonicalize_expected(result);
+	return result;
 }
 
 template <concepts::exec Exec>

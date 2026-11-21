@@ -183,16 +183,21 @@ public:
 
 /*----------------------------------------------------------------------------------------------------------*/
 
+sha1::sha1(std::string_view text) :
+	m_impl(new impl())
+{
+	append(text);
+}
+
 sha1::sha1() :
 	m_impl(new impl())
 {
 
 }
 
-sha1::sha1(std::string_view text) :
-	m_impl(new impl())
+sha1::~sha1()
 {
-	append(text);
+	delete m_impl;
 }
 
 sha1::sha1(const sha1 &other) :
@@ -205,11 +210,6 @@ sha1::sha1(sha1 &&other) noexcept :
 	m_impl(other.m_impl)
 {
 	other.m_impl = new impl();
-}
-
-sha1::~sha1()
-{
-	delete m_impl;
 }
 
 sha1 &sha1::operator=(const sha1 &other)
@@ -272,6 +272,11 @@ sha1 &sha1::append(const void *data, size_t size)
 	return *this;
 }
 
+sha1 &sha1::append(span_t<> data)
+{
+	return append(data.data(), data.size());
+}
+
 sha1 &sha1::append(std::string_view text)
 {
 	if( text.empty() )
@@ -289,7 +294,12 @@ void sha1::operator+=(char c)
 	append(c);
 }
 
-void sha1::operator+=(const std::string &text)
+void sha1::operator+=(span_t<> data)
+{
+	append(data);
+}
+
+void sha1::operator+=(std::string_view text)
 {
 	append(text);
 }

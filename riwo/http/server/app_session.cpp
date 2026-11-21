@@ -14,15 +14,7 @@ namespace riwo::http { namespace
 	auto random = crypto::secure_random_bytes(mutable_buffer(bytes.data(), bytes.size()));
 	sys_expected_loc_throw(random, "Failed to generate HTTP application session ID");
 
-	auto result = crypto::base64_encode(bytes);
-	for(auto &value : result)
-	{
-		if( value == '+' ) value = '-';
-		else if( value == '/' ) value = '_';
-	}
-	while( not result.empty() and result.back() == '=' )
-		result.pop_back();
-	return result;
+	return crypto::base64url_encode(bytes);
 }
 
 } //namespace
